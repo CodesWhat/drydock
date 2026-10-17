@@ -19,7 +19,7 @@ function listFiles(root) {
     .sort();
 }
 
-test('v1.6 archive is byte-for-byte bound to the published GA docs tree', () => {
+test('v1.6 archive preserves GA bytes except its exact settings migration erratum', () => {
   assert.deepEqual(provenance, {
     version: 'v1.6',
     sourceCommit: 'd0f015a38eb2b15fcf634681bd14dfa1568f5fa9',
@@ -58,7 +58,20 @@ test('v1.6 archive is byte-for-byte bound to the published GA docs tree', () => 
     [...sourceEntries.map(([path]) => path), 'changelog/index.mdx'].sort(),
   );
   for (const [path, sourceBlob] of sourceEntries) {
-    assert.equal(git('hash-object', join(archiveRoot, path)), sourceBlob, path);
+    if (path === 'deprecations/index.mdx') {
+      const original = execFileSync('git', ['show', sourceBlob], { encoding: 'utf8' });
+      const paragraph =
+        'The `PUT` method on `/api/v1/settings` is a compatibility alias for `PATCH`. Responses include `Deprecation` and `Sunset` HTTP headers.';
+      const corrected = original
+        .replaceAll('/api/settings', '/api/v1/settings')
+        .replace(
+          paragraph,
+          `${paragraph}\n\n**Documentation correction:** The unversioned \`/api/settings\` path returns \`410 Gone\` in v1.6. Both the retained \`PUT\` alias and its \`PATCH\` replacement use \`/api/v1/settings\`; settings is not a wud-card compatibility exception.`,
+        );
+      assert.equal(readFileSync(join(archiveRoot, path), 'utf8'), corrected, path);
+    } else {
+      assert.equal(git('hash-object', join(archiveRoot, path)), sourceBlob, path);
+    }
   }
 
   const changelog = readFileSync(join(archiveRoot, 'changelog/index.mdx'));
@@ -97,9 +110,74 @@ test('secret-scan exceptions for the immutable archive are exact and commit-inde
     'content/docs/v1.6/configuration/registries/ibmcr/index.mdx:generic-api-key:93',
     'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:60',
     'content/docs/v1.6/configuration/registries/ocir/index.mdx:generic-api-key:67',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:115',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:122',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:129',
-    'content/docs/v1.6/configuration/webhooks/index.mdx:curl-auth-header:46',
   ]);
+});
+
+test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', () => {
+  const record = JSON.parse(readFileSync('content/docs/v1.7-provenance.json', 'utf8'));
+  const root = 'content/docs/v1.7';
+  assert.equal(record.version, 'v1.7');
+  assert.equal(record.sourceTag, 'v1.7.0-rc.24');
+  assert.equal(
+    record.generatedChangelogSha256,
+    'd949eb0b7e4959dd9f3dd9db8f31f498353049f623ae9af918000aa0af997806',
+  );
+  assert.doesNotMatch(
+    readFileSync(join(root, 'changelog/index.mdx'), 'utf8'),
+    /^## \[Unreleased\]|^\[Unreleased\]:/mu,
+  );
+  assert.equal(record.sourceCommit, '3f29a8ade3675845b62f170a3492faa312d577fb');
+  assert.equal(git('rev-parse', `${record.sourceTag}^{commit}`), record.sourceCommit);
+  assert.equal(
+    git('rev-parse', `${record.sourceCommit}:content/docs/current`),
+    record.sourceDocsTree,
+  );
+  assert.equal(git('rev-parse', `${record.sourceCommit}:CHANGELOG.md`), record.sourceChangelogBlob);
+  const sourceFiles = git(
+    'ls-tree',
+    '-r',
+    '--format=%(objectname) %(path)',
+    record.sourceCommit,
+    'content/docs/current',
+  )
+    .split('\n')
+    .map((entry) => entry.split(' '))
+    .map(([object, path]) => [path.replace('content/docs/current/', ''), object]);
+  assert.deepEqual(
+    listFiles(root).map((path) => relative(root, path)),
+    [...sourceFiles.map(([path]) => path), 'changelog/index.mdx'].sort(),
+  );
+  const errata = JSON.parse(readFileSync('content/docs/v1.7-errata.json', 'utf8'));
+  assert.equal(errata.changes.length, 15);
+  assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 8);
+  for (const [path, blob] of sourceFiles) {
+    const changes = errata.changes.filter((entry) => entry.path === path);
+    if (changes.length === 0) {
+      assert.equal(git('hash-object', join(root, path)), blob, path);
+      continue;
+    }
+    const lines = execFileSync('git', ['show', blob], { encoding: 'utf8' }).match(
+      /[^\n]*\n|[^\n]+$/g,
+    );
+    for (const change of changes.sort((a, b) => b.startLine - a.startLine)) {
+      const before = lines.slice(change.startLine - 1, change.endLine).join('');
+      assert.equal(createHash('sha256').update(before).digest('hex'), change.beforeSha256, path);
+      lines.splice(change.startLine - 1, change.endLine - change.startLine + 1, change.replacement);
+      assert.ok(
+        readFileSync(join('content/docs/current', path), 'utf8').includes(change.replacement),
+        path,
+      );
+    }
+    assert.equal(readFileSync(join(root, path), 'utf8'), lines.join(''), path);
+  }
+  assert.equal(
+    createHash('sha256')
+      .update(readFileSync(join(root, 'changelog/index.mdx')))
+      .digest('hex'),
+    record.generatedChangelogSha256,
+  );
+  const config = readFileSync('.coderabbit.yaml', 'utf8');
+  assert.ok(config.includes('    - "!content/docs/v1.7/**"'));
+  assert.ok(!config.includes('!content/docs/v1.7-provenance.json'));
+  assert.ok(!config.includes('!content/docs/v1.7-errata.json'));
 });

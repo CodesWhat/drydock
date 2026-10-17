@@ -6,6 +6,8 @@
     "portwing",
     "app",
     "authentication",
+    "api-keys",
+    "approvals",
     "container",
     "log",
     "registry",

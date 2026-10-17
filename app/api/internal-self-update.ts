@@ -11,9 +11,12 @@ import {
   type TerminalContainerUpdateOperationPhase,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import * as store from '../store/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { notifySelfUpdateHelperCompletion } from '../triggers/providers/docker/self-update-helper-completion.js';
 import { releaseRetainedSelfUpdateLifecycle } from '../updates/update-locks.js';
 import { sendErrorResponse } from './error-response.js';
+import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 export const SELF_UPDATE_FINALIZE_SECRET_HEADER = 'x-dd-self-update-secret';
 
@@ -143,37 +146,33 @@ function validateFinalizeRequestBody(
   };
 }
 
-function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest): void {
+function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest) {
   const lastErrorPatch = body.lastError ? { lastError: body.lastError } : {};
   switch (body.status) {
     case 'succeeded':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'succeeded',
         ...(body.phase ? { phase: body.phase as SucceededContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'rolled-back':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'rolled-back',
         ...(body.phase ? { phase: body.phase as RolledBackContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'failed':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'failed',
         ...(body.phase ? { phase: body.phase as FailedContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
     case 'expired':
-      updateOperationStore.markOperationTerminal(body.operationId, {
+      return updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'expired',
         ...(body.phase ? { phase: body.phase as ExpiredContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
-      return;
   }
 }
 
@@ -200,8 +199,18 @@ function isAlreadyTerminalOperation(operation: { status: string }): boolean {
   );
 }
 
+export function releaseFinalizedHelperLifecycle(
+  operation: { helperLifecycleOwner?: unknown },
+  status: string,
+  operationId: string,
+): void {
+  if (status === 'rolled-back' || operation.helperLifecycleOwner === 'surviving-process') {
+    releaseRetainedSelfUpdateLifecycle(operationId);
+  }
+}
+
 export function createFinalizeSelfUpdateHandler() {
-  return function finalizeSelfUpdate(req: Request, res: Response): void {
+  return async function finalizeSelfUpdate(req: Request, res: Response): Promise<void> {
     if (!isLoopbackAddress(req.socket?.remoteAddress)) {
       sendErrorResponse(res, 403, 'Loopback access required');
       return;
@@ -249,10 +258,23 @@ export function createFinalizeSelfUpdateHandler() {
     }
 
     if (isAlreadyTerminalOperation(operation)) {
-      operationFinalizeSecrets.delete(body.operationId);
-      if (body.status === 'rolled-back') {
-        releaseRetainedSelfUpdateLifecycle(body.operationId);
+      try {
+        await store.save();
+      } catch {
+        sendErrorResponse(res, 503, 'Self-update terminal state was not saved');
+        return;
       }
+      operationFinalizeSecrets.delete(body.operationId);
+      if (
+        operation.helperLifecycleOwner === 'surviving-process' &&
+        (operation.status === 'succeeded' || operation.status === 'rolled-back')
+      ) {
+        notifySelfUpdateHelperCompletion(body.operationId, {
+          status: operation.status,
+          ...(typeof operation.lastError === 'string' ? { lastError: operation.lastError } : {}),
+        });
+      }
+      releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
       res.status(202).json({
         status: 'ignored',
         operationId: body.operationId,
@@ -261,10 +283,27 @@ export function createFinalizeSelfUpdateHandler() {
       return;
     }
 
-    applyFinalizeTerminalPatch(body);
-    if (body.status === 'rolled-back') {
-      releaseRetainedSelfUpdateLifecycle(body.operationId);
+    const finalizedOperation = applyFinalizeTerminalPatch(body);
+    if (!finalizedOperation) {
+      sendErrorResponse(res, 409, 'Update operation could not be finalized');
+      return;
     }
+    try {
+      await store.save();
+    } catch {
+      sendErrorResponse(res, 503, 'Self-update terminal state was not saved');
+      return;
+    }
+    if (
+      operation.helperLifecycleOwner === 'surviving-process' &&
+      (body.status === 'succeeded' || body.status === 'rolled-back')
+    ) {
+      notifySelfUpdateHelperCompletion(body.operationId, {
+        status: body.status,
+        ...(body.lastError ? { lastError: body.lastError } : {}),
+      });
+    }
+    releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
     operationFinalizeSecrets.delete(body.operationId);
 
     res.status(202).json({
@@ -276,6 +315,6 @@ export function createFinalizeSelfUpdateHandler() {
 
 export function init(): express.Router {
   const router = express.Router();
-  router.post('/self-update/finalize', createFinalizeSelfUpdateHandler());
+  router.post('/self-update/finalize', scoped(SESSION_ONLY, createFinalizeSelfUpdateHandler()));
   return router;
 }

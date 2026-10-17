@@ -3,7 +3,68 @@
     "tabs": {
       "general": "General",
       "appearance": "Appearance",
-      "profile": "Profile"
+      "profile": "Profile",
+      "apiKeys": "API Keys"
+    },
+    "apiKeys": {
+      "title": "API Keys",
+      "description": "Scoped keys for scripts and integrations. A key authenticates one request at a time and never creates a session.",
+      "loading": "Loading API keys",
+      "empty": "No API keys yet. Create one to give a script access without sharing a password.",
+      "createButton": "Create Key",
+      "never": "Never",
+      "revokeButton": "Revoke",
+      "form": {
+        "title": "Create an API key",
+        "name": "Name",
+        "namePlaceholder": "CI pipeline",
+        "scopes": "Scopes",
+        "expires": "Expires",
+        "expiresNever": "Leave empty for a key that never expires",
+        "rateLimit": "Requests per 15 minutes",
+        "submit": "Create"
+      },
+      "scopes": {
+        "read": "Read everything",
+        "containersWatch": "Check containers for updates",
+        "containersUpdate": "Update and roll back containers",
+        "triggersTest": "Send test notifications",
+        "admin": "Full administration",
+        "apiKeysManage": "Manage API keys"
+      },
+      "reveal": {
+        "title": "Copy this key now",
+        "description": "This is the only time it is shown. Drydock stores a digest, not the key, so losing it means creating another one.",
+        "copy": "Copy",
+        "copied": "Copied"
+      },
+      "columns": {
+        "name": "Name",
+        "key": "Key",
+        "scopes": "Scopes",
+        "lastUsed": "Last used",
+        "expires": "Expires",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Active",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "revoke": {
+        "header": "Revoke API key",
+        "message": "Revoking {name} also revokes every key created with it. Anything using them stops working immediately.",
+        "accept": "Revoke"
+      },
+      "cascade": "Revoked {count} keys, including every key this one created.",
+      "errors": {
+        "load": "Could not load API keys",
+        "create": "Could not create the API key",
+        "revoke": "Could not revoke the API key"
+      },
+      "showing": "Showing {shown} of {total}",
+      "loadMore": "Load more",
+      "loadingMore": "Loading"
     },
     "general": {
       "updateMode": {

@@ -1,16 +1,19 @@
 import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { emitContainerUpdateApplied } from '../../../event/index.js';
 import { getState } from '../../../registry/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { getCreatedContainerCandidate } from '../docker/created-container-candidate.js';
 import Dockercompose from './Dockercompose.js';
 import {
+  invokeComposeRefreshPostPullHook,
   makeCompose,
   makeContainer,
   makeDockerContainerHandle,
   makeExecMocks,
   setupDockercomposeTestContext,
+  spyOnProcessComposeHelpers,
 } from './Dockercompose.test.helpers.js';
 
 vi.mock('../../../registry', () => ({
@@ -596,7 +599,7 @@ describe('Dockercompose Trigger', () => {
     expect(postStartHookSpy).not.toHaveBeenCalled();
   });
 
-  test('performContainerUpdate should scan a service already refreshed by compose-file-once mode once', async () => {
+  test('performContainerUpdate should recreate a replica already refreshed by compose-file-once mode, reusing its bound identity', async () => {
     trigger.configuration.dryrun = false;
     const updateContainerWithComposeSpy = vi
       .spyOn(trigger, 'updateContainerWithCompose')
@@ -605,7 +608,7 @@ describe('Dockercompose Trigger', () => {
     const postPullHook = vi.fn().mockResolvedValue(undefined);
     const container = makeContainer({ id: 'container-once', name: 'nginx' });
 
-    await trigger.performContainerUpdate(
+    const updated = await trigger.performContainerUpdate(
       {} as any,
       container,
       mockLog,
@@ -619,89 +622,56 @@ describe('Dockercompose Trigger', () => {
       postPullHook,
     );
 
-    expect(updateContainerWithComposeSpy).not.toHaveBeenCalled();
-    expect(postPullHook).toHaveBeenCalledTimes(1);
-    expect(postPullHook).toHaveBeenCalledWith('op-compose-once');
+    expect(updated).toBe(true);
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      expect.objectContaining({
+        runtimeContext: expect.objectContaining({ operationId: 'op-compose-once' }),
+        postPullHook,
+      }),
+    );
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.stringContaining('Recreate nginx for compose-file-once service nginx'),
+    );
   });
 
-  test('performContainerUpdate should use a per-container operation id for a skipped compose refresh', async () => {
+  test('performContainerUpdate should allow a compose-file-once replica refresh without a post-pull hook', async () => {
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const container = makeContainer({ id: 'container-no-hook', name: 'nginx' });
+
+    await trigger.performContainerUpdate({} as any, container, mockLog, {
+      composeFile: '/opt/drydock/test/stack.yml',
+      service: 'nginx',
+      serviceDefinition: {},
+      composeFileOnceApplied: true,
+    });
+
+    expect(updateContainerWithComposeSpy).toHaveBeenCalledWith(
+      '/opt/drydock/test/stack.yml',
+      'nginx',
+      container,
+      expect.not.objectContaining({ postPullHook: expect.anything() }),
+    );
+  });
+
+  test('performContainerUpdate should forward the hook with the gate suppressed when the post-pull gate already completed', async () => {
+    trigger.configuration.dryrun = false;
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
     const postPullHook = vi.fn().mockResolvedValue(undefined);
-    const container = makeContainer({ id: 'container-map', name: 'nginx' });
+    const container = makeContainer({ id: 'container-gated', name: 'nginx' });
 
     await trigger.performContainerUpdate(
       {} as any,
       container,
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-        runtimeContext: {
-          operationIds: new Map([['container-map', 'op-compose-map']]),
-          imageIdentity: 'nginx:1.1.0@sha256:abcdef123456',
-        },
-      },
-      postPullHook,
-    );
-
-    expect(postPullHook).toHaveBeenCalledTimes(1);
-    expect(postPullHook).toHaveBeenCalledWith('op-compose-map', 'nginx:1.1.0@sha256:abcdef123456');
-  });
-
-  test('performContainerUpdate should use an empty operation id when a skipped refresh has none', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    const postPullHook = vi.fn().mockResolvedValue(undefined);
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-no-operation', name: 'nginx' }),
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-        runtimeContext: { imageIdentity: 'nginx:1.1.0@sha256:abcdef123456' },
-      },
-      postPullHook,
-    );
-
-    expect(postPullHook).toHaveBeenCalledWith('', 'nginx:1.1.0@sha256:abcdef123456');
-  });
-
-  test('performContainerUpdate should allow a skipped compose refresh without a post-pull hook', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-no-hook', name: 'nginx' }),
-      mockLog,
-      {
-        composeFile: '/opt/drydock/test/stack.yml',
-        service: 'nginx',
-        serviceDefinition: {},
-        composeFileOnceApplied: true,
-      },
-    );
-  });
-
-  test('performContainerUpdate should skip the hook when the post-pull gate already completed', async () => {
-    trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
-    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    const postPullHook = vi.fn().mockResolvedValue(undefined);
-
-    await trigger.performContainerUpdate(
-      {} as any,
-      makeContainer({ id: 'container-gated', name: 'nginx' }),
       mockLog,
       {
         composeFile: '/opt/drydock/test/stack.yml',
@@ -713,7 +683,46 @@ describe('Dockercompose Trigger', () => {
       postPullHook,
     );
 
+    // The preflight already gated this service, but the hook still carries the
+    // deferred pre-update hook and prune/backup step, which the refresh only
+    // gets to run once it has checked the container (DR-75).
     expect(postPullHook).not.toHaveBeenCalled();
+    const forwardedHook = updateContainerWithComposeSpy.mock.calls[0][3].postPullHook;
+    expect(forwardedHook).toEqual(expect.any(Function));
+    await forwardedHook('operation-1', 'nginx:1.1.0@sha256:abcdef');
+    expect(postPullHook).toHaveBeenCalledWith('operation-1', 'nginx:1.1.0@sha256:abcdef', {
+      skipSecurityGate: true,
+    });
+  });
+
+  test('performContainerUpdate should keep a refusal to bind the image unbound when the post-pull gate already completed', async () => {
+    trigger.configuration.dryrun = false;
+    const updateContainerWithComposeSpy = vi
+      .spyOn(trigger, 'updateContainerWithCompose')
+      .mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await trigger.performContainerUpdate(
+      {} as any,
+      makeContainer({ id: 'container-unbound', name: 'nginx' }),
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'nginx',
+        serviceDefinition: {},
+        postPullGateCompleted: true,
+      },
+      postPullHook,
+    );
+
+    // The unbound-image path already passes skipSecurityGate, so wrapping it
+    // must not drop the rest of the options it hands over.
+    const forwardedHook = updateContainerWithComposeSpy.mock.calls[0][3].postPullHook;
+    await forwardedHook('operation-2', undefined, { skipSecurityGate: true });
+    expect(postPullHook).toHaveBeenCalledWith('operation-2', undefined, {
+      skipSecurityGate: true,
+    });
   });
 
   test('buildComposeRuntimeContext should retain the pulled image identity', () => {
@@ -727,15 +736,12 @@ describe('Dockercompose Trigger', () => {
     ).toEqual({ imageIdentity });
   });
 
-  test('compose-file-once preflight should carry an unbound-image warning into its runtime context', async () => {
+  test('compose-file-once preflight should carry a raw unbound-image reason into its runtime context', async () => {
     trigger.configuration.dryrun = false;
-    const securityGate = trigger.getSecurityGate();
-    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
-      enabled: true,
-      availabilityPolicy: 'warn',
-      signature: { verify: false },
-      gate: { mode: 'on' },
-    } as any);
+    // The service-level capture never applies a binding policy (DR-42): it
+    // always resolves as if `optional`, regardless of what security config
+    // any one replica would otherwise apply, so a bind failure comes back as
+    // a raw reason for runComposeFileOncePostPullGate to judge per container.
     mockDockerApi.getImage.mockReturnValue({
       inspect: vi.fn().mockResolvedValue({ Id: 'sha256:local-image', RepoDigests: [] }),
     });
@@ -747,10 +753,12 @@ describe('Dockercompose Trigger', () => {
 
     expect(result.get('nginx')).toEqual(
       expect.objectContaining({
-        securityGateUnboundWarn: true,
+        pulledImageId: 'sha256:local-image',
         securityGateUnboundReason: expect.any(String),
       }),
     );
+    expect(result.get('nginx')).not.toHaveProperty('securityGateUnboundWarn');
+    expect(result.get('nginx')).not.toHaveProperty('imageIdentity');
   });
 
   test('compose-file-once post-pull gate should fail when its update context cannot be created', async () => {
@@ -765,13 +773,19 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('compose-file-once post-pull gate should record an allowed unbound security warning', async () => {
+    const securityGate = trigger.getSecurityGate();
+    vi.spyOn(securityGate.securityConfig, 'getSecurityConfiguration').mockReturnValue({
+      enabled: true,
+      availabilityPolicy: 'warn',
+      signature: { verify: false },
+      gate: { mode: 'on' },
+    } as any);
     const recordWarningSpy = vi.spyOn(trigger, 'recordUnboundSecurityWarning');
     vi.spyOn(trigger, 'createTriggerContext').mockResolvedValue({} as any);
 
     await (trigger as any).runComposeFileOncePostPullGate(makeContainer(), {
       service: 'nginx',
       runtimeContext: {
-        securityGateUnboundWarn: true,
         securityGateUnboundReason: 'manifest unavailable',
       },
     });
@@ -837,7 +851,7 @@ describe('Dockercompose Trigger', () => {
         makeContainer(),
         mockLog,
       ),
-    ).resolves.toEqual({ unboundWarn: false });
+    ).resolves.toEqual({ unboundWarn: false, localImageId: 'sha256:local-image' });
   });
 
   test('capturePulledImageIdentity should use the missing-identity policy when inspection fails', async () => {
@@ -900,8 +914,6 @@ describe('Dockercompose Trigger', () => {
   test('compose-file-once runtime updates should preserve requested context without a preflight context', async () => {
     trigger.configuration.composeFileOnce = true;
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
-    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
     const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
     const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
 
@@ -916,14 +928,63 @@ describe('Dockercompose Trigger', () => {
     expect(lifecycleSpy).toHaveBeenCalledWith(
       container,
       expect.objectContaining({ runtimeContext: { operationId: 'op-compose-context' } }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: false }),
     );
+  });
+
+  test('compose-file-once runtime updates should still gate a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [{ service: 'nginx', container }],
+    );
+
+    // No preflight context for this service, so the ordinary gated path has to
+    // run rather than the batch claiming the gate was already completed.
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    const composeUpdateOptions = composeUpdateSpy.mock.calls[0][3];
+    expect(composeUpdateOptions.postPullHook).toEqual(expect.any(Function));
+    expect(composeUpdateOptions.skipPull).toBeUndefined();
+  });
+
+  test('compose-file-once runtime updates should gate every replica of a service the preflight did not cover', async () => {
+    trigger.configuration.composeFileOnce = true;
+    trigger.configuration.dryrun = false;
+    const { scanAndGateSpy, composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+    const labels = { 'com.docker.compose.service': 'nginx' };
+    const first = makeContainer({ id: 'nginx-1', name: 'nginx-1', labels });
+    const second = makeContainer({ id: 'nginx-2', name: 'nginx-2', labels });
+
+    await (trigger as any).runRuntimeUpdatesForComposeMappings(
+      '/opt/drydock/test/stack.yml',
+      ['/opt/drydock/test/stack.yml'],
+      makeCompose({ nginx: {} }),
+      [
+        { service: 'nginx', container: first },
+        { service: 'nginx', container: second },
+      ],
+    );
+
+    // Compose-file-once only earns the one-refresh-per-service shortcut off a
+    // preflight. Without one, marking the service handled after the first
+    // replica would make the second wrongly skip its own compose refresh,
+    // assuming the first replica's refresh already covered it. It would
+    // still be gated, through the postPullHook fallback that runs whenever
+    // postPullGateCompleted is false, but it would never get pulled or
+    // recreated.
+    expect(composeUpdateSpy).toHaveBeenCalledTimes(2);
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(2);
   });
 
   test('compose-file-once runtime updates should omit runtime context when neither context is available', async () => {
     trigger.configuration.composeFileOnce = true;
     trigger.configuration.dryrun = false;
-    vi.spyOn(trigger, 'buildComposeFileOnceRuntimeContextByService').mockResolvedValue(new Map());
-    vi.spyOn(trigger, 'runComposeFileOncePostPullGate').mockResolvedValue();
     const lifecycleSpy = vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockResolvedValue();
     const container = makeContainer({ labels: { 'com.docker.compose.service': 'nginx' } });
 
@@ -937,6 +998,7 @@ describe('Dockercompose Trigger', () => {
     expect(lifecycleSpy).toHaveBeenCalledWith(
       container,
       expect.objectContaining({ runtimeContext: undefined }),
+      expect.objectContaining({ lifecycleAlreadyAcquired: false }),
     );
   });
 
@@ -2065,6 +2127,107 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('recreateContainer integration should leave a republished index unbound instead of pinning the update candidate digest', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+      // The manifest the watcher resolved for the update this recreate undoes.
+      result: { digest: 'sha256:bbbb' },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    // One local image ID carrying both the retained manifest and the
+    // republished one, which is the tie capturePulledImageIdentity has to break.
+    mockDockerApi.getImage = vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:localimage',
+        RepoDigests: ['nginx@sha256:aaaa', 'nginx@sha256:bbbb'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0',
+      container,
+      mockLog,
+    );
+
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0' }),
+      'nginx',
+      expect.anything(),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('none of them is the manifest this pull was pinned to'),
+    );
+  });
+
+  test('recreateContainer integration should break a digest tie with the digest the requested image pins', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+      result: { digest: 'sha256:bbbb' },
+    });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.1.0', ''].join('\n');
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    mockDockerApi.getImage = vi.fn().mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({
+        Id: 'sha256:localimage',
+        RepoDigests: ['nginx@sha256:aaaa', 'nginx@sha256:bbbb'],
+        Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+        Os: 'linux',
+      }),
+    });
+    const createContainerSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({
+      inspect: vi.fn().mockResolvedValue({ Image: 'sha256:localimage' }),
+      start: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    await trigger.recreateContainer(
+      mockDockerApi,
+      {
+        State: { Running: true },
+        Config: { Image: 'nginx:1.1.0' },
+      },
+      'nginx:1.0.0@sha256:aaaa',
+      container,
+      mockLog,
+    );
+
+    expect(createContainerSpy).toHaveBeenCalledWith(
+      mockDockerApi,
+      expect.objectContaining({ Image: 'nginx:1.0.0@sha256:aaaa' }),
+      'nginx',
+      expect.anything(),
+    );
+  });
+
   test('recreateContainer should restore original compose text when runtime refresh fails and rollback succeeds', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({
@@ -2229,6 +2392,137 @@ describe('Dockercompose Trigger', () => {
       '/opt/drydock/test/stack.yml',
       composeFileContent,
     ]);
+  });
+
+  test('processComposeFile should surface a failed compose restore on the runtime error', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(
+      new Error('runtime refresh failed'),
+    );
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe(
+      'runtime refresh failed (compose file restore failed: Failed to restore compose file mutations ' +
+        '(/opt/drydock/test/stack.yml: compose restore write failed))',
+    );
+  });
+
+  test('processComposeFile should surface a failed compose restore on a non-Error runtime failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue('runtime refresh exploded');
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toContain('runtime refresh exploded');
+    expect(thrownError.message).toContain('compose restore write failed');
+  });
+
+  test('processComposeFile should keep the rollback outcome of a non-Error runtime failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const composeRollbackOutcome = {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'runtime refresh failed',
+    };
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    const runtimeFailure = { message: 'runtime refresh failed', composeRollbackOutcome };
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(runtimeFailure);
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', [container])
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe(
+      'runtime refresh failed (compose file restore failed: Failed to restore compose file mutations ' +
+        '(/opt/drydock/test/stack.yml: compose restore write failed))',
+    );
+    expect(thrownError.composeRollbackOutcome).toEqual(composeRollbackOutcome);
+    expect(thrownError.cause).toBe(runtimeFailure);
+  });
+
+  test('processComposeFile should surface a failed partial compose restore instead of claiming it restored', async () => {
+    trigger.configuration.dryrun = false;
+    const containers = [
+      makeContainer({ name: 'nginx', updateAvailable: true }),
+      makeContainer({
+        name: 'redis',
+        imageName: 'redis',
+        tagValue: '7.0.0',
+        remoteValue: '7.2.0',
+        updateAvailable: true,
+      }),
+    ];
+    const composeFileContent = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({
+        nginx: { image: 'nginx:1.0.0' },
+        redis: { image: 'redis:7.0.0' },
+      }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error('redis runtime refresh failed'));
+
+    const thrownError = await trigger
+      .processComposeFile('/opt/drydock/test/stack.yml', containers)
+      .catch((error) => error);
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toContain('redis runtime refresh failed');
+    expect(thrownError.message).toContain('compose restore write failed');
+    expect(trigger.log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Restored compose file mutations'),
+    );
   });
 
   test('processComposeFile should not restore the whole compose file after an earlier service succeeds', async () => {
@@ -3086,6 +3380,362 @@ describe('Dockercompose Trigger', () => {
       await expect(
         trigger.buildHookConfig(makeContainer({ labels: { 'dd.hook.pre': 'echo pre' } }), context),
       ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+    });
+
+    // A batch shares one compose file, and under compose-file-once one round of
+    // pulls, so a hook label whose provenance can't be established has to fail
+    // the batch before either of those happens and before an earlier service
+    // is recreated (SEC-27).
+    describe('in a batch', () => {
+      const composeFile = '/opt/drydock/test/stack.yml';
+
+      function makeBatch(redisHookLabels: Record<string, string> = {}) {
+        return [
+          makeContainer({
+            id: 'nginx-id',
+            name: 'nginx',
+            updateAvailable: true,
+            labels: { 'com.docker.compose.service': 'nginx' },
+          }),
+          makeContainer({
+            id: 'redis-id',
+            name: 'redis',
+            imageName: 'redis',
+            tagValue: '7.0.0',
+            remoteValue: '7.2.0',
+            updateAvailable: true,
+            labels: { 'com.docker.compose.service': 'redis', ...redisHookLabels },
+          }),
+        ];
+      }
+
+      /**
+       * Each container reports the image ID it runs, and only redis's running
+       * image decides provenance. Every other image inspect answers with a
+       * host-compatible platform, which is all the compose-file-once preflight
+       * asks of a pulled candidate.
+       */
+      function mockRedisRunningImage(inspectRunningImage: () => Promise<unknown>) {
+        mockDockerApi.getContainer = vi.fn((id) => ({
+          inspect: vi.fn().mockResolvedValue({ Image: `sha256:${id}-image` }),
+        }));
+        const inspectRunningImageSpy = vi.fn(inspectRunningImage);
+        mockDockerApi.getImage = vi.fn((imageRef) => ({
+          inspect:
+            imageRef === 'sha256:redis-id-image'
+              ? inspectRunningImageSpy
+              : vi.fn().mockResolvedValue({
+                  Architecture: process.arch === 'x64' ? 'amd64' : process.arch,
+                  Os: 'linux',
+                }),
+        }));
+        return inspectRunningImageSpy;
+      }
+
+      /** Record every side effect of the batch in the order it happens. */
+      function spyOnBatchSideEffects() {
+        const sideEffects: string[] = [];
+        vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+          makeCompose({ nginx: { image: 'nginx:1.0.0' }, redis: { image: 'redis:7.0.0' } }),
+        );
+        const spies = spyOnProcessComposeHelpers(trigger);
+        spies.writeComposeFileSpy.mockImplementation(async () => {
+          sideEffects.push('write');
+        });
+        spies.scanAndGateSpy.mockImplementation(async (_context, container) => {
+          sideEffects.push(`gate:${container.name}`);
+        });
+        spies.composeUpdateSpy.mockImplementation(
+          async (_composeFile, service, container, options = {}) => {
+            sideEffects.push(`update:${service}`);
+            await invokeComposeRefreshPostPullHook(container, options);
+          },
+        );
+        vi.spyOn(trigger, 'pullImage').mockImplementation(async () => {
+          sideEffects.push('pull');
+        });
+        vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockImplementation(
+          async (_dockerApi, newImage) => ({
+            imageIdentity: `${newImage}@sha256:${'a'.repeat(64)}`,
+            unboundWarn: false,
+          }),
+        );
+        return { sideEffects, ...spies };
+      }
+
+      const originalAllowImageLabels = process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+
+      beforeEach(() => {
+        trigger.configuration.dryrun = false;
+        trigger.configuration.prune = false;
+      });
+
+      afterEach(() => {
+        if (originalAllowImageLabels === undefined) {
+          delete process.env.DD_HOOKS_ALLOW_IMAGE_LABELS;
+        } else {
+          process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = originalAllowImageLabels;
+        }
+      });
+
+      test('fails on unverified provenance before the compose file is written or an earlier service is updated', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+
+        await expect(
+          trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' })),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        // nginx sorts ahead of redis and carries no hook label of its own, so
+        // without a preflight it is pulled and recreated before redis fails.
+        expect(sideEffects).toEqual([]);
+        expect(preHookSpy).not.toHaveBeenCalled();
+        expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
+      });
+
+      test('fails a compose-file-once batch on unverified provenance before any candidate is pulled or gated', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        trigger.configuration.composeFileOnce = true;
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+
+        await expect(
+          trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' })),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        expect(sideEffects).toEqual([]);
+        expect(preHookSpy).not.toHaveBeenCalled();
+        expect(emitContainerUpdateApplied).not.toHaveBeenCalled();
+      });
+
+      test('fails the operation of the container that failed and skips the rest of the batch', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        spyOnBatchSideEffects();
+        vi.spyOn(updateOperationStore, 'getOperationById').mockImplementation(
+          (id) => ({ id, status: 'queued' }) as any,
+        );
+        const insertOperationSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+        const markOperationTerminalSpy = vi
+          .spyOn(updateOperationStore, 'markOperationTerminal')
+          .mockReturnValue(undefined);
+
+        await expect(
+          trigger.processComposeFile(
+            composeFile,
+            makeBatch({ 'dd.hook.pre': 'echo baked' }),
+            undefined,
+            {
+              operationIds: new Map([
+                ['nginx-id', 'op-nginx'],
+                ['redis-id', 'op-redis'],
+              ]),
+            },
+          ),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        // Both updates were requested with an operation of their own, so those
+        // rows are the ones terminalized and none is minted.
+        expect(insertOperationSpy).not.toHaveBeenCalled();
+        expect(markOperationTerminalSpy).toHaveBeenCalledTimes(2);
+        // nginx was never attempted: it names redis as what blocked it.
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-nginx',
+          expect.objectContaining({
+            status: 'skipped-dependency',
+            phase: 'skipped-dependency',
+            skippedDependencyReason: 'upstream-failed',
+            blockingContainerId: 'redis-id',
+            blockingOperationId: 'op-redis',
+          }),
+        );
+        // The code rides in the message, which is all the operation record,
+        // the failure log line and the audit entry are built from.
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-redis',
+          expect.objectContaining({
+            status: 'failed',
+            phase: 'failed',
+            lastError: expect.stringContaining('[hook-provenance-unverified]'),
+          }),
+        );
+      });
+
+      test('records a failed operation carrying the container when the update had no operation of its own', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        // The running container can't be inspected at all, so there is no image
+        // ID to read labels from and provenance is just as unestablished.
+        mockDockerApi.getContainer = vi.fn(() => ({
+          inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+        }));
+        const { sideEffects } = spyOnBatchSideEffects();
+        const insertOperationSpy = vi
+          .spyOn(updateOperationStore, 'insertOperation')
+          .mockImplementation(
+            (operation) => ({ ...operation, id: `op-${operation.containerName}` }) as any,
+          );
+        const markOperationTerminalSpy = vi
+          .spyOn(updateOperationStore, 'markOperationTerminal')
+          .mockReturnValue(undefined);
+        const [nginx, redis] = makeBatch({ 'dd.hook.post': 'echo baked' });
+        // No Docker ID on the container that fails, so the blocker can only be
+        // named by its service.
+        delete redis.id;
+
+        await expect(trigger.processComposeFile(composeFile, [nginx, redis])).rejects.toMatchObject(
+          { code: 'hook-provenance-unverified' },
+        );
+
+        expect(sideEffects).toEqual([]);
+        // Neither update came with an operation, so one is minted for each or
+        // there would be no row to terminalize and no failed event at all.
+        // That event is built from the row alone, so the row carries the
+        // container: without it the event names a container no notification
+        // can be matched to, where the lifecycle's own failure event has it.
+        expect(insertOperationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            containerName: 'redis',
+            containerId: undefined,
+            container: redis,
+          }),
+        );
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-redis',
+          expect.objectContaining({
+            status: 'failed',
+            lastError: expect.stringContaining('[hook-provenance-unverified]'),
+          }),
+        );
+        expect(insertOperationSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            containerName: 'nginx',
+            containerId: 'nginx-id',
+            container: nginx,
+          }),
+        );
+        expect(markOperationTerminalSpy).toHaveBeenCalledWith(
+          'op-nginx',
+          expect.objectContaining({
+            status: 'skipped-dependency',
+            blockingContainerId: undefined,
+            blockingOperationId: undefined,
+          }),
+        );
+      });
+
+      test('ignores an image-baked hook label once for the batch and runs each lifecycle from that answer', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => ({
+          Config: { Labels: { 'dd.hook.pre': 'echo baked' } },
+        }));
+        const { sideEffects, preHookSpy, postHookSpy } = spyOnBatchSideEffects();
+        const resolveHookConfigSpy = vi.spyOn(trigger.hookExecutor, 'resolveHookConfig');
+        const [nginx, redis] = makeBatch({
+          'dd.hook.pre': 'echo baked',
+          'dd.hook.post': 'echo operator',
+        });
+
+        await trigger.processComposeFile(composeFile, [nginx, redis]);
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        // One provenance decision per container: the preflight's. The lifecycle
+        // neither inspects the image again nor repeats the warning.
+        expect(resolveHookConfigSpy).toHaveBeenCalledTimes(2);
+        expect(inspectRunningImageSpy).toHaveBeenCalledTimes(1);
+        expect(
+          mockLog.warn.mock.calls.filter(([message]) =>
+            String(message).includes(
+              'Ignoring lifecycle hook label dd.hook.pre on container redis',
+            ),
+          ),
+        ).toHaveLength(1);
+        // The image's label is dropped and the operator's own still runs.
+        const redisHookConfig = expect.objectContaining({
+          hookPre: undefined,
+          hookPost: 'echo operator',
+        });
+        expect(preHookSpy).toHaveBeenCalledWith(redis, redisHookConfig, expect.anything());
+        expect(postHookSpy).toHaveBeenCalledWith(redis, redisHookConfig, expect.anything());
+      });
+
+      test('trusts an image-baked hook label without inspecting anything when DD_HOOKS_ALLOW_IMAGE_LABELS is true', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = 'true';
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+        const [nginx, redis] = makeBatch({ 'dd.hook.pre': 'echo baked' });
+
+        await trigger.processComposeFile(composeFile, [nginx, redis]);
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        expect(inspectRunningImageSpy).not.toHaveBeenCalled();
+        expect(preHookSpy).toHaveBeenCalledWith(
+          redis,
+          expect.objectContaining({ hookPre: 'echo baked' }),
+          expect.anything(),
+        );
+      });
+
+      test('updates every service without inspecting anything when hooks are disabled', async () => {
+        delete process.env.DD_HOOKS_ENABLED;
+        const inspectRunningImageSpy = mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects } = spyOnBatchSideEffects();
+
+        await trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' }));
+
+        expect(sideEffects).toEqual([
+          'write',
+          'update:nginx',
+          'gate:nginx',
+          'update:redis',
+          'gate:redis',
+        ]);
+        expect(inspectRunningImageSpy).not.toHaveBeenCalled();
+        expect(mockDockerApi.getContainer).not.toHaveBeenCalled();
+      });
+
+      test('a lifecycle the preflight did not cover still checks provenance itself', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => {
+          throw new Error('no such image');
+        });
+        const { sideEffects } = spyOnBatchSideEffects();
+        const [, redis] = makeBatch({ 'dd.hook.pre': 'echo baked' });
+
+        await expect(
+          (trigger as any).runRuntimeUpdatesForComposeMappings(
+            composeFile,
+            [composeFile],
+            makeCompose({ redis: { image: 'redis:7.0.0' } }),
+            [{ service: 'redis', container: redis }],
+          ),
+        ).rejects.toMatchObject({ code: 'hook-provenance-unverified' });
+
+        expect(sideEffects).toEqual([]);
+      });
     });
   });
 });

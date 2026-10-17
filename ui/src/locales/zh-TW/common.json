@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "已執行 {duration}",
+    "apiResponse": {
+      "html": "{context} 傳回了 HTML 而不是 JSON。請檢查 API 伺服器或示範模擬服務是否正在執行。",
+      "contentType": "{context} 傳回了 {contentType} 而不是 JSON。",
+      "invalidJson": "{context} 傳回了無效的 JSON。"
+    },
     "loading": "載入中…",
     "back": "返回",
     "cancel": "取消",
@@ -9,8 +15,8 @@
     "close": "關閉",
     "retry": "重試",
     "unknown": "未知",
-    "yes": "yes",
-    "no": "no",
+    "yes": "是",
+    "no": "否",
     "errorSummary": {
       "rateLimitHit": "倉庫速率限制已觸發",
       "accessDenied": "倉庫存取被拒",
@@ -22,13 +28,13 @@
       "signatureFailed": "簽名驗證失敗"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "自訂"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "剛剛"
     },
     "imageAge": {
-      "now": "now"
+      "now": "現在"
     }
   }
 }

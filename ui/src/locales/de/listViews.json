@@ -42,6 +42,30 @@
       "info": "Info"
     },
     "actions": {
+      "webhook-watch": "Überprüfung per Webhook",
+      "webhook-watch-container": "Containerüberprüfung per Webhook",
+      "webhook-update": "Update per Webhook",
+      "mqtt-command-update": "MQTT-Updatebefehl",
+      "security-scan-skipped": "Sicherheitsprüfung übersprungen",
+      "scanner-asset-pull-started": "Download des Scanner-Images gestartet",
+      "scanner-asset-pull-succeeded": "Scanner-Image erfolgreich heruntergeladen",
+      "scanner-asset-pull-failed": "Download des Scanner-Images fehlgeschlagen",
+      "scanner-asset-warm-started": "Scanner-Vorbereitung gestartet",
+      "scanner-asset-warm-succeeded": "Scanner-Vorbereitung erfolgreich",
+      "scanner-asset-warm-failed": "Scanner-Vorbereitung fehlgeschlagen",
+      "container-unhealthy": "Container nicht funktionsfähig",
+      "env-reveal": "Umgebungsvariablen angezeigt",
+      "debug-dump": "Debug-Daten heruntergeladen",
+      "config-read": "Konfiguration gelesen",
+      "config-validated": "Konfiguration validiert",
+      "config-reloaded": "Konfiguration neu geladen",
+      "config-written": "Konfiguration geschrieben",
+      "update-approved": "Update genehmigt",
+      "update-rejected": "Update abgelehnt",
+      "update-deferred": "Update verschoben",
+      "api-key-created": "API-Schlüssel erstellt",
+      "api-key-revoked": "API-Schlüssel widerrufen",
+      "api-key-auth-failed": "API-Schlüssel-Authentifizierung fehlgeschlagen",
       "container-update": "Container-Update",
       "container-added": "Container hinzugefügt",
       "container-removed": "Container entfernt",
@@ -49,6 +73,13 @@
       "container-stop": "Container gestoppt",
       "container-restart": "Container neugestartet",
       "auth-login": "Auth-Anmeldung",
+      "totp-recovery-used": "Wiederherstellungscode verwendet",
+      "totp-enrollment-started": "Zwei-Faktor-Einrichtung gestartet",
+      "totp-enabled": "Zwei-Faktor aktiviert",
+      "totp-replaced": "Zwei-Faktor ersetzt",
+      "totp-disabled": "Zwei-Faktor deaktiviert",
+      "totp-recovery-codes-replaced": "Wiederherstellungscodes ersetzt",
+      "totp-break-glass": "Zwei-Faktor-Offline-Wiederherstellung",
       "authenticated": "Authentifiziert",
       "authfail": "Authentifizierung fehlgeschlagen",
       "hook-configured": "Hook konfiguriert",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Automatisches Update blockiert",
       "update-policy-override-set": "Update-Policy-Override gesetzt",
       "update-policy-override-cleared": "Update-Policy-Override entfernt",
+      "group-policy-set": "Gruppen-Policy gesetzt",
+      "group-policy-cleared": "Gruppen-Policy entfernt",
+      "label-override-set": "Label-Override gesetzt",
+      "label-override-cleared": "Label-Override entfernt",
       "auto-rollback": "Automatischer Rollback",
       "rollback": "Rollback",
       "preview": "Vorschau",
       "agent-disconnect": "Agent getrennt",
       "notification-delivery-failed": "Benachrichtigung fehlgeschlagen",
       "security-alert": "Sicherheitswarnung",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Reifezeit abgelaufen",
+      "image-prune": "Image-Bereinigung"
     },
     "target": {
       "container": "Container",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Gruppe"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Reife aufgehoben",
         "description": "Wenn ein durch die Reife-Policy zurückgehaltenes Update anwendbar wird"
+      },
+      "update-pending-approval": {
+        "name": "Update wartet auf Genehmigung",
+        "description": "Wenn ein Update im manuellen Modus in die Genehmigungswarteschlange aufgenommen wird"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Sauber"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "Images",
+      "scanned": "gescannt"
     },
     "fixableBadge": "{count} behebbar",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Trigger passen zu deinen Filtern",
-    "testContainerName": "Test Container",
+    "testContainerName": "Testcontainer",
     "columns": {
       "trigger": "Trigger",
       "type": "Typ",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Watcher werden geladen...",
     "loadError": "Watcher konnten nicht geladen werden",
-    "soon": "soon",
+    "soon": "bald",
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Watcher passen zu deinen Filtern",

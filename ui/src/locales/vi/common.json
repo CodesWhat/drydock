@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Đã chạy {duration}",
+    "apiResponse": {
+      "html": "{context} trả về HTML thay vì JSON. Kiểm tra xem máy chủ API hoặc các mô phỏng demo có đang chạy không.",
+      "contentType": "{context} trả về {contentType} thay vì JSON.",
+      "invalidJson": "{context} trả về JSON không hợp lệ."
+    },
     "loading": "Đang tải…",
     "back": "Quay lại",
     "cancel": "Hủy",
@@ -9,8 +15,8 @@
     "close": "Đóng",
     "retry": "Thử lại",
     "unknown": "không xác định",
-    "yes": "yes",
-    "no": "no",
+    "yes": "có",
+    "no": "không",
     "errorSummary": {
       "rateLimitHit": "Registry đã đạt giới hạn tốc độ",
       "accessDenied": "Truy cập registry bị từ chối",
@@ -22,13 +28,13 @@
       "signatureFailed": "Xác minh chữ ký thất bại"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Tùy chỉnh"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Vừa xong"
     },
     "imageAge": {
-      "now": "now"
+      "now": "bây giờ"
     }
   }
 }

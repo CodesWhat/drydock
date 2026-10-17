@@ -1,0 +1,167 @@
+---
+title: "Lifecycle Hooks"
+description: "Run custom commands before or after container updates."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+Lifecycle hooks let you run shell commands before or after a container is updated. Common use cases:
+
+- Stop dependent services before updating
+- Run database migrations after updating
+- Send custom notifications
+- Create network resources or volumes
+
+## Container labels
+
+| Label | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dd.hook.pre` | string | — | Shell command to execute before the update |
+| `dd.hook.post` | string | — | Shell command to execute after the update |
+| `dd.hook.pre.abort` | boolean | `true` | Abort the update if the pre-hook exits with a non-zero code |
+| `dd.hook.timeout` | number (ms) | `60000` | Maximum execution time for each hook |
+
+<Callout type="warn">Legacy `wud.hook.*` labels are ignored as of v1.6. Rename them to `dd.hook.*` before upgrading, or use `node dist/index.js config migrate` to rewrite compose files.</Callout>
+
+## Hook enablement and allowlist
+
+| Env var | Required | Description | Supported values | Default |
+| --- | --- | --- | --- | --- |
+| `DD_HOOKS_ENABLED` | ⚪ | Enable execution of lifecycle hook labels (`dd.hook.*`) | `true`, `false` | `false` |
+| `DD_HOOKS_ALLOWED_COMMANDS` | ⚪ | Comma-separated list of allowed first-token binary names or paths | e.g. `sh,jq,/usr/local/bin/notify.sh` | (unset — see below) |
+| `DD_HOOKS_ALLOW_IMAGE_LABELS` | ⚪ | Trust `dd.hook.*` labels baked into an image with `LABEL`, not just labels set on the container | `true`, `false` | `false` |
+
+<Callout type="warn">Hooks sourced from labels are skipped by default. Set `DD_HOOKS_ENABLED=true` to opt in.</Callout>
+
+<Callout type="warn">**Command allowlist (recommended):** When `DD_HOOKS_ENABLED=true` and `DD_HOOKS_ALLOWED_COMMANDS` is **not set**, drydock logs a one-time warning recommending you configure the allowlist. Any hook that passes the syntax validator runs. When `DD_HOOKS_ALLOWED_COMMANDS` **is set**, drydock checks the first token of each hook command against the list before executing. Hooks whose binary is not on the list are rejected with a clear error and never executed.</Callout>
+
+### Allowlist matching rules
+
+- **No slash in entry** (`sh`, `jq`): the entry must equal the hook command's first token exactly. `jq` matches a command whose first token is literally `jq`; it does not match `/usr/bin/jq` or any other path ending in `jq`.
+- **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required, same as above.
+
+Example:
+
+```bash
+DD_HOOKS_ALLOWED_COMMANDS=jq,/usr/local/bin/notify.sh
+```
+
+This permits `jq ...` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/jq`.
+
+<Callout type="warn">`curl` was removed from the Docker image in v1.7.0 (see [Deprecations](/docs/deprecations#curl-healthcheck-override)). BusyBox itself is still present, so `/bin/busybox wget` remains available for a simple HTTP call from a hook — it lacks curl's flags (no `-u`/basic-auth shorthand, no custom headers beyond `--header`, no request-method flexibility), so a hook with heavier HTTP needs still requires a mounted script or binary with its own HTTP client.</Callout>
+
+## Labels baked into images
+
+Docker copies an image's `LABEL` instructions into every container created from it, so a `dd.hook.*` label on a container can come from the image rather than from you. Drydock only runs hook labels you set on the container (Compose `labels:`, `docker run --label`). Before building the hook config it reads the labels of the image the container was created from, and ignores any `dd.hook.*` label whose key and value match the image's. A label you set on the container with a different value than the image's still runs. Each ignored label is logged as a warning naming the container and label key.
+
+A label you set on the container with exactly the same value the image carries can't be told apart from the image's, so it is ignored too, with a warning in the log. Change the value, or set `DD_HOOKS_ALLOW_IMAGE_LABELS=true`.
+
+If drydock can't read the image labels and the container has a `dd.hook.pre` or `dd.hook.post` label, the update fails with an error saying hook provenance could not be established (`hook-provenance-unverified`), and no hook runs. Containers without hook labels are not affected, and drydock never looks up image labels for them.
+
+If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` and drydock runs them. Only do that for images you control. A baked hook follows the image: it applies while the image the container was created from carries it, and stops once an update moves the container to an image that doesn't.
+
+### Recreated containers
+
+Updating a container means replacing it, and the replacement gets the old container's labels. A `dd.hook.*` label that came from the old image is left out of that copy: if its key and value match the image the old container was created from, it isn't carried onto the new container, whatever the new image contains. Labels you set on the container are carried over unchanged. Without this, a label one image baked in would become a label the new container sets itself, and the next update would treat it as yours.
+
+This applies every time drydock recreates a container, including rollbacks and Compose-managed containers, and it doesn't depend on `DD_HOOKS_ENABLED` or `DD_HOOKS_ALLOW_IMAGE_LABELS`. If the new image bakes the same label, Docker applies it to the new container from that image, and it stays an image label.
+
+If drydock can't read the old image's labels while recreating a container, it can't tell your hook labels from baked ones. It leaves every `dd.hook.*` label off the new container and logs a warning naming the container and the labels. Set them on the container again if they were yours.
+
+### Containers recreated by an earlier version
+
+Earlier versions of drydock copied inherited hook labels onto the replacement when an update pulled a newer image under the same tag. A container one of those versions recreated can still carry a `dd.hook.*` label that came from an old image. Drydock can't tell it from a label you set, so it runs. Compare the container's labels with its image's:
+
+```bash
+docker inspect --format '{{json .Config.Labels}}' <container>
+docker image inspect --format '{{json .Config.Labels}}' "$(docker inspect --format '{{.Image}}' <container>)"
+```
+
+A `dd.hook.*` label on the container that you didn't set, and that the image doesn't carry with the same value, is a leftover. Labels can't be changed on an existing container, so recreate it without the label: `docker compose up -d --force-recreate` for a Compose service, or `docker rm` and `docker run` again.
+
+## Hook environment variables
+
+When a hook runs, drydock injects environment variables describing the update:
+
+| Variable | Description | Example |
+| --- | --- | --- |
+| `DD_CONTAINER_NAME` | Container name | `myapp` |
+| `DD_CONTAINER_ID` | Container ID | `abc123def456` |
+| `DD_IMAGE_NAME` | Image name (without registry prefix) | `myorg/myapp` |
+| `DD_IMAGE_TAG` | Current image tag | `1.2.3` |
+| `DD_UPDATE_KIND` | Update type | `tag` or `digest` |
+| `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
+| `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
+
+Injected hook environment values are sanitized before execution. Control characters, DEL, and the characters `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, `)`, space, `*`, `?`, `[`, `]`, `{`, `}`, `~`, `\`, `"`, and `'` are replaced with `_`, and a leading `-` is stripped so a value can't be parsed as an option, matching the command trigger's environment hardening. This protects hook scripts that expand Drydock-provided values but does not make arbitrary hook commands safe; keep hook commands trusted and quote variables in your scripts.
+
+## Command validation
+
+Hook commands are validated against a restricted shell-safe grammar. Commands containing any of the following are rejected when the hook runs, with a clear error:
+
+- Command substitution: `$(...)` or backticks (`` ` ``)
+- Output or input redirections: `>`, `>>`, `<`
+- Command chaining metacharacters: `;`, `&&`, `||`, `|`
+
+Simple positional arguments and environment variable references that do not use substitution are allowed. Use a wrapper script (mounted into the container) for complex logic.
+
+## Execution details
+
+- Hooks run inside the drydock container using `/bin/sh -c` only when `DD_HOOKS_ENABLED=true`
+- Combined stdout and stderr output is capped at **10 KB**
+- An exit code of `0` is treated as success; any non-zero code is a failure
+- If a hook exceeds its timeout, it is killed and treated as a failure (exit code 1)
+- Hooks are NOT executed during [self-update](/docs/configuration/self-update)
+
+## Threat model (label-sourced commands)
+
+Hooks are sourced from container labels and then executed by drydock. Treat hook labels as a code-execution boundary.
+
+- Trust boundary: Container labels (`dd.hook.*`) cross into the drydock runtime command executor.
+- Trust boundary: Hook execution can cross from drydock into Docker host control when the socket is mounted.
+- High-value assets: Docker socket access, mounted credentials/secrets, and network-reachable internal services.
+- Attacker capability: Anyone who can modify deployed container labels (Compose manifests, swarm specs, API-driven container creation) can inject hook commands.
+- Attacker capability: Whoever publishes an image controls its baked-in `LABEL`s. Drydock ignores `dd.hook.*` labels that come from the image unless `DD_HOOKS_ALLOW_IMAGE_LABELS=true`, so this only applies to images you've opted in to trusting.
+- Abuse path: A malicious label can execute arbitrary shell via `/bin/sh -c`, including secret exfiltration or unauthorized Docker API actions.
+- Abuse path: Expensive hooks can degrade availability (for example long-running or fork-heavy commands), bounded by `dd.hook.timeout`.
+- Mitigation: Restrict who can modify container specs/labels and protect deployment pipelines.
+- Mitigation: Leave `DD_HOOKS_ALLOW_IMAGE_LABELS` unset unless you build every image you run hooks on.
+- Mitigation: Run drydock with least privilege; mount `/var/run/docker.sock` only when required.
+- Mitigation: Keep `dd.hook.pre.abort=true` when you want fail-closed behavior on pre-hook errors.
+- Mitigation: Monitor audit events (`hook-configured`, `hook-pre-*`, `hook-post-*`) for unauthorized hook changes and executions.
+
+## Pre-hook abort behavior
+
+When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook cancels the update entirely. Set it to `false` if you want the update to proceed regardless of hook outcome.
+
+## Audit events
+
+| Event | Description |
+| --- | --- |
+| `hook-configured` | Hook labels were detected for the update lifecycle |
+| `hook-pre-success` | Pre-hook completed successfully |
+| `hook-pre-failed` | Pre-hook exited non-zero or timed out |
+| `hook-post-success` | Post-hook completed successfully |
+| `hook-post-failed` | Post-hook exited non-zero or timed out |
+
+## Example
+
+```yaml
+services:
+  myapp:
+    image: myapp:latest
+    labels:
+      - dd.watch=true
+      - dd.hook.pre=docker exec mydb pg_dump -U postgres -F c -f /backup/pre-update.dump mydb
+      - dd.hook.post=/usr/local/bin/notify-update.sh
+      - dd.hook.pre.abort=true
+      - dd.hook.timeout=120000
+```
+
+Commands that require shell redirects (`>`, `|`, etc.) must be wrapped in a script file and invoked via the hook (e.g. `dd.hook.pre=/usr/local/bin/backup.sh`).
+
+Keep credentials out of hook labels. Put notification tokens and signed URLs in a mounted secret or environment variable read by the script instead.
+
+<Callout type="warn">Hooks run with the permissions of the drydock process. Ensure the Docker socket is mounted if your hooks need to interact with Docker.</Callout>

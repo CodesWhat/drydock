@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Chính sách nhóm",
+    "title": "Chính sách nhóm",
+    "description": "Mỗi nhóm một chính sách, áp dụng cho mọi thành viên hiện tại và cho các container tham gia sau này.",
+    "ownership": "Được lưu trong Drydock, không nằm trong nhãn Docker. Nhãn và ghi đè theo từng container trên các thành viên vẫn được ưu tiên cho các trường chính sách cập nhật.",
+    "newPolicy": "Chính sách mới",
+    "loading": "Đang tải chính sách nhóm…",
+    "empty": "Chưa có nhóm hay chính sách nào. Nhóm lấy từ dd.group, dự án Compose và stack Swarm.",
+    "memberCount": "{count} container | {count} container",
+    "noMembers": "Chưa có thành viên hiện tại; áp dụng cho thành viên sau này",
+    "hosts": "Máy chủ: {hosts}",
+    "controller": "Bộ điều khiển",
+    "noPolicy": "Chưa có chính sách",
+    "whitespaceNotice": "Tên có khoảng trắng ở đầu hoặc cuối, hiển thị dưới dạng ␣.",
+    "edit": "Sửa",
+    "create": "Tạo chính sách",
+    "readOnly": "Chỉ quản trị viên mới đổi được chính sách nhóm. Chế độ xem này chỉ đọc.",
+    "summary": {
+      "maturityMode": "Độ chín: {value}",
+      "minAge": "Tuổi tối thiểu: {days} ngày",
+      "skipTags": "Tag bị bỏ qua: {count}",
+      "skipDigests": "Digest bị bỏ qua: {count}",
+      "updateMode": "Cập nhật: {mode}",
+      "exclude": "Trigger bị loại trừ: {count}"
+    },
+    "editor": {
+      "titleCreate": "Chính sách nhóm mới",
+      "titleEdit": "Chính sách nhóm: {group}",
+      "groupName": "Tên nhóm",
+      "groupNameHelp": "Khớp chính xác. Chữ hoa, chữ thường và khoảng trắng đều được tính.",
+      "groupNameInvalid": "Nhập tên nhóm không để trống.",
+      "maturityMode": "Chế độ độ chín",
+      "maturityOptions": {
+        "inherit": "Kế thừa",
+        "all": "Tất cả bản cập nhật",
+        "mature": "Chỉ bản đã chín"
+      },
+      "minAge": "Tuổi tối thiểu (ngày)",
+      "minAgeHelp": "Số ngày nguyên, từ 1 đến 365. Để trống để kế thừa.",
+      "minAgeInvalid": "Nhập số nguyên từ 1 đến 365.",
+      "skipTags": "Tag bị bỏ qua",
+      "skipDigests": "Digest bị bỏ qua",
+      "listHelp": "Mỗi dòng một mục hoặc ngăn cách bằng dấu phẩy.",
+      "updateMode": "Cập nhật tự động",
+      "updateModeOptions": {
+        "inherit": "Kế thừa",
+        "manual": "Chỉ thủ công",
+        "notify": "Chỉ thông báo"
+      },
+      "updateModeHelp": "Quy tắc nhóm chỉ có thể hạn chế. Chế độ toàn cục hiện tại: {mode}.",
+      "exclude": "Trigger hành động bị loại trừ",
+      "excludeHelp": "ID hoặc tên trigger, có thể kèm :threshold. Mỗi dòng một mục hoặc ngăn cách bằng dấu phẩy.",
+      "noFields": "Hãy đặt ít nhất một trường, hoặc xóa chính sách.",
+      "remove": "Xóa chính sách",
+      "conflict": "Chính sách này đã được người khác thay đổi. Hãy tải lại, rồi áp dụng lại thay đổi của bạn. Bản nháp được giữ cho đến khi bạn tải lại.",
+      "reload": "Tải lại",
+      "notFound": "Chính sách này không còn tồn tại. Hãy tải lại để xem danh sách hiện tại.",
+      "forbidden": "Cần quyền quản trị để đổi chính sách nhóm."
+    },
+    "remove": {
+      "header": "Xóa chính sách nhóm",
+      "message": "Xóa chính sách của nhóm {group}? Các thành viên quay về giá trị từ nhãn, watcher và toàn cục.",
+      "accept": "Xóa"
+    },
+    "saved": "Đã lưu chính sách. Đã cập nhật {members} container. | Đã lưu chính sách. Đã cập nhật {members} container.",
+    "removed": "Đã xóa chính sách. Đã cập nhật {members} container. | Đã xóa chính sách. Đã cập nhật {members} container.",
+    "warningsTitle": "Cảnh báo",
+    "errors": {
+      "load": "Không tải được chính sách nhóm",
+      "requestFailed": "Yêu cầu chính sách nhóm thất bại (HTTP {status})",
+      "unknown": "Không lưu được chính sách nhóm"
+    }
+  }
+}

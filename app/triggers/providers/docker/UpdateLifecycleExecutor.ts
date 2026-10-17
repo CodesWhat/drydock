@@ -110,6 +110,7 @@ type UpdateLifecycleExecutorCallbacks = {
   buildHookConfig: (
     container: UpdateLifecycleContainer,
     context: UpdateLifecycleContext,
+    runtimeContext?: unknown,
   ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   recordHookConfigurationAudit: (
     container: UpdateLifecycleContainer,
@@ -358,7 +359,10 @@ class UpdateLifecycleExecutor {
         await this.security.verifySignaturePreUpdate(context, container, containerLogger);
       }
 
-      const hookConfig = await this.hooks.buildHookConfig(container, context);
+      // The runtime context goes along so a provider that resolved the hook
+      // configuration ahead of the lifecycle can hand that result back here
+      // instead of resolving it again.
+      const hookConfig = await this.hooks.buildHookConfig(container, context, runtimeContext);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
 
       // A runtime update that defers its security gate to the post-pull hook has
@@ -431,11 +435,13 @@ class UpdateLifecycleExecutor {
         }
       }
 
+      let postPullHookInvoked = false;
       const postPullHook = async (
         operationId: string,
         imageIdentity?: string,
         options?: PostPullHookOptions,
       ) => {
+        postPullHookInvoked = true;
         if (options?.skipSecurityGate !== true) {
           const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
           // A deferred verification must still run when the caller could not
@@ -476,6 +482,16 @@ class UpdateLifecycleExecutor {
         runtimeContext,
         postPullHook,
       );
+      // When the lifecycle is deferred, the post-pull hook carries the security
+      // gate, the pre-update hook and the prune/backup step. A subclass that
+      // replaces performContainerUpdate without calling the hook skips all three
+      // with no message at all, so treat a missed call as a failed update rather
+      // than an update nobody gated.
+      if (deferPreRuntimeUpdateLifecycle && !postPullHookInvoked) {
+        throw new Error(
+          `Update of ${this.context.getContainerFullName(container)} deferred its security gate and pre-update hook, but the runtime update never invoked the post-pull hook`,
+        );
+      }
       if (!updated) {
         return;
       }

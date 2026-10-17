@@ -550,7 +550,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.pruneOldBackups).toHaveBeenCalledWith(container, 5);
   });
 
-  test('builds the hook config with the trigger context and fails the update before any hook runs when provenance is unverified', async () => {
+  test('builds the hook config with the trigger and runtime contexts and fails the update before any hook runs when provenance is unverified', async () => {
     const context = createContext();
     const failure = new Error('hook provenance could not be established');
     const buildHookConfig = vi.fn().mockRejectedValue(failure);
@@ -564,7 +564,9 @@ describe('UpdateLifecycleExecutor', () => {
       'hook provenance could not be established',
     );
 
-    expect(buildHookConfig).toHaveBeenCalledWith(container, context);
+    // The runtime context goes along so a provider that already resolved the
+    // hook configuration can hand it back instead of resolving it again.
+    expect(buildHookConfig).toHaveBeenCalledWith(container, context, { runtime: true });
     expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
     expect(harness.performContainerUpdate).not.toHaveBeenCalled();
     expect(harness.runPostUpdateHook).not.toHaveBeenCalled();
@@ -866,6 +868,30 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.scanAndGatePostPull).not.toHaveBeenCalled();
     expect(harness.runPreUpdateHook).toHaveBeenCalledTimes(1);
     expect(harness.runPreRuntimeUpdateLifecycle).toHaveBeenCalledTimes(1);
+  });
+
+  test('fails a deferred update whose runtime override never invokes the post-pull hook', async () => {
+    const harness = createHarness({
+      createTriggerContext: vi.fn().mockResolvedValue(
+        createContext({
+          newImage: 'ghcr.io/acme/web:1.1.0',
+          deferSignatureVerification: true,
+          deferPreRuntimeUpdateLifecycle: true,
+        }),
+      ),
+      // A subclass that replaces the runtime update wholesale and forgets the
+      // hook would otherwise skip the security gate, the pre-update hook and
+      // the prune/backup step without a single message.
+      performContainerUpdate: vi.fn().mockResolvedValue(true),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow(
+      'never invoked the post-pull hook',
+    );
+    expect(harness.scanAndGatePostPull).not.toHaveBeenCalled();
+    expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
+    expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
+    expect(harness.runPostUpdateHook).not.toHaveBeenCalled();
   });
 
   test('defers signature verification until post-pull identity is available', async () => {

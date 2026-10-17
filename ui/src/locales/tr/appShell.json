@@ -47,23 +47,25 @@
       "switchTo": "{id} temasına geç",
       "variantLabel": "{label}",
       "variant": {
-        "light": "Light",
-        "system": "System",
-        "dark": "Dark"
+        "light": "Açık",
+        "system": "Sistem",
+        "dark": "Koyu"
       }
     },
     "layout": {
       "nav": {
         "dashboard": "Pano",
-        "dashboardFallback": "Dashboard",
+        "dashboardFallback": "Pano",
         "containers": "Konteynerler",
         "security": "Güvenlik",
+        "approvals": "Onaylar",
         "audit": "Denetim",
         "systemLogs": "Sistem günlükleri",
         "manageGroup": "Yönet",
         "hosts": "Ana makineler",
         "registries": "Kayıtlar",
         "watchers": "İzleyiciler",
+        "images": "İmajlar",
         "settingsGroup": "Ayarlar",
         "general": "Genel",
         "notifications": "Bildirimler",
@@ -87,7 +89,7 @@
         "userMenu": "Kullanıcı menüsü",
         "profile": "Profil",
         "signOut": "Oturumu kapat",
-        "userFallback": "User"
+        "userFallback": "Kullanıcı"
       },
       "about": {
         "title": "Drydock",
@@ -108,13 +110,15 @@
         "prefixScopeHint": "Önek kapsamı etkin; kullanmak ",
         "typeHint": "Tür",
         "slashComma": ",",
-        "atOrConnector": ", or",
+        "atOrConnector": ", veya",
         "hashSemicolon": "; kullanın",
         "useTab": " kapsamı değiştirmek",
         "moveHint": "hareket etmek",
         "openHint": "açık",
         "recentGroup": "Son kullanılanlar",
         "unknownHost": "bilinmeyen sunucu",
+        "unknownImage": "bilinmeyen imaj",
+        "localHost": "yerel",
         "containerSubtitle": "Kapsayıcı · {image} · {status} · {host}",
         "agentSubtitle": "Aracı · {status} · {host}",
         "triggerSubtitle": "Tetikleyici · {type}",
@@ -123,23 +127,25 @@
         "authSubtitle": "Kimlik doğrulama · {type}",
         "notificationSubtitle": "Bildirim kuralı · {id}",
         "scope": {
-          "all": "All",
-          "pages": "Pages",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "config": "Config"
+          "all": "Tümü",
+          "pages": "Sayfalar",
+          "containers": "Konteynerler",
+          "runtime": "Çalışma zamanı",
+          "config": "Yapılandırma"
         },
         "group": {
-          "navigation": "Navigation",
-          "containers": "Containers",
-          "runtime": "Runtime",
-          "configuration": "Configuration"
+          "navigation": "Gezinme",
+          "containers": "Konteynerler",
+          "runtime": "Çalışma zamanı",
+          "configuration": "Yapılandırma"
         },
         "settings": {
           "appearanceTitle": "Görünüm Ayarları",
           "appearanceSubtitle": "Yapılandırma · Görünüm",
           "profileTitle": "Profil Ayarları",
-          "profileSubtitle": "Yapılandırma · Profil"
+          "profileSubtitle": "Yapılandırma · Profil",
+          "apiKeysTitle": "API Anahtarları",
+          "apiKeysSubtitle": "Kapsamı sınırlı anahtarlar oluşturun ve iptal edin"
         }
       },
       "connection": {

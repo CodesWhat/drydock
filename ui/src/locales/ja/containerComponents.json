@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "エージェント一覧を取得できません。設定済みのエージェントが一部表示されない可能性があります。",
+      "title": "フリートの状態",
+      "description": "フリート全体の状態です。インベントリの更新は、レジストリの確認や更新操作を行わずにコンテナを検出します。",
+      "reload": "状態を再読み込み",
+      "refresh": "インベントリを更新",
+      "configured": "設定済み",
+      "connected": "接続済み",
+      "disconnected": "切断",
+      "unavailable": "利用不可",
+      "agentUnavailable": "エージェントの状態を取得できません。保持されたデータは古い可能性があります。",
+      "watcherUnavailable": "ウォッチャーのメタデータを取得できません。保持されたデータは古い可能性があります。",
+      "total": "コンテナ {count} 個",
+      "lastKnown": "最後に確認された値",
+      "lastSeen": "最終確認: {value}",
+      "unsupported": "すべての対象にインベントリ更新対応の Docker ウォッチャーが必要です。",
+      "complete": "インベントリは完全です",
+      "partial": "インベントリは不完全です",
+      "reloadFailed": "コンテナ一覧を再読み込みできませんでした。インベントリの結果は引き続き表示されます。"
+    },
+    "fleetBulk": {
+      "label": "絞り込み済みフリートの操作",
+      "updateAll": "すべて更新 ({count})",
+      "snoozePatch": "パッチ候補をすべて延期",
+      "patchCount": "パッチ候補 {count} 件",
+      "duration": "延期期間",
+      "days": "{count} 日",
+      "untilDate": "日付まで",
+      "date": "この日の終了まで延期",
+      "snoozeConfirm": "パッチ候補 {count} 件を延期しますか？",
+      "snoozeScope": "これらのコンテナには現在パッチ候補があります。パッチだけでなく、一覧の各コンテナのすべての更新を {duration} 延期します。チェックボックスの選択ではなく、絞り込み済みの現在の一覧が対象です。日付はローカル時刻の一日の終わりまで含みます。",
+      "snoozeResult": "延期: {succeeded}。失敗: {failed}。",
+      "refreshFailed": "ポリシーは保存されましたが、一覧の更新に失敗しました。再読み込みしてください。",
+      "disabled": "コンテナ操作は無効です。ポリシーは変更されていません。",
+      "invalid": "延期期間が無効です。ポリシーは変更されていません。",
+      "busy": "別の操作が実行中です。追加のポリシー変更はありません。"
+    },
+    "fleetDimensions": {
+      "groupBy": "グループ化",
+      "none": "グループ化なし",
+      "agent": "エージェント",
+      "registry": "レジストリ",
+      "status": "状態",
+      "tagType": "タグの種類",
+      "label": "ラベル",
+      "groupLabel": "ラベルキーでグループ化",
+      "allAgents": "すべてのエージェント",
+      "allRegistries": "すべてのレジストリアドレス",
+      "all": "すべてのタグ種類",
+      "specific": "特定タグ",
+      "floating": "可変タグ",
+      "digest": "ダイジェスト固定",
+      "semver": "バージョンタグ",
+      "tag": "バージョン以外のタグ",
+      "unknown": "不明",
+      "local": "ローカルウォッチャー",
+      "running": "実行中",
+      "stopped": "停止中",
+      "labelKey": "ラベルキー",
+      "labelMatch": "ラベルの一致条件",
+      "labelValue": "ラベル値",
+      "exists": "ラベルあり",
+      "equals": "等しい",
+      "missing": "ラベルが欠落",
+      "missingLabel": "ラベルなし",
+      "emptyValue": "空の値"
+    },
     "fullPageActions": {
       "updateWorkflow": "更新ワークフロー",
       "actionsGroup": "アクション",
@@ -28,8 +95,9 @@
       "clearSkips": "スキップをクリア",
       "clearPolicy": "ポリシーをクリア",
       "overridden": "上書き済み",
+      "groupSource": "グループ: {group}",
       "revert": "元に戻す",
-      "revertAll": "宣言的設定に戻す",
+      "revertAll": "継承された設定に戻す",
       "snoozedUntil": "スヌーズ終了：",
       "maturityMode": "成熟度モード：",
       "matureOnlyMinimum": "成熟のみ（最低 {days} 日）",
@@ -58,6 +126,12 @@
       "runningButton": "実行中...",
       "runButton": "実行",
       "noTriggersAssociated": "このコンテナに関連するトリガーがありません",
+      "unavailableTriggers": "利用できないトリガー",
+      "unavailableTriggerReason": {
+        "agentOwnership": "このコンテナとは異なるエージェントに属しています。",
+        "structuralIncompatibility": "Composeのプロジェクト、サービス、またはファイルがこのコンテナと一致しません。",
+        "labelScope": "このコンテナの dd.action/dd.notification の include または exclude ラベルによって除外されています。"
+      },
       "backupsRollback": "バックアップ＆ロールバック",
       "rollingBack": "ロールバック中...",
       "rollbackLatest": "最新へロールバック",
@@ -71,7 +145,13 @@
       "versionLabel": "バージョン：",
       "rollbackReasonLabel": "ロールバック理由：",
       "lastErrorLabel": "最後のエラー：",
-      "noUpdateOperations": "更新操作の記録がまだありません"
+      "noUpdateOperations": "更新操作の記録がまだありません",
+      "skipReleases": "スキップする初期リリース数",
+      "skipReleasesHint": "各ファミリーの最初の N 個の異なる安定版をスキップします。ファミリーは SemVer のメジャーバージョン、または CalVer の年月です。0 でこの条件を無効にします。",
+      "releaseFallbackDays": "経過日数による例外（日）",
+      "releaseFallbackHint": "リリース情報がない場合や必要数に達しない場合、この日数が経過すると許可します。0 で例外を無効にします。最小経過日数の条件は引き続き適用されます。",
+      "releasePolicySummary": "各ファミリーの最初の {count} リリースをスキップします。",
+      "releaseFallbackSummary": "{days} 日後にリリース数の条件を免除します。"
     },
     "fullPageDetail": {
       "statusUpdating": "更新中",
@@ -111,7 +191,7 @@
       "volumes": "ボリューム",
       "composeFiles": "Compose ファイル",
       "version": "バージョン",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "ソフトウェアバージョン",
       "currentLabel": "現在：",
       "latestLabel": "最新：",
       "digestLabel": "ダイジェスト：",
@@ -155,19 +235,19 @@
       "noPortsExposed": "公開ポートがありません",
       "notConfigured": "未設定",
       "noVolumesMounted": "マウント済みボリュームがありません",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "稼働時間",
+      "uptimeAriaLabel": "コンテナの稼働時間"
     },
     "containerLogs": {
       "title": "コンテナログ",
       "download": "ダウンロード",
       "allLevels": "全レベル",
       "downloadError": "ログをダウンロードできません",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "末尾 {count} 行",
+      "tailAll": "すべての行",
+      "statusPaused": "一時停止中",
+      "statusLive": "配信中",
+      "statusOffline": "未接続",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "コンテナを読み込み中...",
+      "fleetUpdateProgress": "コンテナの更新：{total} 件中 {done} 件",
+      "fleetUpdateProgressRunning": "更新中：{names}",
+      "fleetUpdateProgressRunningMore": "更新中：{names}、ほか {more} 件",
       "searchPlaceholder": "名前またはイメージを検索...",
       "allStatuses": "全ステータス",
       "running": "稼働中",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "コンテナを更新",
-      "thisContainer": "this container",
+      "thisContainer": "このコンテナ",
       "confirmTagChange": "{name} を更新しますか？イメージタグが :{currentTag} から :{newTag}{kind} に変更されます。",
       "confirmDigestChange": "{name} を更新しますか？:{currentTag} の新しいビルドが利用可能です（ダイジェスト変更）。",
       "confirmLatest": "{name} を今すぐ更新しますか？最新のイメージが適用されます。",
       "updating": "更新中...",
       "update": "更新",
-      "updateFailed": "Update failed"
+      "updateFailed": "更新に失敗しました"
     },
     "floatingTag": {
       "badgeText": "フローティングタグ",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} ・{date} に解除",
       "maturityClockPublished": "候補は {date} に公開されました — {minDays} 日の最低期間まであと {count} 日",
       "maturityClockDetected": "候補は {date} に検出されました — {minDays} 日の最低期間まであと {count} 日",
+      "groupManualOnly": "グループポリシー '{group}' は手動更新のみを許可しています。Drydock はこの更新を自動では適用しません。",
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
       "notificationsOnlyButton": "通知のみ",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "更新トリガーが構成されていません",
         "self-update-unavailable": "自己更新は利用できません",
         "maintenance-window-closed": "メンテナンスウィンドウは終了しています",
-        "dry-run-trigger": "トリガー構成がドライランモードです"
+        "group-notify-only": "グループは通知のみ許可しています",
+        "group-manual-only": "グループは手動更新を必須にしています",
+        "dry-run-trigger": "トリガー構成がドライランモードです",
+        "maturity-releases-not-reached": "成熟度ポリシー待機中"
       },
       "actions": {
         "editPolicy": "更新ポリシーを編集",
@@ -439,25 +526,28 @@
         "configureTriggers": "更新トリガーを構成",
         "configureThreshold": "トリガーのしきい値を構成",
         "configureSelfUpdate": "自己更新を構成",
-        "configureMaintenance": "メンテナンスウィンドウを構成"
-      }
+        "configureMaintenance": "メンテナンスウィンドウを構成",
+        "editGroupPolicy": "グループポリシーを編集"
+      },
+      "releaseMaturityCount": "ファミリー {family} の安定版を待機中です。必要な先行リリース {required} 件のうち {count} 件が利用可能です。",
+      "releaseMaturityUnavailable": "候補のリリース情報を取得できません。自動更新を保留しています。"
     },
     "maturityBadge": {
       "new": "{duration}前に検出"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "キャンセル",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "コンテナを停止",
+        "message": "{name} を停止しますか？",
+        "acceptLabel": "停止",
+        "successMessage": "停止しました: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "コンテナを再起動",
+        "message": "{name} を再起動しますか？",
+        "acceptLabel": "再起動",
+        "successMessage": "再起動しました: {name}"
       },
       "forceUpdate": {
         "header": "強制更新",
@@ -505,6 +595,19 @@
         "failedDetail": "{name} の依存関係チェーンの更新に失敗しました。",
         "staleChainTitle": "依存関係チェーンが変更されました",
         "staleChainDetail": "{name} の依存関係チェーンは、前回プレビューした時点から変更されています。確定する前に更新ダイアログを再度開き、現在のチェーンを確認してください。"
+      },
+      "bulkUpdate": {
+        "header": "1 件のコンテナを更新 | {count} 件のコンテナを更新",
+        "accept": "1 件のコンテナを更新 | {count} 件のコンテナを更新",
+        "acceptWithParents": "1 件の親を追加して更新 | {count} 件の親を追加して更新",
+        "dispatchHeading": "更新されます",
+        "blockedHeading": "ブロック済み、そのままにします",
+        "softOverridesHeading": "警告を無視して更新",
+        "skippedHeading": "スキップ済み",
+        "staleParentsHeading": "更新待ちの親コンテナ。承認すると追加されます",
+        "agentCountInfo": "{count} 件のエージェントにまたがります。各エージェントは独自に更新を実行します。",
+        "stackCountInfo": "{count} 件のスタックにまたがります。",
+        "successMessage": "1 件のコンテナの更新を開始しました | {count} 件のコンテナの更新を開始しました"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "{name} の再確認に失敗しました"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} 件",
+      "entryCountPlural": "{count} 件",
       "kindLabels": {
         "tag": "タグ",
         "digest": "ダイジェスト"
@@ -561,14 +664,16 @@
         "setAll": "成熟度ポリシーをすべての更新を許可するよう設定しました",
         "skipped": "{name} の現在の更新をスキップしました",
         "removeSkip": "スキップ済みの {kind} {value} を削除しました",
-        "revertField": "{field} を宣言的ポリシーに戻しました",
-        "revertAll": "すべての上書きを宣言的ポリシーに戻しました",
+        "revertField": "{field} を継承されたポリシーに戻しました",
+        "revertAll": "すべての上書きを継承されたポリシーに戻しました",
         "failedTitle": "ポリシーの更新に失敗しました：{name}",
         "failedDetail": "ポリシーの更新に失敗しました"
       },
       "validation": {
         "snoozeDate": "有効なスヌーズ日付を選択してください",
-        "maturityAge": "{min} 日から {max} 日の間で成熟度の日数を入力してください"
+        "maturityAge": "{min} 日から {max} 日の間で成熟度の日数を入力してください",
+        "maturityReleases": "リリース数を 0～100 の整数で入力してください。",
+        "maturityFallback": "例外までの日数を 0～365 の整数で入力してください。"
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "待機中",
+        "pulling": "イメージを取得中",
+        "scanning": "イメージをスキャン中",
+        "sbom-generating": "SBOM を生成中",
+        "pull-failed": "イメージの取得に失敗",
+        "prepare": "更新を準備中",
+        "dryrun": "試行実行",
+        "renamed": "コンテナ名を変更済み",
+        "new-created": "新しいコンテナを作成済み",
+        "old-stopped": "古いコンテナを停止済み",
+        "new-started": "新しいコンテナを起動済み",
+        "health-gate": "ヘルスチェック",
+        "health-gate-passed": "ヘルスチェック成功",
+        "succeeded": "成功",
+        "failed": "失敗",
+        "recovered-cleanup-temp": "復旧済み：一時コンテナを削除",
+        "recovered-rollback": "復旧済み：ロールバック完了",
+        "recovered-active": "復旧済み：稼働中のコンテナを保持",
+        "recovery-failed": "復旧失敗",
+        "recovery-missing-containers": "復旧：コンテナが見つかりません",
+        "rollback-started": "ロールバック開始",
+        "rolled-back": "ロールバック済み",
+        "rollback-deferred": "ロールバック延期",
+        "rollback-failed": "ロールバック失敗",
+        "expired": "期限切れ",
+        "skipped-dependency": "依存関係によりスキップ",
+        "in-progress": "実行中",
+        "update-runtime-failed": "更新処理に失敗",
+        "create-new-failed": "新しいコンテナの作成に失敗",
+        "stop-old-failed": "古いコンテナの停止に失敗",
+        "start-new-failed": "新しいコンテナの起動に失敗",
+        "health-gate-failed": "ヘルスチェック失敗",
+        "cancelled": "キャンセル済み",
+        "compose-runtime-refresh-failed": "Compose の実行状態の更新に失敗"
+      },
       "timestampUnknown": "不明",
       "loadFailed": "バックアップの読み込みに失敗しました",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "明示指定",
+        "inherited": "継承",
+        "unknown": "不明"
       },
       "timeoutDefault": "60000ms（デフォルト）",
       "preAbortYes": "事前フック失敗時に更新を中止",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "概要",
+        "stats": "統計",
+        "logs": "ログ",
+        "environment": "環境",
+        "labels": "ラベル",
+        "actions": "操作"
       }
     },
     "logViewer": {
       "invalidRegex": "無効な正規表現です"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依存先",
+      "requiredBy": "依存元",
+      "cycle": "依存関係のサイクルの一部",
+      "toggle": "依存関係を表示",
+      "updateGroup": "依存関係グループを更新 ({count})",
+      "staleParentsWarning": "{name} は {parents} に依存していますが、これには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。 | {name} は {parents} に依存していますが、これらには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。",
+      "staleParentsOverflow": "他 {count} 件",
+      "staleParentsAccept": "そのまま更新"
+    },
+    "selection": {
+      "selectRow": "{name} を選択",
+      "selectAll": "表示中のすべてのコンテナを選択",
+      "barLabel": "選択したコンテナ",
+      "count": "1 件のコンテナを選択中 | {count} 件のコンテナを選択中",
+      "updateSelected": "選択項目を更新",
+      "clear": "クリア",
+      "reasons": {
+        "stale": "リストから削除されました",
+        "inFlight": "すでに更新中です",
+        "noUpdate": "利用可能な更新はありません"
+      }
     }
   }
 }

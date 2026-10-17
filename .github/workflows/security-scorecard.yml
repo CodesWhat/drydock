@@ -16,7 +16,7 @@ on:
   schedule:
     - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
 
-permissions: read-all
+permissions: {}
 
 concurrency:
   group: scorecard-${{ github.workflow }}
@@ -57,6 +57,6 @@ jobs:
           publish_results: true
 
       - name: Upload to code-scanning
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: results.sarif

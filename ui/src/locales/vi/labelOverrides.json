@@ -1,0 +1,157 @@
+{
+  "labelOverrides": {
+    "title": "Ghi đè nhãn",
+    "boundary": "Drydock lưu các giá trị này và áp dụng chúng lên trên nhãn Docker. Nó không bao giờ sửa tệp Compose hay tạo lại container.",
+    "scope": {
+      "container": "Áp dụng cho container {name}, watcher {watcher}.",
+      "containerAgent": "Áp dụng cho container {name} trên agent {agent}, watcher {watcher}.",
+      "composeService": "Áp dụng cho dịch vụ Compose {name}, số container: {count}, watcher {watcher}. | Áp dụng cho dịch vụ Compose {name}, số container: {count}, watcher {watcher}.",
+      "composeServiceAgent": "Áp dụng cho dịch vụ Compose {name}, số container: {count}, agent {agent}, watcher {watcher}. | Áp dụng cho dịch vụ Compose {name}, số container: {count}, agent {agent}, watcher {watcher}."
+    },
+    "loading": "Đang tải các ghi đè nhãn…",
+    "noOverrides": "Không có ghi đè. Mỗi giá trị đến từ nhãn, Compose, watcher hoặc giá trị mặc định.",
+    "unavailable": "Ghi đè nhãn không khả dụng cho container này.",
+    "readOnly": {
+      "rollback": "Đây là container rollback tạm thời. Không thể thay đổi các ghi đè nhãn của nó.",
+      "forbidden": "Cần quyền quản trị để thay đổi ghi đè nhãn. Chế độ xem này chỉ đọc."
+    },
+    "groups": {
+      "display": "Hiển thị",
+      "dependencies": "Phụ thuộc",
+      "notification": "Định tuyến thông báo",
+      "action": "Định tuyến thao tác"
+    },
+    "fields": {
+      "displayName": "Tên hiển thị",
+      "displayIcon": "Biểu tượng hiển thị",
+      "dependsOn": "Phụ thuộc vào",
+      "dependsOnAction": "Thao tác phụ thuộc",
+      "notificationTriggerInclude": "Bao gồm thông báo",
+      "notificationTriggerExclude": "Loại trừ thông báo",
+      "actionTriggerInclude": "Bao gồm thao tác",
+      "actionTriggerExclude": "Loại trừ thao tác",
+      "actionTriggerAuto": "Thao tác tự động"
+    },
+    "sources": {
+      "override": "Ghi đè",
+      "label": "Nhãn",
+      "compose": "Compose",
+      "watcher": "Cấu hình watcher",
+      "default": "Mặc định",
+      "unset": "Chưa đặt"
+    },
+    "values": {
+      "none": "Không có",
+      "notSet": "Chưa đặt",
+      "labelValue": "Giá trị nhãn: {value}",
+      "noLabel": "Không có nhãn",
+      "explicitNone": "Không có (ghi đè)"
+    },
+    "actions": {
+      "edit": "Sửa",
+      "editField": "Sửa {field}",
+      "resetField": "Đặt lại về nhãn",
+      "resetFieldAria": "Đặt lại {field} về nhãn",
+      "resetHint": "Sẽ trở về: {value}",
+      "resetAll": "Đặt lại tất cả"
+    },
+    "editor": {
+      "displayName": "Tên hiển thị",
+      "displayNameHelp": "Từ 1 đến 128 ký tự. Hiển thị thay cho tên container.",
+      "iconProvider": "Nguồn biểu tượng",
+      "iconName": "Tên biểu tượng",
+      "iconNameHelp": "Chữ cái, chữ số, dấu chấm, dấu gạch ngang và dấu gạch dưới. Dùng tên từ nguồn biểu tượng, không dùng URL.",
+      "iconPreview": "Xem trước biểu tượng",
+      "providers": {
+        "sh": "selfh.st",
+        "hl": "Homarr",
+        "si": "Simple Icons"
+      },
+      "scopeReminder": "Lưu sẽ thay đổi giá trị cho mọi thứ trong phạm vi hiển thị ở trên.",
+      "dependsOnInput": "Thêm container",
+      "dependsOnHelp": "Chọn một container trên cùng máy chủ hoặc nhập tên chưa chạy. Tên mà Drydock chưa biết sẽ được lưu kèm cảnh báo.",
+      "notificationInput": "Thêm trigger thông báo",
+      "actionInput": "Thêm trigger thao tác",
+      "routingHelp": "ID hoặc tên trigger, có thể kèm ngưỡng như minor.",
+      "threshold": "Ngưỡng",
+      "thresholdDefault": "Không có ngưỡng",
+      "addEntry": "Thêm",
+      "removeEntry": "Xóa {entry}",
+      "locked": "từ nhãn",
+      "noneHint": "Danh sách đang trống. Khi lưu, trường này được đặt thành không có và mọi giá trị nhãn bị bỏ qua. Hãy dùng Đặt lại về nhãn để gỡ phần ghi đè.",
+      "autoWarning": "Điều này cho phép các trigger trong danh sách tự động cập nhật container này khi chúng chạy ở chế độ onauto.",
+      "dependencyAction": "Thao tác phụ thuộc",
+      "dependencyActionHelp": "Việc Drydock làm với các container mà container này phụ thuộc vào khi nó được cập nhật.",
+      "dependencyActions": {
+        "update": "Cập nhật",
+        "restart": "Khởi động lại"
+      }
+    },
+    "validation": {
+      "displayName": {
+        "empty": "Nhập tên hiển thị.",
+        "tooLong": "Dùng tối đa 128 ký tự.",
+        "invalidCharacters": "Xóa ký tự điều khiển, dấu hướng văn bản, < và >."
+      },
+      "iconName": "Dùng chữ cái, chữ số, dấu chấm, dấu gạch ngang hoặc dấu gạch dưới, bắt đầu bằng chữ cái hoặc chữ số."
+    },
+    "conflict": {
+      "message": "Các ghi đè này đã được thay đổi ở nơi khác. Hãy tải lại để xem giá trị hiện tại. Bản nháp của bạn được giữ nguyên.",
+      "unknown": "Drydock không thể xác nhận thay đổi đã được lưu hay chưa. Hãy tải lại để xem giá trị hiện tại.",
+      "notFound": "Container này không còn tồn tại. Hãy tải lại để xem danh sách hiện tại.",
+      "reload": "Tải lại"
+    },
+    "status": {
+      "saved": "Đã lưu {field}.",
+      "reset": "Đã đặt lại {field} về giá trị nhãn.",
+      "resetAll": "Số ghi đè đã đặt lại về giá trị nhãn: {count}. | Số ghi đè đã đặt lại về giá trị nhãn: {count}.",
+      "nothingToReset": "Không có gì bị ghi đè."
+    },
+    "resetAllConfirm": {
+      "header": "Đặt lại tất cả ghi đè",
+      "message": "Xóa mọi ghi đè Drydock của {scope} và quay về giá trị nhãn? Tệp Compose và container không bị động tới.",
+      "accept": "Đặt lại tất cả"
+    },
+    "warnings": {
+      "title": "Cảnh báo",
+      "unresolved-dependency": "{field}: {reference} chưa phải là container mà Drydock biết.",
+      "cross-host-dependency": "{field}: {reference} chỉ tồn tại trên máy chủ khác.",
+      "trigger-agent-mismatch": "{field}: {reference} chỉ khớp với trigger trên agent khác.",
+      "auto-inert": "{field}: {reference} không khớp với trigger nào chạy tự động.",
+      "stale-trigger-reference": "{field}: {reference} không còn khớp với trigger nào đã đăng ký.",
+      "other": "{field}: {code}"
+    },
+    "invalidStored": "Một số ghi đè đã lưu không đọc được và bị bỏ qua: {fields}",
+    "errors": {
+      "requestFailed": "Yêu cầu ghi đè nhãn thất bại (HTTP {status})",
+      "load": "Không tải được các ghi đè nhãn",
+      "unknown": "Không thể lưu ghi đè nhãn",
+      "invalid": "Máy chủ đã từ chối thay đổi này.",
+      "codes": {
+        "display-name-empty": "Nhập tên hiển thị.",
+        "display-name-too-long": "Dùng tối đa 128 ký tự.",
+        "display-name-invalid-characters": "Xóa ký tự điều khiển, dấu hướng văn bản, < và >.",
+        "invalid-icon": "Dùng một nguồn biểu tượng và một tên, không dùng URL.",
+        "invalid-type": "Máy chủ đã từ chối giá trị này.",
+        "invalid-value": "Máy chủ đã từ chối giá trị này.",
+        "invalid-name": "Không phải tên container hợp lệ: {entries}.",
+        "duplicate-entry": "Được liệt kê nhiều hơn một lần: {entries}.",
+        "too-many-entries": "Dùng tối đa 32 mục.",
+        "depends-on-self": "Một container không thể phụ thuộc vào chính nó: {entries}.",
+        "invalid-reference": "Không phải tham chiếu trigger hợp lệ: {entries}.",
+        "invalid-threshold": "Ngưỡng không được hỗ trợ: {entries}.",
+        "unknown-trigger-reference": "Không có trigger đã đăng ký nào khớp với: {entries}.",
+        "wrong-trigger-category": "Sai loại trigger cho trường này: {entries}.",
+        "agent-enforced-widening": "Agent sẽ từ chối việc này vì nó mở rộng những gì nhãn của agent cho phép: {entries}.",
+        "invalid-action": "Chọn cập nhật hoặc khởi động lại."
+      },
+      "cycle": "Các phụ thuộc này sẽ tạo thành một vòng lặp qua: {containers}."
+    },
+    "agent": {
+      "note": "Container này chạy trên agent {agent}, agent này áp dụng nhãn riêng của nó. Ở đây Drydock chỉ có thể thu hẹp quyền truy cập thao tác.",
+      "excludeHint": "Các loại trừ từ nhãn được giữ nguyên. Bạn chỉ có thể thêm nữa.",
+      "narrowHint": "Bạn chỉ có thể xóa mục hoặc dùng ngưỡng hẹp hơn nhãn.",
+      "nothingToNarrow": "Nhãn ở đây không cho phép gì, nên không có gì để thu hẹp."
+    }
+  }
+}

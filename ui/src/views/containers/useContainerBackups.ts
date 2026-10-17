@@ -1,9 +1,14 @@
 import { type Ref, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
-import { getBackups, rollback } from '../../services/backup';
+import { type ContainerBackup, getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
 import type { ApiContainerUpdateOperation } from '../../types/api';
+import {
+  isContainerUpdateOperationPhase,
+  isContainerUpdateOperationStatus,
+} from '../../types/update-operation';
+import { backupErrorMessage } from '../../utils/backup-error';
 import { errorMessage } from '../../utils/error';
 import { loadContainerDetailListState } from './loadContainerDetailListState';
 
@@ -30,23 +35,39 @@ export function formatTimestamp(
   return parsed.toLocaleString();
 }
 
-function formatOperationValue(value: unknown, t?: (key: string) => string): string {
+const ROLLBACK_REASONS = new Set([
+  'update-runtime-failed',
+  'create-new-failed',
+  'stop-old-failed',
+  'start-new-failed',
+  'health-gate-failed',
+  'cancelled',
+  'compose-runtime-refresh-failed',
+]);
+
+function formatOperationValue(
+  value: unknown,
+  isKnown: (code: string) => boolean,
+  t?: (key: string) => string,
+): string {
   if (typeof value !== 'string') {
     return t ? t('containerComponents.sideTabContent.unknown') : 'unknown';
   }
-  return value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+  const label = value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+  const code = label.replaceAll(' ', '-');
+  return t && isKnown(code) ? t(`containerComponents.backups.operationValues.${code}`) : label;
 }
 
 export function formatOperationPhase(phase: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(phase, t);
+  return formatOperationValue(phase, isContainerUpdateOperationPhase, t);
 }
 
 export function formatRollbackReason(reason: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(reason, t);
+  return formatOperationValue(reason, (code) => ROLLBACK_REASONS.has(code), t);
 }
 
 export function formatOperationStatus(status: unknown, t?: (key: string) => string): string {
-  return formatOperationValue(status, t);
+  return formatOperationValue(status, isContainerUpdateOperationStatus, t);
 }
 
 function getOperationStatusStyle(status: unknown) {
@@ -141,7 +162,7 @@ async function rollbackToBackupState(args: {
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
   } catch (e: unknown) {
-    const msg = errorMessage(e, args.t('containerComponents.backups.rollback.failedDetail'));
+    const msg = backupErrorMessage(e, args.t('containerComponents.backups.rollback.failedDetail'));
     args.rollbackError.value = msg;
     const toast = useToast();
     toast.error(args.t('containerComponents.backups.rollback.failedTitle'), msg);
@@ -152,7 +173,7 @@ async function rollbackToBackupState(args: {
 
 export function useContainerBackups(input: UseContainerBackupsInput) {
   const { t } = useI18n();
-  const detailBackups = ref<Record<string, unknown>[]>([]);
+  const detailBackups = ref<ContainerBackup[]>([]);
   const backupsLoading = ref(false);
   const rollbackInProgress = ref<string | null>(null);
   const rollbackMessage = ref<string | null>(null);

@@ -22,11 +22,7 @@ function compareSemver(a, b) {
 test('package manifest explicitly pins yaml to the patched version', () => {
   const packageJson = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
 
-  const pinned = packageJson.overrides?.yaml;
-
-  // An exact version, not a range, at or above the first patched release.
-  assert.match(pinned ?? '', /^\d+\.\d+\.\d+$/);
-  assert.ok(compareSemver(pinned, '2.8.3') >= 0, `yaml override ${pinned} is below 2.8.3`);
+  assert.equal(packageJson.overrides?.yaml, '2.9.0');
 });
 
 test('package lockfile does not resolve vulnerable yaml versions', () => {

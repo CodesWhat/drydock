@@ -12,7 +12,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "What is the difference between a notification and an action trigger?",
     answer:
-      "Notifications (DD_NOTIFICATION_* env vars) send a message when an update is detected — Slack, Discord, Telegram, Microsoft Teams, SMTP, Gotify, NTFY, MQTT, Kafka, HTTP webhooks, and more. Actions (DD_ACTION_* env vars) execute the update: the docker action re-pulls and restarts the container, dockercompose runs docker compose pull/up on your stack, and command invokes an arbitrary shell script. You can combine both in the same pipeline — notify a channel and apply the update. Note: DD_TRIGGER_* was removed in v1.7.0 and now fails startup with an error naming each offending variable and its DD_ACTION_* or DD_NOTIFICATION_* replacement; always use those canonical prefixes.",
+      "Notifications (DD_NOTIFICATION_* env vars) send a message when an update is detected, Slack, Discord, Telegram, Microsoft Teams, SMTP, Gotify, NTFY, MQTT, Kafka, HTTP webhooks, and more. Actions (DD_ACTION_* env vars) execute the update: the docker action re-pulls and restarts the container, dockercompose runs docker compose pull/up on your stack, portainer re-pulls and redeploys the container through the Portainer API, and command invokes an arbitrary shell script. You can combine both in the same pipeline, notify a channel and apply the update. Note: DD_TRIGGER_* was removed in v1.7.0 and now fails startup with an error naming each offending variable and its DD_ACTION_* or DD_NOTIFICATION_* replacement; always use those canonical prefixes.",
   },
   {
     question: "How do I control which containers Drydock watches and which tags it considers?",
@@ -33,6 +33,11 @@ export const faqItems: Array<{ question: string; answer: string }> = [
     question: "Does Drydock support vulnerability scanning and image signature verification?",
     answer:
       "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=trivy|grype|both) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
+  },
+  {
+    question: "What does the 100% TypeScript coverage claim include?",
+    answer:
+      "CI enforces 100% line, branch, function, and statement coverage for the configured backend sources and UI TypeScript files. Vue single-file components have separate aggregate coverage floors: 87.54% statements, 81.57% branches, 84.39% functions, and 87.89% lines. Those floors include script and generated-template mappings, not a 100% claim for every component. A separate vue-tsc typecheck checks scripts and templates; passing it does not establish runtime coverage or mutation quality.",
   },
   {
     question: "Is Drydock open source, and how do I get started?",

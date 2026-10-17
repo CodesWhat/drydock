@@ -76,11 +76,11 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 
 import { mount } from '@vue/test-utils';
 import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
+import DataFilterBar from '@/components/DataFilterBar.vue';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
-import { findStub } from '../helpers/find-stub';
 
 let containerIdCounter = 0;
 function makeContainer(overrides: Record<string, any> = {}) {
@@ -604,7 +604,7 @@ describe('SecurityView', () => {
           stream.publish('resync-required', { reason: 'buffer-evicted' });
           await flushPromises();
           expect(button.attributes('disabled')).toBeDefined();
-          const emptyState = findStub(w, stubs.SecurityEmptyState);
+          const emptyState = w.findComponent(stubs.SecurityEmptyState);
           expect(emptyState.props('scannerReady')).toBe(false);
           emptyState.vm.$emit('scan-now');
           await flushPromises();
@@ -1340,6 +1340,36 @@ describe('SecurityView', () => {
   });
 
   describe('scan coverage display', () => {
+    it('updates rendered scan and filtered-image counts when the locale changes', async () => {
+      const originalLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'en';
+      mockContainers([makeContainer(), makeContainer({ security: null })]);
+      const w = factory({ DataFilterBar, ContainerUpdateDialog: containerUpdateDialogStub });
+      try {
+        await flushPromises();
+        const counter = () =>
+          w.get('[data-test="data-filter-bar-trailing"] > span').text().replace(/\s+/g, '');
+        expect(counter()).toBe('1/2scanned');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/2analysés');
+        i18n.global.locale.value = 'ar';
+        await nextTick();
+        expect(counter()).toBe('1/2تمفحصها');
+
+        (w.vm as any).secFilterSeverity = 'HIGH';
+        await nextTick();
+        expect(counter()).toBe('1/1صور');
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(counter()).toBe('1/1images');
+        expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledTimes(1);
+      } finally {
+        w.unmount();
+        i18n.global.locale.value = originalLocale;
+      }
+    });
+
     it('shows 0/N scanned when no containers have been scanned', async () => {
       mockContainers([makeContainer({ security: null }), makeContainer({ security: null })]);
       const w = factory();
@@ -1673,14 +1703,14 @@ describe('SecurityView', () => {
       await expect(clearIconCache()).rejects.toThrow('HTTP 503');
     });
 
-    it('falls back to Unknown error when clearIconCache error body is not JSON', async () => {
+    it('retains the HTTP status with a localized clearIconCache JSON error', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
         json: vi.fn().mockRejectedValue(new Error('not json')),
       } as any);
 
-      await expect(clearIconCache()).rejects.toThrow('Unknown error');
+      await expect(clearIconCache()).rejects.toThrow('API returned invalid JSON. (HTTP 500)');
     });
   });
 

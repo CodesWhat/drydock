@@ -118,26 +118,24 @@ describe('notification-outbox service', () => {
       await expect(getOutboxEntries()).rejects.toThrow('Database unavailable');
     });
 
-    it('falls back to statusText when body parse fails on !ok', async () => {
+    it('leaves malformed diagnostics empty for the view to localize on !ok', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,
         statusText: 'Service Unavailable',
         json: vi.fn().mockRejectedValue(new Error('not json')),
       });
 
-      await expect(getOutboxEntries()).rejects.toThrow(
-        'Failed to load outbox: Service Unavailable',
-      );
+      await expect(getOutboxEntries()).rejects.toMatchObject({ message: '' });
     });
 
-    it('falls back to statusText when body has no error field on !ok', async () => {
+    it('leaves missing diagnostics empty for the view to localize on !ok', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,
         statusText: 'Bad Gateway',
         json: vi.fn().mockResolvedValue({}),
       });
 
-      await expect(getOutboxEntries()).rejects.toThrow('Failed to load outbox: Bad Gateway');
+      await expect(getOutboxEntries()).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -186,7 +184,7 @@ describe('notification-outbox service', () => {
       expect((err as Error & { statusCode?: number }).statusCode).toBe(409);
     });
 
-    it('falls back to statusText and attaches statusCode when body parse fails on !ok', async () => {
+    it('leaves malformed diagnostics empty and attaches statusCode on !ok', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,
         status: 500,
@@ -195,7 +193,7 @@ describe('notification-outbox service', () => {
       });
 
       const err = await retryOutboxEntry('entry-1').catch((e: unknown) => e);
-      expect((err as Error).message).toBe('Failed to retry entry: Internal Server Error');
+      expect((err as Error).message).toBe('');
       expect((err as Error & { statusCode?: number }).statusCode).toBe(500);
     });
   });
@@ -243,7 +241,7 @@ describe('notification-outbox service', () => {
       expect((err as Error & { statusCode?: number }).statusCode).toBe(404);
     });
 
-    it('falls back to statusText and attaches statusCode when body parse fails on !ok', async () => {
+    it('leaves malformed diagnostics empty and attaches statusCode on !ok', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,
         status: 503,
@@ -252,7 +250,7 @@ describe('notification-outbox service', () => {
       });
 
       const err = await deleteOutboxEntry('entry-1').catch((e: unknown) => e);
-      expect((err as Error).message).toBe('Failed to delete entry: Service Unavailable');
+      expect((err as Error).message).toBe('');
       expect((err as Error & { statusCode?: number }).statusCode).toBe(503);
     });
   });

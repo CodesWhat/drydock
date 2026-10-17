@@ -15,7 +15,6 @@
     "@fontsource/*",
     "tailwindcss",
     "@stryker-mutator/api",
-    "@vitest/coverage-custom",
-    "workbox-routing"
+    "@vitest/coverage-custom"
   ]
 }

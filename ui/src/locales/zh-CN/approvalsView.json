@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "无法加载审批摘要",
+      "detailLoadFailed": "无法加载审批",
+      "approveFailed": "无法批准更新",
+      "rejectFailed": "无法拒绝更新",
+      "deferFailed": "无法推迟更新"
+    },
+    "ofCount": "已显示 {count} 项",
+    "refresh": "刷新",
+    "loading": "正在加载审批…",
+    "loadError": "无法加载审批",
+    "notifyModeBanner": "更新模式为 notify。将模式设为 manual 或 auto 之前，批准操作不可用。",
+    "tabs": {
+      "pending": "待处理",
+      "deferred": "已推迟",
+      "decided": "已决定"
+    },
+    "columns": {
+      "container": "容器",
+      "image": "镜像",
+      "version": "版本",
+      "scan": "扫描",
+      "age": "等待时间"
+    },
+    "semver": {
+      "major": "主版本",
+      "minor": "次版本",
+      "patch": "补丁版本",
+      "prerelease": "预发布版本",
+      "unknown": "未知"
+    },
+    "actions": {
+      "notesAriaLabel": "显示发布说明和暂缓原因",
+      "approve": "批准",
+      "approveAriaLabel": "批准更新",
+      "approveDisabledNotify": "更新模式为 notify；批准操作不可用",
+      "reject": "拒绝",
+      "rejectAriaLabel": "拒绝更新",
+      "defer": "推迟",
+      "deferAriaLabel": "推迟更新"
+    },
+    "detail": {
+      "loading": "正在加载详情…",
+      "holdReasons": "暂缓原因",
+      "viewFullNotes": "查看完整说明",
+      "empty": "此更新没有发布说明或暂缓原因"
+    },
+    "empty": {
+      "pending": "没有待处理的审批",
+      "deferred": "没有已推迟的审批",
+      "decided": "尚无已决定的审批",
+      "all": "没有审批"
+    },
+    "confirm": {
+      "cancel": "取消",
+      "approve": {
+        "header": "批准更新",
+        "message": "批准将 {name} 更新到 {toRef}？",
+        "softBlockerSuffix": "\n\n此更新仍有未解决的暂缓原因：\n{list}",
+        "acceptLabel": "批准"
+      },
+      "reject": {
+        "header": "拒绝更新",
+        "message": "拒绝将 {name} 更新到 {toRef}？此更新将不会自动应用。",
+        "acceptLabel": "拒绝"
+      },
+      "defer": {
+        "header": "推迟更新",
+        "message": "将 {name} 的更新推迟 {days} 天？",
+        "acceptLabel": "推迟"
+      }
+    },
+    "toast": {
+      "approved": "已请求批准 {name}",
+      "approveFailed": "无法批准 {name}",
+      "rejected": "已拒绝 {name} 的更新",
+      "rejectFailed": "无法拒绝 {name}",
+      "deferred": "已推迟 {name} 的更新",
+      "deferFailed": "无法推迟 {name}"
+    }
+  }
+}

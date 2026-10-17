@@ -1,5 +1,5 @@
 import { isSensitiveEnvEntry } from '../api/container/shared.js';
-import { REDACTED_VALUE, redactDebugDump } from './redact.js';
+import { REDACTED_VALUE, redactConfigurationTree, redactDebugDump } from './redact.js';
 
 describe('debug/redact', () => {
   test('exports the canonical redaction marker', () => {
@@ -557,6 +557,34 @@ describe('debug/redact', () => {
       nested: {
         hash: undefined,
       },
+    });
+  });
+
+  test('redactConfigurationTree applies the same key-name rules as redactDebugDump', () => {
+    const source = {
+      server: { name: 'drydock', port: 3000 },
+      sources: { DD_SERVER_PORT: 'env', DD_SERVER_NAME: 'file' },
+      secret: 'shh',
+    };
+
+    expect(redactConfigurationTree(source)).toEqual(redactDebugDump(source));
+    expect(redactConfigurationTree(source)).toEqual({
+      server: { name: 'drydock', port: 3000 },
+      sources: { DD_SERVER_PORT: 'env', DD_SERVER_NAME: 'file' },
+      secret: REDACTED_VALUE,
+    });
+  });
+
+  test('redactConfigurationTree also redacts a sensitive key inside a sources map', () => {
+    // A source-attribution map is keyed by DD_* env var names, so a secret's
+    // own key name (containing "token") still matches — the label ("env" or
+    // "file") is redacted along with it, the same way any other sensitive
+    // key's value would be. `GET /api/v1/config` never runs this over its own
+    // `sources` map (its example response shows the label unredacted), but
+    // this module's rule applies uniformly to whatever tree it's given.
+    const source = { DD_REGISTRY_GHCR_PRIVATE_TOKEN: 'file' };
+    expect(redactConfigurationTree(source)).toEqual({
+      DD_REGISTRY_GHCR_PRIVATE_TOKEN: REDACTED_VALUE,
     });
   });
 });

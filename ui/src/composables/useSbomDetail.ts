@@ -16,7 +16,7 @@ interface UseSbomDetailOptions {
   containerIdsByImage: Ref<Record<string, string[]>>;
 }
 
-type SbomResult = Record<string, unknown> | null;
+type SbomResult = Awaited<ReturnType<typeof getContainerSbom>> | null;
 
 interface SbomDetailSelectionState {
   selectedImage: Ref<ImageSummaryWithVulns | null>;

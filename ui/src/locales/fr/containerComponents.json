@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Liste des agents indisponible. Certains agents configurés peuvent manquer.",
+      "title": "État de la flotte",
+      "description": "État de toute la flotte. L’inventaire détecte les conteneurs sans vérifier les registres ni exécuter de mises à jour.",
+      "reload": "Recharger l’état",
+      "refresh": "Actualiser l’inventaire",
+      "configured": "Configuré",
+      "connected": "Connecté",
+      "disconnected": "Déconnecté",
+      "unavailable": "Indisponible",
+      "agentUnavailable": "État des agents indisponible. Les données conservées peuvent être obsolètes.",
+      "watcherUnavailable": "Métadonnées des observateurs indisponibles. Les données conservées peuvent être obsolètes.",
+      "total": "{count} conteneur | {count} conteneurs",
+      "lastKnown": "Dernière valeur connue",
+      "lastSeen": "Dernier contact : {value}",
+      "unsupported": "Toutes les cibles nécessitent des observateurs Docker compatibles avec l’inventaire.",
+      "complete": "Inventaire complet",
+      "partial": "Inventaire incomplet",
+      "reloadFailed": "Échec du rechargement de la liste des conteneurs. Les résultats de l’inventaire restent visibles."
+    },
+    "fleetBulk": {
+      "label": "Actions de la flotte filtrée",
+      "updateAll": "Tout mettre à jour ({count})",
+      "snoozePatch": "Reporter tous les correctifs",
+      "patchCount": "{count} candidats correctifs",
+      "duration": "Durée du report",
+      "days": "{count} jours",
+      "untilDate": "Jusqu’au",
+      "date": "Reporter jusqu’à cette date",
+      "snoozeConfirm": "Reporter {count} candidats correctifs ?",
+      "snoozeScope": "Ces conteneurs ont des correctifs disponibles. Reporter toutes leurs mises à jour pendant {duration}, pas seulement les correctifs. La liste active filtrée est utilisée, pas les cases cochées. Une date inclut la fin de journée locale.",
+      "snoozeResult": "Reportés : {succeeded}. Échecs : {failed}.",
+      "refreshFailed": "Politiques enregistrées, mais actualisation de la liste impossible. Rechargez la liste.",
+      "disabled": "Actions désactivées. Aucune politique modifiée.",
+      "invalid": "Durée invalide. Aucune politique modifiée.",
+      "busy": "Une autre action est en cours. Aucune politique supplémentaire modifiée."
+    },
+    "fleetDimensions": {
+      "groupBy": "Regrouper par",
+      "none": "Aucun regroupement",
+      "agent": "Agent",
+      "registry": "Registre",
+      "status": "État",
+      "tagType": "Type de tag",
+      "label": "Libellé",
+      "groupLabel": "Regrouper par clé de libellé",
+      "allAgents": "Tous les agents",
+      "allRegistries": "Toutes les adresses de registre",
+      "all": "Tous les types de tag",
+      "specific": "Tag précis",
+      "floating": "Tag flottant",
+      "digest": "Digest épinglé",
+      "semver": "Tag de version",
+      "tag": "Tag sans version",
+      "unknown": "Inconnu",
+      "local": "Surveillants locaux",
+      "running": "En cours",
+      "stopped": "Arrêté",
+      "labelKey": "Clé de libellé",
+      "labelMatch": "Correspondance du libellé",
+      "labelValue": "Valeur du libellé",
+      "exists": "Libellé présent",
+      "equals": "Égal à",
+      "missing": "Libellé manquant",
+      "missingLabel": "Aucun libellé",
+      "emptyValue": "Valeur vide"
+    },
     "fullPageActions": {
       "updateWorkflow": "Workflow de mise à jour",
       "actionsGroup": "Actions",
@@ -28,8 +95,9 @@
       "clearSkips": "Effacer les exclusions",
       "clearPolicy": "Effacer la policy",
       "overridden": "Remplacé",
+      "groupSource": "Groupe : {group}",
       "revert": "Annuler",
-      "revertAll": "Revenir au déclaratif",
+      "revertAll": "Revenir à la policy héritée",
       "snoozedUntil": "Reporté jusqu'à :",
       "maturityMode": "Mode de maturité :",
       "matureOnlyMinimum": "Matures seulement ({days} j minimum)",
@@ -58,6 +126,12 @@
       "runningButton": "Exécution...",
       "runButton": "Exécuter",
       "noTriggersAssociated": "Aucun trigger associé à ce conteneur",
+      "unavailableTriggers": "Triggers indisponibles",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Appartient à un agent différent de celui de ce conteneur.",
+        "structuralIncompatibility": "Le projet, le service ou le fichier Compose ne correspond pas à ce conteneur.",
+        "labelScope": "Exclu par les labels d'inclusion ou d'exclusion dd.action/dd.notification de ce conteneur."
+      },
       "backupsRollback": "Backups et rollback",
       "rollingBack": "Rollback en cours...",
       "rollbackLatest": "Rollback du dernier",
@@ -71,7 +145,13 @@
       "versionLabel": "Version :",
       "rollbackReasonLabel": "Raison du rollback :",
       "lastErrorLabel": "Dernière erreur :",
-      "noUpdateOperations": "Aucune opération de mise à jour enregistrée pour le moment"
+      "noUpdateOperations": "Aucune opération de mise à jour enregistrée pour le moment",
+      "skipReleases": "Versions initiales à ignorer",
+      "skipReleasesHint": "Ignore les N premières versions stables distinctes de chaque famille : version majeure SemVer ou mois CalVer. 0 désactive ce filtre.",
+      "releaseFallbackDays": "Exception selon l’âge (jours)",
+      "releaseFallbackHint": "Autorise la mise à jour après ce nombre de jours si les données de version manquent ou si le nombre requis n’est pas atteint. 0 désactive cette exception. L’âge minimum reste applicable.",
+      "releasePolicySummary": "Ignorer les {count} premières versions de chaque famille.",
+      "releaseFallbackSummary": "Exception au nombre de versions après {days} jours."
     },
     "fullPageDetail": {
       "statusUpdating": "Mise à jour",
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Chargement des conteneurs...",
+      "fleetUpdateProgress": "Mise à jour : {done} conteneurs sur {total}",
+      "fleetUpdateProgressRunning": "En cours : {names}",
+      "fleetUpdateProgressRunningMore": "En cours : {names} et {more} de plus",
       "searchPlaceholder": "Rechercher nom ou image...",
       "allStatuses": "Tous les états",
       "running": "En cours",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · débloqué le {date}",
       "maturityClockPublished": "Candidat publié le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat publié le {date} — encore {count} jours avant le minimum de {minDays} jours",
       "maturityClockDetected": "Candidat détecté le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat détecté le {date} — encore {count} jours avant le minimum de {minDays} jours",
+      "groupManualOnly": "La politique du groupe '{group}' n'autorise que les mises à jour manuelles. Drydock n'appliquera pas celle-ci automatiquement.",
       "updateButton": "Mettre à jour maintenant",
       "blockedButton": "Mise à jour bloquée",
       "notificationsOnlyButton": "Notifications uniquement",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Aucun trigger de mise à jour configuré",
         "self-update-unavailable": "Mise à jour automatique de l'application indisponible",
         "maintenance-window-closed": "Fenêtre de maintenance fermée",
-        "dry-run-trigger": "Configuration du trigger en mode dry-run"
+        "group-notify-only": "Le groupe n'autorise que les notifications",
+        "group-manual-only": "Le groupe exige des mises à jour manuelles",
+        "dry-run-trigger": "Configuration du trigger en mode dry-run",
+        "maturity-releases-not-reached": "Politique de maturité en attente"
       },
       "actions": {
         "editPolicy": "Modifier la policy de mise à jour",
@@ -439,8 +526,11 @@
         "configureTriggers": "Configurer les triggers de mise à jour",
         "configureThreshold": "Configurer le seuil du trigger",
         "configureSelfUpdate": "Configurer la mise à jour automatique de l'application",
-        "configureMaintenance": "Configurer la fenêtre de maintenance"
-      }
+        "configureMaintenance": "Configurer la fenêtre de maintenance",
+        "editGroupPolicy": "Modifier la politique de groupe"
+      },
+      "releaseMaturityCount": "En attente de versions stables dans la famille {family} : {count} versions antérieures sur {required} sont disponibles.",
+      "releaseMaturityUnavailable": "Les données de version de ce candidat sont indisponibles. Les mises à jour automatiques restent en attente."
     },
     "maturityBadge": {
       "new": "Détecté il y a {duration}"
@@ -505,6 +595,19 @@
         "failedDetail": "Impossible de mettre à jour la chaîne de dépendances pour {name}.",
         "staleChainTitle": "La chaîne de dépendances a changé",
         "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer."
+      },
+      "bulkUpdate": {
+        "header": "Mettre à jour 1 conteneur | Mettre à jour {count} conteneurs",
+        "accept": "Mettre à jour 1 conteneur | Mettre à jour {count} conteneurs",
+        "acceptWithParents": "Ajouter 1 parent et mettre à jour | Ajouter {count} parents et mettre à jour",
+        "dispatchHeading": "Seront mis à jour",
+        "blockedHeading": "Bloqués, laissés tels quels",
+        "softOverridesHeading": "Mise à jour malgré les avertissements",
+        "skippedHeading": "Ignorés",
+        "staleParentsHeading": "Parents avec mises à jour en attente, ajoutés lors de la confirmation",
+        "agentCountInfo": "Concerne {count} agents ; chaque agent exécute ses propres mises à jour.",
+        "stackCountInfo": "Concerne {count} stacks.",
+        "successMessage": "Mise à jour démarrée pour 1 conteneur | Mise à jour démarrée pour {count} conteneurs"
       }
     },
     "actionToasts": {
@@ -561,14 +664,16 @@
         "setAll": "Politique de maturité définie pour autoriser toutes les mises à jour",
         "skipped": "Mise à jour actuelle ignorée pour {name}",
         "removeSkip": "Exclusion supprimée : {kind} {value}",
-        "revertField": "{field} restauré à la policy déclarative",
-        "revertAll": "Toutes les substitutions ont été restaurées à la policy déclarative",
+        "revertField": "{field} restauré à la policy héritée",
+        "revertAll": "Toutes les substitutions ont été restaurées à la policy héritée",
         "failedTitle": "Mise à jour de la policy échouée : {name}",
         "failedDetail": "Impossible de mettre à jour la policy"
       },
       "validation": {
         "snoozeDate": "Sélectionnez une date de report valide",
-        "maturityAge": "Saisissez un âge de maturité entre {min} et {max} jours"
+        "maturityAge": "Saisissez un âge de maturité entre {min} et {max} jours",
+        "maturityReleases": "Saisissez un nombre entier de versions entre 0 et 100.",
+        "maturityFallback": "Saisissez un nombre entier de jours entre 0 et 365 pour cette exception."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "En attente",
+        "pulling": "Téléchargement de l’image",
+        "scanning": "Analyse de l’image",
+        "sbom-generating": "Génération du SBOM",
+        "pull-failed": "Échec du téléchargement de l’image",
+        "prepare": "Préparation de la mise à jour",
+        "dryrun": "Simulation",
+        "renamed": "Conteneur renommé",
+        "new-created": "Nouveau conteneur créé",
+        "old-stopped": "Ancien conteneur arrêté",
+        "new-started": "Nouveau conteneur démarré",
+        "health-gate": "Vérification de santé",
+        "health-gate-passed": "Vérification de santé réussie",
+        "succeeded": "Réussite",
+        "failed": "Échec",
+        "recovered-cleanup-temp": "Récupération : conteneurs temporaires nettoyés",
+        "recovered-rollback": "Récupération : restauration effectuée",
+        "recovered-active": "Récupération : conteneur actif conservé",
+        "recovery-failed": "Échec de la récupération",
+        "recovery-missing-containers": "Récupération : conteneurs manquants",
+        "rollback-started": "Restauration démarrée",
+        "rolled-back": "Restauration effectuée",
+        "rollback-deferred": "Restauration différée",
+        "rollback-failed": "Échec de la restauration",
+        "expired": "Expiré",
+        "skipped-dependency": "Ignoré à cause d’une dépendance",
+        "in-progress": "En cours",
+        "update-runtime-failed": "Échec de l’exécution de la mise à jour",
+        "create-new-failed": "Échec de création du nouveau conteneur",
+        "stop-old-failed": "Échec de l’arrêt de l’ancien conteneur",
+        "start-new-failed": "Échec du démarrage du nouveau conteneur",
+        "health-gate-failed": "Échec de la vérification de santé",
+        "cancelled": "Annulé",
+        "compose-runtime-refresh-failed": "Échec de l’actualisation de l’état d’exécution de Compose"
+      },
       "timestampUnknown": "Inconnu",
       "loadFailed": "Impossible de charger les backups",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explicite",
+        "inherited": "Hérité",
+        "unknown": "Inconnu"
       },
       "timeoutDefault": "60000 ms (par défaut)",
       "preAbortYes": "Annuler la mise à jour en cas d'échec du hook pré-exécution",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
+        "overview": "Vue d’ensemble",
+        "stats": "Statistiques",
         "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
+        "environment": "Environnement",
+        "labels": "Balises",
         "actions": "Actions"
       }
     },
     "logViewer": {
       "invalidRegex": "Expression régulière invalide"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Dépend de",
+      "requiredBy": "Requis par",
+      "cycle": "Fait partie d'un cycle de dépendances",
+      "toggle": "Afficher les dépendances",
+      "updateGroup": "Mettre à jour le groupe de dépendances ({count})",
+      "staleParentsWarning": "{name} dépend de {parents}, qui a également une mise à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec un parent obsolète. | {name} dépend de {parents}, qui ont également des mises à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec des parents obsolètes.",
+      "staleParentsOverflow": "et {count} de plus",
+      "staleParentsAccept": "Mettre à jour quand même"
+    },
+    "selection": {
+      "selectRow": "Sélectionner {name}",
+      "selectAll": "Sélectionner tous les conteneurs visibles",
+      "barLabel": "Conteneurs sélectionnés",
+      "count": "1 conteneur sélectionné | {count} conteneurs sélectionnés",
+      "updateSelected": "Mettre à jour la sélection",
+      "clear": "Effacer",
+      "reasons": {
+        "stale": "n'est plus dans la liste",
+        "inFlight": "déjà en cours de mise à jour",
+        "noUpdate": "aucune mise à jour disponible"
+      }
     }
   }
 }

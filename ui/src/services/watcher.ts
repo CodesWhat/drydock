@@ -1,9 +1,50 @@
+import { i18n } from '../boot/i18n';
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { ApiError } from '../utils/error';
 
 interface WatcherDetailPathOptions {
   type: string;
   name: string;
   agent?: string;
+}
+
+export interface FleetWatcher extends WatcherDetailPathOptions {
+  id: string;
+  metadata?: {
+    inventoryRefreshSupported?: boolean;
+    containers?: { total: number; running: number; stopped: number };
+  };
+}
+
+export interface InventoryRefreshResult {
+  context: {
+    origin: 'inventory';
+    operationId: string;
+    source: WatcherDetailPathOptions;
+  };
+  containers: unknown[];
+  removedIds: string[];
+  errors: { phase: string; id?: string; message: string }[];
+  authoritative: boolean;
+}
+
+export async function refreshWatcherInventory(
+  watcher: WatcherDetailPathOptions,
+): Promise<InventoryRefreshResult> {
+  const response = await fetch(`${buildWatcherDetailPath(watcher)}/inventory`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    throw new ApiError(
+      `Inventory refresh failed: ${response.statusText || response.status}`,
+      response.status,
+    );
+  }
+  return readJsonResponse(response);
 }
 
 function getWatcherProviderIcon(type: string) {
@@ -23,10 +64,12 @@ function getWatcherProviderColor(type: string) {
 async function getAllWatchers() {
   const response = await fetch('/api/v1/watchers', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get watchers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('watchersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {
@@ -45,7 +88,7 @@ async function getWatcher({ type, name, agent }: WatcherDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get watcher: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 export { getAllWatchers, getWatcher, getWatcherProviderColor, getWatcherProviderIcon };

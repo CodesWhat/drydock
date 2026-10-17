@@ -1,11 +1,32 @@
 export const DEFAULT_MATURITY_MIN_AGE_DAYS = 7;
 export const MATURITY_MIN_AGE_DAYS_MIN = 1;
 export const MATURITY_MIN_AGE_DAYS_MAX = 365;
+export const MATURITY_SKIP_RELEASES_MAX = 100;
+export const MATURITY_RELEASE_FALLBACK_DAYS_MAX = 365;
 export const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MATURITY_MODE_ALL_VALUE: string = 'all';
 const MATURITY_MODE_MATURE_VALUE: string = 'mature';
 
 export type MaturityMode = 'all' | 'mature';
+
+function parseOptionalCount(value: unknown, maximum: number): number | undefined {
+  if (
+    (typeof value !== 'number' && typeof value !== 'string') ||
+    (typeof value === 'string' && value.trim() === '')
+  ) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= maximum ? parsed : undefined;
+}
+
+export function parseMaturitySkipReleases(value: unknown): number | undefined {
+  return parseOptionalCount(value, MATURITY_SKIP_RELEASES_MAX);
+}
+
+export function parseMaturityReleaseFallbackDays(value: unknown): number | undefined {
+  return parseOptionalCount(value, MATURITY_RELEASE_FALLBACK_DAYS_MAX);
+}
 
 export function normalizeMaturityMode(value: unknown): MaturityMode | undefined {
   if (typeof value !== 'string') {
@@ -48,6 +69,29 @@ export function maturityMinAgeDaysToMilliseconds(days: number): number {
 }
 
 type MaturityClockSource = 'publishedAt' | 'detectedAt';
+
+interface MaturityPolicyContainer {
+  updateDetectedAt?: string;
+  firstSeenAt?: string;
+  result?: {
+    publishedAt?: string;
+    publishedAtTrusted?: boolean;
+    releaseMaturity?: { earlierReleases: number };
+  };
+  updatePolicy?: {
+    maturityMode?: MaturityMode;
+    maturityMinAgeDays?: number;
+    maturitySkipReleases?: number;
+    maturityReleaseFallbackDays?: number;
+  };
+}
+
+export function shouldCollectReleaseMaturity(container: MaturityPolicyContainer): boolean {
+  return (
+    container.updatePolicy?.maturityMode === 'mature' &&
+    (parseMaturitySkipReleases(container.updatePolicy.maturitySkipReleases) ?? 0) > 0
+  );
+}
 
 export interface MaturityClock {
   startMs: number | undefined;
@@ -143,11 +187,7 @@ export function getUpdateAgeMs(
  * model/container.ts.
  */
 export function isMaturityGatePending(
-  container: {
-    updateDetectedAt?: string;
-    result?: { publishedAt?: string; publishedAtTrusted?: boolean };
-    updatePolicy?: { maturityMode?: MaturityMode; maturityMinAgeDays?: number };
-  },
+  container: MaturityPolicyContainer,
   nowMs: number = Date.now(),
 ): boolean {
   if (container.updatePolicy?.maturityMode !== MATURITY_MODE_MATURE_VALUE) {
@@ -158,5 +198,26 @@ export function isMaturityGatePending(
     return true;
   }
   const maturityMinAgeDays = resolveMaturityMinAgeDays(container.updatePolicy?.maturityMinAgeDays);
-  return nowMs - maturityStartMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
+  const ageMs = nowMs - maturityStartMs;
+  if (ageMs < maturityMinAgeDaysToMilliseconds(maturityMinAgeDays)) {
+    return true;
+  }
+  return isReleaseMaturityGatePending(container, nowMs);
+}
+
+export function isReleaseMaturityGatePending(
+  container: MaturityPolicyContainer,
+  nowMs: number = Date.now(),
+): boolean {
+  const requiredReleases = container.updatePolicy?.maturitySkipReleases ?? 0;
+  if (container.updatePolicy?.maturityMode !== 'mature' || requiredReleases === 0) {
+    return false;
+  }
+  const earlierReleases = container.result?.releaseMaturity?.earlierReleases;
+  if (Number.isInteger(earlierReleases) && earlierReleases >= requiredReleases) {
+    return false;
+  }
+  const fallbackDays = container.updatePolicy.maturityReleaseFallbackDays ?? 0;
+  const startMs = getMaturityStartMs(container, nowMs);
+  return fallbackDays === 0 || startMs === undefined || nowMs - startMs < daysToMs(fallbackDays);
 }

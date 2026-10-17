@@ -52,9 +52,7 @@ identity_providers:
   oidc:
     hmac_secret: <a-very-long-string>
     issuer_private_key: |
-      -----BEGIN RSA PRIVATE KEY-----
-      # <Generate & paste here an RSA private key>
-      -----END RSA PRIVATE KEY-----    
+      YOUR_OIDC_SIGNING_PRIVATE_KEY
     access_token_lifespan: 1h
     authorize_code_lifespan: 1m
     id_token_lifespan: 1h

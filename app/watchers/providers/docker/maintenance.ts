@@ -1,4 +1,21 @@
 import cron from 'node-cron';
+import { resolveMaintenanceWindowScope } from '../../../model/watcher-maintenance-window.js';
+
+/**
+ * True when a configured maintenance window should gate a *scan*, not just an install.
+ * Only `maintenancewindowscope=scan` does; the default `install` scope leaves discovery,
+ * registry checks and container-state refresh running on the watcher's own cron and defers
+ * the automatic install instead. See app/model/watcher-maintenance-window.ts.
+ */
+export function isScanGatedByMaintenanceWindow(configuration: {
+  maintenancewindow?: string;
+  maintenancewindowscope?: unknown;
+}): boolean {
+  return (
+    Boolean(configuration.maintenancewindow) &&
+    resolveMaintenanceWindowScope(configuration.maintenancewindowscope) === 'scan'
+  );
+}
 
 interface MaintenanceWindowTask {
   timeMatcher: {

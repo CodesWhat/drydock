@@ -71,6 +71,11 @@ interface GuardResult {
 function runGuard(options: {
   releaseTag: string;
   sourceRef: string;
+  candidateTag?: string;
+  candidateDigest?: string;
+  soakOverrideReason?: string;
+  releases?: unknown[];
+  releaseLookupExit?: number;
   lsRemoteOutput?: string;
   lsRemoteExit?: number;
   mainVersion?: string | null;
@@ -81,6 +86,14 @@ function runGuard(options: {
     mkdirSync(stubDir);
     writeFileSync(join(stubDir, 'git'), stubGitScript, { mode: 0o755 });
     chmodSync(join(stubDir, 'git'), 0o755);
+    writeFileSync(
+      join(stubDir, 'gh'),
+      `#!/usr/bin/env bash
+if [ "\${FAKE_RELEASE_LOOKUP_EXIT}" != "0" ]; then exit "\${FAKE_RELEASE_LOOKUP_EXIT}"; fi
+printf '%s' "\${FAKE_RELEASES_OUTPUT}"
+`,
+      { mode: 0o755 },
+    );
 
     // The guard reads package.json (relative path) to derive main's active
     // line, so the script runs with workdir as cwd and a controlled file.
@@ -101,6 +114,21 @@ function runGuard(options: {
       PATH: `${stubDir}:${process.env.PATH ?? ''}`,
       RELEASE_TAG: options.releaseTag,
       SOURCE_REF: options.sourceRef,
+      CANDIDATE_TAG: options.candidateTag ?? '',
+      CANDIDATE_DIGEST: options.candidateDigest ?? '',
+      SOAK_OVERRIDE_REASON: options.soakOverrideReason ?? '',
+      GITHUB_REPOSITORY: 'CodesWhat/drydock',
+      FAKE_RELEASE_LOOKUP_EXIT: String(options.releaseLookupExit ?? 0),
+      FAKE_RELEASES_OUTPUT: JSON.stringify(
+        options.releases ?? [
+          {
+            tag_name: 'v1.6.1',
+            draft: false,
+            prerelease: false,
+            published_at: '2026-10-02T05:17:47Z',
+          },
+        ],
+      ),
       GITHUB_OUTPUT: outputPath,
       FAKE_GIT_LS_REMOTE_OUTPUT: options.lsRemoteOutput ?? DEV_BRANCHES,
     };
@@ -247,6 +275,155 @@ test('rejects a patch-zero prerelease release_tag the same way', () => {
   expect(result.stdout).toContain('has patch version 0');
 });
 
+test('accepts the pending retained-line minor GA without dropping candidate provenance', () => {
+  const result = runGuard({
+    releaseTag: 'v1.7.0',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.8.0',
+    candidateTag: 'v1.7.0-rc.24',
+    candidateDigest: `sha256:${'a'.repeat(64)}`,
+  });
+
+  expect(result.status).toBe(0);
+  expect(result.output.source_branch).toBe('dev/v1.7');
+  expect(result.output.is_retained_ga).toBe('true');
+  expect(result.output.is_maintenance_cut).toBe('false');
+});
+
+test.each([
+  { candidateTag: '', candidateDigest: `sha256:${'a'.repeat(64)}` },
+  { candidateTag: 'v1.8.0-rc.1', candidateDigest: `sha256:${'a'.repeat(64)}` },
+  { candidateTag: 'v1.7.0-beta.1', candidateDigest: `sha256:${'a'.repeat(64)}` },
+  { candidateTag: 'v1.7.0-rc.24', candidateDigest: '' },
+  { candidateTag: 'v1.7.0-rc.24', candidateDigest: 'sha256:invalid' },
+])('retained minor GA rejects incomplete or mismatched candidate inputs: %j', (candidate) => {
+  const result = runGuard({
+    releaseTag: 'v1.7.0',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.8.0',
+    ...candidate,
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.output.source_branch).toBeUndefined();
+});
+
+test('retained minor GA cannot release a line newer than main', () => {
+  const result = runGuard({
+    releaseTag: 'v1.9.0',
+    sourceRef: 'dev/v1.9',
+    mainVersion: '1.8.0',
+    lsRemoteOutput: `${DEV_BRANCHES}\neeeeeee\trefs/heads/dev/v1.9`,
+    candidateTag: 'v1.9.0-rc.1',
+    candidateDigest: `sha256:${'a'.repeat(64)}`,
+  });
+
+  expect(result.status).not.toBe(0);
+  expect(result.output.source_branch).toBeUndefined();
+});
+
+test('retained minor GA rejects an explicit soak override', () => {
+  const result = runGuard({
+    releaseTag: 'v1.7.0',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.8.0',
+    candidateTag: 'v1.7.0-rc.24',
+    candidateDigest: `sha256:${'a'.repeat(64)}`,
+    soakOverrideReason: 'Owner wants to skip the seven day soak',
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.output.source_branch).toBeUndefined();
+});
+
+test.each(['v1.8.0', 'v1.7.1', 'v2.0.0'])(
+  'retained minor GA refuses to roll stable tags back after %s exists',
+  (tag) => {
+    const result = runGuard({
+      releaseTag: 'v1.7.0',
+      sourceRef: 'dev/v1.7',
+      mainVersion: '1.8.0',
+      candidateTag: 'v1.7.0-rc.24',
+      candidateDigest: `sha256:${'a'.repeat(64)}`,
+      releases: [
+        { tag_name: tag, draft: false, prerelease: false, published_at: '2026-10-16T12:00:00Z' },
+      ],
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.output.source_branch).toBeUndefined();
+  },
+);
+
+test('a newer prerelease or unpublished draft does not block the pending older GA', () => {
+  const result = runGuard({
+    releaseTag: 'v1.7.0',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.8.0',
+    candidateTag: 'v1.7.0-rc.24',
+    candidateDigest: `sha256:${'a'.repeat(64)}`,
+    releases: [
+      {
+        tag_name: 'v1.8.0-rc.1',
+        draft: false,
+        prerelease: true,
+        published_at: '2026-10-16T12:00:00Z',
+      },
+      { tag_name: 'v1.8.0', draft: true, prerelease: false, published_at: null },
+    ],
+  });
+  expect(result.status).toBe(0);
+});
+
+test('an unanswered stable-release lookup fails retained promotion closed', () => {
+  const result = runGuard({
+    releaseTag: 'v1.7.0',
+    sourceRef: 'dev/v1.7',
+    mainVersion: '1.8.0',
+    candidateTag: 'v1.7.0-rc.24',
+    candidateDigest: `sha256:${'a'.repeat(64)}`,
+    releaseLookupExit: 1,
+  });
+  expect(result.status).not.toBe(0);
+  expect(result.output.source_branch).toBeUndefined();
+});
+
+test('retained metadata gets both CI gates before the candidate checkout', () => {
+  const steps = releaseSteps();
+  for (const [name, workflow] of [
+    ['Wait for successful retained metadata CI', '${{ env.CI_VERIFY_WORKFLOW_FILE }}'],
+    [
+      'Wait for successful retained metadata E2E Playwright',
+      '${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}',
+    ],
+  ]) {
+    const step = getStep(name);
+    expect(step).toBeDefined();
+    expect(step?.if).toBe("steps.source_ref.outputs.is_retained_ga == 'true'");
+    expect(step?.uses).toBe('./.github/actions/wait-for-successful-branch-ci');
+    expect(step?.with).toMatchObject({
+      'workflow-file': workflow,
+      'target-sha': '${{ steps.target.outputs.sha }}',
+      'allow-dispatch-events': 'true',
+    });
+    expect(steps.findIndex((candidate) => candidate.name === name)).toBeLessThan(
+      steps.findIndex((candidate) => candidate.name === 'Checkout exact release source'),
+    );
+  }
+  for (const name of [
+    'Wait for successful branch CI on release source SHA',
+    'Wait for successful E2E Playwright on release source SHA',
+  ]) {
+    expect(getStep(name)?.with?.['target-sha']).toBe('${{ steps.source.outputs.source_sha }}');
+  }
+});
+
+test('source validation receives candidate inputs from workflow dispatch', () => {
+  expect(getStepById('source_ref')?.env).toMatchObject({
+    CANDIDATE_TAG: '${{ inputs.candidate_tag }}',
+    CANDIDATE_DIGEST: '${{ inputs.candidate_digest }}',
+    SOAK_OVERRIDE_REASON: '${{ inputs.soak_override_reason }}',
+  });
+});
+
 test('accepts a valid maintenance GA cut', () => {
   const result = runGuard({ releaseTag: 'v1.6.1', sourceRef: 'dev/v1.6' });
 
@@ -292,16 +469,16 @@ test('a genuinely failing ls-remote propagates and fails closed', () => {
 
 test('release-cut skips the main-sync drift guard exactly when the maintenance cut is validated', () => {
   const syncStep = getStep('Assert main is in sync with the active dev branch');
-  expect(syncStep?.if).toBe("steps.source_ref.outputs.is_maintenance_cut != 'true'");
+  expect(syncStep?.if).toBe("steps.source_ref.outputs.source_branch == ''");
 });
 
 test('release-cut resolves target SHA from the maintenance branch tip when set, via an unambiguous fully-qualified ref', () => {
   const targetStep = getStep('Resolve target SHA and lowercase repository');
 
   expect(targetStep?.env).toMatchObject({
-    IS_MAINTENANCE_CUT: '${{ steps.source_ref.outputs.is_maintenance_cut }}',
     SOURCE_BRANCH: '${{ steps.source_ref.outputs.source_branch }}',
   });
+  expect(targetStep?.run).toContain('if [ -n "${SOURCE_BRANCH}" ]; then');
   // P1-3: fetch into an explicit remote-tracking ref and resolve that exact
   // fully-qualified path — never the "origin/${SOURCE_BRANCH}" shorthand,
   // which a colliding tag can outrank per gitrevisions' disambiguation order.
@@ -324,7 +501,7 @@ test('release-cut threads the maintenance flag into both CI-wait steps, position
 
   for (const step of [ciWaitStep, e2eWaitStep]) {
     expect(step?.with).toMatchObject({
-      'allow-dispatch-events': '${{ steps.source_ref.outputs.is_maintenance_cut }}',
+      'allow-dispatch-events': "${{ steps.source_ref.outputs.source_branch != '' }}",
     });
   }
 
@@ -344,7 +521,7 @@ test('release-cut threads the maintenance flag into both CI-wait steps, position
   );
 });
 
-test('source_ref input defaults empty and documents the maintenance-only scope', () => {
+test('source_ref input defaults empty and documents the retained-branch scope', () => {
   const workflow = loadWorkflow(workflowPath) as unknown as {
     on?: {
       workflow_dispatch?: { inputs?: Record<string, { default?: string; description?: string }> };
@@ -353,7 +530,8 @@ test('source_ref input defaults empty and documents the maintenance-only scope',
   const input = workflow.on?.workflow_dispatch?.inputs?.source_ref;
 
   expect(input?.default).toBe('');
-  expect(input?.description).toContain('Maintenance cuts only');
+  expect(input?.description).toContain('Retained branches only');
+  expect(input?.description).toContain('already-published');
   expect(input?.description).toContain('dev/v1.6');
 });
 

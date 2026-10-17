@@ -1336,7 +1336,13 @@ export async function resolveContainerDependsOn(
   };
 }
 
-function resolveLookupImageFromContainerLabels(
+/**
+ * Shared with the agent path (`AgentClient.applyRegistryLookupLabels`), which has no
+ * overrides of its own and calls this with `{}` — see that call site for why an
+ * agent-reported `lookupUrl`/`lookupImage` still beats the label there (checked before
+ * this function ever runs).
+ */
+export function resolveLookupImageFromContainerLabels(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides,
 ) {

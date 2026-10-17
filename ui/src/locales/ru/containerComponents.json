@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Список агентов недоступен. Некоторые настроенные агенты могут отсутствовать.",
+      "title": "Состояние парка",
+      "description": "Состояние всего парка. Обновление инвентаря обнаруживает контейнеры без проверки реестров и запуска обновлений.",
+      "reload": "Перезагрузить состояние",
+      "refresh": "Обновить инвентарь",
+      "configured": "Настроено",
+      "connected": "Подключено",
+      "disconnected": "Отключено",
+      "unavailable": "Недоступно",
+      "agentUnavailable": "Состояние агентов недоступно. Сохранённые данные могут быть устаревшими.",
+      "watcherUnavailable": "Метаданные наблюдателей недоступны. Сохранённые данные могут быть устаревшими.",
+      "total": "Контейнеры: {count}",
+      "lastKnown": "Последние известные данные",
+      "lastSeen": "Последний контакт: {value}",
+      "unsupported": "Все цели требуют наблюдателей Docker с поддержкой обновления инвентаря.",
+      "complete": "Инвентарь полный",
+      "partial": "Инвентарь неполный",
+      "reloadFailed": "Не удалось перезагрузить список контейнеров. Результаты инвентаризации остаются видимыми."
+    },
+    "fleetBulk": {
+      "label": "Действия для отфильтрованного парка",
+      "updateAll": "Обновить все ({count})",
+      "snoozePatch": "Отложить все патчи",
+      "patchCount": "Кандидатов на патч: {count}",
+      "duration": "Срок отсрочки",
+      "days": "{count} дн.",
+      "untilDate": "До даты",
+      "date": "Отложить до конца даты",
+      "snoozeConfirm": "Отложить {count} кандидатов на патч?",
+      "snoozeScope": "У этих контейнеров доступны патчи. Отложить все их обновления на {duration}, не только патчи. Используется отфильтрованный актуальный список, а не отмеченные строки. Дата включает конец местного дня.",
+      "snoozeResult": "Отложено: {succeeded}. Ошибок: {failed}.",
+      "refreshFailed": "Политики записаны, но обновить список не удалось. Перезагрузите список.",
+      "disabled": "Действия отключены. Политики не изменены.",
+      "invalid": "Недопустимый срок. Политики не изменены.",
+      "busy": "Другое действие уже выполняется. Дополнительные политики не изменены."
+    },
+    "fleetDimensions": {
+      "groupBy": "Группировать по",
+      "none": "Без группировки",
+      "agent": "Агент",
+      "registry": "Реестр",
+      "status": "Состояние",
+      "tagType": "Тип тега",
+      "label": "Метка",
+      "groupLabel": "Группировать по ключу метки",
+      "allAgents": "Все агенты",
+      "allRegistries": "Все адреса реестров",
+      "all": "Все типы тегов",
+      "specific": "Точный тег",
+      "floating": "Плавающий тег",
+      "digest": "Закреплённый дайджест",
+      "semver": "Тег версии",
+      "tag": "Тег без версии",
+      "unknown": "Неизвестно",
+      "local": "Локальные наблюдатели",
+      "running": "Работает",
+      "stopped": "Остановлен",
+      "labelKey": "Ключ метки",
+      "labelMatch": "Условие метки",
+      "labelValue": "Значение метки",
+      "exists": "Метка есть",
+      "equals": "Равно",
+      "missing": "Метка отсутствует",
+      "missingLabel": "Без метки",
+      "emptyValue": "Пустое значение"
+    },
     "fullPageActions": {
       "updateWorkflow": "Процесс обновления",
       "actionsGroup": "Действия",
@@ -28,8 +95,9 @@
       "clearSkips": "Очистить пропуски",
       "clearPolicy": "Сбросить политику",
       "overridden": "Переопределено",
+      "groupSource": "Группа: {group}",
       "revert": "Отменить",
-      "revertAll": "Вернуть к декларативной политике",
+      "revertAll": "Вернуть к унаследованной политике",
       "snoozedUntil": "Отложено до:",
       "maturityMode": "Режим зрелости:",
       "matureOnlyMinimum": "Только зрелые (минимум {days} д.)",
@@ -58,6 +126,12 @@
       "runningButton": "Выполняется...",
       "runButton": "Запустить",
       "noTriggersAssociated": "С этим контейнером не связаны триггеры",
+      "unavailableTriggers": "Недоступные триггеры",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Принадлежит другому агенту, чем этот контейнер.",
+        "structuralIncompatibility": "Проект, сервис или файл Compose не соответствует этому контейнеру.",
+        "labelScope": "Исключён метками include/exclude dd.action/dd.notification этого контейнера."
+      },
       "backupsRollback": "Резервные копии и откат",
       "rollingBack": "Откат...",
       "rollbackLatest": "Откат к последней копии",
@@ -71,7 +145,13 @@
       "versionLabel": "Версия:",
       "rollbackReasonLabel": "Причина отката:",
       "lastErrorLabel": "Последняя ошибка:",
-      "noUpdateOperations": "Операций обновления пока не зафиксировано"
+      "noUpdateOperations": "Операций обновления пока не зафиксировано",
+      "skipReleases": "Сколько первых выпусков пропустить",
+      "skipReleasesHint": "Пропускать первые N различных стабильных выпусков каждого семейства: основной версии SemVer или месяца CalVer. 0 отключает этот барьер.",
+      "releaseFallbackDays": "Исключение по возрасту (дни)",
+      "releaseFallbackHint": "Разрешить через столько дней, если данных о выпусках нет или нужное количество не достигнуто. 0 отключает исключение. Минимальный возраст всё равно учитывается.",
+      "releasePolicySummary": "Пропускать первые {count} выпусков каждого семейства.",
+      "releaseFallbackSummary": "Исключение из требования к числу выпусков через {days} дней."
     },
     "fullPageDetail": {
       "statusUpdating": "Обновляется",
@@ -111,7 +191,7 @@
       "volumes": "Тома",
       "composeFiles": "Compose-файлы",
       "version": "Версия",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Версия ПО",
       "currentLabel": "Текущая:",
       "latestLabel": "Последняя:",
       "digestLabel": "Дайджест:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "Открытых портов нет",
       "notConfigured": "Не настроено",
       "noVolumesMounted": "Тома не подключены",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Время работы",
+      "uptimeAriaLabel": "Время работы контейнера"
     },
     "containerLogs": {
       "title": "Журналы контейнера",
       "download": "Скачать",
       "allLevels": "Все уровни",
       "downloadError": "Не удалось скачать журналы",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Последние строки: {count}",
+      "tailAll": "Все строки",
+      "statusPaused": "Приостановлено",
+      "statusLive": "В реальном времени",
+      "statusOffline": "Нет подключения",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Загрузка контейнеров...",
+      "fleetUpdateProgress": "Обновление контейнеров: {done} из {total}",
+      "fleetUpdateProgressRunning": "Сейчас обновляются: {names}",
+      "fleetUpdateProgressRunningMore": "Сейчас обновляются: {names} и ещё {more}",
       "searchPlaceholder": "Поиск по имени или образу...",
       "allStatuses": "Все статусы",
       "running": "Работает",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "Обновить контейнер",
-      "thisContainer": "this container",
+      "thisContainer": "этот контейнер",
       "confirmTagChange": "Обновить {name}? Тег образа изменится с :{currentTag} на :{newTag}{kind}.",
       "confirmDigestChange": "Обновить {name}? Доступна новая сборка :{currentTag} (изменение дайджеста).",
       "confirmLatest": "Обновить {name} сейчас? Будет применён последний обнаруженный образ.",
       "updating": "Обновление...",
       "update": "Обновить",
-      "updateFailed": "Update failed"
+      "updateFailed": "Не удалось обновить"
     },
     "floatingTag": {
       "badgeText": "плавающий тег",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · разблокируется {date}",
       "maturityClockPublished": "Кандидат опубликован {date} — остался {count} день до минимума в {minDays} дн. | Кандидат опубликован {date} — осталось {count} дней до минимума в {minDays} дн.",
       "maturityClockDetected": "Кандидат обнаружен {date} — остался {count} день до минимума в {minDays} дн. | Кандидат обнаружен {date} — осталось {count} дней до минимума в {minDays} дн.",
+      "groupManualOnly": "Политика группы '{group}' разрешает только ручные обновления. Drydock не будет применять это обновление автоматически.",
       "updateButton": "Обновить сейчас",
       "blockedButton": "Обновление заблокировано",
       "notificationsOnlyButton": "Только уведомления",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Триггер обновления не настроен",
         "self-update-unavailable": "Самообновление недоступно",
         "maintenance-window-closed": "Окно обслуживания закрыто",
-        "dry-run-trigger": "Конфигурация триггера в режиме dry-run"
+        "group-notify-only": "Группа разрешает только уведомления",
+        "group-manual-only": "Группа требует ручных обновлений",
+        "dry-run-trigger": "Конфигурация триггера в режиме dry-run",
+        "maturity-releases-not-reached": "Ожидание политики зрелости"
       },
       "actions": {
         "editPolicy": "Изменить политику обновления",
@@ -439,25 +526,28 @@
         "configureTriggers": "Настроить триггеры обновления",
         "configureThreshold": "Настроить порог триггера",
         "configureSelfUpdate": "Настроить самообновление",
-        "configureMaintenance": "Настроить окно обслуживания"
-      }
+        "configureMaintenance": "Настроить окно обслуживания",
+        "editGroupPolicy": "Изменить политику группы"
+      },
+      "releaseMaturityCount": "Ожидание стабильных выпусков семейства {family}: доступно {count} из {required} предыдущих выпусков.",
+      "releaseMaturityUnavailable": "Данные о выпуске кандидата недоступны. Автоматические обновления приостановлены."
     },
     "maturityBadge": {
       "new": "Обнаружено {duration} назад"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Отмена",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Остановить контейнер",
+        "message": "Остановить {name}?",
+        "acceptLabel": "Остановить",
+        "successMessage": "Остановлен: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Перезапустить контейнер",
+        "message": "Перезапустить {name}?",
+        "acceptLabel": "Перезапустить",
+        "successMessage": "Перезапущен: {name}"
       },
       "forceUpdate": {
         "header": "Принудительное обновление",
@@ -505,6 +595,19 @@
         "failedDetail": "Не удалось обновить цепочку зависимостей для {name}.",
         "staleChainTitle": "Цепочка зависимостей изменилась",
         "staleChainDetail": "Цепочка зависимостей для {name} изменилась с момента последнего предпросмотра. Откройте диалог обновления заново, чтобы проверить текущую цепочку перед подтверждением."
+      },
+      "bulkUpdate": {
+        "header": "Обновить 1 контейнер | Обновить {count} контейнеров",
+        "accept": "Обновить 1 контейнер | Обновить {count} контейнеров",
+        "acceptWithParents": "Добавить 1 родительский контейнер и обновить | Добавить {count} родительских контейнеров и обновить",
+        "dispatchHeading": "Будут обновлены",
+        "blockedHeading": "Заблокировано, останется без изменений",
+        "softOverridesHeading": "Обновление несмотря на предупреждения",
+        "skippedHeading": "Пропущено",
+        "staleParentsHeading": "Родительские контейнеры с ожидающими обновлениями, добавляются при подтверждении",
+        "agentCountInfo": "Охватывает {count} агентов; каждый агент выполняет свои обновления самостоятельно.",
+        "stackCountInfo": "Охватывает {count} стеков.",
+        "successMessage": "Обновление начато для 1 контейнера | Обновление начато для {count} контейнеров"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "Повторная проверка не удалась для {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} запись",
+      "entryCountPlural": "Количество записей: {count}",
       "kindLabels": {
         "tag": "тег",
         "digest": "дайджест"
@@ -561,14 +664,16 @@
         "setAll": "Политика зрелости установлена на разрешение всех обновлений",
         "skipped": "Текущее обновление для {name} пропущено",
         "removeSkip": "Удалён пропущенный {kind} {value}",
-        "revertField": "{field} возвращён к декларативной политике",
-        "revertAll": "Все переопределения возвращены к декларативной политике",
+        "revertField": "{field} возвращён к унаследованной политике",
+        "revertAll": "Все переопределения возвращены к унаследованной политике",
         "failedTitle": "Ошибка обновления политики: {name}",
         "failedDetail": "Не удалось обновить политику"
       },
       "validation": {
         "snoozeDate": "Выберите корректную дату отсрочки",
-        "maturityAge": "Введите возраст зрелости от {min} до {max} дней"
+        "maturityAge": "Введите возраст зрелости от {min} до {max} дней",
+        "maturityReleases": "Введите целое число выпусков от 0 до 100.",
+        "maturityFallback": "Введите целое число дней для исключения от 0 до 365."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "В очереди",
+        "pulling": "Загрузка образа",
+        "scanning": "Сканирование образа",
+        "sbom-generating": "Создание SBOM",
+        "pull-failed": "Не удалось загрузить образ",
+        "prepare": "Подготовка обновления",
+        "dryrun": "Пробный запуск",
+        "renamed": "Контейнер переименован",
+        "new-created": "Новый контейнер создан",
+        "old-stopped": "Старый контейнер остановлен",
+        "new-started": "Новый контейнер запущен",
+        "health-gate": "Проверка работоспособности",
+        "health-gate-passed": "Проверка работоспособности пройдена",
+        "succeeded": "Успешно",
+        "failed": "Ошибка",
+        "recovered-cleanup-temp": "Восстановлено: временные контейнеры удалены",
+        "recovered-rollback": "Восстановлено: откат завершён",
+        "recovered-active": "Восстановлено: активный контейнер сохранён",
+        "recovery-failed": "Ошибка восстановления",
+        "recovery-missing-containers": "Восстановление: контейнеры отсутствуют",
+        "rollback-started": "Откат начат",
+        "rolled-back": "Выполнен откат",
+        "rollback-deferred": "Откат отложен",
+        "rollback-failed": "Ошибка отката",
+        "expired": "Срок истёк",
+        "skipped-dependency": "Пропущено из-за зависимости",
+        "in-progress": "Выполняется",
+        "update-runtime-failed": "Ошибка выполнения обновления",
+        "create-new-failed": "Не удалось создать новый контейнер",
+        "stop-old-failed": "Не удалось остановить старый контейнер",
+        "start-new-failed": "Не удалось запустить новый контейнер",
+        "health-gate-failed": "Проверка работоспособности не пройдена",
+        "cancelled": "Отменено",
+        "compose-runtime-refresh-failed": "Не удалось обновить состояние выполнения Compose"
+      },
       "timestampUnknown": "Неизвестно",
       "loadFailed": "Не удалось загрузить резервные копии",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Явно задано",
+        "inherited": "Унаследовано",
+        "unknown": "Неизвестно"
       },
       "timeoutDefault": "60000 мс (по умолчанию)",
       "preAbortYes": "Прервать обновление при ошибке предварительного хука",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Обзор",
+        "stats": "Статистика",
+        "logs": "Журналы",
+        "environment": "Окружение",
+        "labels": "Метки",
+        "actions": "Действия"
       }
     },
     "logViewer": {
       "invalidRegex": "Некорректное регулярное выражение"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Зависит от",
+      "requiredBy": "Требуется для",
+      "cycle": "Часть цикла зависимостей",
+      "toggle": "Показать зависимости",
+      "updateGroup": "Обновить группу зависимостей ({count})",
+      "staleParentsWarning": "{name} зависит от {parents}, у которого также есть ожидающее обновление. Если сначала обновить зависимый контейнер, он может продолжить работать с устаревшим родительским контейнером. | {name} зависит от {parents}, у которых также есть ожидающие обновления. Если сначала обновить зависимый контейнер, он может продолжить работать с устаревшими родительскими контейнерами.",
+      "staleParentsOverflow": "и ещё {count}",
+      "staleParentsAccept": "Всё равно обновить"
+    },
+    "selection": {
+      "selectRow": "Выбрать {name}",
+      "selectAll": "Выбрать все видимые контейнеры",
+      "barLabel": "Выбранные контейнеры",
+      "count": "Выбран 1 контейнер | Выбрано {count} контейнеров",
+      "updateSelected": "Обновить выбранное",
+      "clear": "Очистить",
+      "reasons": {
+        "stale": "больше нет в списке",
+        "inFlight": "уже обновляется",
+        "noUpdate": "обновление недоступно"
+      }
     }
   }
 }

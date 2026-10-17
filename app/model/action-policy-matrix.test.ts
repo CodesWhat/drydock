@@ -43,9 +43,9 @@ vi.mock('../store/settings.js', () => ({
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: vi.fn(),
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
-  getActiveOperationByContainerName: vi.fn(),
-  getRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-  hasOtherActiveOperationByContainerName: vi.fn(() => false),
+  getActiveOperationByContainerIdentity: vi.fn(),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
   insertOperation: mockInsertOperation,
   markOperationTerminal: vi.fn(),
 }));
@@ -80,6 +80,135 @@ import {
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
+
+describe('manual access defaults', () => {
+  test.each(['onauto', 'oninclude'] as const)(
+    '%s with manual=all grants unlabeled containers manual access only',
+    async (auto) => {
+      const trigger = makeAdmissionTrigger('docker.update', {
+        configuration: { auto, manual: 'all', threshold: 'all' },
+      });
+      const container = makeAdmissionContainer();
+      const triggers = { 'docker.update': trigger };
+      mockGetState.mockReturnValue({ trigger: triggers, watcher: {} });
+
+      expect(resolveForTrigger(trigger, container)).toEqual({ state: 'manual' });
+      expect(selectActionTrigger(triggers, container, { requireAuto: true })).toBeUndefined();
+      const accepted = await requestContainerUpdate(container);
+      expect(accepted.operationId).toBeDefined();
+      expect(trigger.trigger).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test.each([
+    ['onauto', { actionTriggerAuto: 'update' }],
+    ['oninclude', { actionTriggerInclude: 'update' }],
+  ] as const)('%s still permits labeled automatic updates', (auto, labels) => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      configuration: { auto, manual: 'all', threshold: 'all' },
+    });
+    expect(resolveForTrigger(trigger, makeAdmissionContainer(labels))).toEqual({ state: 'auto' });
+  });
+
+  test.each(['onauto', 'oninclude'] as const)(
+    '%s preserves explicit include restrictions with manual=all',
+    (auto) => {
+      const trigger = makeAdmissionTrigger('docker.update', {
+        configuration: { auto, manual: 'all' },
+      });
+      for (const include of ['another', '']) {
+        expect(
+          resolveForTrigger(trigger, makeAdmissionContainer({ actionTriggerInclude: include })),
+        ).toMatchObject({ state: 'blocked', reason: 'not-included' });
+      }
+    },
+  );
+
+  test.each(['onauto', 'oninclude'] as const)(
+    '%s manual=all never bypasses an explicit exclusion',
+    (auto) => {
+      const trigger = makeAdmissionTrigger('docker.update', {
+        configuration: { auto, manual: 'all' },
+      });
+      expect(
+        resolveForTrigger(trigger, makeAdmissionContainer({ actionTriggerExclude: 'update' })),
+      ).toMatchObject({ state: 'blocked', reason: 'excluded' });
+    },
+  );
+
+  test.each(['onauto', 'oninclude'] as const)(
+    '%s manual=oninclude keeps the existing closed default',
+    (auto) => {
+      const trigger = makeAdmissionTrigger('docker.update', {
+        configuration: { auto, manual: 'oninclude' },
+      });
+      expect(resolveForTrigger(trigger, makeAdmissionContainer())).toMatchObject({
+        state: 'blocked',
+        reason: 'not-included',
+      });
+    },
+  );
+
+  test('an unrelated automatic label grants no automatic access', () => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      configuration: { auto: 'onauto', manual: 'all' },
+    });
+    expect(
+      resolveForTrigger(trigger, makeAdmissionContainer({ actionTriggerAuto: 'another' })),
+    ).toEqual({ state: 'manual' });
+  });
+
+  test('manual defaults preserve agent affinity', () => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      agent: 'edge',
+      configuration: { auto: 'onauto', manual: 'all' },
+    });
+    const triggers = { 'docker.update': trigger };
+    expect(selectActionTrigger(triggers, makeAdmissionContainer({ agent: 'edge' }))).toMatchObject({
+      state: 'manual',
+    });
+    expect(selectActionTrigger(triggers, makeAdmissionContainer())).toBeUndefined();
+  });
+
+  test('an automatic label outside its threshold stays manual', () => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      configuration: { auto: 'onauto', manual: 'all' },
+    });
+    expect(
+      resolveForTrigger(trigger, makeAdmissionContainer({ actionTriggerAuto: 'update:patch' })),
+    ).toEqual({ state: 'manual' });
+  });
+
+  test('manual defaults cannot bypass a group exclusion', () => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      configuration: { auto: 'onauto', manual: 'all' },
+    });
+    expect(
+      resolveForTrigger(
+        trigger,
+        makeAdmissionContainer({
+          groupPolicy: { group: 'payments', actions: { exclude: ['update'] } },
+        }),
+      ),
+    ).toMatchObject({ state: 'blocked', reason: 'excluded', excludedBy: 'group' });
+  });
+
+  test('global manual mode still clamps a labeled automatic grant', async () => {
+    const trigger = makeAdmissionTrigger('docker.update', {
+      configuration: { auto: 'onauto', manual: 'all', threshold: 'all' },
+    });
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger }, watcher: {} });
+    mockGetUpdateMode.mockReturnValue('manual');
+    const container = makeAdmissionContainer({ actionTriggerAuto: 'update' });
+    await expect(enqueueContainerUpdate(container, { source: 'automatic' })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Update mode is manual; automatic updates are disabled',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    await requestContainerUpdate(container);
+    expect(trigger.trigger).toHaveBeenCalledTimes(1);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -231,12 +360,14 @@ describe('case 4: exclude beats include+auto -> blocked, trigger-excluded', () =
     expect(resolveForTrigger(trigger, container)).toStrictEqual({
       state: 'blocked',
       reason: 'excluded',
+      excludedBy: 'label',
     });
     expect(
       selectActionTrigger({ 'docker.update': trigger }, container, { requireAuto: true }),
     ).toStrictEqual({
       state: 'blocked',
       reason: 'excluded',
+      excludedBy: 'label',
       trigger,
       triggerId: 'docker.update',
     });

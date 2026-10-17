@@ -3,6 +3,7 @@ import nocache from 'nocache';
 import * as storeAudit from '../store/audit.js';
 import { sendErrorResponse } from './error-response.js';
 import { buildPaginationLinks } from './pagination-links.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 // Stryker disable next-line Regex: validation behavior is covered by route tests, but module-scope regex mutants survive under the vitest runner.
@@ -153,6 +154,6 @@ function getAuditEntries(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getAuditEntries);
+  router.get('/', scoped('read', getAuditEntries));
   return router;
 }

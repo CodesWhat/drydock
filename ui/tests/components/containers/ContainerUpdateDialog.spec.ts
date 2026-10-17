@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 
 const mockUpdateContainer = vi.fn();
 const mockGetContainerUpdateStartedMessage = vi.fn().mockReturnValue('Update started');
@@ -63,6 +64,42 @@ describe('ContainerUpdateDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpdateMode.value = 'manual';
+  });
+
+  it('localizes a real-service HTTP failure and keeps the dialog available for retry', async () => {
+    const previousLocale = i18n.global.locale.value;
+    const previousFetch = globalThis.fetch;
+    i18n.global.locale.value = 'fr';
+    const service = await vi.importActual<typeof import('@/services/container-actions')>(
+      '@/services/container-actions',
+    );
+    mockUpdateContainer.mockImplementation(service.updateContainer);
+    globalThis.fetch = vi.fn().mockResolvedValueOnce(new Response('{}', { status: 500 }));
+    const w = factory({ containerId: 'abc123', containerName: 'nginx' });
+    try {
+      await nextTick();
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (button) => button.textContent?.trim() === 'Mettre à jour',
+      )!;
+      updateBtn.click();
+      await flushPromises();
+      expect(document.body.textContent).toContain('Echec de la mise à jour');
+      expect(mockToast.error).toHaveBeenCalledWith(
+        'Échec de la mise à jour : nginx',
+        'Echec de la mise à jour',
+      );
+      expect(w.emitted('update:containerId')).toBeUndefined();
+      expect(updateBtn.disabled).toBe(false);
+      vi.mocked(fetch).mockResolvedValueOnce(Response.json({}));
+      updateBtn.click();
+      await flushPromises();
+      expect(w.emitted('updated')).toEqual([['abc123']]);
+      expect(w.emitted('update:containerId')).toEqual([[null]]);
+    } finally {
+      w.unmount();
+      i18n.global.locale.value = previousLocale;
+      globalThis.fetch = previousFetch;
+    }
   });
 
   describe('open / close via prop', () => {

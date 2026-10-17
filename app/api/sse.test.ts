@@ -18,6 +18,10 @@ var {
   mockTimingSafeEqual,
   mockLoggerDebug,
   mockLoggerWarn,
+  mockFindApiKeyById,
+  mockCheckSessionIdentity,
+  mockIsSecondFactorRequired,
+  mockGetSession,
   mockBootId,
   mockSseEventBuffer,
 } = vi.hoisted(() => {
@@ -90,6 +94,10 @@ var {
     ),
     mockLoggerDebug: vi.fn(),
     mockLoggerWarn: vi.fn(),
+    mockFindApiKeyById: vi.fn(),
+    mockCheckSessionIdentity: vi.fn(),
+    mockIsSecondFactorRequired: vi.fn(() => false),
+    mockGetSession: vi.fn(),
     mockBootId: bootId,
     mockSseEventBuffer,
   };
@@ -134,6 +142,7 @@ vi.mock('../event/index', () => ({
   registerContainerUpdateApplied: mockRegisterContainerUpdateApplied,
   registerContainerUpdateFailed: mockRegisterContainerUpdateFailed,
   registerBatchUpdateCompleted: mockRegisterBatchUpdateCompleted,
+  registerApprovalEvent: vi.fn(),
   getContainerUpdateAppliedEventContainerName: (payload: unknown) => {
     if (typeof payload === 'string') return payload || undefined;
     if (!payload || typeof payload !== 'object') return undefined;
@@ -146,6 +155,20 @@ vi.mock('./sse-container-enrichment.js', () => ({
   enrichContainerLifecyclePayloadWithEligibility: (payload) => payload,
 }));
 
+vi.mock('../store/api-key.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../store/api-key.js')>()),
+  findApiKeyById: mockFindApiKeyById,
+}));
+
+vi.mock('./totp-identity.js', () => ({
+  checkSessionIdentity: mockCheckSessionIdentity,
+  isSecondFactorRequired: mockIsSecondFactorRequired,
+}));
+
+vi.mock('./totp-orphans.js', () => ({ listOrphanedFactors: () => [] }));
+
+vi.mock('../store/session.js', () => ({ getSession: mockGetSession }));
+
 vi.mock('../log', () => ({
   default: {
     child: vi.fn(() => ({
@@ -155,6 +178,11 @@ vi.mock('../log', () => ({
   },
 }));
 
+import {
+  closeStreamsForLocalSubjects,
+  closeStreamsForRevokedSessions,
+  registerSessionStreamCloser,
+} from './session-streams.js';
 import * as sseRouter from './sse.js';
 
 function getHandler() {
@@ -198,11 +226,12 @@ function createSSEResponse() {
   };
 }
 
-function createSSERequest(ip = '127.0.0.1', sessionID = `session-${ip}`) {
+function createSSERequest(ip = '127.0.0.1', sessionID = `session-${ip}`, principal?: unknown) {
   const listeners = {};
   return {
     ip,
     sessionID,
+    ...(principal === undefined ? {} : { principal }),
     headers: {} as Record<string, string>,
     on: vi.fn((event, handler) => {
       listeners[event] = handler;
@@ -221,6 +250,15 @@ function createJsonResponse() {
   return {
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
+  };
+}
+
+/** The row express-session keeps for a signed-in session. */
+function storedSession(sid: string, user: unknown = { username: 'someone' }) {
+  return {
+    sid,
+    expiresAt: Date.now() + 60_000,
+    data: JSON.stringify({ cookie: {}, passport: { user: JSON.stringify(user) } }),
   };
 }
 
@@ -252,8 +290,8 @@ function parseSseEventPayload(res, eventName) {
   return JSON.parse(dataSection.trim());
 }
 
-function connectSseClient(handler, ip = '127.0.0.1') {
-  const req = createSSERequest(ip);
+function connectSseClient(handler, ip = '127.0.0.1', principal?: unknown) {
+  const req = createSSERequest(ip, `session-${ip}`, principal);
   const res = createSSEResponse();
   handler(req, res);
   const connectedPayload = parseSseEventPayload(res, 'dd:connected');
@@ -295,6 +333,13 @@ describe('SSE Router', () => {
     sseRouter._connectionsPerIp.clear();
     sseRouter._connectionsPerSession.clear();
     sseRouter._clearPendingSelfUpdateAcks();
+    // Every session is good unless a test says otherwise: its row is there
+    // and the validator accepts the user it holds.
+    mockGetSession.mockReset();
+    mockGetSession.mockImplementation((sid: string) => storedSession(sid));
+    mockCheckSessionIdentity.mockReset();
+    mockCheckSessionIdentity.mockReturnValue('valid');
+    mockIsSecondFactorRequired.mockReset();
   });
 
   afterEach(() => {
@@ -1978,6 +2023,28 @@ describe('SSE Router', () => {
       );
     });
 
+    test('serves label-owned sources on a container event and never the declared layer', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+      const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
+
+      onContainerUpdated({
+        id: 'container-1',
+        name: 'nginx',
+        labelOwned: {
+          v: 1,
+          declared: { displayName: 'Secret declared' },
+          declaredSources: {},
+          sources: { displayName: 'override' },
+        },
+      });
+
+      const frame = res.write.mock.calls.map(([chunk]) => String(chunk)).join('');
+      expect(frame).toContain('"labelOwnedSources":{"displayName":"override"}');
+      expect(frame).not.toContain('Secret declared');
+      expect(frame).not.toContain('"labelOwned"');
+    });
+
     test('should broadcast dd:container-removed when container-removed event fires', () => {
       const handler = getHandler();
       const { res } = connectSseClient(handler);
@@ -2288,5 +2355,600 @@ describe('SSE Router', () => {
       {},
       expect.any(Number),
     );
+  });
+  describe('a stream ends when the key that opened it does', () => {
+    const KEY_PRINCIPAL = {
+      kind: 'api-key',
+      username: 'ci',
+      keyId: 'child0000001',
+      scopes: ['read'],
+      parentKeyId: 'root00000001',
+    };
+
+    function validRecord(overrides = {}) {
+      return { keyId: 'child0000001', revokedAt: null, expiresAt: null, ...overrides };
+    }
+
+    beforeEach(() => {
+      // The key just authenticated, so the store has it. Connecting reads the
+      // expiry off it once, which is sound because no verb edits a key.
+      mockFindApiKeyById.mockReturnValue(validRecord());
+    });
+
+    test('records the key id on the client, and nothing for a session', () => {
+      const handler = getHandler();
+      const keyClient = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      const sessionClient = connectSseClient(handler, '10.1.0.2', {
+        kind: 'session',
+        username: 'scott',
+      });
+
+      expect(sseRouter._activeSseClientRegistry.getByResponse(keyClient.res)?.apiKeyId).toBe(
+        'child0000001',
+      );
+      expect(
+        sseRouter._activeSseClientRegistry.getByResponse(sessionClient.res)?.apiKeyId,
+      ).toBeUndefined();
+    });
+
+    test('revoking the parent closes the child key stream and leaves the session alone', () => {
+      const handler = getHandler();
+      const keyClient = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      const sessionClient = connectSseClient(handler, '10.1.0.2', {
+        kind: 'session',
+        username: 'scott',
+      });
+
+      // What the store hands back for a parent revocation: the parent and every
+      // key it minted, which is where the open stream's key shows up.
+      const closed = sseRouter.closeSseClientsForRevokedApiKeys(['root00000001', 'child0000001']);
+
+      expect(closed).toBe(1);
+      expect(keyClient.res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(keyClient.res)).toBe(false);
+      expect(sseRouter._activeSseClientRegistry.hasByResponse(keyClient.res)).toBe(false);
+      expect(sseRouter._connectionsPerIp.has('10.1.0.1')).toBe(false);
+
+      expect(sessionClient.res.destroy).not.toHaveBeenCalled();
+      expect(sseRouter._clients.has(sessionClient.res)).toBe(true);
+    });
+
+    test('a stream a session opened is closed when that session is revoked, and no other', () => {
+      const handler = getHandler();
+      const mine = connectSseClient(handler, '10.1.0.2', { kind: 'session', username: 'scott' });
+      const theirs = connectSseClient(handler, '10.1.0.3', { kind: 'session', username: 'scott' });
+      const keyed = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+
+      expect(sseRouter._activeSseClientRegistry.getByResponse(mine.res)?.sessionId).toBe(
+        'session-10.1.0.2',
+      );
+      expect(
+        sseRouter._activeSseClientRegistry.getByResponse(keyed.res)?.sessionId,
+      ).toBeUndefined();
+
+      const closed = sseRouter.closeSseClientsForRevokedSessions(new Set(['session-10.1.0.2']));
+
+      expect(closed).toBe(1);
+      expect(mine.res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(mine.res)).toBe(false);
+      expect(sseRouter._connectionsPerIp.has('10.1.0.2')).toBe(false);
+      expect(theirs.res.destroy).not.toHaveBeenCalled();
+      expect(keyed.res.destroy).not.toHaveBeenCalled();
+    });
+
+    test('a session revocation reaches the stream through the shared session-stream hook', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.2', { kind: 'session', username: 'scott' });
+
+      expect(closeStreamsForRevokedSessions(['session-10.1.0.2'])).toBe(1);
+      expect(res.destroy).toHaveBeenCalled();
+    });
+
+    test('a session stream with no session id is not tracked by session', () => {
+      const handler = getHandler();
+      const req = createSSERequest('10.1.0.4', undefined, { kind: 'session', username: 'scott' });
+      req.sessionID = undefined;
+      const res = createSSEResponse();
+      handler(req, res);
+
+      expect(sseRouter._activeSseClientRegistry.getByResponse(res)?.sessionId).toBeUndefined();
+    });
+
+    test('revoking an unrelated key closes nothing, and an empty cascade is a no-op', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+
+      expect(sseRouter.closeSseClientsForRevokedApiKeys(['someoneelse1'])).toBe(0);
+      expect(sseRouter.closeSseClientsForRevokedApiKeys([])).toBe(0);
+      expect(res.destroy).not.toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(true);
+    });
+
+    test('the heartbeat drops a stream whose key expired', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      mockFindApiKeyById.mockReturnValue(
+        validRecord({ expiresAt: new Date(Date.now() - 1000).toISOString() }),
+      );
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      expect(mockFindApiKeyById).toHaveBeenCalledWith('child0000001');
+      expect(res.destroy).toHaveBeenCalled();
+      expect(res.write).not.toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test.each([
+      ['revoked out of band', validRecord({ revokedAt: '2026-09-01T00:00:00.000Z' })],
+      ['deleted from the store', null],
+    ])('the heartbeat drops a stream whose key was %s', (_label, record) => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      mockFindApiKeyById.mockReturnValue(record);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      expect(res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('the heartbeat keeps a stream whose key is still valid', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      mockFindApiKeyById.mockReturnValue(
+        validRecord({ expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      );
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      expect(res.destroy).not.toHaveBeenCalled();
+      expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+    });
+
+    test('a broadcast between heartbeats does not reach a key that expired', () => {
+      const handler = getHandler();
+      mockFindApiKeyById.mockReturnValue(
+        validRecord({ expiresAt: new Date(Date.now() + 5_000).toISOString() }),
+      );
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      res.write.mockClear();
+
+      // Six seconds: past the expiry, nowhere near the 15-second heartbeat that
+      // used to be the only thing checking it.
+      vi.advanceTimersByTime(6_000);
+      sseRouter._broadcastWithId('dd:container-added', { id: 'c1' });
+
+      expect(res.write).not.toHaveBeenCalled();
+      expect(res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(false);
+    });
+
+    test('a broadcast still reaches a key that has not expired yet', () => {
+      const handler = getHandler();
+      mockFindApiKeyById.mockReturnValue(
+        validRecord({ expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+      );
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(6_000);
+      sseRouter._broadcastWithId('dd:container-added', { id: 'c1' });
+
+      expect(res.destroy).not.toHaveBeenCalled();
+      expect(res.write).toHaveBeenCalledTimes(1);
+    });
+
+    test('a key with no expiry keeps receiving broadcasts', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      sseRouter._broadcastWithId('dd:container-added', { id: 'c1' });
+
+      expect(res.destroy).not.toHaveBeenCalled();
+      expect(res.write).toHaveBeenCalled();
+    });
+
+    test.each([
+      ['is gone from the store by the time it connects', null],
+      [
+        'carries an expiry that cannot be parsed',
+        { keyId: 'child0000001', revokedAt: null, expiresAt: 'not-a-date' },
+      ],
+    ])('closes a stream whose key %s, on the first write', (_label, record) => {
+      const handler = getHandler();
+      mockFindApiKeyById.mockReturnValue(record);
+      const req = createSSERequest('10.1.0.1', 'session-10.1.0.1', KEY_PRINCIPAL);
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(res.destroy).toHaveBeenCalled();
+      expect(sseRouter._clients.has(res)).toBe(false);
+      expect(res.write).not.toHaveBeenCalled();
+    });
+
+    describe('frames queued under backpressure', () => {
+      function blockWithQueuedFrame(res: ReturnType<typeof createSSEResponse>) {
+        res.write.mockClear();
+        res.once.mockClear();
+        res.write.mockImplementationOnce(() => false).mockImplementation(() => true);
+        // The first blocks the socket, the second is retained behind it.
+        sseRouter._broadcastScanStarted('container-1');
+        sseRouter._broadcastScanCompleted('container-1', 'success');
+        expect(res.write).toHaveBeenCalledTimes(1);
+      }
+
+      test('are dropped when the key expired while the socket was blocked', () => {
+        // A slow client can stay blocked for as long as it likes, and the
+        // drain writes straight to the socket without passing through the
+        // per-frame check, so the queue would have been delivered to a dead
+        // credential.
+        const handler = getHandler();
+        mockFindApiKeyById.mockReturnValue(
+          validRecord({ expiresAt: new Date(Date.now() + 2_000).toISOString() }),
+        );
+        const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+        blockWithQueuedFrame(res);
+
+        vi.setSystemTime(new Date(Date.now() + 5_000));
+        res._listeners.drain();
+
+        expect(res.write).toHaveBeenCalledTimes(1);
+        expect(res.destroy).toHaveBeenCalled();
+        expect(sseRouter._clients.has(res)).toBe(false);
+      });
+
+      test('are dropped when the key was revoked while the socket was blocked', () => {
+        const handler = getHandler();
+        const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+        blockWithQueuedFrame(res);
+
+        mockFindApiKeyById.mockReturnValue(validRecord({ revokedAt: new Date().toISOString() }));
+        res._listeners.drain();
+
+        expect(res.write).toHaveBeenCalledTimes(1);
+        expect(res.destroy).toHaveBeenCalled();
+      });
+
+      test('are dropped when the key vanished from the store while the socket was blocked', () => {
+        const handler = getHandler();
+        const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+        blockWithQueuedFrame(res);
+
+        mockFindApiKeyById.mockReturnValue(null);
+        res._listeners.drain();
+
+        expect(res.write).toHaveBeenCalledTimes(1);
+        expect(res.destroy).toHaveBeenCalled();
+      });
+
+      test('are dropped when the store gained an expiry while the socket was blocked', () => {
+        const handler = getHandler();
+        const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+        blockWithQueuedFrame(res);
+
+        mockFindApiKeyById.mockReturnValue(
+          validRecord({ expiresAt: new Date(Date.now() - 1_000).toISOString() }),
+        );
+        res._listeners.drain();
+
+        expect(res.write).toHaveBeenCalledTimes(1);
+        expect(res.destroy).toHaveBeenCalled();
+      });
+
+      test('are delivered when the key is still live', () => {
+        const handler = getHandler();
+        mockFindApiKeyById.mockReturnValue(
+          validRecord({ expiresAt: new Date(Date.now() + 60_000).toISOString() }),
+        );
+        const { res } = connectSseClient(handler, '10.1.0.1', KEY_PRINCIPAL);
+        blockWithQueuedFrame(res);
+
+        res._listeners.drain();
+
+        expect(res.write).toHaveBeenCalledTimes(2);
+        expect(res.write.mock.calls[1][0]).toContain('event: dd:scan-completed');
+        expect(res.destroy).not.toHaveBeenCalled();
+      });
+
+      test('are delivered to a response the registry never saw, without a store read', () => {
+        const res = createSSEResponse();
+        sseRouter._clients.add(res);
+        blockWithQueuedFrame(res);
+
+        mockFindApiKeyById.mockClear();
+        res._listeners.drain();
+
+        expect(mockFindApiKeyById).not.toHaveBeenCalled();
+        expect(res.write).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    describe('the heartbeat asks about the session again', () => {
+      const identity = {
+        type: 'local',
+        subjectId: 'a'.repeat(64),
+        providerId: 'basic.default',
+        assurance: 'password',
+        factorVersion: 0,
+        issuedAt: 1,
+      };
+      const { type: _type, ...storedIdentity } = identity;
+
+      /** Rows that hold a user named after whoever opened the stream. */
+      function storeSessionsOf(usernames: Record<string, string>) {
+        mockGetSession.mockImplementation((sid: string) =>
+          storedSession(sid, { username: usernames[sid] }),
+        );
+      }
+
+      test('a stream whose session is still valid keeps its heartbeat', () => {
+        const handler = getHandler();
+        const local = connectSseClient(handler, '10.2.0.1', {
+          kind: 'session',
+          username: 'scott',
+          identity,
+        });
+        const legacy = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        mockGetSession.mockImplementation((sid: string) =>
+          storedSession(
+            sid,
+            sid === 'session-10.2.0.1'
+              ? { v: 2, kind: 'local', username: 'scott', ...storedIdentity }
+              : { username: 'jo' },
+          ),
+        );
+        local.res.write.mockClear();
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        // The validator sees what the session's row holds, a legacy one included.
+        expect(mockCheckSessionIdentity).toHaveBeenCalledWith({ username: 'scott', identity });
+        expect(mockCheckSessionIdentity).toHaveBeenCalledWith({ username: 'jo' });
+        expect(local.res.destroy).not.toHaveBeenCalled();
+        expect(legacy.res.destroy).not.toHaveBeenCalled();
+        expect(local.res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+      });
+
+      test('a stream whose session reads as stale is closed instead of sent a heartbeat, and no other', () => {
+        const handler = getHandler();
+        const gone = connectSseClient(handler, '10.2.0.1', {
+          kind: 'session',
+          username: 'scott',
+        });
+        const kept = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        const anonymous = connectSseClient(handler, '10.2.0.3');
+        storeSessionsOf({ 'session-10.2.0.1': 'scott', 'session-10.2.0.2': 'jo' });
+        mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+          user.username === 'scott' ? 'stale' : 'valid',
+        );
+        gone.res.write.mockClear();
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(gone.res.destroy).toHaveBeenCalled();
+        expect(gone.res.write).not.toHaveBeenCalled();
+        expect(sseRouter._clients.has(gone.res)).toBe(false);
+        expect(kept.res.destroy).not.toHaveBeenCalled();
+        expect(anonymous.res.destroy).not.toHaveBeenCalled();
+        expect(mockCheckSessionIdentity).toHaveBeenCalledTimes(2);
+      });
+
+      describe('when the store cannot answer', () => {
+        const HEARTBEAT = 'event: dd:heartbeat\ndata: {}\n\n';
+
+        test('a fault that passes leaves the stream open and its heartbeats flowing', () => {
+          const handler = getHandler();
+          const { res } = connectSseClient(handler, '10.2.1.1', {
+            kind: 'session',
+            username: 'scott',
+          });
+          res.write.mockClear();
+
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          mockCheckSessionIdentity.mockReturnValue('valid');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+          expect(res.destroy).not.toHaveBeenCalled();
+          expect(res.write.mock.calls).toEqual([
+            [HEARTBEAT],
+            [HEARTBEAT],
+            [HEARTBEAT],
+            [HEARTBEAT],
+          ]);
+
+          // The wait starts over, so three more unanswered heartbeats are waited out again.
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(res.destroy).not.toHaveBeenCalled();
+        });
+
+        test('a fault that lasts closes the stream on the fourth unanswered heartbeat', () => {
+          const handler = getHandler();
+          const { res } = connectSseClient(handler, '10.2.1.2', {
+            kind: 'session',
+            username: 'scott',
+          });
+          const keyed = connectSseClient(handler, '10.2.1.3', KEY_PRINCIPAL);
+          res.write.mockClear();
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(res.destroy).not.toHaveBeenCalled();
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+          expect(res.destroy).toHaveBeenCalled();
+          expect(sseRouter._clients.has(res)).toBe(false);
+          // Closed instead of sent a fourth heartbeat.
+          expect(res.write.mock.calls).toEqual([[HEARTBEAT], [HEARTBEAT], [HEARTBEAT]]);
+          expect(keyed.res.destroy).not.toHaveBeenCalled();
+        });
+
+        test('a count does not outlive the heartbeat that kept it', () => {
+          const handler = getHandler();
+          const first = connectSseClient(handler, '10.2.1.4', {
+            kind: 'session',
+            username: 'scott',
+          });
+          mockCheckSessionIdentity.mockReturnValue('unavailable');
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          // The last client goes, and the heartbeat stops with it.
+          first.req._listeners.close();
+          expect(vi.getTimerCount()).toBe(1);
+
+          const second = connectSseClient(handler, '10.2.1.4', {
+            kind: 'session',
+            username: 'scott',
+          });
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS * 3);
+          expect(second.res.destroy).not.toHaveBeenCalled();
+
+          vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+          expect(second.res.destroy).toHaveBeenCalled();
+        });
+      });
+
+      test('a stream whose session row is gone is closed, though its identity would still pass', () => {
+        const handler = getHandler();
+        const gone = connectSseClient(handler, '10.2.0.1', { kind: 'session', username: 'scott' });
+        const kept = connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        mockGetSession.mockImplementation((sid: string) =>
+          sid === 'session-10.2.0.1' ? undefined : storedSession(sid),
+        );
+        gone.res.write.mockClear();
+        kept.res.write.mockClear();
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(gone.res.destroy).toHaveBeenCalled();
+        expect(gone.res.write).not.toHaveBeenCalled();
+        expect(sseRouter._clients.has(gone.res)).toBe(false);
+        expect(kept.res.destroy).not.toHaveBeenCalled();
+        expect(kept.res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+      });
+
+      test('two streams of one session are asked about once', () => {
+        const handler = getHandler();
+        const req = createSSERequest('10.2.0.1', 'shared', { kind: 'session', username: 'scott' });
+        handler(req, createSSEResponse());
+        handler(
+          createSSERequest('10.2.0.2', 'shared', { kind: 'session', username: 'scott' }),
+          createSSEResponse(),
+        );
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(mockGetSession.mock.calls).toEqual([['shared']]);
+      });
+
+      test('the verdict goes through the shared hook, so the session’s other streams close with it', () => {
+        const closer = vi.fn(() => 0);
+        registerSessionStreamCloser(closer);
+        const handler = getHandler();
+        connectSseClient(handler, '10.2.0.1', { kind: 'session', username: 'scott' });
+        connectSseClient(handler, '10.2.0.2', { kind: 'session', username: 'jo' });
+        storeSessionsOf({ 'session-10.2.0.1': 'scott', 'session-10.2.0.2': 'jo' });
+        mockCheckSessionIdentity.mockImplementation((user: { username: string }) =>
+          user.username === 'scott' ? 'stale' : 'valid',
+        );
+
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(closer).toHaveBeenCalledTimes(1);
+        expect(closer).toHaveBeenCalledWith(new Set(['session-10.2.0.1']));
+      });
+    });
+
+    describe('a stream an Authorization: Basic header opened', () => {
+      const SUBJECT = 'a'.repeat(64);
+      const OTHER_SUBJECT = 'b'.repeat(64);
+      const basicPrincipal = (subjectId: string) => ({
+        kind: 'basic',
+        username: 'scott',
+        identity: {
+          subjectId,
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+          issuedAt: 1,
+        },
+      });
+
+      afterEach(() => {
+        // Nothing of one test stays tracked into the next.
+        closeStreamsForLocalSubjects([SUBJECT, OTHER_SUBJECT]);
+      });
+
+      test('is closed when its account stops being let in on a password, and nothing else is', () => {
+        const handler = getHandler();
+        const header = connectSseClient(handler, '10.3.0.1', basicPrincipal(SUBJECT));
+        const otherAccount = connectSseClient(handler, '10.3.0.2', basicPrincipal(OTHER_SUBJECT));
+        const session = connectSseClient(handler, '10.3.0.3', {
+          kind: 'session',
+          username: 'scott',
+        });
+        const keyed = connectSseClient(handler, '10.3.0.4', KEY_PRINCIPAL);
+        // No session opened it, so the session id its request carried ends nothing.
+        expect(closeStreamsForRevokedSessions(['session-10.3.0.1'])).toBe(0);
+        expect(header.res.destroy).not.toHaveBeenCalled();
+
+        expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(1);
+
+        expect(header.res.destroy).toHaveBeenCalled();
+        expect(sseRouter._clients.has(header.res)).toBe(false);
+        expect(sseRouter._activeSseClientRegistry.hasByResponse(header.res)).toBe(false);
+        expect(sseRouter._connectionsPerIp.has('10.3.0.1')).toBe(false);
+        expect(otherAccount.res.destroy).not.toHaveBeenCalled();
+        expect(session.res.destroy).not.toHaveBeenCalled();
+        expect(keyed.res.destroy).not.toHaveBeenCalled();
+      });
+
+      test('is forgotten once the client has gone, so a later enrollment finds nothing', () => {
+        const handler = getHandler();
+        const { req, res } = connectSseClient(handler, '10.3.0.5', basicPrincipal(SUBJECT));
+
+        req._listeners.close();
+
+        expect(closeStreamsForLocalSubjects([SUBJECT])).toBe(0);
+        expect(res.destroy).not.toHaveBeenCalled();
+      });
+
+      test('is closed by the re-check once its account has a factor nothing announced', () => {
+        const handler = getHandler();
+        const header = connectSseClient(handler, '10.3.0.6', basicPrincipal(SUBJECT));
+        const otherAccount = connectSseClient(handler, '10.3.0.7', basicPrincipal(OTHER_SUBJECT));
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+        expect(header.res.destroy).not.toHaveBeenCalled();
+
+        mockIsSecondFactorRequired.mockImplementation((subjectId: string) => subjectId === SUBJECT);
+        vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+        expect(header.res.destroy).toHaveBeenCalled();
+        expect(sseRouter._clients.has(header.res)).toBe(false);
+        expect(otherAccount.res.destroy).not.toHaveBeenCalled();
+      });
+    });
+
+    test('a session stream is never looked up in the key store', () => {
+      const handler = getHandler();
+      const { res } = connectSseClient(handler, '10.1.0.2', {
+        kind: 'session',
+        username: 'scott',
+      });
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(sseRouter._SSE_HEARTBEAT_INTERVAL_MS);
+
+      expect(mockFindApiKeyById).not.toHaveBeenCalled();
+      expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+    });
   });
 });

@@ -42,7 +42,7 @@ describe('preferences service', () => {
       status: 502,
       json: vi.fn().mockRejectedValue(new Error()),
     } as any);
-    await expect(getPreferences()).rejects.toThrow('Unknown error');
+    await expect(getPreferences()).rejects.toThrow('API returned invalid JSON. (HTTP 502)');
   });
 
   it('patches the complete preferences envelope', async () => {
@@ -86,6 +86,8 @@ describe('preferences service', () => {
       status: 500,
       json: vi.fn().mockRejectedValue(new Error()),
     } as any);
-    await expect(updatePreferences(11, DEFAULTS)).rejects.toThrow('Unknown error');
+    await expect(updatePreferences(11, DEFAULTS)).rejects.toThrow(
+      'API returned invalid JSON. (HTTP 500)',
+    );
   });
 });

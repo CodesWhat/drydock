@@ -25,12 +25,33 @@
       "providerBasic": "Basic auth '{name}': {error}",
       "providerOidc": "OIDC provider '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
-      "providerGeneric": "{provider}: {error}"
+      "providerGeneric": "{provider}: {error}",
+      "challengeInvalid": "That code didn't work. Check it and try again.",
+      "challengeMalformed": "Enter a valid code.",
+      "challengeExpired": "Verification expired. Sign in again.",
+      "challengeLocked": "Too many attempts. Try again in {time}.",
+      "challengeLockedLater": "Too many attempts. Try again later.",
+      "challengeUnavailable": "Verification is unavailable right now. Try again shortly."
     },
     "connectionLost": {
       "title": "Connection Lost",
       "body": "The server is unreachable. Waiting for it to come back online...",
       "reconnecting": "Reconnecting"
+    },
+    "challenge": {
+      "heading": "Two-step verification",
+      "codeHint": "Enter the 6-digit code from your authenticator app.",
+      "codeLabel": "Authentication code",
+      "codePlaceholder": "6-digit code",
+      "recoveryHint": "Enter one of your saved recovery codes. Each one works only once.",
+      "recoveryLabel": "Recovery code",
+      "recoveryPlaceholder": "Enter a recovery code",
+      "expiresAt": "Enter the code before {time}.",
+      "verify": "Verify",
+      "verifying": "Verifying...",
+      "useRecovery": "Use a recovery code",
+      "useCode": "Use an authenticator code",
+      "cancel": "Back to sign in"
     }
   }
 }

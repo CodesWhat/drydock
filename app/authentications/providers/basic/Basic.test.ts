@@ -32,6 +32,24 @@ vi.mock('node:crypto', async () => {
   };
 });
 
+var { mockResolveLocalIdentity, mockIsSecondFactorRequired, mockAssertNotShadowed } = vi.hoisted(
+  () => ({
+    mockResolveLocalIdentity: vi.fn(),
+    mockIsSecondFactorRequired: vi.fn(),
+    mockAssertNotShadowed: vi.fn(),
+  }),
+);
+
+vi.mock('../../../api/totp-identity.js', () => ({
+  resolveLocalIdentity: mockResolveLocalIdentity,
+  isSecondFactorRequired: mockIsSecondFactorRequired,
+  deriveSubjectId: (providerId: string, username: string) => `${providerId}|${username}`,
+}));
+
+vi.mock('../../../api/totp-orphans.js', () => ({
+  assertNotShadowedByOrphanedFactor: mockAssertNotShadowed,
+}));
+
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
@@ -123,22 +141,21 @@ describe('Basic Authentication', () => {
     mockRecordAuthLogin.mockClear();
     mockObserveAuthLoginDuration.mockClear();
     mockRecordAuthUsernameMismatch.mockClear();
+    mockResolveLocalIdentity.mockReset();
+    mockIsSecondFactorRequired.mockReset();
+    mockAssertNotShadowed.mockReset();
+    mockIsSecondFactorRequired.mockReturnValue(false);
+    mockResolveLocalIdentity.mockImplementation((providerId: string) => ({
+      subjectId: 's'.repeat(64),
+      providerId,
+      assurance: 'password',
+      factorVersion: 0,
+    }));
   });
 
   test('should create instance', async () => {
     expect(basic).toBeDefined();
     expect(basic).toBeInstanceOf(Basic);
-  });
-
-  test('should return basic strategy', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    expect(strategy).toBeDefined();
-    expect(strategy.name).toBe('basic');
   });
 
   test('should return strategy description', async () => {
@@ -487,21 +504,6 @@ describe('Basic Authentication', () => {
     expect(() => basic.validateConfiguration({})).toThrow('"user" is required');
   });
 
-  test('should delegate authentication through strategy callback', async () => {
-    basic.configuration = {
-      user: 'testuser',
-      hash: createArgon2Hash('password'),
-    };
-
-    const strategy = basic.getStrategy();
-    await new Promise<void>((resolve) => {
-      strategy._verify('testuser', 'password', (err, result) => {
-        expect(result).toEqual({ username: 'testuser' });
-        resolve();
-      });
-    });
-  });
-
   test('should reject authentication when argon2id derivation fails', async () => {
     basic.configuration = {
       user: 'testuser',
@@ -632,6 +634,188 @@ describe('Basic Authentication', () => {
         expect(result).toBe(false);
         resolve();
       });
+    });
+  });
+
+  describe('verifyPasswordForUser (re-authentication of a signed-in account)', () => {
+    beforeEach(() => {
+      basic.configuration = { user: 'testuser', hash: createArgon2Hash('password') };
+    });
+
+    test('accepts the configured user with the right password and records no login metric', async () => {
+      await expect(basic.verifyPasswordForUser('testuser', 'password')).resolves.toBe(true);
+      expect(mockRecordAuthLogin).not.toHaveBeenCalled();
+      expect(mockObserveAuthLoginDuration).not.toHaveBeenCalled();
+    });
+
+    test('refuses a wrong password, a different user and a non-string password', async () => {
+      await expect(basic.verifyPasswordForUser('testuser', 'wrong')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('someone-else', 'password')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('', 'password')).resolves.toBe(false);
+      await expect(basic.verifyPasswordForUser('testuser', undefined as never)).resolves.toBe(
+        false,
+      );
+    });
+
+    test('runs the password hash even when the user does not match, so timing does not tell', async () => {
+      mockArgon2.mockClear();
+      await basic.verifyPasswordForUser('someone-else', 'password');
+      expect(mockArgon2).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getAuthenticator / authenticateRequest', () => {
+    function encodeBasic(value: string): string {
+      return `Basic ${Buffer.from(value).toString('base64')}`;
+    }
+
+    beforeEach(async () => {
+      await basic.register('authentication', 'basic', 'default', {
+        user: 'testuser',
+        hash: createArgon2Hash('password'),
+      });
+    });
+
+    test('declares its registry id and refuses to persist a session', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(authenticator.id).toBe('basic.default');
+      expect(authenticator.persistsSession).toBe(false);
+    });
+
+    test('resolves valid credentials to a basic principal', async () => {
+      const authenticator = basic.getAuthenticator();
+
+      await expect(
+        authenticator.authenticate({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).resolves.toEqual({
+        kind: 'basic',
+        username: 'testuser',
+        identity: {
+          subjectId: 's'.repeat(64),
+          providerId: 'basic.default',
+          assurance: 'password',
+          factorVersion: 0,
+        },
+      });
+      expect(mockResolveLocalIdentity).toHaveBeenCalledWith('basic.default', 'testuser');
+    });
+
+    test('declines a verified password for a subject with an active factor, but reports it to login', async () => {
+      mockIsSecondFactorRequired.mockReturnValue(true);
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await expect(authenticator.authenticate(req)).resolves.toBeUndefined();
+      expect(mockIsSecondFactorRequired).toHaveBeenCalledWith('s'.repeat(64));
+      await expect(authenticator.authenticateForLogin?.(req)).resolves.toMatchObject({
+        kind: 'basic',
+        username: 'testuser',
+      });
+    });
+
+    test('names the local subject it signs in, following the configured username', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(authenticator.localSubjectId).toBe('basic.default|testuser');
+      basic.configuration.user = 'renamed';
+      expect(authenticator.localSubjectId).toBe('basic.default|renamed');
+    });
+
+    test('checks a verified password against orphaned factors, on every route and at login', async () => {
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await authenticator.authenticate(req);
+      await authenticator.authenticateForLogin?.(req);
+
+      expect(mockAssertNotShadowed).toHaveBeenCalledTimes(2);
+      expect(mockAssertNotShadowed).toHaveBeenCalledWith('s'.repeat(64));
+    });
+
+    test('refuses a verified password that an orphaned factor may belong to, as a fault', async () => {
+      mockAssertNotShadowed.mockImplementation(() => {
+        throw Object.assign(new Error('Local sign-in is refused'), { status: 503 });
+      });
+      const authenticator = basic.getAuthenticator();
+      const req = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+
+      await expect(authenticator.authenticate(req)).rejects.toMatchObject({ status: 503 });
+      await expect(authenticator.authenticateForLogin?.(req)).rejects.toMatchObject({
+        status: 503,
+      });
+    });
+
+    test('does not consult orphaned factors for a wrong password', async () => {
+      await basic.authenticateRequest({
+        headers: { authorization: encodeBasic('testuser:wrong') },
+      } as never);
+
+      expect(mockAssertNotShadowed).not.toHaveBeenCalled();
+    });
+
+    test('lets a store failure propagate instead of answering as a wrong password', async () => {
+      mockResolveLocalIdentity.mockImplementation(() => {
+        throw new Error('totp collection not initialized');
+      });
+
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).rejects.toThrow('totp collection not initialized');
+    });
+
+    test('declines a wrong password', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('testuser:wrong') },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('declines an unknown user', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: encodeBasic('someoneelse:password') },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('declines a request carrying no Authorization header', async () => {
+      await expect(basic.authenticateRequest({ headers: {} } as never)).resolves.toBeUndefined();
+    });
+
+    test('declines a request with no headers at all', async () => {
+      await expect(basic.authenticateRequest({} as never)).resolves.toBeUndefined();
+    });
+
+    test('declines another scheme without inspecting it', async () => {
+      await expect(
+        basic.authenticateRequest({
+          headers: { authorization: 'Bearer abcdef' },
+        } as never),
+      ).resolves.toBeUndefined();
+    });
+
+    test('asks the chain for 400 on a syntactically broken header', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(
+        authenticator.getFailureStatus?.({ headers: { authorization: 'Basic' } } as never),
+      ).toBe(400);
+    });
+
+    test('leaves the chain on its default status for valid credentials', () => {
+      const authenticator = basic.getAuthenticator();
+
+      expect(
+        authenticator.getFailureStatus?.({
+          headers: { authorization: encodeBasic('testuser:password') },
+        } as never),
+      ).toBeUndefined();
     });
   });
 

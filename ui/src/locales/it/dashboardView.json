@@ -97,7 +97,8 @@
       "updatesAvailable": "Aggiornamenti disponibili",
       "updateDetail": "{fresh} nuovi · {mature} maturi",
       "securityIssues": "Problemi di sicurezza",
-      "registries": "Registry"
+      "registries": "Registry",
+      "approvals": "Approvazioni"
     },
     "updateKind": {
       "major": "Principale",
@@ -106,9 +107,9 @@
       "digest": "Aggiornamento immagine"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Aperta ora",
+      "scheduled": "Pianificata",
+      "openingSoon": "Apertura a breve"
     },
     "dataLoadFailed": "Impossibile caricare i dati della dashboard",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

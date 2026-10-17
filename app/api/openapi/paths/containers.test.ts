@@ -21,7 +21,14 @@ describe('containerPaths', () => {
     expect(schema.properties.action.enum).toContain('revert-to-declarative');
     expect(schema.properties.field).toEqual({
       type: 'string',
-      enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+      enum: [
+        'maturityMode',
+        'maturityMinAgeDays',
+        'maturitySkipReleases',
+        'maturityReleaseFallbackDays',
+        'skipTags',
+        'skipDigests',
+      ],
       description: 'Override field to revert; omit to revert all declarative policy overrides.',
     });
     expect(schema.properties.minAgeDays).toEqual({
@@ -29,6 +36,27 @@ describe('containerPaths', () => {
       minimum: 1,
       maximum: 365,
     });
+    expect(schema.properties.skipReleases).toEqual({ type: 'integer', minimum: 0, maximum: 100 });
+    expect(schema.properties.releaseFallbackDays).toEqual({
+      type: 'integer',
+      minimum: 0,
+      maximum: 365,
+    });
+  });
+
+  test('effective-policy is a read-only containers path with a documented response schema', () => {
+    const get = containerPaths['/api/v1/containers/{id}/effective-policy'].get;
+
+    expect(get.operationId).toBe('getContainerEffectivePolicy');
+    expect(get.responses[200].content['application/json'].schema).toEqual({
+      $ref: '#/components/schemas/EffectiveContainerPolicy',
+    });
+    expect(Object.keys(get.responses)).toEqual(['200', '401', '403', '404']);
+    expect(Object.keys(openApiSchemas.EffectiveContainerPolicy.properties)).toEqual([
+      'group',
+      'updatePolicy',
+      'actions',
+    ]);
   });
 
   test('ContainerResource documents effective, declarative, override, and source policy layers', () => {

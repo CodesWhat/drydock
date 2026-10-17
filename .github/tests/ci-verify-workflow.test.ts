@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
@@ -13,9 +16,13 @@ import {
 interface LefthookCommand {
   priority?: number;
   run?: string;
+  timeout?: string;
 }
 
 interface LefthookDefinition {
+  'pre-commit'?: {
+    commands?: Record<string, LefthookCommand>;
+  };
   'pre-push'?: {
     commands?: Record<string, LefthookCommand>;
   };
@@ -41,6 +48,59 @@ function getTestJobStep(name: string): WorkflowStep | undefined {
   const workflow = loadWorkflow();
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
+
+test('UI coverage captures bounded resource evidence without changing the gate', () => {
+  const step = getTestJobStep('Run ui tests');
+  expect(step?.run).toContain('node ../scripts/ci-resource-sampler.mjs "$$"');
+  expect(step?.run).toContain('trap');
+  expect(step?.run).toContain('kill');
+  expect(step?.run).toContain('wait');
+  expect(step?.run).toContain('npm run test:unit -- --maxWorkers=1');
+  expect(step?.env?.NODE_OPTIONS).toBe('--max-old-space-size=1536');
+  expect(step?.['continue-on-error']).not.toBe(true);
+});
+
+test.each([0, 7])(
+  'UI resource cleanup preserves test exit %i and stops its sampler',
+  (exitCode) => {
+    const bin = mkdtempSync(join(tmpdir(), 'dd-ci-shell-'));
+    try {
+      writeFileSync(
+        join(bin, 'npm'),
+        `#!/bin/sh\nprintf 'NPM_ARGS=%s\\n' "$*"\nsleep 0.25\nexit ${exitCode}\n`,
+        { mode: 0o755 },
+      );
+      const command = getTestJobStep('Run ui tests')?.run ?? '';
+      const result = spawnSync(
+        'bash',
+        [
+          '-e',
+          '-o',
+          'pipefail',
+          '-c',
+          command.replace(
+            'npm run test:unit',
+            'printf "SAMPLER_PID=%s\\n" "$resource_sampler_pid"\nnpm run test:unit',
+          ),
+        ],
+        {
+          cwd: fileURLToPath(new URL('../../ui', import.meta.url)),
+          env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+          encoding: 'utf8',
+          timeout: 5000,
+        },
+      );
+      expect(result.status, result.stderr).toBe(exitCode);
+      expect(result.stdout).toContain('NPM_ARGS=run test:unit -- --maxWorkers=1');
+      expect(result.stdout).toContain('CI_RESOURCE ');
+      const pid = Number(result.stdout.match(/SAMPLER_PID=(\d+)/)?.[1]);
+      expect(pid).toBeGreaterThan(0);
+      expect(() => process.kill(pid, 0)).toThrow();
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
+  },
+);
 
 test('required ci-verify jobs publish stable plain-text check names', () => {
   const workflow = loadWorkflow();
@@ -183,9 +243,7 @@ test('secret scanning gates full history and the tracked working tree', () => {
       GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb',
     },
   });
-  expect(getWorkflowStep('secrets', 'Scan secrets')).toMatchObject({
-    run: 'scripts/scan-secrets.sh',
-  });
+  expect(getWorkflowStep('secrets', 'Scan secrets')?.run).toContain('scripts/scan-secrets.sh');
 
   const scanScript = readFileSync(secretScanScriptPath, 'utf8');
   expect(scanScript).toContain('gitleaks git');
@@ -195,10 +253,24 @@ test('secret scanning gates full history and the tracked working tree', () => {
 
   const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8');
   expect(gitleaksConfig).toContain('useDefault = true');
-  expect(gitleaksConfig).not.toContain('paths =');
+  // A bare `paths =` allowlist would exempt a whole directory from every
+  // rule unconditionally, which is the blanket exemption this job exists to
+  // prevent. CI-16 adds one narrow exception for the webhooks doc's
+  // documented placeholder credential, so a `paths` entry is only allowed
+  // when it is paired with `condition = "and"` and a `regexes` match — path
+  // alone is never enough to allowlist a finding.
+  const allowlistBlocks = gitleaksConfig.split('[[allowlists]]').slice(1);
+  for (const block of allowlistBlocks.filter((candidate) => candidate.includes('paths ='))) {
+    expect(block).toContain('condition = "and"');
+    expect(block).toContain('regexes =');
+  }
 
   const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
-  expect(baselineEntries.length).toBeGreaterThan(400);
+  // CI-16 removed the line-pinned curl-auth-header fingerprints for
+  // content/docs/ in favor of the pattern-based allowlist above, so the
+  // historical baseline shrank from 446 to 399; the floor here just guards
+  // against the file being emptied by accident.
+  expect(baselineEntries.length).toBeGreaterThan(350);
   expect(
     baselineEntries.every((entry) =>
       /^(?:[0-9a-f]{40}:)?[^:]+:(?:generic-api-key|private-key|curl-auth-header|telegram-bot-api-token):\d+$/u.test(
@@ -214,7 +286,7 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
 
   const checkoutIndex = steps.findIndex((step) => step.name === 'Checkout');
   const restoreIndex = steps.findIndex(
-    (step) => step.name === 'Restore scanner policy from the base ref',
+    (step) => step.name === 'Restore scanner policy from a protected ref',
   );
   const installGitleaksIndex = steps.findIndex((step) => step.name === 'Install Gitleaks');
   const scanIndex = steps.findIndex((step) => step.name === 'Scan secrets');
@@ -227,7 +299,7 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
   expect(installGitleaksIndex).toBeGreaterThan(restoreIndex);
   expect(scanIndex).toBeGreaterThan(restoreIndex);
 
-  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from the base ref');
+  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from a protected ref');
   expect(restoreStep).toMatchObject({
     if: "github.event_name == 'pull_request'",
     env: {
@@ -244,12 +316,54 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
 
   const run = restoreStep?.run ?? '';
   expect(run).toContain('set -euo pipefail');
-  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
-  // ever needs the current state of those three files on base, not history.
-  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
+  // Keep full history available for the subsequent scan. The real-Git
+  // promotion tests cover selection of the protected source commit.
+  expect(run).toContain('git fetch --no-tags origin "refs/heads/${BASE_REF}"');
+  expect(run).toContain('policy_commit="$(git rev-parse FETCH_HEAD)"');
   expect(run).toContain(
-    'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
+    'git checkout "${policy_commit}" -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
   );
+});
+
+test('the secrets git-history scan is scoped to base..HEAD on pull_request and full history otherwise', () => {
+  // DR-51: the "Scan secrets" step used to run `gitleaks git --log-opts="--all"`
+  // unconditionally, so a pull_request scanned every commit ever pushed to any
+  // branch in the repo under the base branch's ignore file. An unannotated
+  // fixture on any other open branch failed Secrets on every PR, and a branch
+  // could never fix its own finding by editing its own history. Scoping the
+  // pull_request scan to `origin/<base>..HEAD` fixes that; push/schedule/
+  // workflow_dispatch/workflow_call keep scanning full history, since head and
+  // base are the same trust domain there.
+  const scanStep = getWorkflowStep('secrets', 'Scan secrets');
+
+  expect(scanStep).toMatchObject({
+    env: {
+      BASE_REF: '${{ github.base_ref }}',
+      SCAN_SECRETS_LOG_OPTS:
+        "${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '--all' }}",
+    },
+  });
+
+  const run = scanStep?.run ?? '';
+  expect(run).toContain('set -euo pipefail');
+  // origin/<base> isn't a local ref after the job's fetch-depth: 0 checkout
+  // (that only unshallows the ref under test, not every other branch), so the
+  // step fetches it into refs/remotes/origin/<base> before delegating to the
+  // script -- otherwise `origin/${BASE_REF}..HEAD` wouldn't resolve.
+  expect(run).toContain('if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then');
+  expect(run).toContain(
+    'git fetch --no-tags origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"',
+  );
+  expect(run).toContain('scripts/scan-secrets.sh');
+});
+
+test('scan-secrets.sh consumes SCAN_SECRETS_LOG_OPTS and defaults to full history', () => {
+  const scanScript = readFileSync(secretScanScriptPath, 'utf8');
+
+  // Local/manual runs (no SCAN_SECRETS_LOG_OPTS set) must keep scanning
+  // complete history, matching the workflow's push/schedule behavior.
+  expect(scanScript).toContain('log_opts="${SCAN_SECRETS_LOG_OPTS:---all}"');
+  expect(scanScript).toContain('--log-opts="${log_opts}"');
 });
 
 test('ci-verify can dispatch the complete release-candidate matrix manually', () => {
@@ -505,6 +619,19 @@ test('load-test processor only exports Artillery hooks used by scenarios', () =>
   const processorSource = readFileSync(processorPath, 'utf8');
 
   expect(processorSource).not.toContain('ensureContainerId');
+});
+
+test('the ui coverage step bounds memory and worker count so the runner cannot kill it', () => {
+  // CI-17: three runs on 2026-09-07 (plus #1102) saw "Run ui tests" marked
+  // `cancelled` after 2.5-6 min with no timeout hit and no concurrency
+  // group -- the 7 GB runner most likely OOM'd under the vitest coverage
+  // pass and GitHub reported the runner service's death as a cancel. An
+  // explicit heap cap and worker cap keep worst-case memory well inside the
+  // runner's budget so nobody can silently drop them later.
+  const step = getTestJobStep('Run ui tests');
+
+  expect(step?.env?.NODE_OPTIONS).toContain('--max-old-space-size=1536');
+  expect(step?.run).toMatch(/(?:^|\s)--maxWorkers=1(?:\s|$)/);
 });
 
 test('build job checks base image pins before building, for the platforms it smoke-builds', () => {

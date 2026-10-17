@@ -14,6 +14,7 @@ import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { getErrorMessage } from '../../util/error.js';
+import { trackSessionSocket } from '../session-streams.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -619,14 +620,14 @@ export function createContainerLogStreamGateway(
       }
 
       const upgradeRequest = request as UpgradeRequest;
-      // Rate-limit keying must stay based on genuine passport authentication only —
+      // Rate-limit keying must stay based on a genuine session identity only —
       // anonymous auth being active shouldn't let anonymous clients earn session-keyed
       // (rotatable) rate limits instead of IP-keyed ones.
-      const passportAuthenticated = isAuthenticatedSession(upgradeRequest);
+      const identityAuthenticated = isAuthenticatedSession(upgradeRequest);
       const gateAuthenticated = isAuthenticatedSession(upgradeRequest, {
         anonymousAuthActive: registry.isAnonymousAuthenticationActive(),
       });
-      const rateLimitKey = getRateLimitKey(upgradeRequest, passportAuthenticated);
+      const rateLimitKey = getRateLimitKey(upgradeRequest, identityAuthenticated);
       if (isRateLimited(rateLimitKey)) {
         writeUpgradeError(socket, 429, 'Too Many Requests');
         return;
@@ -638,6 +639,17 @@ export function createContainerLogStreamGateway(
 
       await new Promise<void>((resolve) => {
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+          // The upgrade authenticates once, so a session revoked afterwards
+          // would keep reading logs until the viewer let go. The stream below
+          // settles as soon as it is set up, so the socket is forgotten when it
+          // closes, not when that promise does.
+          webSocket.on(
+            'close',
+            trackSessionSocket(
+              identityAuthenticated ? upgradeRequest.sessionID : undefined,
+              webSocket,
+            ),
+          );
           void streamContainerLogsToWebSocket({
             webSocket,
             containerId: parsedRequest.containerId,

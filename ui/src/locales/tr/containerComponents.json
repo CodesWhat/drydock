@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Aracı listesi kullanılamıyor. Yapılandırılmış bazı aracılar eksik olabilir.",
+      "title": "Filo durumu",
+      "description": "Tüm filonun durumu. Envanter yenileme, kayıt depolarını denetlemeden veya güncelleme yapmadan kapsayıcıları keşfeder.",
+      "reload": "Durumu yeniden yükle",
+      "refresh": "Envanteri yenile",
+      "configured": "Yapılandırıldı",
+      "connected": "Bağlı",
+      "disconnected": "Bağlantı kesildi",
+      "unavailable": "Kullanılamıyor",
+      "agentUnavailable": "Aracı durumu kullanılamıyor. Saklanan veriler eski olabilir.",
+      "watcherUnavailable": "İzleyici meta verileri kullanılamıyor. Saklanan veriler eski olabilir.",
+      "total": "{count} kapsayıcı",
+      "lastKnown": "Son bilinen",
+      "lastSeen": "Son görülme: {value}",
+      "unsupported": "Tüm hedefler envanter yenilemeyi destekleyen Docker izleyicileri gerektirir.",
+      "complete": "Envanter tamamlandı",
+      "partial": "Envanter eksik",
+      "reloadFailed": "Kapsayıcı listesi yeniden yüklenemedi. Envanter sonuçları görünür durumda."
+    },
+    "fleetBulk": {
+      "label": "Filtrelenmiş filo işlemleri",
+      "updateAll": "Tümünü güncelle ({count})",
+      "snoozePatch": "Tüm yamaları ertele",
+      "patchCount": "{count} yama adayı",
+      "duration": "Erteleme süresi",
+      "days": "{count} gün",
+      "untilDate": "Tarihe kadar",
+      "date": "Bu tarihin sonuna kadar ertele",
+      "snoozeConfirm": "{count} yama adayı ertelensin mi?",
+      "snoozeScope": "Bu konteynerlerde yama adayları var. Yalnızca yamaları değil, listelenen konteynerlerin tüm güncellemelerini {duration} ertele. İşaretli seçim değil, filtrelenmiş canlı liste kullanılır. Tarih, yerel gün sonunu kapsar.",
+      "snoozeResult": "Ertelenen: {succeeded}. Başarısız: {failed}.",
+      "refreshFailed": "İlkeler kaydedildi ancak liste yenilenemedi. Listeyi yeniden yükleyin.",
+      "disabled": "İşlemler devre dışı. Hiçbir ilke değişmedi.",
+      "invalid": "Geçersiz süre. Hiçbir ilke değişmedi.",
+      "busy": "Başka bir işlem sürüyor. Ek ilke değişmedi."
+    },
+    "fleetDimensions": {
+      "groupBy": "Gruplama ölçütü",
+      "none": "Gruplama yok",
+      "agent": "Aracı",
+      "registry": "Kayıt deposu",
+      "status": "Durum",
+      "tagType": "Etiket türü",
+      "label": "Docker etiketi",
+      "groupLabel": "Etiket anahtarına göre grupla",
+      "allAgents": "Tüm aracılar",
+      "allRegistries": "Tüm kayıt deposu adresleri",
+      "all": "Tüm etiket türleri",
+      "specific": "Belirli etiket",
+      "floating": "Değişken etiket",
+      "digest": "Sabitlenmiş özet",
+      "semver": "Sürüm etiketi",
+      "tag": "Sürüm olmayan etiket",
+      "unknown": "Bilinmiyor",
+      "local": "Yerel izleyiciler",
+      "running": "Çalışıyor",
+      "stopped": "Durduruldu",
+      "labelKey": "Etiket anahtarı",
+      "labelMatch": "Etiket eşleştirme",
+      "labelValue": "Etiket değeri",
+      "exists": "Etiketi var",
+      "equals": "Eşittir",
+      "missing": "Etiket eksik",
+      "missingLabel": "Etiket yok",
+      "emptyValue": "Boş değer"
+    },
     "fullPageActions": {
       "updateWorkflow": "İş Akışını Güncelle",
       "actionsGroup": "Eylemler",
@@ -28,8 +95,9 @@
       "clearSkips": "Atlamaları Temizle",
       "clearPolicy": "Politikayı Temizle",
       "overridden": "Geçersiz kılındı",
+      "groupSource": "Grup: {group}",
       "revert": "Geri al",
-      "revertAll": "Bildirime dayalı politikaya döndür",
+      "revertAll": "Devralınan politikaya döndür",
       "snoozedUntil": "Şu tarihe kadar ertelendi:",
       "maturityMode": "Olgunluk modu:",
       "matureOnlyMinimum": "Yalnızca olgun ({days}d minimum)",
@@ -58,6 +126,12 @@
       "runningButton": "Çalışıyor...",
       "runButton": "Çalıştır",
       "noTriggersAssociated": "Bu kapsayıcıyla ilişkili tetikleyici yok",
+      "unavailableTriggers": "Kullanılamayan Tetikleyiciler",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Bu kapsayıcıdan farklı bir aracıya ait.",
+        "structuralIncompatibility": "Compose projesi, servisi veya dosyası bu kapsayıcıyla eşleşmiyor.",
+        "labelScope": "Bu kapsayıcının dd.action/dd.notification include veya exclude etiketleri tarafından hariç tutuldu."
+      },
       "backupsRollback": "Yedeklemeler ve Geri Alma",
       "rollingBack": "Geri dönüyor...",
       "rollbackLatest": "En son sürüme geri al",
@@ -71,7 +145,13 @@
       "versionLabel": "Sürüm:",
       "rollbackReasonLabel": "Geri alma nedeni:",
       "lastErrorLabel": "Son hata:",
-      "noUpdateOperations": "Henüz hiçbir güncelleme işlemi kaydedilmedi"
+      "noUpdateOperations": "Henüz hiçbir güncelleme işlemi kaydedilmedi",
+      "skipReleases": "Atlanacak ilk sürümler",
+      "skipReleasesHint": "Her ailedeki ilk N farklı kararlı sürümü atlar: SemVer ana sürümü veya CalVer ayı. 0 bu engeli kapatır.",
+      "releaseFallbackDays": "Yaşa göre istisna (gün)",
+      "releaseFallbackHint": "Sürüm verileri eksikse veya gereken sayıya ulaşılmadıysa bu kadar gün sonra izin verir. 0 istisnayı kapatır. Asgari yaş yine geçerlidir.",
+      "releasePolicySummary": "Her ailede ilk {count} sürümü atla.",
+      "releaseFallbackSummary": "{days} gün sonra sürüm sayısı istisnası."
     },
     "fullPageDetail": {
       "statusUpdating": "Güncelleniyor",
@@ -111,7 +191,7 @@
       "volumes": "Birimler",
       "composeFiles": "Compose dosyaları",
       "version": "Sürüm",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Yazılım sürümü",
       "currentLabel": "Güncel:",
       "latestLabel": "En son:",
       "digestLabel": "Özet:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "Hiçbir bağlantı noktası açıkta değil",
       "notConfigured": "Yapılandırılmadı",
       "noVolumesMounted": "Hiçbir birim monte edilmedi",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Çalışma süresi",
+      "uptimeAriaLabel": "Konteyner çalışma süresi"
     },
     "containerLogs": {
       "title": "Konteyner Günlükleri",
       "download": "İndir",
       "allLevels": "Tüm Seviyeler",
       "downloadError": "Günlükler indirilemiyor",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Son {count} satır",
+      "tailAll": "Tüm satırlar",
+      "statusPaused": "Duraklatıldı",
+      "statusLive": "Canlı",
+      "statusOffline": "Bağlantı yok",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Konteynerler yükleniyor...",
+      "fleetUpdateProgress": "Kapsayıcı güncellemesi: {done} / {total}",
+      "fleetUpdateProgressRunning": "Şu anda güncellenen: {names}",
+      "fleetUpdateProgressRunningMore": "Şu anda güncellenen: {names} ve {more} tane daha",
       "searchPlaceholder": "Ad veya görsel arayın...",
       "allStatuses": "Tüm Durumlar",
       "running": "Çalışıyor",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "Kapsayıcıyı Güncelle",
-      "thisContainer": "this container",
+      "thisContainer": "bu konteyner",
       "confirmTagChange": "{name} güncellensin mi? Bu, imaj etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
       "confirmDigestChange": "{name} güncellensin mi? :{currentTag} imajının daha yeni bir yapısı mevcut (özet değişikliği).",
       "confirmLatest": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
       "updating": "Güncelleniyor...",
       "update": "Güncelle",
-      "updateFailed": "Update failed"
+      "updateFailed": "Güncelleme başarısız"
     },
     "floatingTag": {
       "badgeText": "kayan etiket",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · {date} tarihinde açılır",
       "maturityClockPublished": "Aday {date} tarihinde yayımlandı — {minDays} günlük minimuma {count} gün kaldı",
       "maturityClockDetected": "Aday {date} tarihinde algılandı — {minDays} günlük minimuma {count} gün kaldı",
+      "groupManualOnly": "'{group}' grup ilkesi yalnızca elle güncellemeye izin veriyor. Drydock bu güncellemeyi otomatik uygulamayacak.",
       "updateButton": "Şimdi güncelle",
       "blockedButton": "Güncelleme engellendi",
       "notificationsOnlyButton": "Yalnızca bildirimler",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Yapılandırılmış güncelleme tetikleyicisi yok",
         "self-update-unavailable": "Kendi kendini güncelleme kullanılamıyor",
         "maintenance-window-closed": "Bakım penceresi kapalı",
-        "dry-run-trigger": "Tetikleyici yapılandırması deneme modunda (dry-run)"
+        "group-notify-only": "Grup yalnızca bildirimlere izin veriyor",
+        "group-manual-only": "Grup elle güncelleme gerektiriyor",
+        "dry-run-trigger": "Tetikleyici yapılandırması deneme modunda (dry-run)",
+        "maturity-releases-not-reached": "Olgunluk politikası bekliyor"
       },
       "actions": {
         "editPolicy": "Güncelleme politikasını düzenle",
@@ -439,25 +526,28 @@
         "configureTriggers": "Güncelleme tetikleyicilerini yapılandır",
         "configureThreshold": "Tetikleyici eşiğini yapılandır",
         "configureSelfUpdate": "Kendi kendini güncellemeyi yapılandır",
-        "configureMaintenance": "Bakım penceresini yapılandır"
-      }
+        "configureMaintenance": "Bakım penceresini yapılandır",
+        "editGroupPolicy": "Grup ilkesini düzenle"
+      },
+      "releaseMaturityCount": "{family} ailesindeki kararlı sürümler bekleniyor: gerekli {required} önceki sürümün {count} tanesi kullanılabilir.",
+      "releaseMaturityUnavailable": "Adayın sürüm verileri kullanılamıyor. Otomatik güncellemeler bekletiliyor."
     },
     "maturityBadge": {
       "new": "{duration} önce algılandı"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "İptal",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Konteyneri durdur",
+        "message": "{name} durdurulsun mu?",
+        "acceptLabel": "Durdur",
+        "successMessage": "Durduruldu: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Konteyneri yeniden başlat",
+        "message": "{name} yeniden başlatılsın mı?",
+        "acceptLabel": "Yeniden başlat",
+        "successMessage": "Yeniden başlatıldı: {name}"
       },
       "forceUpdate": {
         "header": "Güncellemeyi Zorla",
@@ -505,6 +595,19 @@
         "failedDetail": "{name} için bağımlılık zinciri güncellenemedi.",
         "staleChainTitle": "Bağımlılık zinciri değişti",
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
+      },
+      "bulkUpdate": {
+        "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "accept": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
+        "acceptWithParents": "1 üst öğeyi ekle ve güncelle | {count} üst öğeyi ekle ve güncelle",
+        "dispatchHeading": "Güncellenecek",
+        "blockedHeading": "Engellendi, olduğu gibi bırakılacak",
+        "softOverridesHeading": "Uyarılara rağmen güncelleniyor",
+        "skippedHeading": "Atlandı",
+        "staleParentsHeading": "Bekleyen güncellemesi olan üst öğeler, onaylandığında eklenir",
+        "agentCountInfo": "{count} ajanı kapsar; her ajan kendi güncellemelerini çalıştırır.",
+        "stackCountInfo": "{count} yığını kapsar.",
+        "successMessage": "1 kapsayıcı için güncelleme başlatıldı | {count} kapsayıcı için güncelleme başlatıldı"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "{name} için yeniden kontrol başarısız oldu"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} kayıt",
+      "entryCountPlural": "{count} kayıt",
       "kindLabels": {
         "tag": "etiket",
         "digest": "özet"
@@ -561,14 +664,16 @@
         "setAll": "Olgunluk politikası tüm güncellemelere izin verecek şekilde ayarlandı",
         "skipped": "{name} için mevcut güncelleme atlandı",
         "removeSkip": "Atlanan {kind} {value} kaldırıldı",
-        "revertField": "{field}, bildirime dayalı politikaya döndürüldü",
-        "revertAll": "Tüm geçersiz kılmalar bildirime dayalı politikaya döndürüldü",
+        "revertField": "{field}, devralınan politikaya döndürüldü",
+        "revertAll": "Tüm geçersiz kılmalar devralınan politikaya döndürüldü",
         "failedTitle": "Politika güncellemesi başarısız oldu: {name}",
         "failedDetail": "Politika güncellenemedi"
       },
       "validation": {
         "snoozeDate": "Geçerli bir erteleme tarihi seçin",
-        "maturityAge": "{min} ile {max} gün arasında bir olgunluk yaşı girin"
+        "maturityAge": "{min} ile {max} gün arasında bir olgunluk yaşı girin",
+        "maturityReleases": "0 ile 100 arasında tam sayı sürüm adedi girin.",
+        "maturityFallback": "İstisna için 0 ile 365 arasında tam sayı gün girin."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "Kuyrukta",
+        "pulling": "İmaj indiriliyor",
+        "scanning": "İmaj taranıyor",
+        "sbom-generating": "SBOM oluşturuluyor",
+        "pull-failed": "İmaj indirilemedi",
+        "prepare": "Güncelleme hazırlanıyor",
+        "dryrun": "Deneme çalıştırması",
+        "renamed": "Konteyner yeniden adlandırıldı",
+        "new-created": "Yeni konteyner oluşturuldu",
+        "old-stopped": "Eski konteyner durduruldu",
+        "new-started": "Yeni konteyner başlatıldı",
+        "health-gate": "Sağlık kontrolü",
+        "health-gate-passed": "Sağlık kontrolü başarılı",
+        "succeeded": "Başarılı",
+        "failed": "Başarısız",
+        "recovered-cleanup-temp": "Kurtarıldı: geçici konteynerler temizlendi",
+        "recovered-rollback": "Kurtarıldı: geri alma tamamlandı",
+        "recovered-active": "Kurtarıldı: etkin konteyner korundu",
+        "recovery-failed": "Kurtarma başarısız",
+        "recovery-missing-containers": "Kurtarma: konteynerler eksik",
+        "rollback-started": "Geri alma başlatıldı",
+        "rolled-back": "Geri alındı",
+        "rollback-deferred": "Geri alma ertelendi",
+        "rollback-failed": "Geri alma başarısız",
+        "expired": "Süresi doldu",
+        "skipped-dependency": "Bağımlılık nedeniyle atlandı",
+        "in-progress": "Devam ediyor",
+        "update-runtime-failed": "Güncelleme yürütülemedi",
+        "create-new-failed": "Yeni konteyner oluşturulamadı",
+        "stop-old-failed": "Eski konteyner durdurulamadı",
+        "start-new-failed": "Yeni konteyner başlatılamadı",
+        "health-gate-failed": "Sağlık kontrolü başarısız",
+        "cancelled": "İptal edildi",
+        "compose-runtime-refresh-failed": "Compose çalışma durumu yenilenemedi"
+      },
       "timestampUnknown": "Bilinmiyor",
       "loadFailed": "Yedeklemeler yüklenemedi",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Açıkça belirtilmiş",
+        "inherited": "Devralınmış",
+        "unknown": "Bilinmiyor"
       },
       "timeoutDefault": "60000ms (varsayılan)",
       "preAbortYes": "Ön hook hatasında güncellemeyi iptal et",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Genel bakış",
+        "stats": "İstatistikler",
+        "logs": "Günlükler",
+        "environment": "Ortam",
+        "labels": "Etiketler",
+        "actions": "Eylemler"
       }
     },
     "logViewer": {
       "invalidRegex": "Geçersiz normal ifade"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Şuna bağlı",
+      "requiredBy": "Şunun tarafından gerekli",
+      "cycle": "Bir bağımlılık döngüsünün parçası",
+      "toggle": "Bağımlılıkları göster",
+      "updateGroup": "Bağımlılık grubunu güncelle ({count})",
+      "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
+      "staleParentsOverflow": "ve {count} tane daha",
+      "staleParentsAccept": "Yine de güncelle"
+    },
+    "selection": {
+      "selectRow": "{name} öğesini seç",
+      "selectAll": "Görünen tüm kapsayıcıları seç",
+      "barLabel": "Seçili kapsayıcılar",
+      "count": "1 kapsayıcı seçildi | {count} kapsayıcı seçildi",
+      "updateSelected": "Seçilenleri güncelle",
+      "clear": "Temizle",
+      "reasons": {
+        "stale": "artık listede değil",
+        "inFlight": "zaten güncelleniyor",
+        "noUpdate": "kullanılabilir güncelleme yok"
+      }
     }
   }
 }

@@ -12,6 +12,7 @@ import {
 } from '../log/buffer.js';
 import { toDisplayLogEntry } from '../log/display-timestamp.js';
 import * as registry from '../registry/index.js';
+import { trackSessionSocket } from './session-streams.js';
 import {
   applySessionMiddleware,
   createFixedWindowRateLimiter,
@@ -256,15 +257,15 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
       }
 
       const upgradeRequest = request as UpgradeRequest;
-      // Rate-limit keying must stay based on genuine passport authentication only —
+      // Rate-limit keying must stay based on a genuine session identity only —
       // anonymous auth being active shouldn't let anonymous clients earn session-keyed
       // (rotatable) rate limits instead of IP-keyed ones.
-      const passportAuthenticated = isAuthenticatedSession(upgradeRequest);
+      const identityAuthenticated = isAuthenticatedSession(upgradeRequest);
       const gateAuthenticated = isAuthenticatedSession(upgradeRequest, {
         anonymousAuthActive: registry.isAnonymousAuthenticationActive(),
       });
       const rateLimitKey =
-        getRateLimitKey(upgradeRequest, passportAuthenticated) ||
+        getRateLimitKey(upgradeRequest, identityAuthenticated) ||
         getDefaultRateLimitKey(upgradeRequest);
       if (isRateLimited(rateLimitKey)) {
         writeUpgradeError(socket, 429, 'Too Many Requests');
@@ -277,12 +278,21 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
 
       await new Promise<void>((resolve) => {
         webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+          // The upgrade authenticates once, so a session revoked afterwards
+          // would keep reading logs until the client let go.
+          const forgetSocket = trackSessionSocket(
+            identityAuthenticated ? upgradeRequest.sessionID : undefined,
+            webSocket,
+          );
           void streamSystemLogsToWebSocket({
             webSocket,
             query: parsedRequest.query,
             getBackfillEntries,
             subscribeToEntries,
-          }).finally(resolve);
+          }).finally(() => {
+            forgetSocket();
+            resolve();
+          });
         });
       });
     },

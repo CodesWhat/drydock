@@ -10,12 +10,17 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import {
   type RejectedContainerUpdateRequest,
-  requestContainerUpdate,
   requestContainerUpdates,
-  UpdateRequestError,
 } from '../updates/request-update.js';
 import { recordAuditEvent } from './audit-events.js';
-import { redactContainerRuntimeEnv } from './container/shared.js';
+import { toApiContainer } from './container/shared.js';
+import {
+  areContainerActionsEnabled,
+  CONTAINER_ACTIONS_DISABLED_MESSAGE,
+  CONTAINER_NOT_FOUND_MESSAGE,
+  dispatchManualContainerUpdate,
+  sendContainerUpdateDispatchOutcome,
+} from './container-update-dispatch.js';
 import {
   AGENT_LIFECYCLE_UNSUPPORTED_ERROR,
   findDockerTriggerForContainer,
@@ -24,6 +29,7 @@ import {
 } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'container-actions' });
 
@@ -188,7 +194,7 @@ async function executeAction(
 
   res.status(200).json({
     message: ACTION_MESSAGES[method],
-    result: redactContainerRuntimeEnv(responseContainer),
+    result: toApiContainer(responseContainer),
   });
 }
 
@@ -217,38 +223,19 @@ async function restartContainer(req: Request, res: Response) {
  * Update a container by pulling the new image and recreating the container.
  */
 async function updateContainer(req: Request, res: Response) {
-  const serverConfiguration = getServerConfiguration();
-  if (!serverConfiguration.feature.containeractions) {
-    sendErrorResponse(res, 403, 'Container actions are disabled');
+  if (!areContainerActionsEnabled()) {
+    sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
   }
 
   const id = req.params.id as string;
   const container = storeContainer.getContainer(id);
   if (!container) {
-    sendErrorResponse(res, 404, 'Container not found');
+    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_MESSAGE);
     return;
   }
 
-  try {
-    const accepted = await requestContainerUpdate(container);
-    getContainerActionsCounter()?.inc({ action: 'container-update' });
-    res
-      .status(202)
-      .json({ message: 'Container update accepted', operationId: accepted.operationId });
-  } catch (error: unknown) {
-    if (error instanceof UpdateRequestError) {
-      sendErrorResponse(res, error.statusCode, error.message);
-      return;
-    }
-
-    log.warn(
-      `Unexpected error accepting update for container ${sanitizeLogParam(id)} (${sanitizeLogParam(
-        error instanceof Error ? error.message : String(error),
-      )})`,
-    );
-    sendErrorResponse(res, 500, 'Unable to accept container update');
-  }
+  sendContainerUpdateDispatchOutcome(res, await dispatchManualContainerUpdate(container));
 }
 
 async function updateContainers(req: Request, res: Response) {
@@ -313,10 +300,10 @@ async function updateContainers(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.post('/update', updateContainers);
-  router.post('/:id/start', startContainer);
-  router.post('/:id/stop', stopContainer);
-  router.post('/:id/restart', restartContainer);
-  router.post('/:id/update', updateContainer);
+  router.post('/update', scoped('containers:update', updateContainers));
+  router.post('/:id/start', scoped('admin', startContainer));
+  router.post('/:id/stop', scoped('admin', stopContainer));
+  router.post('/:id/restart', scoped('admin', restartContainer));
+  router.post('/:id/update', scoped('containers:update', updateContainer));
   return router;
 }

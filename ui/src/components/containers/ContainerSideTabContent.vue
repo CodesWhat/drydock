@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import ContainerMaturityPolicyEditor from './ContainerMaturityPolicyEditor.vue';
+import { getPreviewUpdateKind } from '../../services/preview';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
+import LabelOverridesPanel from '../LabelOverridesPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
@@ -117,12 +120,10 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMode,
   selectedMaturityMinAgeDays,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
-  maturityModeInput,
-  maturityMinAgeDaysInput,
-  setMaturityPolicySelected,
-  clearMaturityPolicySelected,
   confirmClearPolicy,
   revertPolicySelected,
   policyMessage,
@@ -135,6 +136,7 @@ const {
   previewErrorAction,
   triggersLoading,
   detailTriggers,
+  unassociatedTriggers,
   getTriggerKey,
   triggerRunInProgress,
   runAssociatedTrigger,
@@ -188,7 +190,7 @@ function openUpdateStatusTab(tab: string, section?: string) {
   }
 }
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
@@ -345,7 +347,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               >
                 <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.imageAge') }}</span>
                 <span class="font-mono dd-text">
-                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created) }}
+                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created, t, locale) }}
                 </span>
                 <span class="min-w-0 truncate dd-text-muted">
                   {{ formatTimestamp(selectedContainer.imageCreated || selectedImageMetadata.created) }}
@@ -710,6 +712,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
 
           <!-- Labels tab -->
           <div v-if="activeDetailTab === 'labels'">
+            <LabelOverridesPanel :container-id="selectedContainer.id" />
             <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageLabels.labels') }}</div>
             <div v-if="selectedContainer.details.labels.length > 0" class="flex flex-wrap gap-1.5">
               <AppBadge v-for="label in selectedContainer.details.labels" :key="label" tone="neutral" size="sm">
@@ -805,46 +808,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   </AppButton>
                 </div>
               </div>
-              <!-- Maturity group -->
-              <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.maturityGroup') }}</div>
-                <div class="flex flex-wrap gap-1.5 items-center">
-                  <div class="flex items-center gap-1">
-                    <select
-                      v-model="maturityModeInput"
-                      class="px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    >
-                      <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
-                      <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
-                    </select>
-                    <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMode')" data-test="policy-overridden-maturityMode" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <input
-                      v-model.number="maturityMinAgeDaysInput"
-                      type="number"
-                      min="1"
-                      max="365"
-                      class="w-[92px] px-2 py-1.5 dd-rounded text-2xs outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    />
-                    <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMinAgeDays')" data-test="policy-overridden-maturityMinAgeDays" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
-                  </div>
-                  <AppButton size="sm" variant="outlined"
-                          :disabled="policyInProgress !== null"
-                          @click="setMaturityPolicySelected(maturityModeInput)">
-                    {{ t('containerComponents.fullPageActions.applyMaturity') }}
-                  </AppButton>
-                  <AppButton size="sm" variant="outlined"
-                          :disabled="!selectedHasMaturityPolicy || policyInProgress !== null"
-                          @click="clearMaturityPolicySelected">
-                    {{ t('containerComponents.fullPageActions.clearMaturity') }}
-                  </AppButton>
-                </div>
-              </div>
+              <ContainerMaturityPolicyEditor />
               <!-- Reset group -->
               <div>
                 <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.resetGroup') }}</div>
@@ -880,8 +844,9 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div v-if="selectedSkipTags.length > 0 || selectedPolicyOverrideFields.has('skipTags')">
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedTags') }}
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipTags')" data-test="policy-group-skipTags" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipTags')" data-test="policy-overridden-skipTags" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipTags.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -903,8 +868,9 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div v-if="selectedSkipDigests.length > 0 || selectedPolicyOverrideFields.has('skipDigests')">
                   <div class="flex items-center gap-1">
                     {{ t('containerComponents.fullPageActions.skippedDigests') }}
+                    <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipDigests')" data-test="policy-group-skipDigests" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipDigests')" data-test="policy-overridden-skipDigests" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipDigests.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -946,7 +912,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.currentLabel') }} <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.newLabel') }} <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.updateKindLabel') }}
-                      <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
+                      <span class="dd-text font-mono">{{ getPreviewUpdateKind(detailPreview.updateKind) || t('common.unknown') }}</span>
                     </div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
                       <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>
@@ -1024,6 +990,20 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <p v-else class="text-2xs-plus dd-text-muted italic">{{ t('containerComponents.fullPageActions.noTriggersAssociated') }}</p>
               <p v-if="triggerMessage" class="mt-2 text-2xs" style="color: var(--dd-success);">{{ triggerMessage }}</p>
               <p v-if="triggerError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ triggerError }}</p>
+              <div v-if="unassociatedTriggers.length > 0" class="mt-3 space-y-1.5">
+                <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.unavailableTriggers') }}</div>
+                <div v-for="trigger in unassociatedTriggers" :key="getTriggerKey(trigger)"
+                     :data-unassociated-trigger-key="getTriggerKey(trigger)"
+                     class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus opacity-60"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="min-w-0"
+                       v-tooltip.top="t(`containerComponents.fullPageActions.unavailableTriggerReason.${trigger.reason}`)">
+                    <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
+                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
+                    <div class="text-2xs dd-text-muted" data-test="unassociated-trigger-reason">{{ t(`containerComponents.fullPageActions.unavailableTriggerReason.${trigger.reason}`) }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div>

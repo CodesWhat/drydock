@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "{duration} 稼働中",
+    "apiResponse": {
+      "html": "{context} が JSON ではなく HTML を返しました。API サーバーまたはデモのモックが動作しているか確認してください。",
+      "contentType": "{context} が JSON ではなく {contentType} を返しました。",
+      "invalidJson": "{context} が無効な JSON を返しました。"
+    },
     "loading": "読み込み中…",
     "back": "戻る",
     "cancel": "キャンセル",
@@ -9,8 +15,8 @@
     "close": "閉じる",
     "retry": "再試行",
     "unknown": "不明",
-    "yes": "yes",
-    "no": "no",
+    "yes": "はい",
+    "no": "いいえ",
     "errorSummary": {
       "rateLimitHit": "レジストリのレート制限に達しました",
       "accessDenied": "レジストリへのアクセスが拒否されました",
@@ -22,13 +28,13 @@
       "signatureFailed": "署名の検証に失敗しました"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "カスタム"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "たった今"
     },
     "imageAge": {
-      "now": "now"
+      "now": "今"
     }
   }
 }

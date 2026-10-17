@@ -1,0 +1,25 @@
+{
+  "notificationEditor": {
+    "title": "Meldingsbeleid",
+    "edit": "Meldingsbeleid bewerken",
+    "boundary": "Bewerk het bezorgbeleid en de sjablonen voor beveiligingssamenvattingen. Opslaan test de trigger niet en verstuurt geen melding. Inloggegevens, bestemmingen en uitvoeringsinstellingen blijven alleen-lezen.",
+    "providerForced": "De provider bepaalt deze waarde. Deze kan hier niet worden bewerkt.",
+    "triggerUnavailable": "Deze exacte meldingstrigger is niet beschikbaar in de momentopname van de editor.",
+    "apiUnavailable": "Deze server biedt de API voor de meldingsbeleid-editor niet aan.",
+    "fields": {
+      "threshold": "Updatedrempel",
+      "once": "Slechts één keer melden",
+      "mode": "Verzendmodus",
+      "securitymode": "Verzendmodus voor beveiligingsmeldingen",
+      "digestcron": "Samenvattingsschema (cron)",
+      "resolvenotifications": "Oplossingsmeldingen versturen",
+      "securitydigesttitle": "Titel van beveiligingssamenvatting",
+      "securitydigestbody": "Inhoud van beveiligingssamenvatting"
+    },
+    "templateHelp": "Een sjabloon verwijderen herstelt de ingebouwde standaardwaarden bij het weergeven. Sjablonen mogen niet leeg zijn. Een sjabloon bewerken wijzigt de beveiligingsbezorgmodus niet.",
+    "templateUnavailable": "Deze server biedt dit sjabloonveld niet aan.",
+    "templateEmpty": "Sjablonen mogen niet leeg zijn. Voer tekst in of verwijder de bestandswaarde expliciet.",
+    "providerUnsupported": "Deze provider ondersteunt geen sjablonen voor beveiligingssamenvattingen.",
+    "interpolationHelp": "Volledige waarden zoals {reference} of {fallback} gebruiken YAML-interpolatie van omgevingsvariabelen en worden alleen-lezen na herladen. Scanexpressies zoals {expression} blijven bewerkbaar. Zet geen geheimen in sjablonen."
+  }
+}

@@ -17,14 +17,11 @@ type RollbackContainer = {
   watcher: string;
   agent?: string;
   identityKey?: string;
-  labels?: Record<string, string>;
+  labels: Record<string, string>;
   image: {
-    // Not read here, and required rather than optional because the rollback
-    // the health monitor performs is a trigger lifecycle call against this
-    // container, and the compose action reads the registry name off it
-    // (DR-101). Requiring it keeps this type assignable to the health
-    // monitor's own, so neither end can go back to an `{ id, name }` stub
-    // without failing the build.
+    // Not read here, declared because the rollback the health monitor performs
+    // is a trigger lifecycle call against this container and the compose
+    // action reads the registry name off it (DR-101).
     registry: { name: string };
     tag: { value: string };
     digest?: { repo?: string };

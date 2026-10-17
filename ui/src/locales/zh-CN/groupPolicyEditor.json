@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "分组策略",
+    "title": "分组策略",
+    "description": "每个分组一条策略，应用于当前所有成员以及之后加入的容器。",
+    "ownership": "存储在 Drydock 中，而不是 Docker 标签里。对更新策略字段来说，成员上的标签和单个容器的覆盖设置仍然优先。",
+    "newPolicy": "新建策略",
+    "loading": "正在加载分组策略…",
+    "empty": "还没有分组或策略。分组来自 dd.group、Compose 项目和 Swarm 堆栈。",
+    "memberCount": "{count} 个容器 | {count} 个容器",
+    "noMembers": "当前没有成员；适用于之后加入的成员",
+    "hosts": "主机：{hosts}",
+    "controller": "控制器",
+    "noPolicy": "无策略",
+    "whitespaceNotice": "名称开头或结尾有空白字符，以 ␣ 显示。",
+    "edit": "编辑",
+    "create": "创建策略",
+    "readOnly": "只有管理员可以更改分组策略。此视图为只读。",
+    "summary": {
+      "maturityMode": "成熟度：{value}",
+      "minAge": "最短时长：{days} 天",
+      "skipTags": "跳过的标签：{count}",
+      "skipDigests": "跳过的摘要：{count}",
+      "updateMode": "更新：{mode}",
+      "exclude": "排除的触发器：{count}"
+    },
+    "editor": {
+      "titleCreate": "新建分组策略",
+      "titleEdit": "分组策略：{group}",
+      "groupName": "分组名称",
+      "groupNameHelp": "按原样精确匹配，区分大小写和空格。",
+      "groupNameInvalid": "请输入不为空白的分组名称。",
+      "maturityMode": "成熟度模式",
+      "maturityOptions": {
+        "inherit": "继承",
+        "all": "所有更新",
+        "mature": "仅成熟的更新"
+      },
+      "minAge": "最短时长（天）",
+      "minAgeHelp": "整数天数，1 到 365。留空则继承。",
+      "minAgeInvalid": "请输入 1 到 365 之间的整数。",
+      "skipTags": "跳过的标签",
+      "skipDigests": "跳过的摘要",
+      "listHelp": "每行一个，或用逗号分隔。",
+      "updateMode": "自动更新",
+      "updateModeOptions": {
+        "inherit": "继承",
+        "manual": "仅手动",
+        "notify": "仅通知"
+      },
+      "updateModeHelp": "分组规则只能收紧限制。当前全局模式：{mode}。",
+      "exclude": "排除的动作触发器",
+      "excludeHelp": "触发器 ID 或名称，可在后面加 :threshold。每行一个，或用逗号分隔。",
+      "noFields": "请至少设置一个字段，或删除该策略。",
+      "remove": "删除策略",
+      "conflict": "此策略已被其他人更改。请重新加载，然后再次应用你的更改。重新加载之前会保留你的草稿。",
+      "reload": "重新加载",
+      "notFound": "此策略已不存在。请重新加载以查看当前列表。",
+      "forbidden": "更改分组策略需要管理员权限。"
+    },
+    "remove": {
+      "header": "删除分组策略",
+      "message": "要删除分组 {group} 的策略吗？成员将回退到各自的标签、监视器和全局值。",
+      "accept": "删除"
+    },
+    "saved": "策略已保存。已更新 {members} 个容器。 | 策略已保存。已更新 {members} 个容器。",
+    "removed": "策略已删除。已更新 {members} 个容器。 | 策略已删除。已更新 {members} 个容器。",
+    "warningsTitle": "警告",
+    "errors": {
+      "load": "无法加载分组策略",
+      "requestFailed": "分组策略请求失败（HTTP {status}）",
+      "unknown": "无法保存分组策略"
+    }
+  }
+}

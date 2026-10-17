@@ -9,14 +9,22 @@ import {
   notificationRuleIdPathParam,
   operationIdPathParam,
 } from '../common.js';
+import { apiKeyPaths } from './api-keys.js';
+import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
+import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
+import { groupPolicyPaths } from './group-policies.js';
+import { imagePaths } from './images.js';
+import { labelOverridePaths } from './label-overrides.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
+import { totpFactorPaths } from './totp-factor.js';
 import { triggerPaths } from './triggers.js';
+import { watcherInventoryPaths } from './watcher-inventory.js';
 
 const updateOperationIdPathParam = {
   name: 'id',
@@ -187,7 +195,9 @@ export const openApiPaths = {
       },
     },
   },
+  ...apiKeyPaths,
   ...authPaths,
+  ...totpFactorPaths,
   '/api/v1/events/ui': {
     get: {
       tags: ['Realtime'],
@@ -350,6 +360,8 @@ export const openApiPaths = {
       },
     },
   },
+  ...configPaths,
+  ...labelOverridePaths,
   '/api/v1/server': {
     get: {
       tags: ['System'],
@@ -421,7 +433,9 @@ export const openApiPaths = {
   },
   ...containerPaths,
   ...statsPaths,
+  ...imagePaths,
   ...dependencyGroupPaths,
+  ...groupPolicyPaths,
   '/api/v1/operations/{id}/cancel': {
     post: {
       tags: ['Containers', 'Actions'],
@@ -498,6 +512,7 @@ export const openApiPaths = {
   ...triggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
+  ...watcherInventoryPaths,
   '/api/v1/agents': {
     get: {
       tags: ['Agents'],
@@ -506,6 +521,99 @@ export const openApiPaths = {
       responses: {
         200: jsonResponse('Agent list', { $ref: '#/components/schemas/CollectionResult' }),
         401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/agents/roster': {
+    get: {
+      tags: ['Agents'],
+      summary: 'List exact names of live configured agent clients without status or configuration',
+      operationId: 'getAgentRoster',
+      responses: {
+        200: jsonResponse('Agent identities', {
+          type: 'object',
+          required: ['data', 'total'],
+          additionalProperties: false,
+          properties: {
+            data: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['name'],
+                additionalProperties: false,
+                properties: { name: { type: 'string' } },
+              },
+            },
+            total: { type: 'integer', minimum: 0 },
+          },
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Missing required read scope'),
+      },
+    },
+  },
+  '/api/v1/agents/{name}/key-rotation': {
+    get: {
+      tags: ['Agents'],
+      summary: 'Get public managed signing key status',
+      operationId: 'getAgentKeyRotation',
+      description:
+        'Existing session access policy. API keys are rejected. Reports controller state without private credentials.',
+      parameters: [agentNamePathParam],
+      responses: {
+        200: jsonResponse('Public rotation status', {
+          type: 'object',
+          properties: {
+            enabled: { type: 'boolean' },
+            root_key_id: { type: 'string' },
+            current_key_id: { type: 'string' },
+            pending_key_id: { type: 'string' },
+            phase: { type: 'string', enum: ['idle', 'pending', 'awaiting-reconnect', 'aborted'] },
+          },
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API keys are not permitted'),
+        404: errorResponse('Agent not found'),
+      },
+    },
+    post: {
+      tags: ['Agents'],
+      summary: 'Rotate or abort an opted-in Portwing signing key',
+      operationId: 'changeAgentKeyRotation',
+      description:
+        'Existing session access policy. API keys and recovery-assurance writes are rejected. Edge 202 means a fresh signed reconnect is still pending. Check status after reconnect or an uncertain result.',
+      parameters: [agentNamePathParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['action'],
+              additionalProperties: false,
+              properties: { action: { type: 'string', enum: ['rotate', 'abort'] } },
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Completed Standard rotation or cancellation; public key IDs only', {
+          type: 'object',
+        }),
+        202: jsonResponse('Edge activation pending signed reconnect; public key IDs only', {
+          type: 'object',
+          properties: {
+            current_key_id: { type: 'string' },
+            pending_key_id: { type: 'string' },
+            phase: { type: 'string', enum: ['awaiting-reconnect'] },
+          },
+        }),
+        400: errorResponse('Provide exactly action rotate or abort'),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Credential management is not permitted'),
+        404: errorResponse('Agent not found'),
+        409: errorResponse('Managed rotation is disabled'),
+        502: errorResponse('Remote result could not be confirmed; check status before retrying'),
       },
     },
   },
@@ -745,6 +853,7 @@ export const openApiPaths = {
     },
   },
   ...notificationOutboxPaths,
+  ...approvalPaths,
   '/api/v1/notifications/{id}': {
     patch: {
       tags: ['Notifications'],

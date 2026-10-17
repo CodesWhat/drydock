@@ -6,6 +6,7 @@ export const DASHBOARD_WIDGET_IDS = [
   'stat-updates',
   'stat-security',
   'stat-registries',
+  'stat-approvals',
   'recent-updates',
   'security-overview',
   'resource-usage',
@@ -26,63 +27,70 @@ interface DashboardWidgetMeta {
 export const DASHBOARD_WIDGET_META: DashboardWidgetMeta[] = [
   {
     id: 'stat-containers',
-    labelKey: 'dashboardView.widgets.statContainers',
+    labelKey: 'dashboardView.stats.containers',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-updates',
-    labelKey: 'dashboardView.widgets.statUpdates',
+    labelKey: 'dashboardView.stats.updatesAvailable',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-security',
-    labelKey: 'dashboardView.widgets.statSecurity',
+    labelKey: 'dashboardView.stats.securityIssues',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-registries',
-    labelKey: 'dashboardView.widgets.statRegistries',
+    labelKey: 'dashboardView.stats.registries',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-approvals',
+    labelKey: 'dashboardView.stats.approvals',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'recent-updates',
-    labelKey: 'dashboardView.widgets.recentUpdates',
+    labelKey: 'dashboardView.recentUpdates.title',
     category: 'widget',
     canStretch: true,
     defaultSpan: 2,
   },
   {
     id: 'security-overview',
-    labelKey: 'dashboardView.widgets.securityOverview',
+    labelKey: 'dashboardView.securityOverview.title',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'resource-usage',
-    labelKey: 'dashboardView.widgets.resourceUsage',
+    labelKey: 'dashboardView.resourceUsage.title',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'host-status',
-    labelKey: 'dashboardView.widgets.hostStatus',
+    labelKey: 'dashboardView.hostStatus.title',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'update-breakdown',
-    labelKey: 'dashboardView.widgets.updateBreakdown',
+    labelKey: 'dashboardView.updateBreakdown.title',
     category: 'widget',
     canStretch: true,
     defaultSpan: 2,
@@ -130,6 +138,13 @@ export interface DashboardStatCard {
   colorMuted: string;
   route?: RouteLocationRaw;
   detail?: string;
+}
+
+export interface DashboardVulnerabilityRow {
+  id: string;
+  image: string;
+  package: string;
+  severity: 'CRITICAL' | 'HIGH';
 }
 
 export interface RecentUpdateRow {

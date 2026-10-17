@@ -10,7 +10,7 @@ import type { Container, TriggerCategory } from '../model/container.js';
  * value from there (or from this module) would create a require cycle. This
  * module has no such dependencies, so it can be imported anywhere.
  */
-const ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'command']);
+const ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer', 'command']);
 
 /**
  * Classify a trigger provider `type` string into its configuration category.

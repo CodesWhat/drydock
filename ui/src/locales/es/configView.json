@@ -3,7 +3,68 @@
     "tabs": {
       "general": "General",
       "appearance": "Apariencia",
-      "profile": "Perfil"
+      "profile": "Perfil",
+      "apiKeys": "Claves de API"
+    },
+    "apiKeys": {
+      "title": "Claves de API",
+      "description": "Claves con ámbito limitado para scripts e integraciones. Una clave autentica una solicitud a la vez y nunca crea una sesión.",
+      "loading": "Cargando claves de API",
+      "empty": "Todavía no hay claves de API. Crea una para dar acceso a un script sin compartir una contraseña.",
+      "createButton": "Crear clave",
+      "never": "Nunca",
+      "revokeButton": "Revocar",
+      "form": {
+        "title": "Crear una clave de API",
+        "name": "Nombre",
+        "namePlaceholder": "Pipeline de CI",
+        "scopes": "Ámbitos",
+        "expires": "Caduca",
+        "expiresNever": "Déjalo vacío para una clave que nunca caduque",
+        "rateLimit": "Solicitudes cada 15 minutos",
+        "submit": "Crear"
+      },
+      "scopes": {
+        "read": "Leer todo",
+        "containersWatch": "Comprobar actualizaciones de contenedores",
+        "containersUpdate": "Actualizar y revertir contenedores",
+        "triggersTest": "Enviar notificaciones de prueba",
+        "admin": "Administración completa",
+        "apiKeysManage": "Gestionar claves de API"
+      },
+      "reveal": {
+        "title": "Copia esta clave ahora",
+        "description": "Esta es la única vez que se muestra. Drydock almacena un resumen (digest), no la clave, así que perderla significa crear otra.",
+        "copy": "Copiar",
+        "copied": "Copiado"
+      },
+      "columns": {
+        "name": "Nombre",
+        "key": "Clave",
+        "scopes": "Ámbitos",
+        "lastUsed": "Último uso",
+        "expires": "Caduca",
+        "status": "Estado"
+      },
+      "status": {
+        "active": "Activa",
+        "revoked": "Revocada",
+        "expired": "Caducada"
+      },
+      "revoke": {
+        "header": "Revocar clave de API",
+        "message": "Revocar {name} también revoca cada clave creada con ella. Todo lo que las use dejará de funcionar de inmediato.",
+        "accept": "Revocar"
+      },
+      "cascade": "Se revocaron {count} claves, incluida cada clave que esta creó.",
+      "errors": {
+        "load": "No se pudieron cargar las claves de API",
+        "create": "No se pudo crear la clave de API",
+        "revoke": "No se pudo revocar la clave de API"
+      },
+      "showing": "Mostrando {shown} de {total}",
+      "loadMore": "Cargar más",
+      "loadingMore": "Cargando"
     },
     "general": {
       "updateMode": {

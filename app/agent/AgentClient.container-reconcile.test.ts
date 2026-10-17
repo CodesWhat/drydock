@@ -9,13 +9,14 @@
  *
  * This file deliberately does NOT mock ../store/container.js (unlike AgentClient.test.ts,
  * which mocks it wholesale and therefore cannot see this class of bug at all). It drives the
- * real store module against a real in-memory Loki collection so the stash/restore contract
- * in app/store/container.ts is actually exercised.
+ * real store module against a real in-memory SQLite database (roadmap 7-STORE slice 8) so
+ * the stash/restore contract in app/store/container.ts is actually exercised.
  */
 
 import axios from 'axios';
-import Loki from 'lokijs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { Database } from '../store/db/driver.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 
 vi.mock('axios');
 
@@ -107,13 +108,14 @@ function buildIncomingContainer(overrides: Record<string, unknown> = {}) {
 
 describe('AgentClient container-reconcile ordering (real store/container.js)', () => {
   let client: AgentClient;
+  let db: Database;
 
   beforeEach(() => {
     vi.clearAllMocks();
     for (const watcherId of Object.keys(mockRegistryState.watcher)) {
       delete mockRegistryState.watcher[watcherId];
     }
-    const db = new Loki('test.db', { autosave: false });
+    db = createMigratedMemoryDatabase();
     storeContainer.createCollections(db);
     storeContainer._resetContainerStoreStateForTests();
     vi.useFakeTimers();
@@ -123,6 +125,7 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
   afterEach(() => {
     client.stop();
     vi.useRealTimers();
+    db.close();
   });
 
   describe('_doHandshake() via handshake()', () => {
@@ -141,6 +144,54 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
   });
 
   describe('watch()', () => {
+    test('requests release evidence only for controller-owned enabled policies without sending policy values', async () => {
+      seedOldContainerWithPolicy();
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'enabled',
+          agent: AGENT_NAME,
+          updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+        }),
+      );
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'disabled',
+          name: 'disabled',
+          agent: AGENT_NAME,
+          updatePolicy: { maturityMode: 'all', maturitySkipReleases: 2 },
+        }),
+      );
+      storeContainer.insertContainer(
+        buildIncomingContainer({
+          id: 'foreign',
+          name: 'foreign',
+          agent: 'another',
+          updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+        }),
+      );
+      vi.mocked(axios.post).mockResolvedValue({ data: [] });
+      await client.watch(WATCHER_NAME, WATCHER_NAME);
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.any(String),
+        { collectReleaseMaturityFor: ['enabled'] },
+        expect.any(Object),
+      );
+    });
+
+    test('requests evidence for a single enabled container without sending its policy', async () => {
+      const container = buildIncomingContainer({
+        agent: AGENT_NAME,
+        updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+      });
+      vi.mocked(axios.post).mockResolvedValue({ data: { container } });
+      await client.watchContainer(WATCHER_NAME, WATCHER_NAME, container);
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.any(String),
+        { collectReleaseMaturity: true },
+        expect.any(Object),
+      );
+    });
+
     test('retains updatePolicy when a same-identity container arrives under a new id', async () => {
       seedOldContainerWithPolicy();
       vi.mocked(axios.post).mockResolvedValueOnce({
@@ -277,6 +328,24 @@ describe('AgentClient container-reconcile ordering (real store/container.js)', (
       await client.handleEvent('dd:container-added', buildIncomingContainer());
 
       expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+    });
+
+    // #1280: the replacement reached the controller first and inherited the policy from its
+    // still-stored predecessor. A snapshot that then lists it flags the predecessor's prune
+    // as a replacement, but must not leave a stash for the next recreate to pick up.
+    test('a snapshot listing an already-stored replacement leaves no stash behind (#1280)', async () => {
+      seedOldContainerWithPolicy();
+      await client.handleEvent('dd:container-added', buildIncomingContainer());
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: WATCHER_NAME, name: WATCHER_NAME },
+        containers: [buildIncomingContainer()],
+      });
+
+      expect(storeContainer.getContainer('old-id')).toBeUndefined();
+      expect(storeContainer.getContainer('new-id')?.updatePolicy).toEqual(MATURITY_POLICY);
+      expect(storeContainer._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
     });
   });
 

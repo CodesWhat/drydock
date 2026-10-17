@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Eylem ilkesi",
+    "edit": "Eylem ilkesini düzenle",
+    "boundary": "Yalnızca zamanlama ilkesini düzenleyin. Kaydetmek eylem, komut, güncelleme veya bildirim çalıştırmaz. Kimlik bilgileri ve yürütme ayarları salt okunur kalır. Genel elle çalıştırma modu ve konteyner uygunluğu geçerliliğini korur.",
+    "actionUnavailable": "Bu eylem düzenleyici anlık görüntüsünde bulunmuyor.",
+    "apiUnavailable": "Bu sunucu eylem ilkesi düzenleyici API’sini sağlamıyor.",
+    "reset": "Dosya değerini kaldır / ayarları devral",
+    "orderHelp": "Negatif ve kesirli değerlere izin verilir. Mevcut sıra devralma davranışı, aynı adlı diğer eylemleri ve bildirimleri de etkileyebilir.",
+    "concurrencyHelp": "Pozitif bir tam sayı. Dosya değerini kaldırmak devralınan ayarları geri getirir. Compose için bu sınır aynı dosyadaki hizmetlere değil, bağımsız projelere uygulanır.",
+    "invalidNumber": "Sonlu bir sayı girin. Ayarları devralmak için dosya değerini açıkça kaldırın.",
+    "invalidConcurrency": "Pozitif bir tam sayı girin. Ayarları devralmak için dosya değerini açıkça kaldırın.",
+    "fields": {
+      "auto": "Otomatik çalıştırma",
+      "order": "Çalıştırma sırası",
+      "concurrency": "Eşzamanlı güncellemeler"
+    },
+    "autoModes": {
+      "all": "Tüm uygun konteynerler",
+      "oninclude": "Açıkça dahil edilen konteynerler",
+      "onauto": "Otomatik eylem ilkesinin izin verdiği konteynerler",
+      "none": "Otomatik çalıştırma yok"
+    }
+  }
+}

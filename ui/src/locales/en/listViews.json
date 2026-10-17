@@ -42,6 +42,30 @@
       "info": "Info"
     },
     "actions": {
+      "webhook-watch": "Webhook Watch",
+      "webhook-watch-container": "Webhook Container Watch",
+      "webhook-update": "Webhook Update",
+      "mqtt-command-update": "MQTT Update Command",
+      "security-scan-skipped": "Security Scan Skipped",
+      "scanner-asset-pull-started": "Scanner Image Pull Started",
+      "scanner-asset-pull-succeeded": "Scanner Image Pull Succeeded",
+      "scanner-asset-pull-failed": "Scanner Image Pull Failed",
+      "scanner-asset-warm-started": "Scanner Warm-up Started",
+      "scanner-asset-warm-succeeded": "Scanner Warm-up Succeeded",
+      "scanner-asset-warm-failed": "Scanner Warm-up Failed",
+      "container-unhealthy": "Container Unhealthy",
+      "env-reveal": "Environment Revealed",
+      "debug-dump": "Debug Dump Downloaded",
+      "config-read": "Configuration Read",
+      "config-validated": "Configuration Validated",
+      "config-reloaded": "Configuration Reloaded",
+      "config-written": "Configuration Written",
+      "update-approved": "Update Approved",
+      "update-rejected": "Update Rejected",
+      "update-deferred": "Update Deferred",
+      "api-key-created": "API Key Created",
+      "api-key-revoked": "API Key Revoked",
+      "api-key-auth-failed": "API Key Authentication Failed",
       "container-update": "Container Update",
       "container-added": "Container Added",
       "container-removed": "Container Removed",
@@ -49,6 +73,13 @@
       "container-stop": "Container Stop",
       "container-restart": "Container Restart",
       "auth-login": "Auth Login",
+      "totp-recovery-used": "Recovery Code Used",
+      "totp-enrollment-started": "Two-Factor Enrollment Started",
+      "totp-enabled": "Two-Factor Enabled",
+      "totp-replaced": "Two-Factor Replaced",
+      "totp-disabled": "Two-Factor Disabled",
+      "totp-recovery-codes-replaced": "Recovery Codes Replaced",
+      "totp-break-glass": "Two-Factor Offline Recovery",
       "authenticated": "Authenticated",
       "authfail": "Authentication Failed",
       "hook-configured": "Hook Configured",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Auto-Update Blocked",
       "update-policy-override-set": "Update Policy Override Set",
       "update-policy-override-cleared": "Update Policy Override Cleared",
+      "group-policy-set": "Group Policy Set",
+      "group-policy-cleared": "Group Policy Cleared",
+      "label-override-set": "Label Override Set",
+      "label-override-cleared": "Label Override Cleared",
       "auto-rollback": "Auto Rollback",
       "rollback": "Rollback",
       "preview": "Preview",
       "agent-disconnect": "Agent Disconnect",
       "notification-delivery-failed": "Notification Delivery Failed",
       "security-alert": "Security Alert",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Maturity Cleared",
+      "image-prune": "Image Prune"
     },
     "target": {
       "container": "Container",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Group"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Maturity Cleared",
         "description": "When an update held back by the maturity policy becomes applicable"
+      },
+      "update-pending-approval": {
+        "name": "Update Pending Approval",
+        "description": "When a manual-mode update enters the approval queue"
       }
     },
     "columns": {

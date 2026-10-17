@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Falha ao carregar o resumo das aprovações",
+      "detailLoadFailed": "Falha ao carregar a aprovação",
+      "approveFailed": "Falha ao aprovar a atualização",
+      "rejectFailed": "Falha ao rejeitar a atualização",
+      "deferFailed": "Falha ao adiar a atualização"
+    },
+    "ofCount": "Exibidos: {count}",
+    "refresh": "Atualizar",
+    "loading": "Carregando aprovações…",
+    "loadError": "Não foi possível carregar as aprovações",
+    "notifyModeBanner": "O modo de atualização é notify. As aprovações ficam desativadas até que o modo seja definido como manual ou auto.",
+    "tabs": {
+      "pending": "Pendentes",
+      "deferred": "Adiadas",
+      "decided": "Decididas"
+    },
+    "columns": {
+      "container": "Contêiner",
+      "image": "Imagem",
+      "version": "Versão",
+      "scan": "Verificação",
+      "age": "Tempo decorrido"
+    },
+    "semver": {
+      "major": "Versão principal",
+      "minor": "Versão secundária",
+      "patch": "Correção",
+      "prerelease": "Pré-lançamento",
+      "unknown": "Desconhecida"
+    },
+    "actions": {
+      "notesAriaLabel": "Mostrar notas da versão e motivos de retenção",
+      "approve": "Aprovar",
+      "approveAriaLabel": "Aprovar atualização",
+      "approveDisabledNotify": "O modo de atualização é notify; as aprovações estão desativadas",
+      "reject": "Rejeitar",
+      "rejectAriaLabel": "Rejeitar atualização",
+      "defer": "Adiar",
+      "deferAriaLabel": "Adiar atualização"
+    },
+    "detail": {
+      "loading": "Carregando detalhes…",
+      "holdReasons": "Motivos de retenção",
+      "viewFullNotes": "Ver notas completas",
+      "empty": "Não há notas da versão nem motivos de retenção para esta atualização"
+    },
+    "empty": {
+      "pending": "Não há aprovações pendentes",
+      "deferred": "Não há aprovações adiadas",
+      "decided": "Ainda não há aprovações decididas",
+      "all": "Não há aprovações"
+    },
+    "confirm": {
+      "cancel": "Cancelar",
+      "approve": {
+        "header": "Aprovar atualização",
+        "message": "Aprovar a atualização de {name} para {toRef}?",
+        "softBlockerSuffix": "\n\nEsta atualização tem motivos de retenção não resolvidos:\n{list}",
+        "acceptLabel": "Aprovar"
+      },
+      "reject": {
+        "header": "Rejeitar atualização",
+        "message": "Rejeitar a atualização de {name} para {toRef}? Ela não será aplicada automaticamente.",
+        "acceptLabel": "Rejeitar"
+      },
+      "defer": {
+        "header": "Adiar atualização",
+        "message": "Adiar a atualização de {name} por {days} dias?",
+        "acceptLabel": "Adiar"
+      }
+    },
+    "toast": {
+      "approved": "Aprovação solicitada para {name}",
+      "approveFailed": "Não foi possível aprovar {name}",
+      "rejected": "Atualização rejeitada para {name}",
+      "rejectFailed": "Não foi possível rejeitar {name}",
+      "deferred": "Atualização adiada para {name}",
+      "deferFailed": "Não foi possível adiar {name}"
+    }
+  }
+}

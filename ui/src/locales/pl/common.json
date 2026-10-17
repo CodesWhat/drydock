@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Działa od {duration}",
+    "apiResponse": {
+      "html": "{context} zwrócił HTML zamiast JSON. Sprawdź, czy serwer API lub symulacje demonstracyjne są uruchomione.",
+      "contentType": "{context} zwrócił {contentType} zamiast JSON.",
+      "invalidJson": "{context} zwrócił nieprawidłowy JSON."
+    },
     "loading": "Ładowanie…",
     "back": "Wstecz",
     "cancel": "Anuluj",
@@ -9,8 +15,8 @@
     "close": "Zamknij",
     "retry": "Spróbuj ponownie",
     "unknown": "nieznany",
-    "yes": "yes",
-    "no": "no",
+    "yes": "tak",
+    "no": "nie",
     "errorSummary": {
       "rateLimitHit": "Przekroczono limit zapytań do rejestru",
       "accessDenied": "Odmowa dostępu do rejestru",
@@ -22,13 +28,13 @@
       "signatureFailed": "Weryfikacja podpisu nie powiodła się"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Niestandardowy"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Właśnie teraz"
     },
     "imageAge": {
-      "now": "now"
+      "now": "teraz"
     }
   }
 }

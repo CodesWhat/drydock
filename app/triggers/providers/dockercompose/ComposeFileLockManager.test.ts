@@ -20,9 +20,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 describe('ComposeFileLockManager', () => {
   test('withComposeFileLock should not reacquire lock when operation nests on the same file', async () => {
     const manager = new ComposeFileLockManager({
-      log: {
-        warn: vi.fn(),
-      },
+      getLog: () => ({ warn: vi.fn() }),
     });
 
     const nestedOperation = vi.fn(async () => 'ok');
@@ -41,14 +39,10 @@ describe('ComposeFileLockManager', () => {
     const lockBusyError: any = new Error('lock exists');
     lockBusyError.code = 'EEXIST';
     const managerA = new ComposeFileLockManager({
-      log: {
-        warn: vi.fn(),
-      },
+      getLog: () => ({ warn: vi.fn() }),
     });
     const managerB = new ComposeFileLockManager({
-      log: {
-        warn: vi.fn(),
-      },
+      getLog: () => ({ warn: vi.fn() }),
     });
     let firstOperationActive = false;
     let markFirstOperationStarted: () => void = () => {};
@@ -113,5 +107,76 @@ describe('ComposeFileLockManager', () => {
     expect(secondResult).toBe('second');
     expect(lockCreateAttemptCountBeforeRelease).toBe(1);
     expect(lockWaitCallCountBeforeRelease).toBe(0);
+  });
+
+  test('withComposeFileLock should release the lock when the operation throws, so a subsequent acquisition succeeds immediately', async () => {
+    const filePath = '/opt/drydock/test/compose.yml';
+    const lockFilePath = `${filePath}.drydock.lock`;
+    let lockFileExists = false;
+
+    fs.writeFile
+      .mockReset()
+      .mockImplementation(async (target: unknown, _data: unknown, opts?: { flag?: string }) => {
+        if (opts?.flag === 'wx') {
+          if (lockFileExists) {
+            const lockBusyError: any = new Error('lock exists');
+            lockBusyError.code = 'EEXIST';
+            throw lockBusyError;
+          }
+          lockFileExists = true;
+        }
+        return undefined;
+      });
+    fs.unlink.mockReset().mockImplementation(async () => {
+      lockFileExists = false;
+    });
+
+    const manager = new ComposeFileLockManager({ getLog: () => ({ warn: vi.fn() }) });
+    const waitForLockChangeSpy = vi.spyOn(manager, 'waitForComposeFileLockChange');
+
+    await expect(
+      manager.withComposeFileLock(filePath, async () => {
+        throw new Error('operation failed');
+      }),
+    ).rejects.toThrow('operation failed');
+
+    expect(fs.unlink).toHaveBeenCalledTimes(1);
+    expect(fs.unlink).toHaveBeenCalledWith(lockFilePath);
+    expect(lockFileExists).toBe(false);
+
+    const secondOperation = vi.fn(async () => 'second');
+    const secondResult = await manager.withComposeFileLock(filePath, secondOperation);
+
+    expect(secondResult).toBe('second');
+    // If the release were skipped on throw (release moved out of `finally`),
+    // the lock file would still be present and this second acquisition would
+    // hit EEXIST and have to wait for it, instead of succeeding immediately.
+    expect(waitForLockChangeSpy).not.toHaveBeenCalled();
+  });
+
+  test('withComposeFileLock should clear the held-lock fast-path entry when the operation throws', async () => {
+    const filePath = '/opt/drydock/test/compose.yml';
+    fs.writeFile.mockReset().mockResolvedValue(undefined);
+
+    const manager = new ComposeFileLockManager({ getLog: () => ({ warn: vi.fn() }) });
+
+    await expect(
+      manager.withComposeFileLock(filePath, async () => {
+        throw new Error('operation failed');
+      }),
+    ).rejects.toThrow('operation failed');
+
+    expect(manager._composeFileLocksHeld.has(filePath)).toBe(false);
+
+    const secondOperation = vi.fn(async () => 'second');
+    const secondResult = await manager.withComposeFileLock(filePath, secondOperation);
+
+    expect(secondResult).toBe('second');
+    expect(secondOperation).toHaveBeenCalledWith(filePath);
+    // If the held-set delete were removed, the entry would leak and the
+    // second call would take the in-process fast path without reacquiring
+    // the lock, so fs.writeFile would only have been called once (the first
+    // acquisition) instead of twice.
+    expect(fs.writeFile).toHaveBeenCalledTimes(2);
   });
 });

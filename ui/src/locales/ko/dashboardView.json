@@ -97,7 +97,8 @@
       "updatesAvailable": "사용 가능한 업데이트",
       "updateDetail": "{fresh} 신규 · {mature} 기존",
       "securityIssues": "보안 문제",
-      "registries": "레지스트리"
+      "registries": "레지스트리",
+      "approvals": "승인"
     },
     "updateKind": {
       "major": "메이저",
@@ -106,9 +107,9 @@
       "digest": "이미지 업데이트"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "현재 열림",
+      "scheduled": "예약됨",
+      "openingSoon": "곧 시작"
     },
     "dataLoadFailed": "대시보드 데이터를 불러오지 못했습니다",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

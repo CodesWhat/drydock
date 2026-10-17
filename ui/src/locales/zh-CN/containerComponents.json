@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "代理列表不可用，某些已配置的代理可能未显示。",
+      "title": "集群健康状态",
+      "description": "显示整个集群的状态。刷新清单仅发现容器，不检查镜像仓库或执行更新。",
+      "reload": "重新加载状态",
+      "refresh": "刷新清单",
+      "configured": "已配置",
+      "connected": "已连接",
+      "disconnected": "已断开",
+      "unavailable": "不可用",
+      "agentUnavailable": "代理状态不可用，保留的数据可能已过期。",
+      "watcherUnavailable": "监视器元数据不可用，保留的数据可能已过期。",
+      "total": "{count} 个容器",
+      "lastKnown": "上次已知状态",
+      "lastSeen": "上次在线：{value}",
+      "unsupported": "所有目标都需要支持清单刷新的 Docker 监视器。",
+      "complete": "清单完整",
+      "partial": "清单不完整",
+      "reloadFailed": "容器列表重新加载失败，清单结果仍可查看。"
+    },
+    "fleetBulk": {
+      "label": "筛选后的集群操作",
+      "updateAll": "全部更新（{count}）",
+      "snoozePatch": "延后所有补丁候选",
+      "patchCount": "{count} 个补丁候选",
+      "duration": "延后时长",
+      "days": "{count} 天",
+      "untilDate": "直到日期",
+      "date": "延后至此日期结束",
+      "snoozeConfirm": "延后 {count} 个补丁候选？",
+      "snoozeScope": "这些容器当前有补丁候选。将所列容器的所有更新延后 {duration}，不仅是补丁更新。范围为筛选后的实时列表，而不是复选框选择。日期包含当地时间当天结束。",
+      "snoozeResult": "已延后：{succeeded}。失败：{failed}。",
+      "refreshFailed": "策略已保存，但列表刷新失败。请重新加载列表。",
+      "disabled": "容器操作已禁用。未更改策略。",
+      "invalid": "延后时长无效。未更改策略。",
+      "busy": "其他操作正在进行。未额外更改策略。"
+    },
+    "fleetDimensions": {
+      "groupBy": "分组依据",
+      "none": "不分组",
+      "agent": "代理",
+      "registry": "镜像仓库",
+      "status": "状态",
+      "tagType": "标签类型",
+      "label": "容器标签",
+      "groupLabel": "按容器标签键分组",
+      "allAgents": "所有代理",
+      "allRegistries": "所有仓库地址",
+      "all": "所有标签类型",
+      "specific": "精确标签",
+      "floating": "浮动标签",
+      "digest": "摘要固定",
+      "semver": "版本标签",
+      "tag": "非版本标签",
+      "unknown": "未知",
+      "local": "本地监视器",
+      "running": "运行中",
+      "stopped": "已停止",
+      "labelKey": "容器标签键",
+      "labelMatch": "匹配方式",
+      "labelValue": "容器标签值",
+      "exists": "包含标签",
+      "equals": "等于",
+      "missing": "缺少标签",
+      "missingLabel": "无标签",
+      "emptyValue": "空值"
+    },
     "fullPageActions": {
       "updateWorkflow": "更新工作流",
       "actionsGroup": "操作",
@@ -28,8 +95,9 @@
       "clearSkips": "清除跳过",
       "clearPolicy": "清除策略",
       "overridden": "已覆盖",
+      "groupSource": "分组：{group}",
       "revert": "还原",
-      "revertAll": "还原为声明式配置",
+      "revertAll": "还原为继承的策略",
       "snoozedUntil": "推迟至：",
       "maturityMode": "成熟度模式：",
       "matureOnlyMinimum": "仅成熟（{days} 天最低）",
@@ -58,6 +126,12 @@
       "runningButton": "运行中...",
       "runButton": "运行",
       "noTriggersAssociated": "此容器没有关联的触发器",
+      "unavailableTriggers": "不可用的触发器",
+      "unavailableTriggerReason": {
+        "agentOwnership": "属于与此容器不同的代理。",
+        "structuralIncompatibility": "Compose 项目、服务或文件与此容器不匹配。",
+        "labelScope": "被此容器的 dd.action/dd.notification 包含或排除标签排除。"
+      },
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",
@@ -71,7 +145,13 @@
       "versionLabel": "版本：",
       "rollbackReasonLabel": "回滚原因：",
       "lastErrorLabel": "最后错误：",
-      "noUpdateOperations": "暂无更新操作记录"
+      "noUpdateOperations": "暂无更新操作记录",
+      "skipReleases": "跳过的初始版本数",
+      "skipReleasesHint": "跳过每个系列最初 N 个不同的稳定版。系列指 SemVer 主版本或 CalVer 年月。0 表示禁用此条件。",
+      "releaseFallbackDays": "按时间放行（天）",
+      "releaseFallbackHint": "如果缺少发布信息或未达到所需数量，则在这些天数后放行。0 表示禁用此例外。最短等待天数仍然适用。",
+      "releasePolicySummary": "跳过每个系列最初的 {count} 个版本。",
+      "releaseFallbackSummary": "{days} 天后免除版本数量条件。"
     },
     "fullPageDetail": {
       "statusUpdating": "更新中",
@@ -111,7 +191,7 @@
       "volumes": "卷",
       "composeFiles": "Compose 文件",
       "version": "版本",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "软件版本",
       "currentLabel": "当前：",
       "latestLabel": "最新：",
       "digestLabel": "摘要：",
@@ -155,19 +235,19 @@
       "noPortsExposed": "未暴露端口",
       "notConfigured": "未配置",
       "noVolumesMounted": "未挂载卷",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "运行时间",
+      "uptimeAriaLabel": "容器运行时间"
     },
     "containerLogs": {
       "title": "容器日志",
       "download": "下载",
       "allLevels": "所有级别",
       "downloadError": "无法下载日志",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "最后 {count} 行",
+      "tailAll": "全部行",
+      "statusPaused": "已暂停",
+      "statusLive": "实时",
+      "statusOffline": "未连接",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "正在加载容器...",
+      "fleetUpdateProgress": "容器更新：{done} / {total}",
+      "fleetUpdateProgressRunning": "正在更新：{names}",
+      "fleetUpdateProgressRunningMore": "正在更新：{names}，以及另外 {more} 个",
       "searchPlaceholder": "搜索名称或镜像...",
       "allStatuses": "所有状态",
       "running": "运行中",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "更新容器",
-      "thisContainer": "this container",
+      "thisContainer": "此容器",
       "confirmTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
       "confirmDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
       "confirmLatest": "立即更新 {name}？这将应用最新发现的镜像。",
       "updating": "更新中...",
       "update": "更新",
-      "updateFailed": "Update failed"
+      "updateFailed": "更新失败"
     },
     "floatingTag": {
       "badgeText": "浮动标签",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · 于 {date} 解锁",
       "maturityClockPublished": "候选版本于 {date} 发布 — 距达到 {minDays} 天最低要求还有 {count} 天",
       "maturityClockDetected": "候选版本于 {date} 被检测到 — 距达到 {minDays} 天最低要求还有 {count} 天",
+      "groupManualOnly": "分组策略“{group}”仅允许手动更新。Drydock 不会自动应用此更新。",
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
       "notificationsOnlyButton": "仅通知",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "未配置更新触发器",
         "self-update-unavailable": "自我更新不可用",
         "maintenance-window-closed": "维护窗口已关闭",
-        "dry-run-trigger": "触发器配置处于 dry-run 模式"
+        "group-notify-only": "分组仅允许通知",
+        "group-manual-only": "分组要求手动更新",
+        "dry-run-trigger": "触发器配置处于 dry-run 模式",
+        "maturity-releases-not-reached": "成熟度策略等待中"
       },
       "actions": {
         "editPolicy": "编辑更新策略",
@@ -439,25 +526,28 @@
         "configureTriggers": "配置更新触发器",
         "configureThreshold": "配置触发阈值",
         "configureSelfUpdate": "配置自我更新",
-        "configureMaintenance": "配置维护窗口"
-      }
+        "configureMaintenance": "配置维护窗口",
+        "editGroupPolicy": "编辑分组策略"
+      },
+      "releaseMaturityCount": "正在等待版本系列 {family} 的稳定版：已确认 {count} 个较早版本，需要 {required} 个。",
+      "releaseMaturityUnavailable": "无法获取候选版本的发布信息。自动更新仍处于保留状态。"
     },
     "maturityBadge": {
       "new": "{duration}前检测到"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "取消",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "停止容器",
+        "message": "停止 {name}？",
+        "acceptLabel": "停止",
+        "successMessage": "已停止：{name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "重启容器",
+        "message": "重启 {name}？",
+        "acceptLabel": "重启",
+        "successMessage": "已重启：{name}"
       },
       "forceUpdate": {
         "header": "强制更新",
@@ -505,6 +595,19 @@
         "failedDetail": "无法更新 {name} 的依赖链。",
         "staleChainTitle": "依赖链已发生变化",
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
+      },
+      "bulkUpdate": {
+        "header": "更新 1 个容器 | 更新 {count} 个容器",
+        "accept": "更新 1 个容器 | 更新 {count} 个容器",
+        "acceptWithParents": "添加 1 个上级容器并更新 | 添加 {count} 个上级容器并更新",
+        "dispatchHeading": "将会更新",
+        "blockedHeading": "已阻止，将保持不变",
+        "softOverridesHeading": "忽略警告继续更新",
+        "skippedHeading": "已跳过",
+        "staleParentsHeading": "有待处理更新的上级容器，将在您接受时添加",
+        "agentCountInfo": "涉及 {count} 个代理；每个代理各自运行自己的更新。",
+        "stackCountInfo": "涉及 {count} 个技术栈。",
+        "successMessage": "已开始更新 1 个容器 | 已开始更新 {count} 个容器"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "重新检查 {name} 失败"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} 项",
+      "entryCountPlural": "{count} 项",
       "kindLabels": {
         "tag": "标签",
         "digest": "摘要"
@@ -561,14 +664,16 @@
         "setAll": "成熟度策略已设置为允许所有更新",
         "skipped": "已跳过 {name} 的当前更新",
         "removeSkip": "已移除跳过的 {kind} {value}",
-        "revertField": "已将 {field} 还原为声明式策略",
-        "revertAll": "已将所有覆盖项还原为声明式策略",
+        "revertField": "已将 {field} 还原为继承的策略",
+        "revertAll": "已将所有覆盖项还原为继承的策略",
         "failedTitle": "策略更新失败：{name}",
         "failedDetail": "无法更新策略"
       },
       "validation": {
         "snoozeDate": "请选择有效的推迟日期",
-        "maturityAge": "请输入 {min} 到 {max} 天之间的成熟期"
+        "maturityAge": "请输入 {min} 到 {max} 天之间的成熟期",
+        "maturityReleases": "请输入 0 到 100 之间的整数版本数。",
+        "maturityFallback": "请输入 0 到 365 之间的整数天数作为放行时间。"
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "已排队",
+        "pulling": "正在拉取镜像",
+        "scanning": "正在扫描镜像",
+        "sbom-generating": "正在生成 SBOM",
+        "pull-failed": "镜像拉取失败",
+        "prepare": "正在准备更新",
+        "dryrun": "试运行",
+        "renamed": "容器已重命名",
+        "new-created": "新容器已创建",
+        "old-stopped": "旧容器已停止",
+        "new-started": "新容器已启动",
+        "health-gate": "健康检查",
+        "health-gate-passed": "健康检查通过",
+        "succeeded": "成功",
+        "failed": "失败",
+        "recovered-cleanup-temp": "已恢复：临时容器已清理",
+        "recovered-rollback": "已恢复：回滚已完成",
+        "recovered-active": "已恢复：已保留运行中的容器",
+        "recovery-failed": "恢复失败",
+        "recovery-missing-containers": "恢复：容器缺失",
+        "rollback-started": "回滚已开始",
+        "rolled-back": "已回滚",
+        "rollback-deferred": "回滚已推迟",
+        "rollback-failed": "回滚失败",
+        "expired": "已过期",
+        "skipped-dependency": "因依赖项而跳过",
+        "in-progress": "进行中",
+        "update-runtime-failed": "更新执行失败",
+        "create-new-failed": "创建新容器失败",
+        "stop-old-failed": "停止旧容器失败",
+        "start-new-failed": "启动新容器失败",
+        "health-gate-failed": "健康检查失败",
+        "cancelled": "已取消",
+        "compose-runtime-refresh-failed": "Compose 运行状态刷新失败"
+      },
       "timestampUnknown": "未知",
       "loadFailed": "无法加载备份",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "显式指定",
+        "inherited": "继承",
+        "unknown": "未知"
       },
       "timeoutDefault": "60000ms（默认）",
       "preAbortYes": "前置钩子失败时中止更新",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "概览",
+        "stats": "统计",
+        "logs": "日志",
+        "environment": "环境",
+        "labels": "标签",
+        "actions": "操作"
       }
     },
     "logViewer": {
       "invalidRegex": "无效的正则表达式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依赖于",
+      "requiredBy": "被以下依赖",
+      "cycle": "属于依赖循环的一部分",
+      "toggle": "显示依赖关系",
+      "updateGroup": "更新依赖组 ({count})",
+      "staleParentsWarning": "{name} 依赖于 {parents}，该容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。 | {name} 依赖于 {parents}，这些容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。",
+      "staleParentsOverflow": "还有 {count} 个",
+      "staleParentsAccept": "仍然更新"
+    },
+    "selection": {
+      "selectRow": "选择 {name}",
+      "selectAll": "选择所有可见容器",
+      "barLabel": "已选容器",
+      "count": "已选择 1 个容器 | 已选择 {count} 个容器",
+      "updateSelected": "更新所选",
+      "clear": "清除",
+      "reasons": {
+        "stale": "已不在列表中",
+        "inFlight": "已在更新中",
+        "noUpdate": "没有可用更新"
+      }
     }
   }
 }

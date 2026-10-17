@@ -10,7 +10,7 @@ import { useNotificationStore } from '../stores/notifications';
 import type { AuditEntry } from '../utils/audit-helpers';
 import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-helpers';
 
-const { t, te } = useI18n();
+const { t, te, locale } = useI18n();
 const router = useRouter();
 const notificationStore = useNotificationStore();
 const { lastSeen, loading, unreadCount, visibleEntries } = storeToRefs(notificationStore);
@@ -164,7 +164,7 @@ function isUnread(entry: AuditEntry): boolean {
                 </div>
               </div>
               <span class="text-2xs dd-text-muted whitespace-nowrap shrink-0 mt-0.5">
-                {{ timeAgo(entry.timestamp) }}
+                {{ timeAgo(entry.timestamp, locale, t) }}
               </span>
             </AppButton>
             <div class="dd-bell-dismiss flex items-center pr-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">

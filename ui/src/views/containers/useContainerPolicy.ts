@@ -2,7 +2,7 @@ import { computed, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { updateContainerPolicy } from '../../services/container';
-import type { Container } from '../../types/container';
+import type { Container, ContainerGroupPolicySnapshot, UpdateBlocker } from '../../types/container';
 import { errorMessage } from '../../utils/error';
 import {
   DEFAULT_MATURITY_MIN_AGE_DAYS,
@@ -11,10 +11,17 @@ import {
   maturityMinAgeDaysToMilliseconds,
   normalizeMaturityMode,
   parseMaturityMinAgeDays,
+  parseMaturityReleaseFallbackDays,
+  parseMaturitySkipReleases,
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from '../../utils/maturity-policy';
-import { findBackendMaturityBlocked } from '../../utils/update-eligibility';
+import { resolveSnoozeUntilFromInput } from '../../utils/snooze-date';
+import {
+  findBackendMaturityBlocked,
+  findBackendReleaseMaturityBlocker,
+  formatReleaseMaturityMessage,
+} from '../../utils/update-eligibility';
 
 type ContainerListPolicyState = {
   snoozed: boolean;
@@ -22,6 +29,8 @@ type ContainerListPolicyState = {
   skipCount: number;
   snoozeUntil?: string;
   maturityBlocked: boolean;
+  releaseMaturityBlocker?: UpdateBlocker;
+  ageMaturityBlocked?: boolean;
   updateDetectedAt?: string;
 } & (
   | {
@@ -35,11 +44,19 @@ type ContainerListPolicyState = {
 );
 
 type ContainerPolicyTarget = string | Pick<Container, 'id' | 'name'>;
-type DeclarativePolicyField = 'maturityMode' | 'maturityMinAgeDays' | 'skipTags' | 'skipDigests';
+type DeclarativePolicyField =
+  | 'maturityMode'
+  | 'maturityMinAgeDays'
+  | 'maturitySkipReleases'
+  | 'maturityReleaseFallbackDays'
+  | 'skipTags'
+  | 'skipDigests';
 
 const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
   'maturityMode',
   'maturityMinAgeDays',
+  'maturitySkipReleases',
+  'maturityReleaseFallbackDays',
   'skipTags',
   'skipDigests',
 ];
@@ -47,6 +64,8 @@ const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
 const DECLARATIVE_POLICY_FIELD_LABEL_KEYS: Record<DeclarativePolicyField, string> = {
   maturityMode: 'containerComponents.fullPageActions.maturityGroup',
   maturityMinAgeDays: 'containerComponents.fullPageActions.maturityGroup',
+  maturitySkipReleases: 'containerComponents.fullPageActions.skipReleases',
+  maturityReleaseFallbackDays: 'containerComponents.fullPageActions.releaseFallbackDays',
   skipTags: 'containerComponents.fullPageActions.skippedTags',
   skipDigests: 'containerComponents.fullPageActions.skippedDigests',
 };
@@ -91,17 +110,6 @@ function toDateInputValue(timestamp: string | undefined): string {
   const month = String(parsed.getMonth() + 1).padStart(2, '0');
   const day = String(parsed.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
-}
-
-function resolveSnoozeUntilFromInput(dateInput: string): string | undefined {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
-    return undefined;
-  }
-  const parsed = new Date(`${dateInput}T23:59:59`);
-  if (Number.isNaN(parsed.getTime())) {
-    return undefined;
-  }
-  return parsed.toISOString();
 }
 
 function normalizePolicyEntries(values: unknown): string[] {
@@ -207,6 +215,11 @@ function buildContainerListPolicyStateFromPolicy(
   const snoozeUntilMs = rawSnoozeUntil ? new Date(rawSnoozeUntil).getTime() : Number.NaN;
   const snoozed = Number.isFinite(snoozeUntilMs) && snoozeUntilMs > Date.now();
   const backendMaturityBlocked = findBackendMaturityBlocked(metaRecord);
+  const releaseMaturityBlocker = findBackendReleaseMaturityBlocker(metaRecord);
+  const blockers = asRecord(metaRecord.updateEligibility)?.blockers;
+  const ageMaturityBlocked =
+    Array.isArray(blockers) &&
+    blockers.some((blocker) => asRecord(blocker)?.reason === 'maturity-not-reached');
   const fallbackMaturityStartMs = resolveFallbackMaturityClockStartMs(metaRecord, updateDetectedAt);
   const maturityBlocked =
     backendMaturityBlocked !== undefined
@@ -228,6 +241,8 @@ function buildContainerListPolicyStateFromPolicy(
     snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
     ...(updateDetectedAt ? { updateDetectedAt } : {}),
     maturityBlocked,
+    ...(ageMaturityBlocked ? { ageMaturityBlocked } : {}),
+    ...(releaseMaturityBlocker ? { releaseMaturityBlocker } : {}),
   };
 
   if (!maturityMode) {
@@ -270,6 +285,9 @@ function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTra
 }
 
 function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
+  if (state.releaseMaturityBlocker && !state.ageMaturityBlocked) {
+    return formatReleaseMaturityMessage(state.releaseMaturityBlocker, t);
+  }
   if (state.maturityMode === 'mature') {
     const minAgeDays = state.maturityMinAgeDays;
     if (state.maturityBlocked) {
@@ -378,6 +396,8 @@ type SelectedPolicyActionsArgs = {
   policyError: Ref<string | null>;
   snoozeDateInput: Ref<string>;
   maturityMinAgeDaysInput: Ref<number>;
+  maturitySkipReleasesInput: Ref<number>;
+  maturityReleaseFallbackDaysInput: Ref<number>;
   t: PolicyTranslateFn;
 };
 
@@ -484,11 +504,23 @@ function createSetMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) 
       });
       return;
     }
+    const skipReleases = parseMaturitySkipReleases(args.maturitySkipReleasesInput.value);
+    const releaseFallbackDays = parseMaturityReleaseFallbackDays(
+      args.maturityReleaseFallbackDaysInput.value,
+    );
+    if (skipReleases === undefined || releaseFallbackDays === undefined) {
+      args.policyError.value = args.t(
+        skipReleases === undefined
+          ? 'containerComponents.policy.validation.maturityReleases'
+          : 'containerComponents.policy.validation.maturityFallback',
+      );
+      return;
+    }
     await runForSelectedContainer(args.selectedContainer, async (container) => {
       await args.applyPolicy(
         container,
         'set-maturity-policy',
-        { mode, minAgeDays },
+        { mode, minAgeDays, skipReleases, releaseFallbackDays },
         mode === 'mature'
           ? minAgeDays === 1
             ? args.t('containerComponents.policy.toasts.setMatureSingular', { days: minAgeDays })
@@ -588,6 +620,22 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   const selectedPolicyDeclarative = computed<Record<string, unknown>>(
     () => asRecord(selectedPolicyMeta.value.updatePolicyDeclarative) ?? {},
   );
+  const selectedGroupPolicy = computed<ContainerGroupPolicySnapshot | undefined>(() => {
+    const snapshot = asRecord(selectedPolicyMeta.value.groupPolicy);
+    if (!snapshot || typeof snapshot.group !== 'string' || snapshot.group.length === 0) {
+      return undefined;
+    }
+    return snapshot as unknown as ContainerGroupPolicySnapshot;
+  });
+  const selectedPolicyGroupName = computed<string | undefined>(
+    () => selectedGroupPolicy.value?.group,
+  );
+  // Which fields the server says come from the group. Rendered as sent, never re-derived.
+  const selectedPolicyGroupFields = computed<Set<DeclarativePolicyField>>(() => {
+    const sources = asRecord(selectedPolicyMeta.value.updatePolicySources);
+    if (!selectedGroupPolicy.value || !sources) return new Set();
+    return new Set(DECLARATIVE_POLICY_FIELDS.filter((field) => sources[field] === 'group'));
+  });
   const selectedPolicyOverrideFields = computed<Set<DeclarativePolicyField>>(
     () =>
       new Set(
@@ -600,11 +648,18 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     const baseline: Record<DeclarativePolicyField, unknown> = {
       maturityMode: 'all',
       maturityMinAgeDays: DEFAULT_MATURITY_MIN_AGE_DAYS,
+      maturitySkipReleases: 0,
+      maturityReleaseFallbackDays: 0,
       skipTags: [],
       skipDigests: [],
     };
-    for (const tierName of ['env', 'label']) {
-      const tier = asRecord(selectedPolicyDeclarative.value[tierName]);
+    // Same precedence the server resolves with: env, then group, then label.
+    const tiers = [
+      asRecord(selectedPolicyDeclarative.value.env),
+      asRecord(selectedGroupPolicy.value?.updatePolicy),
+      asRecord(selectedPolicyDeclarative.value.label),
+    ];
+    for (const tier of tiers) {
       for (const field of DECLARATIVE_POLICY_FIELDS) {
         if (tier && Object.hasOwn(tier, field)) baseline[field] = tier[field];
       }
@@ -612,6 +667,9 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     const normalizeForComparison = (field: DeclarativePolicyField, value: unknown) => {
       if (field === 'maturityMode') return normalizeMaturityMode(value) ?? 'all';
       if (field === 'maturityMinAgeDays') return resolveMaturityMinAgeDays(value);
+      if (field === 'maturitySkipReleases') return parseMaturitySkipReleases(value) ?? 0;
+      if (field === 'maturityReleaseFallbackDays')
+        return parseMaturityReleaseFallbackDays(value) ?? 0;
       return [...new Set(normalizePolicyEntries(value))].sort();
     };
     return new Set(
@@ -637,6 +695,13 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   const selectedMaturityMinAgeDays = computed<number>(() =>
     resolveMaturityMinAgeDays(selectedUpdatePolicy.value.maturityMinAgeDays),
   );
+  const selectedMaturitySkipReleases = computed<number>(
+    () => parseMaturitySkipReleases(selectedUpdatePolicy.value.maturitySkipReleases) ?? 0,
+  );
+  const selectedMaturityReleaseFallbackDays = computed<number>(
+    () =>
+      parseMaturityReleaseFallbackDays(selectedUpdatePolicy.value.maturityReleaseFallbackDays) ?? 0,
+  );
   const selectedHasMaturityPolicy = computed<boolean>(
     () => selectedMaturityMode.value !== undefined,
   );
@@ -644,9 +709,12 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     () => selectedUpdatePolicy.value.snoozeUntil as string | undefined,
   );
 
+  const selectedContainerId = computed(() => input.selectedContainer.value?.id);
   const snoozeDateInput = ref('');
   const maturityModeInput = ref<'all' | 'mature'>('all');
   const maturityMinAgeDaysInput = ref<number>(DEFAULT_MATURITY_MIN_AGE_DAYS);
+  const maturitySkipReleasesInput = ref<number>(0);
+  const maturityReleaseFallbackDaysInput = ref<number>(0);
 
   watch(
     () => selectedSnoozeUntil.value,
@@ -657,27 +725,48 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
   );
 
   watch(
-    () => selectedMaturityMode.value,
-    (mode) => {
+    [selectedContainerId, selectedMaturityMode],
+    ([, mode]) => {
       maturityModeInput.value = mode ?? 'all';
     },
     { immediate: true },
   );
 
   watch(
-    () => selectedMaturityMinAgeDays.value,
-    (minAgeDays) => {
+    [selectedContainerId, selectedMaturityMinAgeDays],
+    ([, minAgeDays]) => {
       maturityMinAgeDaysInput.value = minAgeDays;
+    },
+    { immediate: true },
+  );
+
+  watch(
+    [selectedContainerId, selectedMaturitySkipReleases],
+    ([, value]) => {
+      maturitySkipReleasesInput.value = value;
+    },
+    { immediate: true },
+  );
+  watch(
+    [selectedContainerId, selectedMaturityReleaseFallbackDays],
+    ([, value]) => {
+      maturityReleaseFallbackDaysInput.value = value;
     },
     { immediate: true },
   );
 
   return {
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,
@@ -766,10 +855,16 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
 
   const {
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,
@@ -799,6 +894,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     policyError,
     snoozeDateInput,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     t,
   });
 
@@ -818,6 +915,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     containerPolicyTooltip,
     getContainerListPolicyState,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     maturityModeInput,
     policyError,
     policyInProgress,
@@ -828,7 +927,11 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     resetPolicyMessages,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
+    selectedMaturitySkipReleases,
+    selectedMaturityReleaseFallbackDays,
     selectedMaturityMode,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     selectedPolicyOverrideFields,
     selectedSkipDigests,

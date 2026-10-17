@@ -1,14 +1,26 @@
+import type { Root } from 'joi';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
 import type {
   Container,
   ContainerDeclarativeUpdatePolicy,
   ContainerUpdatePolicyDeclarative,
 } from '../../../model/container.js';
-import { normalizeMaturityMode, parseMaturityMinAgeDays } from '../../../model/maturity-policy.js';
+import {
+  MATURITY_MIN_AGE_DAYS_MAX,
+  MATURITY_MIN_AGE_DAYS_MIN,
+  MATURITY_RELEASE_FALLBACK_DAYS_MAX,
+  MATURITY_SKIP_RELEASES_MAX,
+  normalizeMaturityMode,
+  parseMaturityMinAgeDays,
+  parseMaturityReleaseFallbackDays,
+  parseMaturitySkipReleases,
+} from '../../../model/maturity-policy.js';
 import { applyDeclarativeUpdatePolicy } from '../../../model/update-policy.js';
 import {
   ddUpdatePolicyMaturityMinAgeDays,
   ddUpdatePolicyMaturityMode,
+  ddUpdatePolicyMaturityReleaseFallbackDays,
+  ddUpdatePolicyMaturitySkipReleases,
   ddUpdatePolicySkipDigests,
   ddUpdatePolicySkipTags,
 } from './label.js';
@@ -16,6 +28,25 @@ import {
 interface DockerMaturityDefaults {
   maturitymode?: unknown;
   maturityminagedays?: unknown;
+  maturityskipreleases?: unknown;
+  maturityreleasefallbackdays?: unknown;
+}
+
+export function getDockerMaturityConfigurationSchema(joi: Root) {
+  return {
+    maturitymode: joi.string().valid('all', 'mature'),
+    maturityminagedays: joi
+      .number()
+      .integer()
+      .min(MATURITY_MIN_AGE_DAYS_MIN)
+      .max(MATURITY_MIN_AGE_DAYS_MAX),
+    maturityskipreleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+    maturityreleasefallbackdays: joi
+      .number()
+      .integer()
+      .min(0)
+      .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
+  };
 }
 
 export interface DockerUpdatePolicyResolutionOptions {
@@ -62,6 +93,16 @@ export function resolveDockerDeclarativeUpdatePolicy(
   if (envDays !== undefined) env.maturityMinAgeDays = envDays;
   if (labelMode) label.maturityMode = labelMode;
   if (labelDays !== undefined) label.maturityMinAgeDays = labelDays;
+  const envSkipReleases = parseMaturitySkipReleases(defaults.maturityskipreleases);
+  const envFallbackDays = parseMaturityReleaseFallbackDays(defaults.maturityreleasefallbackdays);
+  const labelSkipReleases = parseMaturitySkipReleases(labels[ddUpdatePolicyMaturitySkipReleases]);
+  const labelFallbackDays = parseMaturityReleaseFallbackDays(
+    labels[ddUpdatePolicyMaturityReleaseFallbackDays],
+  );
+  if (envSkipReleases !== undefined) env.maturitySkipReleases = envSkipReleases;
+  if (envFallbackDays !== undefined) env.maturityReleaseFallbackDays = envFallbackDays;
+  if (labelSkipReleases !== undefined) label.maturitySkipReleases = labelSkipReleases;
+  if (labelFallbackDays !== undefined) label.maturityReleaseFallbackDays = labelFallbackDays;
   const skipTags = csv(labels[ddUpdatePolicySkipTags]);
   const skipDigests = csv(labels[ddUpdatePolicySkipDigests]);
   if (skipTags) label.skipTags = skipTags;

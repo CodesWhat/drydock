@@ -1,11 +1,23 @@
 import { argon2, createHash, timingSafeEqual } from 'node:crypto';
+import type { AuthRequest } from '../../../api/auth-types.js';
+import type { Authenticator } from '../../../api/authenticator-chain.js';
+import type { AuthenticatedPrincipal } from '../../../api/principal.js';
+import {
+  deriveSubjectId,
+  isSecondFactorRequired,
+  resolveLocalIdentity,
+} from '../../../api/totp-identity.js';
+import { assertNotShadowedByOrphanedFactor } from '../../../api/totp-orphans.js';
 import {
   observeAuthLoginDuration,
   recordAuthLogin,
   recordAuthUsernameMismatch,
 } from '../../../prometheus/auth.js';
 import Authentication from '../Authentication.js';
-import BasicStrategy from './BasicStrategy.js';
+import {
+  getBasicAuthorizationFailureStatus,
+  parseBasicAuthorization,
+} from './basic-authorization.js';
 
 interface BasicConfiguration {
   user: string;
@@ -316,10 +328,102 @@ class Basic extends Authentication<BasicConfiguration> {
   }
 
   /**
-   * Return passport strategy.
+   * Return the authenticator this provider contributes to the chain.
+   *
+   * persistsSession is false: a credential presented in a header proves the
+   * caller for this request only, and nothing on this path can turn it into a
+   * stored session.
    */
-  getStrategy(_app?: unknown) {
-    return new BasicStrategy((user, pass, done) => this.authenticate(user, pass, done));
+  getAuthenticator(_app?: unknown): Authenticator {
+    const readLocalSubjectId = (): string => deriveSubjectId(this.getId(), this.configuration.user);
+    return {
+      id: this.getId(),
+      persistsSession: false,
+      // Read on use, so it names the account as it is configured now. A factor
+      // enrolled under any other subject is orphaned (spec 11.1.2 decision 10).
+      get localSubjectId(): string {
+        return readLocalSubjectId();
+      },
+      authenticate: (req: AuthRequest) => this.authenticateRequest(req),
+      authenticateForLogin: (req: AuthRequest) => this.verifyRequestCredentials(req),
+      getFailureStatus: (req: AuthRequest) =>
+        getBasicAuthorizationFailureStatus(req.headers?.authorization),
+    };
+  }
+
+  /**
+   * Resolve an `Authorization: Basic` header to a principal, or undefined so
+   * the chain moves on. A wrong password and a missing header are the same
+   * answer here; only the shared login route distinguishes them, and only to
+   * count the attempt against the lockout budget.
+   *
+   * A subject with an active second factor is declined as well, however right
+   * the password: a password alone is not an authenticated principal for such a
+   * subject (spec 11.1.2 decision 2), so a header can never stand in for the
+   * login challenge on any route. The login route reads the verified password
+   * through `verifyRequestCredentials` instead.
+   */
+  async authenticateRequest(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
+    const principal = await this.verifyRequestCredentials(req);
+    if (principal === undefined || isSecondFactorRequired(principal.identity.subjectId)) {
+      return undefined;
+    }
+    return principal;
+  }
+
+  /**
+   * Verify the `Authorization: Basic` header against the configured account,
+   * regardless of whether a second factor is also due. Used directly only by
+   * the login route, which turns a verified enrolled subject into a challenge.
+   */
+  verifyRequestCredentials(
+    req: AuthRequest,
+  ): Promise<(AuthenticatedPrincipal & { kind: 'basic' }) | undefined> {
+    const authorization = parseBasicAuthorization(req.headers?.authorization);
+    if (authorization.outcome !== 'credentials') {
+      return Promise.resolve(undefined);
+    }
+
+    return new Promise((resolve, reject) => {
+      this.authenticate(authorization.userid, authorization.password, (_error, user) => {
+        try {
+          resolve(user ? this.toBasicPrincipal(user.username) : undefined);
+        } catch (error: unknown) {
+          reject(error);
+        }
+      });
+    });
+  }
+
+  /**
+   * The verified identity as a principal carrying its stable subject. When the
+   * subject version cannot be read this throws rather than answering as a wrong
+   * password: a store fault is the server's, so it must not count toward the
+   * caller's lockout, and the session it would mint could not be checked later.
+   *
+   * It throws the same way while a factor is orphaned and this account has
+   * none of its own: the account may be the renamed owner of that factor, and
+   * signing it in on a password would drop a second factor nobody removed.
+   */
+  private toBasicPrincipal(username: string): AuthenticatedPrincipal & { kind: 'basic' } {
+    const identity = resolveLocalIdentity(this.getId(), username);
+    assertNotShadowedByOrphanedFactor(identity.subjectId);
+    return { kind: 'basic', username, identity };
+  }
+
+  /**
+   * Re-check the password of the account a session already belongs to, for
+   * actions that ask the person to prove themselves again. The hash is always
+   * run, whatever the username, and neither a login metric nor a lockout is
+   * touched here: the caller owns the failure budget.
+   */
+  async verifyPasswordForUser(username: string, password: string): Promise<boolean> {
+    const userMatches =
+      username.length > 0 &&
+      timingSafeEqual(hashValue(username), hashValue(this.configuration.user));
+    const passwordMatches =
+      typeof password === 'string' && (await verifyPassword(password, this.configuration.hash));
+    return userMatches && passwordMatches;
   }
 
   getStrategyDescription() {

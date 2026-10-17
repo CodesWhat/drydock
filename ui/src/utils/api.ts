@@ -1,3 +1,5 @@
+import { i18n } from '../boot/i18n';
+
 type CollectionEnvelope = { data?: unknown; items?: unknown; entries?: unknown };
 type ItemValidator<T> = (item: unknown) => item is T;
 
@@ -32,18 +34,16 @@ async function readJsonResponse<T = unknown>(response: Response, context = 'API'
   if (contentType && !isJsonContentType(contentType)) {
     const preview = await readResponsePreview(response);
     if (isHtmlResponse(contentType, preview)) {
-      throw new Error(
-        `${context} returned HTML instead of JSON. Check that the API server or demo mocks are running.`,
-      );
+      throw new Error(i18n.global.t('common.apiResponse.html', { context }));
     }
-    throw new Error(`${context} returned ${contentType} instead of JSON.`);
+    throw new Error(i18n.global.t('common.apiResponse.contentType', { context, contentType }));
   }
 
   try {
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error(`${context} returned invalid JSON.`);
+      throw new Error(i18n.global.t('common.apiResponse.invalidJson', { context }));
     }
     throw error;
   }

@@ -1,15 +1,29 @@
-import { findDockerTriggerForContainer } from '../api/docker-trigger.js';
+import type { DockerTriggerCandidate } from '../api/docker-trigger.js';
+import {
+  findDockerTriggerForContainer,
+  isTriggerExecutionCompatibleWithContainer,
+} from '../api/docker-trigger.js';
+import type { UpdateMode } from '../store/settings.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import {
   type ActionPolicyBlockedReason,
   type ActionPolicyState,
   type ActionPolicyTrigger,
+  findMatchingGroupExcludeEntries,
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
 import {
+  GROUP_POLICY_ACTION_HINT,
+  groupTriggerExcludedMessage,
+  resolveUpdateModeCeiling,
+} from './group-policy.js';
+import { describeRoutingOrigin } from './label-owned.js';
+import {
+  daysToMs,
+  isReleaseMaturityGatePending,
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
@@ -25,9 +39,11 @@ export type UpdateBlockerReason =
   | 'skip-tag'
   | 'skip-digest'
   | 'maturity-not-reached'
+  | 'maturity-releases-not-reached'
   | 'threshold-not-reached'
   | 'trigger-excluded'
   | 'trigger-not-included'
+  | 'group-notify-only'
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
@@ -58,10 +74,13 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'skip-tag': 'soft',
   'skip-digest': 'soft',
   'maturity-not-reached': 'soft',
+  'maturity-releases-not-reached': 'soft',
   'threshold-not-reached': 'soft',
   // Hard as of v1.7.0 (spec-6.0.1-action-policy.md slice 6). See DEPRECATIONS.md.
   'trigger-excluded': 'hard',
   'trigger-not-included': 'hard',
+  // Hard because it restricts one container: its group allows notifications only (spec 7.3).
+  'group-notify-only': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
 };
@@ -137,11 +156,23 @@ interface UpdateEligibilityActionPolicy {
   reason?: ActionPolicyBlockedReason;
 }
 
+/**
+ * The update mode that binds this container, and whose it is: the global mode, or its
+ * group's when that is strictly more restrictive (spec 7.3). Only present when the caller
+ * supplied the global mode through the context.
+ */
+interface UpdateEligibilityUpdateMode {
+  value: UpdateMode;
+  source: 'global' | 'group';
+  group?: string;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: UpdateEligibilityActionPolicy;
+  updateMode?: UpdateEligibilityUpdateMode;
 }
 
 export interface UpdateEligibilityContext {
@@ -154,10 +185,13 @@ export interface UpdateEligibilityContext {
   /**
    * Optional. When explicitly set to `false` by a caller, a soft `maintenance-window-closed`
    * blocker is recorded in the eligibility result. Defaults to `undefined`.
-   * Auto-update window enforcement happens at two layers: (1) the Docker watcher's scheduled
-   * scan (watchFromCron / maybeFastResyncAfterUpdate return early when the window is closed),
-   * and (2) the auto-trigger's apply gate (runUpdateAvailableSimpleTrigger defers action
-   * triggers when the owning watcher's window is closed, via isAutoUpdateDeferredByMaintenanceWindow).
+   * Auto-update window enforcement layers depend on the watcher's `maintenancewindowscope`.
+   * Under the default `install` scope there is exactly one: the auto-trigger's apply gate
+   * (runUpdateAvailableSimpleTrigger and runAcceptedUpdateBatch defer action triggers when the
+   * owning watcher's window is closed, via deferAutoUpdateForMaintenanceWindow, which also
+   * queues the catch-up that applies them once it opens). Under `scope=scan` the Docker
+   * watcher's scheduled scan gates as well (watchFromCron / maybeFastResyncAfterUpdate return
+   * early when the window is closed).
    * This field lets a caller additionally reflect the window state here as a soft blocker in the
    * eligibility model. Manual UI/API update requests leave it undefined and are never gated by it.
    */
@@ -176,6 +210,12 @@ export interface UpdateEligibilityContext {
    * wrong-agent trigger during the registration window. See issue #605.
    */
   isAgentPendingRegistration?: (agentName: string | undefined) => boolean;
+  /**
+   * Optional. The global update mode. When supplied, the result carries `updateMode`, the
+   * mode that binds this container after any group ceiling. It never adds a blocker:
+   * global `notify` keeps its banner, and only a group `notify` blocks (`group-notify-only`).
+   */
+  updateMode?: UpdateMode;
 }
 
 /**
@@ -247,6 +287,18 @@ export function computeUpdateEligibility(
 ): UpdateEligibility {
   const now = context.now ?? Date.now();
   const evaluatedAt = new Date(now).toISOString();
+  const ceiling = context.updateMode
+    ? resolveUpdateModeCeiling(container, context.updateMode)
+    : undefined;
+  const updateMode: { updateMode?: UpdateEligibilityUpdateMode } = ceiling
+    ? {
+        updateMode: {
+          value: ceiling.value,
+          source: ceiling.source,
+          ...(ceiling.group === undefined ? {} : { group: ceiling.group }),
+        },
+      }
+    : {};
 
   // If no raw update exists at all, short-circuit with no-update-available only
   if (!hasRawTagOrDigestUpdate(container)) {
@@ -260,16 +312,34 @@ export function computeUpdateEligibility(
         }),
       ],
       evaluatedAt,
+      ...updateMode,
     };
   }
 
   const blockers: UpdateBlocker[] = [];
 
+  // group-notify-only: the container's group policy allows notifications only (spec 7.3).
+  // A per-container restriction travels the per-container channel, so the button is disabled,
+  // admission is rejected and the approval verdict is `blocked`. Global `notify` is
+  // deliberately not mirrored here: it keeps its banner, with no blocker.
+  const groupPolicy = container.groupPolicy;
+  if (groupPolicy?.actions.updateMode === 'notify') {
+    blockers.push(
+      makeBlocker({
+        reason: 'group-notify-only',
+        message: `Group policy '${groupPolicy.group}' allows notifications only.`,
+        actionable: true,
+        actionHint: GROUP_POLICY_ACTION_HINT,
+        details: { group: groupPolicy.group, policyId: groupPolicy.id },
+      }),
+    );
+  }
+
   // maintenance-window-closed: fires only when the caller explicitly passes `false`. Manual
   // API/UI callers pass `undefined` so the window never blocks manual ops. The actual auto-apply
-  // gate lives in Trigger.isAutoUpdateDeferredByMaintenanceWindow (simple path) and
-  // Trigger.runAcceptedUpdateBatch (batch/digest path). Those guard action triggers regardless
-  // of how container detection was triggered.
+  // gate lives in Trigger.deferAutoUpdateForMaintenanceWindow, reached from the simple path
+  // (runUpdateAvailableSimpleTrigger) and the batch/digest path (runAcceptedUpdateBatch). Those
+  // guard action triggers regardless of how container detection was triggered.
   if (context.maintenanceWindowOpen === false) {
     blockers.push(
       makeBlocker({
@@ -450,13 +520,44 @@ export function computeUpdateEligibility(
     }
   }
 
-  // Resolve a candidate docker/dockercompose trigger for trigger-level checks.
+  if (isReleaseMaturityGatePending(container, now)) {
+    const evidence = container.result?.releaseMaturity;
+    const requiredReleases = container.updatePolicy.maturitySkipReleases;
+    const policySource = container.updatePolicySources?.maturitySkipReleases;
+    const fallbackDays = container.updatePolicy.maturityReleaseFallbackDays ?? 0;
+    const clock = resolveMaturityClock(container, now);
+    const fallbackAt =
+      fallbackDays > 0 && clock.startMs !== undefined
+        ? new Date(clock.startMs + daysToMs(fallbackDays)).toISOString()
+        : undefined;
+    blockers.push(
+      makeBlocker({
+        reason: 'maturity-releases-not-reached',
+        message: evidence
+          ? `Maturity policy requires ${requiredReleases} earlier stable releases in family ${evidence.family}; ${evidence.earlierReleases} are available.`
+          : 'Release maturity evidence is unavailable for this candidate. Automatic updates are held.',
+        actionable: true,
+        actionHint:
+          "Wait for releases, configure an age fallback or change maturity mode to 'all'.",
+        ...(fallbackAt ? { liftableAt: fallbackAt } : {}),
+        details: {
+          requiredReleases,
+          evidenceAvailable: evidence !== undefined,
+          ...(evidence ?? {}),
+          ...(policySource ? { policySource } : {}),
+          ...(fallbackDays > 0 ? { fallbackDays } : {}),
+        },
+      }),
+    );
+  }
+
+  // Resolve a candidate docker/dockercompose/portainer trigger for trigger-level checks.
   //
   // findDockerTriggerForContainer uses full compatibility checking (including agent matching),
   // so it won't return a trigger when the agent doesn't match. To distinguish
   // "no docker trigger at all" from "trigger exists but agent is wrong", we also do a
   // type-only lookup that ignores agent constraints.
-  const DOCKER_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+  const DOCKER_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
   function findDockerTriggerByTypeOnly(
     triggers: Record<string, TriggerInstanceMethods> | undefined,
@@ -464,7 +565,13 @@ export function computeUpdateEligibility(
     if (!triggers) return undefined;
     for (const trigger of Object.values(triggers)) {
       const type = (trigger as unknown as { type?: string }).type ?? '';
-      if (DOCKER_TRIGGER_TYPES.has(type.toLowerCase())) {
+      if (
+        DOCKER_TRIGGER_TYPES.has(type.toLowerCase()) &&
+        isTriggerExecutionCompatibleWithContainer(
+          trigger as unknown as DockerTriggerCandidate,
+          container,
+        )
+      ) {
         return trigger;
       }
     }
@@ -489,7 +596,7 @@ export function computeUpdateEligibility(
   let actionPolicy: UpdateEligibilityActionPolicy | undefined;
 
   if (!typeOnlyTrigger) {
-    // 11. no-update-trigger-configured — no docker/dockercompose trigger exists at all.
+    // 11. no-update-trigger-configured — no docker/dockercompose/portainer trigger exists at all.
     // AgentClient._doHandshake() deregisters an agent's components before re-registering,
     // so an agent-owned container can transiently see zero triggers of any kind during that
     // window too. Apply the same #605 downgrade as agent-mismatch below.
@@ -500,9 +607,11 @@ export function computeUpdateEligibility(
       makeBlocker(
         {
           reason: 'no-update-trigger-configured',
-          message: 'No docker or dockercompose action trigger is configured for this container.',
+          message:
+            'No docker, dockercompose, or portainer action trigger is configured for this container.',
           actionable: true,
-          actionHint: 'Configure `DD_ACTION_DOCKER_*` or `DD_ACTION_DOCKERCOMPOSE_*`.',
+          actionHint:
+            'Configure `DD_ACTION_DOCKER_*`, `DD_ACTION_DOCKERCOMPOSE_*`, or `DD_ACTION_PORTAINER_*`.',
         },
         isPendingRegistration ? 'soft' : undefined,
       ),
@@ -584,12 +693,33 @@ export function computeUpdateEligibility(
       { requireAuto: false },
     );
 
-    if (selection?.reason === 'excluded') {
+    if (selection?.reason === 'excluded' && selection.excludedBy === 'group') {
+      // `excludedBy: 'group'` is only ever produced from this container's own snapshot.
+      const excludingPolicy = container.groupPolicy as NonNullable<Container['groupPolicy']>;
+      const matchedEntries = findMatchingGroupExcludeEntries(selection.triggerId, container);
+      const triggerExclude = matchedEntries.join(',');
+      blockers.push(
+        makeBlocker({
+          reason: 'trigger-excluded',
+          message: groupTriggerExcludedMessage(excludingPolicy.group, matchedEntries),
+          actionable: true,
+          actionHint: GROUP_POLICY_ACTION_HINT,
+          details: {
+            triggerExclude,
+            triggerId: selection.triggerId,
+            excludedBy: 'group',
+            group: excludingPolicy.group,
+            policyId: excludingPolicy.id,
+          },
+        }),
+      );
+      actionPolicy = { state: 'blocked', reason: 'excluded', triggerId: selection.triggerId };
+    } else if (selection?.reason === 'excluded') {
       const triggerExclude = container.actionTriggerExclude;
       blockers.push(
         makeBlocker({
           reason: 'trigger-excluded',
-          message: `Trigger excluded by container label dd.action.exclude='${triggerExclude}'.`,
+          message: `Trigger excluded ${describeRoutingOrigin(container, 'actionTriggerExclude')}='${triggerExclude}'.`,
           actionable: true,
           actionHint:
             'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
@@ -607,8 +737,8 @@ export function computeUpdateEligibility(
           reason: 'trigger-not-included',
           message:
             triggerInclude === undefined
-              ? 'Trigger not matched by container label dd.action.include.'
-              : `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
+              ? `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}.`
+              : `Trigger not matched ${describeRoutingOrigin(container, 'actionTriggerInclude')}='${triggerInclude}'.`,
           actionable: true,
           // References dd.action.auto alongside dd.action.include/exclude (locked-button
           // tooltip copy, spec-6.0.1-action-policy.md): under a trigger's AUTO=onauto,
@@ -656,5 +786,6 @@ export function computeUpdateEligibility(
     blockers,
     evaluatedAt,
     ...(actionPolicy ? { actionPolicy } : {}),
+    ...updateMode,
   };
 }

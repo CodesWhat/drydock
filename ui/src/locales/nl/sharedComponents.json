@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Gekopieerd!",
       "clickToCopy": "Klik om te kopiëren",
-      "failed": "Copy failed"
+      "failed": "Kopiëren mislukt"
     },
     "dataFilterBar": {
       "filters": "Filters",
@@ -23,8 +23,8 @@
       "viewMode": "Bekijk modus",
       "viewModeLabel": "{label} weergave",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Tabel",
+        "cards": "Kaarten"
       }
     },
     "dataTable": {

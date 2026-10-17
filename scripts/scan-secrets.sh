@@ -17,8 +17,10 @@ scan_args=(
 	--no-banner
 )
 
-echo "Scanning complete Git history for secrets"
-gitleaks git "${scan_args[@]}" --log-opts="--all" "${repo_root}"
+log_opts="${SCAN_SECRETS_LOG_OPTS:---all}"
+
+echo "Scanning Git history for secrets (log-opts: ${log_opts})"
+gitleaks git "${scan_args[@]}" --log-opts="${log_opts}" "${repo_root}"
 
 tracked_tree="$(mktemp -d)"
 trap 'rm -rf "${tracked_tree}"' EXIT

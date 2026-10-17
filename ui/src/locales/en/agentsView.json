@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Agent table spacing",
+        "normal": "Normal spacing",
+        "compact": "Compact spacing"
+      },
       "loading": "Loading agents...",
       "filterPlaceholder": "Filter by name...",
       "clearFilter": "Clear",

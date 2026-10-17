@@ -64,7 +64,7 @@ describe('preferences router', () => {
 
   it('gets an existing user record in an OpenAPI-valid envelope', () => {
     const res = createMockResponse();
-    handler('get')({ user: { username: ' alice ' } }, res);
+    handler('get')({ principal: { kind: 'basic', username: ' alice ' } }, res);
     expect(getStored).toHaveBeenCalledWith('alice');
     expect(res.json).toHaveBeenCalledWith({ apiVersion: 1, ...record });
     assertContract('get', res);
@@ -73,7 +73,7 @@ describe('preferences router', () => {
   it('returns nullable fields when no record exists', () => {
     getStored.mockReturnValue(null);
     const res = createMockResponse();
-    handler('get')({ user: { username: 'alice' } }, res);
+    handler('get')({ principal: { kind: 'basic', username: 'alice' } }, res);
     expect(res.json).toHaveBeenCalledWith({
       apiVersion: 1,
       username: 'alice',
@@ -84,20 +84,21 @@ describe('preferences router', () => {
     assertContract('get', res);
   });
 
-  it.each([undefined, { username: 'anonymous' }, { username: '   ' }])(
-    'rejects anonymous GET before store access',
-    (user) => {
-      const res = createMockResponse();
-      handler('get')({ user }, res);
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(getStored).not.toHaveBeenCalled();
-    },
-  );
+  it.each([
+    undefined,
+    { kind: 'anonymous', username: 'anonymous' },
+    { kind: 'basic', username: '   ' },
+  ])('rejects anonymous GET before store access', (principal) => {
+    const res = createMockResponse();
+    handler('get')({ principal }, res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(getStored).not.toHaveBeenCalled();
+  });
 
   it('replaces preferences, broadcasts, and returns an OpenAPI-valid response', () => {
     const res = createMockResponse();
     const body = { apiVersion: 1, schemaVersion: 11, preferences: record.preferences };
-    handler('patch')({ user: { username: 'alice' }, body }, res);
+    handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
     expect(replaceStored).toHaveBeenCalledWith('alice', 11, record.preferences);
     expect(broadcast).toHaveBeenCalledWith();
     expect(res.status).toHaveBeenCalledWith(200);
@@ -108,7 +109,10 @@ describe('preferences router', () => {
     const res = createMockResponse();
     const preferences = { futureFeature: { value: true } };
     handler('patch')(
-      { user: { username: 'alice' }, body: { apiVersion: 1, schemaVersion: 99, preferences } },
+      {
+        principal: { kind: 'basic', username: 'alice' },
+        body: { apiVersion: 1, schemaVersion: 99, preferences },
+      },
       res,
     );
     expect(replaceStored).toHaveBeenCalledWith('alice', 99, preferences);
@@ -116,7 +120,10 @@ describe('preferences router', () => {
 
   it('returns 409 for an API version mismatch without writing or broadcasting', () => {
     const res = createMockResponse();
-    handler('patch')({ user: { username: 'alice' }, body: { apiVersion: 2 } }, res);
+    handler('patch')(
+      { principal: { kind: 'basic', username: 'alice' }, body: { apiVersion: 2 } },
+      res,
+    );
     expect(res.status).toHaveBeenCalledWith(409);
     expect(res.json).toHaveBeenCalledWith({
       error: 'PREFERENCES_API_VERSION_MISMATCH',
@@ -130,7 +137,7 @@ describe('preferences router', () => {
     'returns 400 for malformed payload %#',
     (body) => {
       const res = createMockResponse();
-      handler('patch')({ user: { username: 'alice' }, body }, res);
+      handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
       expect(res.status).toHaveBeenCalledWith(body?.apiVersion === undefined ? 409 : 400);
       if (body?.apiVersion !== undefined) {
         expect(res.json).toHaveBeenCalledWith({ error: 'Invalid request parameters' });
@@ -146,7 +153,7 @@ describe('preferences router', () => {
     });
     try {
       const res = createMockResponse();
-      handler('patch')({ user: { username: 'alice' }, body: 0 }, res);
+      handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body: 0 }, res);
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error: 'Invalid request parameters' });
     } finally {
@@ -156,7 +163,7 @@ describe('preferences router', () => {
 
   it('rejects anonymous PATCH before validating', () => {
     const res = createMockResponse();
-    handler('patch')({ user: undefined, body: { apiVersion: 2 } }, res);
+    handler('patch')({ principal: undefined, body: { apiVersion: 2 } }, res);
     expect(res.status).toHaveBeenCalledWith(403);
     expect(replaceStored).not.toHaveBeenCalled();
     expect(broadcast).not.toHaveBeenCalled();

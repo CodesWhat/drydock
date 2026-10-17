@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Xác thực hai yếu tố",
+    "description": "Yêu cầu mã từ ứng dụng xác thực của bạn, ngoài mật khẩu, mỗi lần đăng nhập.",
+    "loading": "Đang tải trạng thái xác thực hai yếu tố",
+    "retry": "Thử lại",
+    "status": {
+      "off": "Tắt",
+      "on": "Bật",
+      "onSince": "Bật từ {date}",
+      "recoveryRemaining": "Còn {count} mã khôi phục",
+      "recoveryNone": "Không còn mã khôi phục nào. Hãy tạo bộ mới trước khi bạn mất quyền truy cập vào ứng dụng xác thực.",
+      "recoveryLow": "Bạn sắp hết mã khôi phục. Hãy tạo bộ mới.",
+      "pending": "Quá trình thiết lập đã bắt đầu và đang chờ mã. Hết hạn lúc {time}."
+    },
+    "unavailable": {
+      "notLocal": "Xác thực hai yếu tố chỉ dùng được cho tài khoản cục bộ đăng nhập bằng mật khẩu. Nếu đây là tài khoản của bạn, hãy đăng xuất rồi đăng nhập lại.",
+      "httpsRequired": "Thiết lập hai yếu tố cần HTTPS. Hãy mở Drydock qua HTTPS, hoặc nhờ quản trị viên đặt DD_AUTH_TOTP_ALLOWHTTP=true nếu mạng đáng tin cậy.",
+      "noKeyRing": "Thiết lập hai yếu tố không khả dụng trên máy chủ này. Quản trị viên cần cấu hình bộ khóa mã hóa trước.",
+      "recoverySession": "Bạn đã đăng nhập bằng mã khôi phục nên không được thực hiện thao tác này. Hãy đăng nhập bằng mã từ ứng dụng xác thực."
+    },
+    "actions": {
+      "enable": "Bật",
+      "replace": "Thay ứng dụng xác thực",
+      "regenerate": "Mã khôi phục mới",
+      "remove": "Tắt",
+      "cancelSetup": "Hủy thiết lập",
+      "cancel": "Hủy"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Xác nhận đây là bạn",
+        "replace": "Xác nhận đây là bạn để thay ứng dụng xác thực",
+        "regenerate": "Xác nhận đây là bạn để nhận mã khôi phục mới",
+        "remove": "Xác nhận đây là bạn để tắt xác thực hai yếu tố"
+      },
+      "hint": "Nhập mật khẩu của bạn. Không có gì được lưu lại sau bước này.",
+      "hintWithCode": "Nhập mật khẩu và một mã hiện tại. Không có gì được lưu lại sau bước này.",
+      "passwordLabel": "Mật khẩu",
+      "passwordPlaceholder": "Nhập mật khẩu của bạn",
+      "codeLabel": "Mã xác thực",
+      "codePlaceholder": "Mã 6 chữ số",
+      "recoveryLabel": "Mã khôi phục",
+      "recoveryPlaceholder": "Nhập mã khôi phục",
+      "useRecovery": "Dùng mã khôi phục",
+      "useCode": "Dùng mã xác thực",
+      "submit": {
+        "enable": "Tiếp tục",
+        "replace": "Tiếp tục",
+        "regenerate": "Tạo mã mới",
+        "remove": "Tắt xác thực hai yếu tố",
+        "busy": "Đang kiểm tra..."
+      }
+    },
+    "scan": {
+      "heading": "Quét bằng ứng dụng xác thực của bạn",
+      "instructions": "Mở ứng dụng xác thực, thêm một tài khoản và quét mã này. Sau đó nhập mã 6 chữ số mà ứng dụng hiển thị.",
+      "replaceNote": "Ứng dụng xác thực hiện tại vẫn hoạt động cho đến khi bạn xác nhận ứng dụng mới.",
+      "qrLabel": "Mã QR để thiết lập xác minh hai bước",
+      "qrFailed": "Không thể vẽ mã QR. Hãy nhập khóa thiết lập thay thế.",
+      "secretLabel": "Không quét được? Hãy nhập khóa thiết lập này",
+      "copySecret": "Sao chép khóa",
+      "copied": "Đã sao chép",
+      "expiresAt": "Thiết lập này hết hạn lúc {time}.",
+      "codeLabel": "Mã xác thực",
+      "codeHint": "Nhập mã gồm 6 chữ số từ ứng dụng xác thực của bạn.",
+      "codePlaceholder": "Mã 6 chữ số",
+      "confirm": "Xác nhận và bật",
+      "confirming": "Đang xác nhận..."
+    },
+    "codes": {
+      "heading": "Lưu các mã khôi phục của bạn",
+      "description": "Mỗi mã chỉ dùng được một lần nếu bạn mất ứng dụng xác thực. Đây là lần duy nhất chúng được hiển thị.",
+      "copy": "Sao chép mã",
+      "copied": "Đã sao chép",
+      "download": "Tải xuống",
+      "fileHeading": "Mã khôi phục Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Tôi đã lưu các mã này",
+      "done": "Xong",
+      "downloadFailed": "Trình duyệt không tải tệp xuống. Hãy sao chép các mã thay thế."
+    },
+    "remove": {
+      "header": "Tắt xác thực hai yếu tố?",
+      "message": "Đăng nhập sẽ chỉ cần mật khẩu như trước, và các phiên khác của bạn sẽ bị kết thúc.",
+      "accept": "Tắt"
+    },
+    "notice": {
+      "enabled": "Xác thực hai yếu tố đang bật.",
+      "replaced": "Ứng dụng xác thực mới của bạn đã hoạt động.",
+      "regenerated": "Mã khôi phục mới của bạn đã hoạt động. Các mã cũ không còn dùng được.",
+      "removed": "Xác thực hai yếu tố đang tắt."
+    },
+    "errors": {
+      "load": "Không thể tải trạng thái xác thực hai yếu tố.",
+      "network": "Không thể kết nối tới máy chủ. Hãy thử lại.",
+      "generic": "Đã xảy ra lỗi. Hãy thử lại.",
+      "sessionEnded": "Phiên của bạn đã kết thúc. Hãy đăng nhập lại.",
+      "reauthFailed": "Mật khẩu hoặc mã không khớp. Hãy kiểm tra và thử lại.",
+      "locked": "Quá nhiều lần thử. Hãy thử lại sau {time}.",
+      "lockedLater": "Quá nhiều lần thử. Hãy thử lại sau.",
+      "busy": "Một lần kiểm tra khác vẫn đang chạy. Hãy thử lại sau giây lát.",
+      "invalidRequest": "Nhập mật khẩu và một mã hợp lệ.",
+      "codeFormat": "Nhập 6 chữ số từ ứng dụng xác thực của bạn.",
+      "codeWrong": "Mã đó không hoạt động. Hãy kiểm tra và thử lại.",
+      "enrollmentExpired": "Thiết lập này đã hết hạn. Hãy bắt đầu lại.",
+      "enrollmentGone": "Thiết lập này đã bị đóng sau quá nhiều mã sai. Hãy bắt đầu lại.",
+      "stateChanged": "Cài đặt hai yếu tố đã thay đổi ở nơi khác. Hãy xem lại và thử lại.",
+      "notActive": "Xác thực hai yếu tố chưa được bật."
+    }
+  }
+}

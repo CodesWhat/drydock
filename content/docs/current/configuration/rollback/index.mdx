@@ -10,7 +10,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Before every container update, drydock automatically backs up the current image metadata including the image name, tag, digest, and timestamp. This ensures you always have a record of exactly which image was running prior to each update.
 
-Backups are stored in the LokiJS data store, which is persisted to the `/store` volume. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
+These image-restore backup records live in the SQLite store in v1.8.0-rc.1 builds; v1.7 and earlier use the LokiJS JSON store. The `/store` volume persists them in either case. They describe container images, rather than snapshots of Drydock's database. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
 
 ## Backup Retention
 
@@ -19,8 +19,9 @@ The number of backups retained per container is configurable via a trigger envir
 | Env var | Required | Description | Supported values | Default value when missing |
 | -------------------------------------------------- | :--------------: | ---------------------------------------- | ---------------- | -------------------------- |
 | `DD_ACTION_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of backups to retain per container | integer | `3` |
 
-<Callout type="info">This variable is set on the [Docker trigger](/docs/configuration/triggers/docker), not on the target container.</Callout>
+<Callout type="info">This variable is set on the [Docker](/docs/configuration/triggers/docker) or [Docker Compose](/docs/configuration/triggers/docker-compose) action trigger, not on the target container. The Docker Compose trigger inherits its configuration schema from Docker, so the same variable and default apply.</Callout>
 
 ## Manual Rollback
 
@@ -29,7 +30,7 @@ Rollback is available in two ways:
 - **UI** -- on the container detail page, select a previous backup and click **Rollback**. A shortcut is also available directly from the container's actions menu (the `...` menu on each row).
 - **API** -- send a `POST` request to `/api/v1/containers/:id/rollback`, where `:id` is the container ID.
 
-Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image.
+Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image. The image is pulled and created from an immutable `repo:tag@sha256:...` reference whenever a digest can be established, so a registry retag between the backup and the rollback can't change what gets deployed. Backups written before digest capture existed resolve one from the retained local image at rollback time; if none can be established and the security policy requires one, the rollback is refused with an error instead of deploying the mutable tag.
 
 <Callout type="info">Automatic updates (via Docker trigger) use a more sophisticated rename-first strategy with health gates — see [Updates](/docs/updates) for details. Manual rollback uses the simpler approach described here.</Callout>
 

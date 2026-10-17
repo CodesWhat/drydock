@@ -1,6 +1,66 @@
 import { emptyObjectSchema, genericArraySchema, genericObjectSchema } from './common.js';
+import { labelOverrideSchemas } from './label-override-schemas.js';
+
+const groupPolicyProperties = {
+  id: { type: 'string', description: 'Random identifier used as the API path key' },
+  group: {
+    type: 'string',
+    minLength: 1,
+    description:
+      'The exact group name, matched without trimming or case folding. Immutable after creation.',
+  },
+  revision: {
+    type: 'integer',
+    minimum: 1,
+    description: 'Starts at 1 and increases by one on every change. Send it back to write.',
+  },
+  updatePolicy: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+  actions: { $ref: '#/components/schemas/GroupPolicyActions' },
+  createdAt: { type: 'string', format: 'date-time' },
+  createdBy: { type: 'string', description: '`user:<username>` or `api-key:<keyId>`' },
+  updatedAt: { type: 'string', format: 'date-time' },
+  updatedBy: { type: 'string', description: '`user:<username>` or `api-key:<keyId>`' },
+} as const;
+
+const groupPolicyRequired = [
+  'id',
+  'group',
+  'revision',
+  'updatePolicy',
+  'actions',
+  'createdAt',
+  'createdBy',
+  'updatedAt',
+  'updatedBy',
+] as const;
+
+const effectivePolicySources = ['default', 'env', 'group', 'label', 'override'] as const;
+
+/** One update-policy field of the effective-policy response: its value, owner and layers. */
+function effectivePolicyField(value: Record<string, unknown>, description: string) {
+  return {
+    type: 'object',
+    description,
+    properties: {
+      value,
+      source: { type: 'string', enum: effectivePolicySources },
+      layers: {
+        type: 'object',
+        description:
+          'The value each layer that sets this field holds, so a layer shadowed by a later one is still visible.',
+        properties: { env: value, group: value, label: value, override: value },
+        additionalProperties: false,
+      },
+    },
+    required: ['value', 'source', 'layers'],
+    additionalProperties: false,
+  } as const;
+}
+
+const effectivePolicyStrings = { type: 'array', items: { type: 'string' } } as const;
 
 export const openApiSchemas = {
+  ...labelOverrideSchemas,
   ErrorResponse: {
     type: 'object',
     properties: {
@@ -219,6 +279,110 @@ export const openApiSchemas = {
     required: ['username'],
     additionalProperties: true,
   },
+  LoginChallengeResponse: {
+    type: 'object',
+    properties: {
+      challenge: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          expiresAt: { type: 'string', format: 'date-time' },
+          methods: { type: 'array', items: { type: 'string', enum: ['totp', 'recovery'] } },
+        },
+        required: ['id', 'expiresAt', 'methods'],
+        additionalProperties: false,
+      },
+    },
+    required: ['challenge'],
+    additionalProperties: false,
+  },
+  LoginChallengeCompletion: {
+    type: 'object',
+    description: 'Exactly one of `code` or `recoveryCode`, plus an optional `remember`.',
+    properties: {
+      code: { type: 'string', pattern: '^[0-9]{6}$' },
+      recoveryCode: { type: 'string', maxLength: 64 },
+      remember: { type: 'boolean' },
+    },
+    additionalProperties: false,
+  },
+  TotpPendingEnrollment: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      expiresAt: { type: 'string', format: 'date-time' },
+      replacesFactor: { type: 'boolean' },
+    },
+    required: ['id', 'expiresAt', 'replacesFactor'],
+    additionalProperties: false,
+  },
+  TotpFactorStatus: {
+    type: 'object',
+    properties: {
+      status: { type: 'string', enum: ['unenrolled', 'active'] },
+      activatedAt: { type: 'string', format: 'date-time' },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+      pendingEnrollment: { $ref: '#/components/schemas/TotpPendingEnrollment' },
+    },
+    required: ['status', 'recoveryCodesRemaining'],
+    additionalProperties: false,
+  },
+  TotpReauthenticationRequest: {
+    type: 'object',
+    description:
+      'The caller proves themselves again in the request. `password` is always required. While a factor is active exactly one of `code` or `recoveryCode` is also required; with no factor active neither may be sent.',
+    properties: {
+      password: { type: 'string', minLength: 1, maxLength: 1024 },
+      code: { type: 'string', pattern: '^[0-9]{6}$', description: 'Current TOTP code' },
+      recoveryCode: { type: 'string', maxLength: 64, description: 'An unused recovery code' },
+    },
+    required: ['password'],
+    additionalProperties: false,
+  },
+  TotpEnrollmentReveal: {
+    type: 'object',
+    description:
+      'Shown once. `secret` is the base32 seed and `otpauthUri` carries it; neither is readable again.',
+    properties: {
+      id: { type: 'string', format: 'uuid' },
+      secret: { type: 'string', pattern: '^[A-Z2-7]{32}$' },
+      otpauthUri: { type: 'string' },
+      expiresAt: { type: 'string', format: 'date-time' },
+      replacesFactor: { type: 'boolean' },
+    },
+    required: ['id', 'secret', 'otpauthUri', 'expiresAt', 'replacesFactor'],
+    additionalProperties: false,
+  },
+  TotpEnrollmentConfirmation: {
+    type: 'object',
+    properties: {
+      code: { type: 'string', pattern: '^[0-9]{6}$' },
+    },
+    required: ['code'],
+    additionalProperties: false,
+  },
+  TotpFactorActivated: {
+    type: 'object',
+    description: 'Shown once. `recoveryCodes` is not readable again.',
+    properties: {
+      status: { type: 'string', enum: ['active'] },
+      activatedAt: { type: 'string', format: 'date-time' },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+      recoveryCodes: { type: 'array', items: { type: 'string' }, minItems: 10, maxItems: 10 },
+    },
+    required: ['status', 'activatedAt', 'recoveryCodesRemaining', 'recoveryCodes'],
+    additionalProperties: false,
+  },
+  TotpRecoveryCodeSet: {
+    type: 'object',
+    description: 'Shown once. `recoveryCodes` is not readable again.',
+    properties: {
+      recoveryCodes: { type: 'array', items: { type: 'string' }, minItems: 10, maxItems: 10 },
+      recoveryCodesRemaining: { type: 'integer', minimum: 0 },
+    },
+    required: ['recoveryCodes', 'recoveryCodesRemaining'],
+    additionalProperties: false,
+  },
   AuthStatusResponse: {
     type: 'object',
     properties: {
@@ -240,18 +404,6 @@ export const openApiSchemas = {
       },
     },
     required: ['providers', 'errors'],
-    additionalProperties: false,
-  },
-  AuthStrategiesResponse: {
-    type: 'object',
-    properties: {
-      strategies: {
-        type: 'array',
-        items: { type: 'object', additionalProperties: true },
-      },
-      warnings: { type: 'array', items: { type: 'string' } },
-    },
-    required: ['strategies', 'warnings'],
     additionalProperties: false,
   },
   RememberMeResponse: {
@@ -305,6 +457,7 @@ export const openApiSchemas = {
         properties: {
           path: { type: 'string' },
           file: { type: 'string' },
+          dbFile: { type: 'string' },
         },
         required: ['path', 'file'],
         additionalProperties: true,
@@ -566,6 +719,8 @@ export const openApiSchemas = {
     properties: {
       maturityMode: { type: 'string', enum: ['all', 'mature'] },
       maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      maturitySkipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+      maturityReleaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
       skipTags: { type: 'array', items: { type: 'string' } },
       skipDigests: { type: 'array', items: { type: 'string' } },
     },
@@ -576,6 +731,8 @@ export const openApiSchemas = {
     properties: {
       maturityMode: { type: 'string', enum: ['all', 'mature'] },
       maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      maturitySkipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+      maturityReleaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
       skipTags: { type: 'array', items: { type: 'string' } },
       skipDigests: { type: 'array', items: { type: 'string' } },
       snoozeUntil: { type: 'string', format: 'date-time' },
@@ -594,11 +751,239 @@ export const openApiSchemas = {
   ContainerUpdatePolicySources: {
     type: 'object',
     properties: {
-      maturityMode: { type: 'string', enum: ['env', 'label', 'override'] },
-      maturityMinAgeDays: { type: 'string', enum: ['env', 'label', 'override'] },
-      skipTags: { type: 'string', enum: ['env', 'label', 'override'] },
-      skipDigests: { type: 'string', enum: ['env', 'label', 'override'] },
+      maturityMode: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      maturityMinAgeDays: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      maturitySkipReleases: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      maturityReleaseFallbackDays: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      skipTags: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
+      skipDigests: { type: 'string', enum: ['env', 'group', 'label', 'override'] },
     },
+    additionalProperties: false,
+  },
+  GroupPolicyActions: {
+    type: 'object',
+    description:
+      'Restrict-only action rules. They lower what a member may do and never grant: `updateMode` can only be `manual` or `notify` and is composed with the global mode as the more restrictive of the two, and `exclude` is a hard stop that a member include or auto label cannot lift. Each `exclude` entry uses the `dd.action.exclude` grammar: a trigger id or name with an optional `:threshold`.',
+    properties: {
+      updateMode: { type: 'string', enum: ['manual', 'notify'] },
+      exclude: {
+        type: 'array',
+        items: { type: 'string', minLength: 1 },
+        uniqueItems: true,
+      },
+    },
+    additionalProperties: false,
+  },
+  ContainerGroupPolicySnapshot: {
+    type: 'object',
+    description:
+      'The group policy a container was last resolved against, recorded with the container so its effective policy and the policy that shaped it come from one write. Absent when no group policy applies.',
+    properties: {
+      id: { type: 'string' },
+      group: { type: 'string', minLength: 1 },
+      revision: { type: 'integer', minimum: 1 },
+      updatePolicy: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+      actions: { $ref: '#/components/schemas/GroupPolicyActions' },
+    },
+    required: ['id', 'group', 'revision', 'updatePolicy', 'actions'],
+    additionalProperties: false,
+  },
+  GroupPolicy: {
+    type: 'object',
+    properties: groupPolicyProperties,
+    required: groupPolicyRequired,
+    additionalProperties: false,
+  },
+  GroupPolicyMembers: {
+    type: 'object',
+    description: 'The containers whose current labels resolve to the policy group.',
+    properties: {
+      count: { type: 'integer', minimum: 0 },
+      agents: {
+        type: 'array',
+        description: 'Distinct hosts the members run on. `null` is the controller.',
+        items: { type: ['string', 'null'] },
+      },
+    },
+    required: ['count', 'agents'],
+    additionalProperties: false,
+  },
+  GroupPolicyWithMembers: {
+    type: 'object',
+    properties: {
+      ...groupPolicyProperties,
+      members: { $ref: '#/components/schemas/GroupPolicyMembers' },
+    },
+    required: [...groupPolicyRequired, 'members'],
+    additionalProperties: false,
+  },
+  GroupPolicyWriteResult: {
+    type: 'object',
+    properties: {
+      changed: {
+        type: 'boolean',
+        description:
+          'Present on replace and delete. False when a replace changed nothing, so nothing was written, the revision did not move and no audit entry was recorded.',
+      },
+      policy: { $ref: '#/components/schemas/GroupPolicy' },
+      applied: {
+        type: 'object',
+        properties: {
+          members: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Stored container records that were re-resolved against the change',
+          },
+        },
+        required: ['members'],
+        additionalProperties: false,
+      },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['policy', 'applied', 'warnings'],
+    additionalProperties: false,
+  },
+  EffectiveContainerPolicy: {
+    type: 'object',
+    description:
+      'Where each update-policy field and action restriction on one container comes from, and what dispatch will do with it. Computed with the same resolvers dispatch uses, from the container as it stands now and the live group policy and global update mode.',
+    properties: {
+      group: {
+        type: ['object', 'null'],
+        description: 'The group the container belongs to, or null when no label names one.',
+        properties: {
+          name: { type: 'string', description: 'The exact group name. May be empty.' },
+          label: {
+            type: 'string',
+            enum: ['dd.group', 'com.docker.compose.project', 'com.docker.stack.namespace'],
+            description: 'The label that supplied the name.',
+          },
+          policyId: { type: ['string', 'null'] },
+          revision: { type: ['integer', 'null'] },
+        },
+        required: ['name', 'label', 'policyId', 'revision'],
+        additionalProperties: false,
+      },
+      updatePolicy: {
+        type: 'object',
+        properties: {
+          maturityMode: effectivePolicyField(
+            { type: 'string', enum: ['all', 'mature'] },
+            'Defaults to `all`.',
+          ),
+          maturityMinAgeDays: effectivePolicyField(
+            { type: 'integer', minimum: 1, maximum: 365 },
+            'Defaults to 7.',
+          ),
+          maturitySkipReleases: effectivePolicyField(
+            { type: 'integer', minimum: 0, maximum: 100 },
+            'Defaults to 0, which disables release-count maturity.',
+          ),
+          maturityReleaseFallbackDays: effectivePolicyField(
+            { type: 'integer', minimum: 0, maximum: 365 },
+            'Defaults to 0, which disables the age fallback for release-count maturity.',
+          ),
+          skipTags: effectivePolicyField(effectivePolicyStrings, 'Defaults to none.'),
+          skipDigests: effectivePolicyField(effectivePolicyStrings, 'Defaults to none.'),
+          snoozeUntil: {
+            type: 'object',
+            description: 'Snooze is per-container, so it is an override or nothing.',
+            properties: {
+              value: { type: ['string', 'null'] },
+              source: { type: 'string', enum: ['default', 'override'] },
+            },
+            required: ['value', 'source'],
+            additionalProperties: false,
+          },
+        },
+        required: [
+          'maturityMode',
+          'maturityMinAgeDays',
+          'maturitySkipReleases',
+          'maturityReleaseFallbackDays',
+          'skipTags',
+          'skipDigests',
+          'snoozeUntil',
+        ],
+        additionalProperties: false,
+      },
+      actions: {
+        type: 'object',
+        properties: {
+          updateMode: {
+            type: 'object',
+            description:
+              'The update mode that binds the container: the more restrictive of the global mode and the group rule.',
+            properties: {
+              value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+              source: {
+                type: 'string',
+                enum: ['global', 'group'],
+                description: '`group` only when the group is strictly more restrictive.',
+              },
+              global: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+              group: { type: 'string', enum: ['manual', 'notify'] },
+            },
+            required: ['value', 'source', 'global'],
+            additionalProperties: false,
+          },
+          exclude: {
+            type: 'object',
+            description:
+              'Trigger exclusions, kept apart by owner. Both are hard stops, and the container own one wins the attribution when both match.',
+            properties: {
+              label: {
+                type: 'string',
+                description: 'The container `dd.action.exclude`, from its label or an override.',
+              },
+              labelSource: { type: 'string', enum: ['label', 'override'] },
+              group: { ...effectivePolicyStrings, description: 'The group exclusion entries.' },
+            },
+            required: ['group'],
+            additionalProperties: false,
+          },
+          dispatch: {
+            type: 'object',
+            properties: {
+              automatic: {
+                type: 'boolean',
+                description: 'Whether the automatic paths will apply an update on their own.',
+              },
+              trigger: {
+                type: ['object', 'null'],
+                description:
+                  'The action trigger the resolver selects. Null when none is authorized.',
+                properties: {
+                  id: { type: 'string' },
+                  state: { type: 'string', enum: ['blocked', 'manual', 'auto'] },
+                  reason: { type: 'string', enum: ['excluded', 'not-included'] },
+                  excludedBy: { type: 'string', enum: ['label', 'group'] },
+                },
+                required: ['id', 'state'],
+                additionalProperties: false,
+              },
+              manualUpdate: {
+                type: 'object',
+                properties: {
+                  allowed: { type: 'boolean' },
+                  blockedBy: {
+                    type: 'string',
+                    enum: ['group-notify-only', 'global-notify', 'trigger-excluded', 'no-trigger'],
+                  },
+                },
+                required: ['allowed'],
+                additionalProperties: false,
+              },
+            },
+            required: ['automatic', 'trigger', 'manualUpdate'],
+            additionalProperties: false,
+          },
+        },
+        required: ['updateMode', 'exclude', 'dispatch'],
+        additionalProperties: false,
+      },
+    },
+    required: ['group', 'updatePolicy', 'actions'],
     additionalProperties: false,
   },
   UpdateBlocker: {
@@ -616,9 +1001,11 @@ export const openApiSchemas = {
           'skip-tag',
           'skip-digest',
           'maturity-not-reached',
+          'maturity-releases-not-reached',
           'threshold-not-reached',
           'trigger-excluded',
           'trigger-not-included',
+          'group-notify-only',
           'agent-mismatch',
           'no-update-trigger-configured',
           'self-update-unavailable',
@@ -637,6 +1024,12 @@ export const openApiSchemas = {
           clockStartAt: { type: 'string', format: 'date-time' },
           minAgeDays: { type: 'integer', minimum: 1 },
           remainingMs: { type: 'number', minimum: 0 },
+          requiredReleases: { type: 'integer', minimum: 0, maximum: 100 },
+          earlierReleases: { type: 'integer', minimum: 0 },
+          evidenceAvailable: { type: 'boolean' },
+          version: { type: 'string' },
+          family: { type: 'string' },
+          fallbackDays: { type: 'integer', minimum: 1, maximum: 365 },
           policySource: { type: 'string' },
         },
         additionalProperties: true,
@@ -650,7 +1043,7 @@ export const openApiSchemas = {
     description:
       'Non-blocker reflection of the action-policy resolver verdict for this container ' +
       '(spec-6.0.1-action-policy.md). Omitted entirely from UpdateEligibility when no ' +
-      'compatible docker/dockercompose action trigger exists at all — the ' +
+      'compatible docker/dockercompose/portainer action trigger exists at all — the ' +
       'no-update-trigger-configured/agent-mismatch blockers own that messaging in that case. ' +
       "A `state` of 'manual' or 'auto' never produces an UpdateEligibility blocker; a " +
       "`state` of 'blocked' duplicates information already carried by the trigger-excluded/" +
@@ -663,6 +1056,18 @@ export const openApiSchemas = {
     required: ['state'],
     additionalProperties: false,
   },
+  UpdateEligibilityUpdateMode: {
+    type: 'object',
+    description:
+      "The update mode that binds this container: the global mode, or its group policy's when that is strictly more restrictive. `source` is `group` only in that case, and `group` then names it.",
+    properties: {
+      value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      source: { type: 'string', enum: ['global', 'group'] },
+      group: { type: 'string' },
+    },
+    required: ['value', 'source'],
+    additionalProperties: false,
+  },
   UpdateEligibility: {
     type: 'object',
     properties: {
@@ -673,6 +1078,7 @@ export const openApiSchemas = {
       },
       evaluatedAt: { type: 'string', format: 'date-time' },
       actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
+      updateMode: { $ref: '#/components/schemas/UpdateEligibilityUpdateMode' },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,
@@ -708,11 +1114,12 @@ export const openApiSchemas = {
       },
       updatePolicyOverrides: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
       updatePolicySources: { $ref: '#/components/schemas/ContainerUpdatePolicySources' },
+      groupPolicy: { $ref: '#/components/schemas/ContainerGroupPolicySnapshot' },
       actionTriggerInclude: {
         type: 'string',
         example: 'dockercompose.local:minor',
         description:
-          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, command).',
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label. The legacy dd.trigger.include fallback was removed in v1.7.0. Applies only to action triggers (docker, dockercompose, portainer, command).',
       },
       actionTriggerExclude: {
         type: 'string',
@@ -749,6 +1156,9 @@ export const openApiSchemas = {
         deprecated: true,
         description:
           'Deprecated compat mirror of actionTriggerExclude/notificationTriggerExclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerExclude/notificationTriggerExclude.',
+      },
+      labelOwnedSources: {
+        $ref: '#/components/schemas/LabelOwnedSources',
       },
     },
     required: ['id', 'name'],
@@ -946,6 +1356,29 @@ export const openApiSchemas = {
         required: ['files', 'paths', 'service', 'mutation'],
         additionalProperties: false,
       },
+      portainer: {
+        type: 'object',
+        properties: {
+          stackId: { type: 'integer' },
+          stackName: { type: 'string' },
+          endpointId: { type: 'integer' },
+          service: { type: 'string' },
+          mode: { type: 'string', enum: ['env', 'compose'] },
+          versionVar: { type: 'string' },
+          mutation: {
+            type: 'object',
+            properties: {
+              intent: { type: 'string' },
+              dryRun: { type: 'boolean' },
+              willWrite: { type: 'boolean' },
+            },
+            required: ['intent', 'dryRun', 'willWrite'],
+            additionalProperties: false,
+          },
+        },
+        required: ['stackId', 'service', 'mode', 'mutation'],
+        additionalProperties: false,
+      },
     },
     additionalProperties: true,
   },
@@ -1054,7 +1487,12 @@ export const openApiSchemas = {
       from: { type: 'string', description: "The dependent container's id." },
       to: { type: 'string', description: 'The dependency (must dispatch first).' },
       action: { type: 'string', enum: ['update', 'restart'] },
-      source: { type: 'string', enum: ['label', 'compose'] },
+      source: {
+        type: 'string',
+        enum: ['label', 'compose', 'override'],
+        description:
+          'Where the dependency was declared: a Docker label, Compose depends_on, or a Drydock label override.',
+      },
     },
     required: ['from', 'to', 'action', 'source'],
     additionalProperties: false,
@@ -1196,7 +1634,7 @@ export const openApiSchemas = {
             enum: ['blocked', 'manual', 'auto'],
             description:
               'Action-policy resolver verdict (spec-6.0.1-action-policy.md) for this trigger ' +
-              'against the requested container. Only present for docker/dockercompose ' +
+              'against the requested container. Only present for docker/dockercompose/portainer ' +
               '(update-action) triggers — notification and command triggers have no ' +
               'automatic-execution policy and never carry this field. A trigger can appear ' +
               "here with resolvedState 'blocked' (e.g. AUTO=oninclude with no matching " +
@@ -1207,6 +1645,29 @@ export const openApiSchemas = {
         additionalProperties: true,
       },
     ],
+  },
+  ContainerUnassociatedTrigger: {
+    type: 'object',
+    description:
+      'A trigger that does not apply to the requested container (GET /containers/{id}/triggers, ' +
+      'DR-78), with the reason it was excluded from `data`.',
+    properties: {
+      id: { type: 'string' },
+      type: { type: 'string' },
+      name: { type: 'string' },
+      agent: { type: 'string' },
+      reason: {
+        type: 'string',
+        enum: ['agentOwnership', 'structuralIncompatibility', 'labelScope'],
+        description:
+          "'agentOwnership' — the trigger belongs to a different agent than the container. " +
+          "'structuralIncompatibility' — a dockercompose/portainer trigger whose compose " +
+          "project/service or file does not match the container. 'labelScope' — excluded, or " +
+          'omitted from a configured include list, by the dd.action.*/dd.notification.* labels.',
+      },
+    },
+    required: ['id', 'type', 'name', 'reason'],
+    additionalProperties: false,
   },
   IconCacheClearResponse: {
     type: 'object',
@@ -1385,6 +1846,127 @@ export const openApiSchemas = {
     required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
+  Approval: {
+    type: 'object',
+    description:
+      'One pending-approval ledger row, inserted the first time a candidate is sighted ' +
+      '(spec-ca-2-approval-queue.md). The row records the decision and the candidate it ' +
+      'points at; everything live — eligibility, hold reasons, release-notes body, current ' +
+      'vulnerability counts — is read from the container at render time and is never frozen ' +
+      'into the row.',
+    properties: {
+      schemaVersion: { type: 'integer', minimum: 1 },
+      id: { type: 'string' },
+      containerId: { type: 'string' },
+      containerIdentityKey: { type: 'string' },
+      containerName: { type: 'string' },
+      watcher: { type: 'string' },
+      agent: { type: 'string' },
+      image: { type: 'string' },
+      fromRef: { type: 'string' },
+      toRef: { type: 'string' },
+      candidateRef: { type: 'string' },
+      updateKind: { type: 'string', enum: ['tag', 'digest', 'unknown'] },
+      semverDiff: {
+        type: 'string',
+        enum: ['major', 'minor', 'patch', 'prerelease', 'unknown'],
+      },
+      releaseNotesUrl: { type: 'string' },
+      scanCritical: { type: 'integer', minimum: 0 },
+      scanHigh: { type: 'integer', minimum: 0 },
+      scanMedium: { type: 'integer', minimum: 0 },
+      scanLow: { type: 'integer', minimum: 0 },
+      scanUnknown: { type: 'integer', minimum: 0 },
+      scanAt: { type: 'string', format: 'date-time' },
+      createdAt: { type: 'string', format: 'date-time' },
+      createdAtMs: { type: 'integer', minimum: 0 },
+      decision: { type: 'string', enum: ['pending', 'approved', 'rejected', 'deferred'] },
+      decidedAt: { type: 'string', format: 'date-time' },
+      decidedBy: { type: 'string' },
+      decisionNote: { type: 'string' },
+      deferredUntil: { type: 'string', format: 'date-time' },
+      operationId: { type: 'string' },
+      outcome: { type: 'string', enum: ['applied', 'rolled-back', 'failed'] },
+      resolvedAt: { type: 'string', format: 'date-time' },
+      resolution: {
+        type: 'string',
+        enum: ['superseded', 'container-removed', 'candidate-withdrawn', 'auto-applied'],
+      },
+    },
+    required: [
+      'schemaVersion',
+      'id',
+      'containerId',
+      'containerIdentityKey',
+      'containerName',
+      'watcher',
+      'image',
+      'fromRef',
+      'toRef',
+      'candidateRef',
+      'updateKind',
+      'semverDiff',
+      'createdAt',
+      'createdAtMs',
+      'decision',
+    ],
+    additionalProperties: false,
+  },
+  ApprovalListResult: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/Approval' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      limit: { type: 'integer', minimum: 0 },
+      offset: { type: 'integer', minimum: 0 },
+      hasMore: { type: 'boolean' },
+      _links: { $ref: '#/components/schemas/PaginationLinks' },
+    },
+    required: ['data', 'total', 'limit', 'offset', 'hasMore'],
+    additionalProperties: false,
+  },
+  ApprovalSummary: {
+    type: 'object',
+    description: 'Counts behind the nav badge and the dashboard tile.',
+    properties: {
+      pending: { type: 'integer', minimum: 0 },
+      deferred: { type: 'integer', minimum: 0 },
+      decidedToday: { type: 'integer', minimum: 0 },
+    },
+    required: ['pending', 'deferred', 'decidedToday'],
+    additionalProperties: false,
+  },
+  ApprovalDecisionResult: {
+    type: 'object',
+    description: 'The row as it stands after a reject or a defer.',
+    properties: {
+      approval: { $ref: '#/components/schemas/Approval' },
+    },
+    required: ['approval'],
+    additionalProperties: false,
+  },
+  ApprovalDetail: {
+    type: 'object',
+    description:
+      'A row plus everything live about it. `eligibility` is recomputed per request and is ' +
+      'omitted when the container the row points at no longer exists. `holdReasons` is its ' +
+      'soft blockers: what is holding the candidate back without hiding it. A hard blocker ' +
+      'stays in `eligibility.blockers` carrying the exact message a manual update would ' +
+      'return.',
+    properties: {
+      approval: { $ref: '#/components/schemas/Approval' },
+      eligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      holdReasons: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/UpdateBlocker' },
+      },
+    },
+    required: ['approval', 'holdReasons'],
+    additionalProperties: false,
+  },
   UpdateOperation: {
     type: 'object',
     properties: {
@@ -1427,6 +2009,99 @@ export const openApiSchemas = {
       updatedAt: { type: 'string', format: 'date-time' },
     },
     required: ['id', 'status', 'phase', 'containerName', 'createdAt', 'updatedAt'],
+    additionalProperties: true,
+  },
+  ImageInventoryItem: {
+    type: 'object',
+    description: 'One image on one image host, with its reclaimable share of shared layers.',
+    properties: {
+      id: { type: 'string' },
+      repoTags: { type: 'array', items: { type: 'string' } },
+      repoDigests: { type: 'array', items: { type: 'string' } },
+      size: { type: 'integer', minimum: 0 },
+      reclaimable: { type: 'integer', minimum: 0 },
+      created: { type: 'string', format: 'date-time' },
+      containers: { type: 'integer', minimum: 0 },
+      dangling: { type: 'boolean' },
+      watcher: { type: 'string' },
+      agent: { type: 'string' },
+      lastSeen: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'repoTags',
+      'repoDigests',
+      'size',
+      'reclaimable',
+      'created',
+      'containers',
+      'dangling',
+      'watcher',
+    ],
+    additionalProperties: false,
+  },
+  ImageHostSummary: {
+    type: 'object',
+    description:
+      'One Docker watcher host that image inventory can be requested from. `supported` is false for an agent-owned watcher without controller Docker transport, in which case `reason` explains why.',
+    properties: {
+      id: { type: 'string' },
+      name: { type: 'string' },
+      agent: { type: 'string' },
+      supported: { type: 'boolean' },
+      reason: { type: 'string', enum: ['agent-transport-unsupported'] },
+      error: { type: 'string' },
+    },
+    required: ['id', 'name', 'supported'],
+    additionalProperties: false,
+  },
+  ImageInventoryResponse: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ImageInventoryItem' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      hosts: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ImageHostSummary' },
+      },
+    },
+    required: ['data', 'total', 'hosts'],
+    additionalProperties: false,
+  },
+  PruneEstimate: {
+    type: 'object',
+    description:
+      'A dry-run estimate of what a prune with this mode would reclaim, no images deleted.',
+    properties: {
+      host: { type: 'string' },
+      mode: { type: 'string', enum: ['dangling', 'unused'] },
+      images: { type: 'integer', minimum: 0 },
+      reclaimable: { type: 'integer', minimum: 0 },
+    },
+    required: ['host', 'mode', 'images', 'reclaimable'],
+    additionalProperties: false,
+  },
+  ImagePruneResult: {
+    type: 'object',
+    properties: {
+      host: { type: 'string' },
+      mode: { type: 'string', enum: ['dangling', 'unused'] },
+      imagesDeleted: { type: 'integer', minimum: 0 },
+      spaceReclaimed: { type: 'integer', minimum: 0 },
+    },
+    required: ['host', 'mode', 'imagesDeleted', 'spaceReclaimed'],
+    additionalProperties: false,
+  },
+  ImagePruneResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      result: { $ref: '#/components/schemas/ImagePruneResult' },
+    },
+    required: ['message', 'result'],
     additionalProperties: true,
   },
 } as const;

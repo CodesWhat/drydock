@@ -42,6 +42,30 @@
       "info": "Информация"
     },
     "actions": {
+      "webhook-watch": "Проверка через вебхук",
+      "webhook-watch-container": "Проверка контейнера через вебхук",
+      "webhook-update": "Обновление через вебхук",
+      "mqtt-command-update": "Команда обновления MQTT",
+      "security-scan-skipped": "Проверка безопасности пропущена",
+      "scanner-asset-pull-started": "Загрузка образа сканера начата",
+      "scanner-asset-pull-succeeded": "Образ сканера загружен",
+      "scanner-asset-pull-failed": "Ошибка загрузки образа сканера",
+      "scanner-asset-warm-started": "Подготовка сканера начата",
+      "scanner-asset-warm-succeeded": "Подготовка сканера завершена",
+      "scanner-asset-warm-failed": "Ошибка подготовки сканера",
+      "container-unhealthy": "Контейнер неисправен",
+      "env-reveal": "Переменные окружения показаны",
+      "debug-dump": "Отладочные данные скачаны",
+      "config-read": "Конфигурация прочитана",
+      "config-validated": "Конфигурация проверена",
+      "config-reloaded": "Конфигурация перезагружена",
+      "config-written": "Конфигурация записана",
+      "update-approved": "Обновление одобрено",
+      "update-rejected": "Обновление отклонено",
+      "update-deferred": "Обновление отложено",
+      "api-key-created": "Ключ API создан",
+      "api-key-revoked": "Ключ API отозван",
+      "api-key-auth-failed": "Ошибка аутентификации по ключу API",
       "container-update": "Обновление контейнера",
       "container-added": "Контейнер добавлен",
       "container-removed": "Контейнер удалён",
@@ -49,6 +73,13 @@
       "container-stop": "Остановка контейнера",
       "container-restart": "Перезапуск контейнера",
       "auth-login": "Вход в систему",
+      "totp-recovery-used": "Использован код восстановления",
+      "totp-enrollment-started": "Начата настройка двухфакторной аутентификации",
+      "totp-enabled": "Двухфакторная аутентификация включена",
+      "totp-replaced": "Двухфакторная аутентификация заменена",
+      "totp-disabled": "Двухфакторная аутентификация отключена",
+      "totp-recovery-codes-replaced": "Коды восстановления заменены",
+      "totp-break-glass": "Офлайн-восстановление двухфакторной аутентификации",
       "authenticated": "Аутентифицирован",
       "authfail": "Ошибка аутентификации",
       "hook-configured": "Хук настроен",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Автообновление заблокировано",
       "update-policy-override-set": "Переопределение политики обновления задано",
       "update-policy-override-cleared": "Переопределение политики обновления очищено",
+      "group-policy-set": "Политика группы задана",
+      "group-policy-cleared": "Политика группы очищена",
+      "label-override-set": "Переопределение метки задано",
+      "label-override-cleared": "Переопределение метки очищено",
       "auto-rollback": "Автооткат",
       "rollback": "Откат",
       "preview": "Предпросмотр",
       "agent-disconnect": "Отключение агента",
       "notification-delivery-failed": "Ошибка доставки уведомления",
       "security-alert": "Предупреждение безопасности",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Период ожидания завершён",
+      "image-prune": "Очистка образа"
     },
     "target": {
       "container": "Контейнер",
-      "agent": "Агент"
+      "agent": "Агент",
+      "group": "Группа"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Зрелость снята",
         "description": "Когда обновление, отложенное политикой зрелости, становится доступным"
+      },
+      "update-pending-approval": {
+        "name": "Обновление ожидает подтверждения",
+        "description": "Когда обновление в ручном режиме попадает в очередь подтверждения"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Чисто"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "образы",
+      "scanned": "просканировано"
     },
     "fixableBadge": "{count} испр.",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет триггеров, соответствующих фильтрам",
-    "testContainerName": "Test Container",
+    "testContainerName": "Тестовый контейнер",
     "columns": {
       "trigger": "Триггер",
       "type": "Тип",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Загрузка наблюдателей...",
     "loadError": "Не удалось загрузить наблюдателей",
-    "soon": "soon",
+    "soon": "скоро",
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет наблюдателей, соответствующих фильтрам",

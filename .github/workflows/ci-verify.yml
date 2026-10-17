@@ -114,10 +114,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Restore scanner policy from the base ref
+      - name: Restore scanner policy from a protected ref
         # A PR must not be able to alter the gate that scans it: restore the
-        # scanner script and ignore policy from the protected base ref, so
-        # policy changes only take effect after they merge.
+        # scanner script and ignore policy from protected, merged content.
+        # An exact dev-tree promotion on the same or newer release base can
+        # use that protected dev commit's policy. Ordinary PRs keep the base
+        # policy, including older lines or unreviewed changes. Capture the
+        # selected commit before checkout.
         #
         # pull_request only. push/schedule/workflow_dispatch/workflow_call all
         # run already-trusted content, where head and base are the same trust
@@ -131,8 +134,38 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
-          git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
+          git fetch --no-tags origin "refs/heads/${BASE_REF}"
+          policy_commit="$(git rev-parse FETCH_HEAD)"
+          policy_ref="${BASE_REF}"
+
+          if [ "${BASE_REF}" = "main" ]; then
+            if version="$(git show HEAD:package.json | jq -er '.version | select(type == "string")')" \
+              && [[ "${version}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              dev_ref="dev/v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              if git fetch --no-tags origin "refs/heads/${dev_ref}"; then
+                dev_commit="$(git rev-parse FETCH_HEAD)"
+                if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${dev_commit}^{tree}")" ]; then
+                  if base_version="$(git show "${policy_commit}:package.json" | jq -er '.version | select(type == "string")')" \
+                    && jq -en --arg candidate "${version}" --arg base "${base_version}" '
+                      # Compare integer components by decimal length and digits.
+                      def parts:
+                        split("-")[0] | split("+")[0] | split(".")
+                        | if length == 3 and all(.[]; test("^[0-9]+$"))
+                          then map(sub("^0+"; "") | [length, .])
+                          else error("Invalid release base version")
+                          end;
+                      ($candidate | parts) >= ($base | parts)
+                    ' >/dev/null; then
+                    policy_commit="${dev_commit}"
+                    policy_ref="${dev_ref}"
+                  fi
+                fi
+              fi
+            fi
+          fi
+
+          echo "Restoring secret scanner policy from ${policy_ref} (${policy_commit})"
+          git checkout "${policy_commit}" -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
 
       - name: Install Gitleaks
         env:
@@ -153,7 +186,26 @@ jobs:
           printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
       - name: Scan secrets
-        run: scripts/scan-secrets.sh
+        # On pull_request the git-history scan covers base..HEAD only. The
+        # checkout above has fetch-depth 0, so with --log-opts=--all every
+        # branch ever pushed to the repo was scanned under the base branch's
+        # ignore file: an unannotated fixture on any other branch failed
+        # Secrets on every open PR, and a branch could never fix its own
+        # finding. push, schedule, workflow_dispatch and workflow_call keep
+        # scanning full history; head and base are the same trust domain
+        # there. Policy files still come from the base ref (step above).
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          SCAN_SECRETS_LOG_OPTS: >-
+            ${{ github.event_name == 'pull_request' && format('origin/{0}..HEAD', github.base_ref) || '--all' }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            # Make sure origin/<base> resolves with full history even if the
+            # checkout's remote refs were trimmed.
+            git fetch --no-tags origin "refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          fi
+          scripts/scan-secrets.sh
 
   changes:
     name: "Changes: Path Filter"
@@ -228,16 +280,16 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           category: /language:${{ matrix.language }}
 
@@ -273,7 +325,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: app/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -463,7 +516,11 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            ui/package-lock.json
 
       - name: Install dependencies
         run: npm ci
@@ -524,7 +581,9 @@ jobs:
   test:
     name: "Quality: Test & Coverage"
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # The app and UI coverage shards plus the Codecov upload reached 19 to 20
+    # minutes on dev/v1.8 and the job was cancelled mid-upload twice (#1324).
+    timeout-minutes: 30
     permissions:
       contents: read
 
@@ -554,7 +613,12 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            apps/demo/package-lock.json
+            ui/package-lock.json
 
       - name: Install repository dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -607,7 +671,24 @@ jobs:
         working-directory: ui
 
       - name: Run ui tests
-        run: npm run test:unit
+        # CI-17: three runs on 2026-09-07 (plus #1102) had this step marked
+        # `cancelled` after 2.5-6 min with no timeout hit and no concurrency
+        # group -- the 7 GB ubuntu-latest runner most likely ran the vitest
+        # coverage pass out of memory and the runner service died, which
+        # GitHub reports as a cancel rather than an OOM. Budget: 1536 MiB
+        # heap cap * 2 processes (the main vitest process plus the single
+        # worker fork --maxWorkers=1 allows) = 3 GiB worst case, comfortably
+        # under the 7 GiB runner with headroom left for non-heap V8
+        # overhead, npm, and the OS.
+        env:
+          NODE_OPTIONS: --max-old-space-size=1536
+        run: |
+          # Emit bounded numeric resource evidence before an abrupt runner exit.
+          # No environment, command arguments or application data is collected.
+          node ../scripts/ci-resource-sampler.mjs "$$" &
+          resource_sampler_pid=$!
+          trap 'kill "$resource_sampler_pid" 2>/dev/null || true; wait "$resource_sampler_pid" 2>/dev/null || true' EXIT
+          npm run test:unit -- --maxWorkers=1
         working-directory: ui
 
       - name: Normalize coverage paths
@@ -624,7 +705,7 @@ jobs:
         # secrets anyway); secrets.CODECOV_TOKEN is optional and covers
         # private-context uploads. Advisory (continue-on-error plus
         # fail_ci_if_error: false): an upload hiccup never blocks CI — the
-        # vitest 100% coverage thresholds enforced in the app/ui test steps
+        # Vitest's configured coverage thresholds enforced in app/ui tests
         # above are the real gate.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6.0.2
@@ -683,7 +764,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: apps/web/package-lock.json
 
       - name: Install apps/web dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -728,7 +810,10 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: |
+            ui/package-lock.json
+            apps/demo/package-lock.json
 
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -785,7 +870,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Set up QEMU (multi-arch smoke build)
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a  # v4.3.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
 
       # moby/buildkit#7089 (open, fix unmerged in #7092): ExecOp mutates its own
       # Meta.Args in place to prepend the QEMU emulator path, so when the solver
@@ -903,7 +988,7 @@ jobs:
         # Scans the exact image the PR built (drydock:dev, loaded from the
         # build job's artifact) — the same severity gate as the periodic
         # image scan, applied to what a merge would actually ship.
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         id: grype
         env:
           # Load the repo-root .grype.yaml explicitly — see security-grype.yml
@@ -921,7 +1006,7 @@ jobs:
         # Distinct category from security-grype.yml's `grype-image` so the two
         # scans (PR-built vs. periodic) don't collide in the same ref's results.
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image-pr
@@ -1050,7 +1135,7 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-baseline.sarif') != ''
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/zap/zap-baseline.sarif
           category: zap-baseline
@@ -1258,7 +1343,7 @@ jobs:
 
       - name: Upload Nuclei SARIF to code scanning
         if: always() && steps.nuclei_sarif.outputs.upload == 'true'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei
@@ -1365,7 +1450,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Download QA image
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
@@ -1499,7 +1585,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
@@ -1621,7 +1708,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
         with:
           node-version: 24
-          package-manager-cache: false
+          package-manager-cache: true
+          cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0

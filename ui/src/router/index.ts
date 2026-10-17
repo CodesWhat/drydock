@@ -24,12 +24,14 @@ const viewLoaders = {
   agents: () => import('../views/AgentsView.vue'),
   triggers: () => import('../views/TriggersView.vue'),
   watchers: () => import('../views/WatchersView.vue'),
+  images: () => import('../views/ImagesView.vue'),
   auth: () => import('../views/AuthView.vue'),
   notifications: () => import('../views/NotificationsView.vue'),
   notificationOutbox: () => import('../views/NotificationOutboxView.vue'),
   audit: () => import('../views/AuditView.vue'),
   logs: () => import('../views/LogsView.vue'),
   containerLogs: () => import('../views/ContainerLogsView.vue'),
+  approvals: () => import('../views/ApprovalsView.vue'),
 };
 
 function createLazyRoute(
@@ -56,11 +58,13 @@ const routes: RouteRecordRaw[] = [
       createLazyRoute(ROUTES.AGENTS, 'agents'),
       createLazyRoute(ROUTES.TRIGGERS, 'triggers'),
       createLazyRoute(ROUTES.WATCHERS, 'watchers'),
+      createLazyRoute(ROUTES.IMAGES, 'images'),
       createLazyRoute(ROUTES.AUTH, 'auth'),
       createLazyRoute(ROUTES.NOTIFICATIONS, 'notifications'),
       createLazyRoute(ROUTES.NOTIFICATION_OUTBOX, 'notificationOutbox', 'notification-outbox'),
       createLazyRoute(ROUTES.AUDIT, 'audit'),
       createLazyRoute(ROUTES.LOGS, 'logs'),
+      createLazyRoute(ROUTES.APPROVALS, 'approvals'),
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: ROUTES.DASHBOARD },

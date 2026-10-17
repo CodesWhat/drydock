@@ -7,17 +7,19 @@ import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllAuthentications, getAuthentication } from '../services/authentication';
-import type { ApiComponent } from '../types/api';
+import type { ApiComponentResponse } from '../types/api';
 
 const { t } = useI18n();
 
-const authData = ref<Record<string, unknown>[]>([]);
+type AuthenticationRow = ReturnType<typeof mapAuthentication>;
+
+const authData = ref<AuthenticationRow[]>([]);
 const loading = ref(true);
 const error = ref('');
 const route = useRoute();
 
 const { isMobile } = useBreakpoints();
-const selectedAuth = ref<Record<string, unknown> | null>(null);
+const selectedAuth = ref<AuthenticationRow | null>(null);
 const detailOpen = ref(false);
 const detailLoading = ref(false);
 const detailError = ref('');
@@ -82,7 +84,7 @@ const tableColumns = computed(() => [
   { key: 'status', label: t('authView.columns.status'), size: 120, minSize: 96, maxSize: 150 },
 ]);
 
-function mapAuthentication(authentication: ApiComponent, status = 'active') {
+function mapAuthentication(authentication: ApiComponentResponse, status = 'active') {
   return {
     id: authentication.id,
     name: authentication.name,
@@ -109,7 +111,7 @@ function handleDetailOpenChange(value: boolean) {
   }
 }
 
-async function openDetail(authentication: Record<string, unknown>) {
+async function openDetail(authentication: AuthenticationRow) {
   selectedAuth.value = authentication;
   detailOpen.value = true;
   detailLoading.value = true;
@@ -120,7 +122,7 @@ async function openDetail(authentication: Record<string, unknown>) {
     const detail = await getAuthentication({
       type: String(authentication.type),
       name: String(authentication.name),
-      agent: authentication.agent as string | undefined,
+      agent: authentication.agent,
     });
     if (requestId !== detailRequestId || !detailOpen.value) return;
     selectedAuth.value = mapAuthentication(detail, String(authentication.status));
@@ -137,7 +139,7 @@ async function openDetail(authentication: Record<string, unknown>) {
 onMounted(async () => {
   try {
     const data = await getAllAuthentications();
-    authData.value = data.map((authentication: ApiComponent) => mapAuthentication(authentication));
+    authData.value = data.map((authentication) => mapAuthentication(authentication));
   } catch {
     error.value = t('authView.loadError');
   } finally {

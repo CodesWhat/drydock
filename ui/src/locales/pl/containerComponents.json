@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Lista agentów jest niedostępna. Może brakować niektórych skonfigurowanych agentów.",
+      "title": "Stan floty",
+      "description": "Stan całej floty. Odświeżenie inwentarza wykrywa kontenery bez sprawdzania rejestrów i wykonywania aktualizacji.",
+      "reload": "Wczytaj stan ponownie",
+      "refresh": "Odśwież inwentarz",
+      "configured": "Skonfigurowano",
+      "connected": "Połączono",
+      "disconnected": "Rozłączono",
+      "unavailable": "Niedostępne",
+      "agentUnavailable": "Stan agentów jest niedostępny. Zachowane dane mogą być nieaktualne.",
+      "watcherUnavailable": "Metadane obserwatorów są niedostępne. Zachowane dane mogą być nieaktualne.",
+      "total": "Kontenery: {count}",
+      "lastKnown": "Ostatnio znane",
+      "lastSeen": "Ostatnio widziano: {value}",
+      "unsupported": "Wszystkie cele wymagają obserwatorów Docker obsługujących odświeżanie inwentarza.",
+      "complete": "Inwentarz kompletny",
+      "partial": "Inwentarz niekompletny",
+      "reloadFailed": "Nie udało się ponownie wczytać listy kontenerów. Wyniki inwentarza pozostają widoczne."
+    },
+    "fleetBulk": {
+      "label": "Działania dla filtrowanej floty",
+      "updateAll": "Aktualizuj wszystkie ({count})",
+      "snoozePatch": "Odłóż wszystkie poprawki",
+      "patchCount": "Kandydaci poprawek: {count}",
+      "duration": "Czas odroczenia",
+      "days": "{count} dzień | {count} dni",
+      "untilDate": "Do daty",
+      "date": "Odłóż do tej daty",
+      "snoozeConfirm": "Odłożyć {count} kandydatów poprawek?",
+      "snoozeScope": "Te kontenery mają dostępne poprawki. Odłóż wszystkie ich aktualizacje na {duration}, nie tylko poprawki. Dotyczy filtrowanej listy aktywnych kontenerów, nie zaznaczonych pól. Data obejmuje koniec lokalnego dnia.",
+      "snoozeResult": "Odłożono: {succeeded}. Błędy: {failed}.",
+      "refreshFailed": "Zasady zapisane, ale odświeżenie listy nie powiodło się. Wczytaj ją ponownie.",
+      "disabled": "Działania wyłączone. Nie zmieniono zasad.",
+      "invalid": "Nieprawidłowy czas. Nie zmieniono zasad.",
+      "busy": "Inne działanie już trwa. Nie zmieniono dodatkowych zasad."
+    },
+    "fleetDimensions": {
+      "groupBy": "Grupuj według",
+      "none": "Bez grupowania",
+      "agent": "Agent",
+      "registry": "Rejestr",
+      "status": "Stan",
+      "tagType": "Typ tagu",
+      "label": "Etykieta",
+      "groupLabel": "Grupuj według klucza etykiety",
+      "allAgents": "Wszyscy agenci",
+      "allRegistries": "Wszystkie adresy rejestrów",
+      "all": "Wszystkie typy tagów",
+      "specific": "Dokładny tag",
+      "floating": "Zmienny tag",
+      "digest": "Przypięty skrót",
+      "semver": "Tag wersji",
+      "tag": "Tag bez wersji",
+      "unknown": "Nieznany",
+      "local": "Lokalne monitory",
+      "running": "Uruchomiony",
+      "stopped": "Zatrzymany",
+      "labelKey": "Klucz etykiety",
+      "labelMatch": "Dopasowanie etykiety",
+      "labelValue": "Wartość etykiety",
+      "exists": "Ma etykietę",
+      "equals": "Równa się",
+      "missing": "Brak etykiety",
+      "missingLabel": "Bez etykiety",
+      "emptyValue": "Pusta wartość"
+    },
     "fullPageActions": {
       "updateWorkflow": "Zaktualizuj przepływ pracy",
       "actionsGroup": "Działania",
@@ -28,8 +95,9 @@
       "clearSkips": "Usuń pominięcia",
       "clearPolicy": "Jasne zasady",
       "overridden": "Zastąpiony",
+      "groupSource": "Grupa: {group}",
       "revert": "Przywróć",
-      "revertAll": "Przywróć do trybu deklaratywnego",
+      "revertAll": "Przywróć do odziedziczonej polityki",
       "snoozedUntil": "Odłożone do:",
       "maturityMode": "Tryb dojrzałości:",
       "matureOnlyMinimum": "Tylko dojrzałe (minimum {days}d)",
@@ -58,6 +126,12 @@
       "runningButton": "Uruchomione...",
       "runButton": "Uruchom",
       "noTriggersAssociated": "Brak wyzwalaczy powiązanych z tym kontenerem",
+      "unavailableTriggers": "Niedostępne wyzwalacze",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Należy do innego agenta niż ten kontener.",
+        "structuralIncompatibility": "Projekt, usługa lub plik Compose nie pasują do tego kontenera.",
+        "labelScope": "Wykluczony przez etykiety include/exclude dd.action/dd.notification tego kontenera."
+      },
       "backupsRollback": "Kopie zapasowe i przywracanie",
       "rollingBack": "Cofanie się...",
       "rollbackLatest": "Wycofaj najnowszą",
@@ -71,7 +145,13 @@
       "versionLabel": "Wersja:",
       "rollbackReasonLabel": "Powód wycofania:",
       "lastErrorLabel": "Ostatni błąd:",
-      "noUpdateOperations": "Nie zarejestrowano jeszcze żadnych operacji aktualizacji"
+      "noUpdateOperations": "Nie zarejestrowano jeszcze żadnych operacji aktualizacji",
+      "skipReleases": "Początkowe wydania do pominięcia",
+      "skipReleasesHint": "Pomiń pierwszych N różnych stabilnych wydań w każdej rodzinie: głównej wersji SemVer lub miesiącu CalVer. 0 wyłącza tę blokadę.",
+      "releaseFallbackDays": "Wyjątek według wieku (dni)",
+      "releaseFallbackHint": "Zezwól po tylu dniach, gdy brakuje danych wydań lub nie osiągnięto wymaganej liczby. 0 wyłącza wyjątek. Minimalny wiek nadal obowiązuje.",
+      "releasePolicySummary": "Pomiń pierwszych {count} wydań w każdej rodzinie.",
+      "releaseFallbackSummary": "Wyjątek od liczby wydań po {days} dniach."
     },
     "fullPageDetail": {
       "statusUpdating": "Aktualizowanie",
@@ -163,11 +243,11 @@
       "download": "Pobierz",
       "allLevels": "Wszystkie poziomy",
       "downloadError": "Nie można pobrać logów",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
+      "tailCount": "Ostatnie wiersze: {count}",
+      "tailAll": "Wszystkie wiersze",
       "statusPaused": "Wstrzymano",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "statusLive": "Na żywo",
+      "statusOffline": "Brak połączenia",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Ładowanie kontenerów...",
+      "fleetUpdateProgress": "Aktualizacja kontenerów: {done} z {total}",
+      "fleetUpdateProgressRunning": "W toku: {names}",
+      "fleetUpdateProgressRunningMore": "W toku: {names} i jeszcze {more}",
       "searchPlaceholder": "Wyszukaj nazwę lub obraz...",
       "allStatuses": "Wszystkie statusy",
       "running": "Działa",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · odblokuje się {date}",
       "maturityClockPublished": "Kandydat opublikowany {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat opublikowany {date} — jeszcze {count} dni do minimum {minDays} dni",
       "maturityClockDetected": "Kandydat wykryty {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat wykryty {date} — jeszcze {count} dni do minimum {minDays} dni",
+      "groupManualOnly": "Zasady grupy '{group}' dopuszczają tylko ręczne aktualizacje. Drydock nie zastosuje tej automatycznie.",
       "updateButton": "Aktualizuj teraz",
       "blockedButton": "Aktualizacja zablokowana",
       "notificationsOnlyButton": "Tylko powiadomienia",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Nie skonfigurowano wyzwalacza aktualizacji",
         "self-update-unavailable": "Samoaktualizacja niedostępna",
         "maintenance-window-closed": "Okno konserwacji zamknięte",
-        "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run"
+        "group-notify-only": "Grupa zezwala tylko na powiadomienia",
+        "group-manual-only": "Grupa wymaga ręcznych aktualizacji",
+        "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run",
+        "maturity-releases-not-reached": "Polityka dojrzałości oczekuje"
       },
       "actions": {
         "editPolicy": "Edytuj politykę aktualizacji",
@@ -439,25 +526,28 @@
         "configureTriggers": "Skonfiguruj wyzwalacze aktualizacji",
         "configureThreshold": "Skonfiguruj próg wyzwalacza",
         "configureSelfUpdate": "Skonfiguruj samoaktualizację",
-        "configureMaintenance": "Skonfiguruj okno konserwacji"
-      }
+        "configureMaintenance": "Skonfiguruj okno konserwacji",
+        "editGroupPolicy": "Edytuj zasady grupy"
+      },
+      "releaseMaturityCount": "Oczekiwanie na stabilne wydania w rodzinie {family}: dostępnych wcześniejszych wydań: {count} z {required}.",
+      "releaseMaturityUnavailable": "Dane wydania kandydata są niedostępne. Aktualizacje automatyczne pozostają wstrzymane."
     },
     "maturityBadge": {
       "new": "Wykryto {duration} temu"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Anuluj",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Zatrzymaj kontener",
+        "message": "Zatrzymać {name}?",
+        "acceptLabel": "Zatrzymaj",
+        "successMessage": "Zatrzymano: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Uruchom ponownie kontener",
+        "message": "Uruchomić ponownie {name}?",
+        "acceptLabel": "Uruchom ponownie",
+        "successMessage": "Uruchomiono ponownie: {name}"
       },
       "forceUpdate": {
         "header": "Wymuś aktualizację",
@@ -505,6 +595,19 @@
         "failedDetail": "Nie udało się zaktualizować łańcucha zależności dla {name}.",
         "staleChainTitle": "Łańcuch zależności uległ zmianie",
         "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
+      },
+      "bulkUpdate": {
+        "header": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
+        "accept": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
+        "acceptWithParents": "Dodaj 1 kontener nadrzędny i zaktualizuj | Dodaj {count} kontenerów nadrzędnych i zaktualizuj",
+        "dispatchHeading": "Zostaną zaktualizowane",
+        "blockedHeading": "Zablokowane, pozostaną bez zmian",
+        "softOverridesHeading": "Aktualizacja mimo ostrzeżeń",
+        "skippedHeading": "Pominięte",
+        "staleParentsHeading": "Kontenery nadrzędne z oczekującymi aktualizacjami, dodawane po zatwierdzeniu",
+        "agentCountInfo": "Obejmuje {count} agentów; każdy agent wykonuje własne aktualizacje.",
+        "stackCountInfo": "Obejmuje {count} stosów.",
+        "successMessage": "Rozpoczęto aktualizację dla 1 kontenera | Rozpoczęto aktualizację dla {count} kontenerów"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "Ponowne sprawdzenie nie powiodło się dla {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} wpis",
+      "entryCountPlural": "Liczba wpisów: {count}",
       "kindLabels": {
         "tag": "tag",
         "digest": "skrót"
@@ -561,14 +664,16 @@
         "setAll": "Ustawiono politykę dojrzałości na zezwalanie na wszystkie aktualizacje",
         "skipped": "Pominięto bieżącą aktualizację dla {name}",
         "removeSkip": "Usunięto pominięty {kind} {value}",
-        "revertField": "Przywrócono {field} do deklaratywnej polityki",
-        "revertAll": "Przywrócono wszystkie nadpisania do deklaratywnej polityki",
+        "revertField": "Przywrócono {field} do odziedziczonej polityki",
+        "revertAll": "Przywrócono wszystkie nadpisania do odziedziczonej polityki",
         "failedTitle": "Aktualizacja zasad nie powiodła się: {name}",
         "failedDetail": "Nie udało się zaktualizować zasad"
       },
       "validation": {
         "snoozeDate": "Wybierz prawidłową datę odłożenia",
-        "maturityAge": "Podaj wiek dojrzałości między {min} a {max} dni"
+        "maturityAge": "Podaj wiek dojrzałości między {min} a {max} dni",
+        "maturityReleases": "Podaj całkowitą liczbę wydań od 0 do 100.",
+        "maturityFallback": "Podaj całkowitą liczbę dni dla wyjątku od 0 do 365."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "W kolejce",
+        "pulling": "Pobieranie obrazu",
+        "scanning": "Skanowanie obrazu",
+        "sbom-generating": "Generowanie SBOM",
+        "pull-failed": "Pobieranie obrazu nie powiodło się",
+        "prepare": "Przygotowywanie aktualizacji",
+        "dryrun": "Uruchomienie próbne",
+        "renamed": "Zmieniono nazwę kontenera",
+        "new-created": "Utworzono nowy kontener",
+        "old-stopped": "Zatrzymano stary kontener",
+        "new-started": "Uruchomiono nowy kontener",
+        "health-gate": "Kontrola stanu",
+        "health-gate-passed": "Kontrola stanu zakończona pomyślnie",
+        "succeeded": "Powodzenie",
+        "failed": "Niepowodzenie",
+        "recovered-cleanup-temp": "Odzyskano: usunięto kontenery tymczasowe",
+        "recovered-rollback": "Odzyskano: ukończono przywracanie",
+        "recovered-active": "Odzyskano: zachowano aktywny kontener",
+        "recovery-failed": "Odzyskiwanie nie powiodło się",
+        "recovery-missing-containers": "Odzyskiwanie: brak kontenerów",
+        "rollback-started": "Rozpoczęto przywracanie",
+        "rolled-back": "Przywrócono",
+        "rollback-deferred": "Odroczono przywracanie",
+        "rollback-failed": "Przywracanie nie powiodło się",
+        "expired": "Wygasło",
+        "skipped-dependency": "Pominięto z powodu zależności",
+        "in-progress": "W toku",
+        "update-runtime-failed": "Wykonanie aktualizacji nie powiodło się",
+        "create-new-failed": "Nie udało się utworzyć nowego kontenera",
+        "stop-old-failed": "Nie udało się zatrzymać starego kontenera",
+        "start-new-failed": "Nie udało się uruchomić nowego kontenera",
+        "health-gate-failed": "Kontrola stanu nie powiodła się",
+        "cancelled": "Anulowano",
+        "compose-runtime-refresh-failed": "Odświeżenie stanu wykonawczego Compose nie powiodło się"
+      },
       "timestampUnknown": "Nieznany",
       "loadFailed": "Nie udało się załadować kopii zapasowych",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Jawne",
+        "inherited": "Odziedziczone",
+        "unknown": "Nieznane"
       },
       "timeoutDefault": "60000ms (domyślnie)",
       "preAbortYes": "Przerwij aktualizację w przypadku niepowodzenia haka wstępnego",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Przegląd",
+        "stats": "Statystyki",
+        "logs": "Logi",
+        "environment": "Środowisko",
+        "labels": "Etykiety",
+        "actions": "Akcje"
       }
     },
     "logViewer": {
       "invalidRegex": "Nieprawidłowe wyrażenie regularne"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Zależy od",
+      "requiredBy": "Wymagany przez",
+      "cycle": "Część cyklu zależności",
+      "toggle": "Pokaż zależności",
+      "updateGroup": "Zaktualizuj grupę zależności ({count})",
+      "staleParentsWarning": "{name} zależy od {parents}, który również ma oczekującą aktualizację. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego. | {name} zależy od {parents}, które również mają oczekujące aktualizacje. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnych kontenerów nadrzędnych.",
+      "staleParentsOverflow": "i {count} więcej",
+      "staleParentsAccept": "Zaktualizuj mimo to"
+    },
+    "selection": {
+      "selectRow": "Zaznacz {name}",
+      "selectAll": "Zaznacz wszystkie widoczne kontenery",
+      "barLabel": "Wybrane kontenery",
+      "count": "Wybrano 1 kontener | Wybrano {count} kontenerów",
+      "updateSelected": "Zaktualizuj wybrane",
+      "clear": "Wyczyść",
+      "reasons": {
+        "stale": "nie ma już na liście",
+        "inFlight": "już się aktualizuje",
+        "noUpdate": "brak dostępnej aktualizacji"
+      }
     }
   }
 }

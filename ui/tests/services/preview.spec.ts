@@ -1,6 +1,23 @@
-import { normalizePreviewPayload, PreviewRequestError, previewContainer } from '@/services/preview';
+import {
+  getPreviewUpdateKind,
+  normalizePreviewPayload,
+  PreviewRequestError,
+  previewContainer,
+} from '@/services/preview';
 
 describe('preview service', () => {
+  it.each([
+    [{ kind: 'tag', remoteValue: '2.0' }, 'tag'],
+    ['digest', 'digest'],
+    [undefined, undefined],
+    [null, null],
+    [{ kind: '' }, { kind: '' }],
+    [{ legacy: 'value' }, { legacy: 'value' }],
+    [[], []],
+  ])('preserves the preview update-kind display fallback for %j', (input, expected) => {
+    expect(getPreviewUpdateKind(input)).toEqual(expected);
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -101,7 +118,7 @@ describe('preview service', () => {
 
     expect(failure).toMatchObject({
       code: 'preview-http-error',
-      message: 'Unable to prepare this update preview (502 Bad Gateway)',
+      message: 'Failed to generate update preview (HTTP 502): Bad Gateway',
       status: 502,
     });
   });
@@ -129,7 +146,7 @@ describe('preview service', () => {
 
       expect(failure).toMatchObject({
         code: 'preview-http-error',
-        message: `Unable to prepare this update preview (502${statusText ? ` ${statusText}` : ''})`,
+        message: `Failed to generate update preview (HTTP 502)${statusText ? `: ${statusText}` : ''}`,
         status: 502,
         details: undefined,
         action: undefined,

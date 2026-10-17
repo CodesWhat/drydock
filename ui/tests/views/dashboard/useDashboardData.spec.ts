@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
     getSummaryController: () => summaryController,
     mapApiContainers: vi.fn(),
     mapApiContainer: vi.fn(),
+    getApprovalSummary: vi.fn(),
   };
 });
 
@@ -68,6 +69,10 @@ vi.mock('@/services/watcher', () => ({
 vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: mocks.mapApiContainers,
   mapApiContainer: mocks.mapApiContainer,
+}));
+
+vi.mock('@/services/approval', () => ({
+  getApprovalSummary: mocks.getApprovalSummary,
 }));
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
@@ -154,6 +159,7 @@ describe('useDashboardData', () => {
       security: { issues: 0 },
     });
     mocks.getContainerRecentStatus.mockResolvedValue({ statuses: {}, statusesByIdentity: {} });
+    mocks.getApprovalSummary.mockResolvedValue({ pending: 0, deferred: 0, decidedToday: 0 });
     mocks.mapApiContainers.mockReturnValue([makeContainer()]);
     mocks.mapApiContainer.mockImplementation((raw: Record<string, unknown>) =>
       makeContainer({
@@ -407,6 +413,75 @@ describe('useDashboardData', () => {
     expect(removedEvents).toContain('dd:sse-resync-required');
     expect(removedEvents).not.toContain('dd:sse-container-changed');
     expect(removedEvents).not.toContain('dd:sse-scan-completed');
+  });
+
+  it('populates the approval pending count from the initial fetch', async () => {
+    mocks.getApprovalSummary.mockResolvedValue({ pending: 3, deferred: 1, decidedToday: 0 });
+
+    const { state } = await mountDashboardData();
+
+    expect(state.approvalPendingCount.value).toBe(3);
+  });
+
+  it('leaves the approval pending count at its default when the initial fetch fails', async () => {
+    mocks.getApprovalSummary.mockRejectedValue(new Error('boom'));
+
+    const { state } = await mountDashboardData();
+
+    expect(state.approvalPendingCount.value).toBe(0);
+  });
+
+  it.each([['dd:sse-approval-created'], ['dd:sse-approval-decided'], ['dd:sse-approval-resolved']])(
+    'sets the approval pending count from a %s payload',
+    async (eventName) => {
+      const { state } = await mountDashboardData();
+
+      globalThis.dispatchEvent(new CustomEvent(eventName, { detail: { pendingCount: 5 } }));
+      await flushPromises();
+
+      expect(state.approvalPendingCount.value).toBe(5);
+    },
+  );
+
+  it('ignores an approval event with no detail', async () => {
+    const { state } = await mountDashboardData();
+    state.approvalPendingCount.value = 2;
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-approval-created'));
+    await flushPromises();
+
+    expect(state.approvalPendingCount.value).toBe(2);
+  });
+
+  it('ignores an approval event whose payload has a non-numeric pendingCount', async () => {
+    const { state } = await mountDashboardData();
+    state.approvalPendingCount.value = 2;
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-approval-created', { detail: { pendingCount: 'lots' } }),
+    );
+    await flushPromises();
+
+    expect(state.approvalPendingCount.value).toBe(2);
+  });
+
+  it('adds and removes approval SSE listeners symmetrically', async () => {
+    const addSpy = vi.spyOn(globalThis, 'addEventListener');
+    const removeSpy = vi.spyOn(globalThis, 'removeEventListener');
+
+    const { wrapper } = await mountDashboardData();
+
+    const addedEvents = addSpy.mock.calls.map((c) => c[0]);
+    expect(addedEvents).toContain('dd:sse-approval-created');
+    expect(addedEvents).toContain('dd:sse-approval-decided');
+    expect(addedEvents).toContain('dd:sse-approval-resolved');
+
+    wrapper.unmount();
+
+    const removedEvents = removeSpy.mock.calls.map((c) => c[0]);
+    expect(removedEvents).toContain('dd:sse-approval-created');
+    expect(removedEvents).toContain('dd:sse-approval-decided');
+    expect(removedEvents).toContain('dd:sse-approval-resolved');
   });
 
   it('sets error for a failed foreground fetch and clears loading', async () => {

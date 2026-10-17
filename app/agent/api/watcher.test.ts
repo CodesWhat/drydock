@@ -110,6 +110,116 @@ describe('agent API watcher', () => {
       expect(res.json).toHaveBeenCalledWith(reports);
     });
 
+    test('collects missing proof only for requested containers in the completed watcher reports', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      req.body = { collectReleaseMaturityFor: ['c1', 'c2', 'foreign'] };
+      const c1 = { id: 'c1' };
+      const c2 = {
+        id: 'c2',
+        result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+      };
+      const resolved = { container: { ...c1, result: c2.result }, changed: true };
+      const watcher = {
+        watch: vi.fn().mockResolvedValue([{ container: c1 }, { container: c2 }]),
+        watchContainer: vi.fn().mockResolvedValue(resolved),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      await watcherApi.watchWatcher(req, res);
+      expect(watcher.watchContainer).toHaveBeenCalledExactlyOnceWith(c1, {
+        collectReleaseMaturity: true,
+        emitBatchEvent: false,
+      });
+      expect(res.json).toHaveBeenCalledWith([resolved, { container: c2 }]);
+    });
+
+    test('collects requested proofs with concurrency ten and preserves report order', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const reports = Array.from({ length: 12 }, (_, index) => ({
+        container: { id: `c${index}` },
+      }));
+      req.body = { collectReleaseMaturityFor: reports.map((report) => report.container.id) };
+      let release: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let active = 0;
+      let peak = 0;
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(reports),
+        watchContainer: vi.fn().mockImplementation(async (container) => {
+          active += 1;
+          peak = Math.max(peak, active);
+          await gate;
+          active -= 1;
+          return {
+            container: {
+              ...container,
+              result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+            },
+          };
+        }),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      const pending = watcherApi.watchWatcher(req, res);
+      try {
+        await vi.waitFor(() => expect(watcher.watchContainer).toHaveBeenCalledTimes(10), {
+          timeout: 500,
+          interval: 5,
+        });
+      } finally {
+        release();
+        await pending;
+      }
+      expect(peak).toBe(10);
+      expect(res.json.mock.calls[0][0].map((report) => report.container.id)).toEqual(
+        reports.map((report) => report.container.id),
+      );
+      expect(
+        watcher.watchContainer.mock.calls.every(([, options]) => options.emitBatchEvent === false),
+      ).toBe(true);
+    });
+
+    test('returns completed reports when one optional proof re-watch rejects', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      req.body = { collectReleaseMaturityFor: ['failed', 'healthy'] };
+      const failed = {
+        container: {
+          id: 'failed',
+          result: { tag: '2.0.2' },
+          image: { tag: { value: '2' } },
+          error: { message: 'completed scan' },
+        },
+      };
+      const healthy = { container: { id: 'healthy' } };
+      const resolved = {
+        container: {
+          ...healthy.container,
+          result: { releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 } },
+        },
+      };
+      const reports = [failed, healthy];
+      const completed = structuredClone(reports);
+      const watcher = {
+        watch: vi.fn().mockResolvedValue(reports),
+        watchContainer: vi.fn().mockImplementation(async (container) => {
+          if (container.id === 'failed') {
+            container.result.tag = '2.0.3';
+            delete container.result;
+            container.image.tag.value = '3';
+            container.error = { message: 'recheck changed this' };
+            throw new Error('report handler rejected');
+          }
+          return resolved;
+        }),
+      };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      await watcherApi.watchWatcher(req, res);
+      expect(res.status).not.toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith([completed[0], resolved]);
+      expect(reports[1]).toEqual(completed[1]);
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('failed'));
+    });
+
     test('should return 500 when watcher throws', async () => {
       req.params = { type: 'docker', name: 'local' };
       const mockWatcher = {
@@ -238,6 +348,19 @@ describe('agent API watcher', () => {
       await watcherApi.watchContainer(req, res);
       expect(mockWatcher.watchContainer).toHaveBeenCalledWith(container);
       expect(res.json).toHaveBeenCalledWith({ container });
+    });
+
+    test('passes only the collection flag to a single-container watch', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'c1' };
+      req.body = { collectReleaseMaturity: true, maturitySkipReleases: 99 };
+      const container = { id: 'c1' };
+      const watcher = { watchContainer: vi.fn().mockResolvedValue({ container }) };
+      registry.getState.mockReturnValue({ watcher: { 'docker.local': watcher } });
+      storeContainer.getContainer.mockReturnValue(container);
+      await watcherApi.watchContainer(req, res);
+      expect(watcher.watchContainer).toHaveBeenCalledWith(container, {
+        collectReleaseMaturity: true,
+      });
     });
 
     test('should return 500 when watchContainer throws', async () => {

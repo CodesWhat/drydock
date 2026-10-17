@@ -3,11 +3,71 @@ import {
   getWatcher,
   getWatcherProviderColor,
   getWatcherProviderIcon,
+  refreshWatcherInventory,
 } from '@/services/watcher';
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
 describe('Watcher Service', () => {
+  it('includes the numeric status when an inventory failure has an empty HTTP status message', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 504, statusText: '' });
+    await expect(refreshWatcherInventory({ type: 'docker', name: 'local' })).rejects.toThrow(
+      'Inventory refresh failed: 504',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves nonempty inventory HTTP status messages', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 503, statusText: 'Service Unavailable' });
+    await expect(refreshWatcherInventory({ type: 'docker', name: 'local' })).rejects.toThrow(
+      'Inventory refresh failed: Service Unavailable',
+    );
+  });
+  it.each([undefined, 'Local / edge'])(
+    'refreshes inventory only for the exact watcher and agent %s',
+    async (agent) => {
+      const result = {
+        context: {
+          origin: 'inventory',
+          operationId: 'op',
+          source: { type: 'docker', name: 'local / one', agent },
+        },
+        containers: [],
+        removedIds: [],
+        errors: [],
+        authoritative: true,
+      };
+      fetchMock.mockResolvedValue({ ok: true, json: vi.fn().mockResolvedValue(result) });
+      expect(await refreshWatcherInventory({ type: 'docker', name: 'local / one', agent })).toEqual(
+        result,
+      );
+      expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+        `/api/v1/watchers/docker/local%20%2F%20one${agent ? '/Local%20%2F%20edge' : ''}/inventory`,
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        },
+      );
+    },
+  );
+
+  it.each([404, 501, 503, 504])(
+    'preserves inventory HTTP failure status %s without falling back to a scan',
+    async (status) => {
+      fetchMock.mockResolvedValue({
+        ok: false,
+        status,
+        statusText: 'unavailable',
+        json: vi.fn().mockResolvedValue({ error: 'Unavailable' }),
+      });
+      await expect(
+        refreshWatcherInventory({ type: 'docker', name: 'local' }),
+      ).rejects.toMatchObject({ status });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
   beforeEach(() => {
     fetchMock = vi.fn();
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -88,11 +148,14 @@ describe('Watcher Service', () => {
   it('throws when fetching all watchers fails', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
       json: vi.fn().mockResolvedValue({}),
     });
 
-    await expect(getAllWatchers()).rejects.toThrow('Failed to get watchers: Internal Server Error');
+    await expect(getAllWatchers()).rejects.toThrow(
+      'Failed to load watchers (HTTP 500): Internal Server Error',
+    );
   });
 
   it('fetches a specific watcher by type and name', async () => {

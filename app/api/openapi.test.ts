@@ -147,12 +147,15 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/auth/methods']).toBeUndefined();
   });
 
-  test('should model auth status, strategy, and logout response shapes', () => {
-    expect(openApiDocument.paths['/auth/strategies']?.get?.responses?.[200]).toEqual(
-      jsonResponse('Authentication strategies', {
-        $ref: '#/components/schemas/AuthStrategiesResponse',
-      }),
-    );
+  test('should not document the removed /auth/strategies alias', () => {
+    // Removed in v1.8.0 (see DEPRECATIONS.md); unlike /api/auth/methods,
+    // /auth/strategies is not behind the unversioned /api/* tombstone, so a
+    // request to it now falls through to the UI's SPA catch-all instead of
+    // any JSON error response. It has no OpenAPI entry either way.
+    expect(openApiDocument.paths['/auth/strategies']).toBeUndefined();
+  });
+
+  test('should model auth status and logout response shapes', () => {
     expect(openApiDocument.paths['/api/v1/auth/status']?.get?.responses?.[200]).toEqual(
       jsonResponse('Authentication provider status', {
         $ref: '#/components/schemas/AuthStatusResponse',
@@ -341,6 +344,29 @@ describe('OpenAPI document', () => {
             },
           },
         },
+        portainer: {
+          type: 'object',
+          properties: {
+            stackId: { type: 'integer' },
+            stackName: { type: 'string' },
+            endpointId: { type: 'integer' },
+            service: { type: 'string' },
+            mode: { type: 'string', enum: ['env', 'compose'] },
+            versionVar: { type: 'string' },
+            mutation: {
+              type: 'object',
+              properties: {
+                intent: { type: 'string' },
+                dryRun: { type: 'boolean' },
+                willWrite: { type: 'boolean' },
+              },
+              required: ['intent', 'dryRun', 'willWrite'],
+              additionalProperties: false,
+            },
+          },
+          required: ['stackId', 'service', 'mode', 'mutation'],
+          additionalProperties: false,
+        },
       },
     });
   });
@@ -384,6 +410,11 @@ describe('OpenAPI document', () => {
     expect(previewPath.responses[503].content['application/json'].schema).toEqual({
       $ref: '#/components/schemas/PreviewErrorResponse',
     });
+    expect(openApiDocument.paths['/api/v1/containers/{id}/rollback'].post.responses[409]).toEqual(
+      errorResponse(
+        'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+      ),
+    );
   });
 
   test('should keep agent-scoped component routes with agent as the final path segment', () => {

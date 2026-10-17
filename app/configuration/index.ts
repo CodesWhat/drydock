@@ -6,6 +6,8 @@ import setValue from 'set-value';
 import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { toPositiveInteger } from '../util/parse.js';
+import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './file/layer.js';
+import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
@@ -25,6 +27,7 @@ const DEFAULT_GRYPE_WORKER_IMAGE =
 const DEFAULT_SYFT_WORKER_IMAGE =
   'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
 const DEFAULT_PORTWING_POLL_INTERVAL = 300;
+const DEFAULT_DIGEST_WATCH_SCHEMA = joi.boolean().label('DD_DEFAULTS_WATCH_DIGEST');
 
 export type SecuritySeverity = (typeof SECURITY_SEVERITY_VALUES)[number];
 export type SecuritySbomFormat = (typeof SECURITY_SBOM_FORMAT_VALUES)[number];
@@ -139,8 +142,151 @@ Object.keys(process.env)
     ddEnvVars[envVar] = process.env[envVar];
   });
 
-// 2. Replace all secret files referenced by their secret values
+// 2. Read whatever drydock.yml layer app/index.ts's bootstrap already loaded
+// (if any) into file/layer.ts. Loading and its own failure modes — silent
+// when the default path is absent, fatal (naming the path) when an explicit
+// DD_CONFIG_FILE is absent or the file fails parsing or its own hardening
+// checks — live entirely in file/loader.ts, which this module never imports:
+// that keeps this module free of fs calls at import time, since it's
+// imported by nearly every test file. `configFileInterpolatedKeys` names
+// the keys whose file value came from `${NAME}` substitution (decision D1)
+// rather than literal file text, so the merge below can attribute them as
+// `env` even though they physically arrived via the file layer.
+//
+// Exported (and mutable) rather than the plain local `const` a one-shot
+// bootstrap read would otherwise be: `file/layer.ts`'s own copy of this set
+// is kept current on every reload (`setConfigFileLayer`), but a snapshot
+// taken once here at import time would silently go stale the moment the
+// file changed underneath it. `applyConfigurationReload` below is what
+// keeps this singleton current after that point, mutating it in place for
+// the same reason `ddEnvVars`/`configFileSources` are mutated rather than
+// reassigned — every module that imported this binding keeps seeing live
+// values. `file/diff.ts`'s `buildCandidateEnvAndDiff` is why it needs to
+// stay current at all: an interpolated key's `configFileSources` entry
+// reads `'env'` exactly like a genuinely environment-owned key's does, and
+// this is the only way it can tell the two apart on a *later* reload.
+const configFileLayer = getConfigFileLayer();
+export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInterpolatedKeys());
+
+// 3. Merge the file layer beneath the real environment: a setting already
+// provided in step 1 wins, an unset one is filled in from the file, and Joi
+// defaults are untouched either way — the whole env > file > defaults
+// precedence is this one test, done in mergeConfigLayers. `DD_X` and
+// `DD_X__FILE` count as the same setting there, so step 4 never resolves a
+// file `_file` node over a value the environment set, nor a file value beside
+// a secret file the environment named. Records which layer
+// supplied each key; an interpolated key attributes as `env` even though it
+// reached ddEnvVars via the file layer.
+export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(
+  ddEnvVars,
+  configFileLayer,
+  configFileInterpolatedKeys,
+);
+
+// 4. Replace all secret files referenced by their secret values. Runs after
+// the merge so a file-sourced `_file` node — flattened to the same `__FILE`
+// suffix an env-set secret uses — resolves through this one path either way.
 await replaceSecrets(ddEnvVars);
+
+getDefaultDigestWatch();
+
+/**
+ * Validate the merged configuration against every component schema —
+ * roadmap 7.1 slice 2 — so a drydock.yml mistake is reported with its YAML
+ * path and the underlying Joi message before anything starts, instead of
+ * surfacing later as a partial-degrade warning (a bad trigger silently
+ * skipped) or, for the section schemas, an unhandled throw from
+ * whichever call site reads them first (`getServerConfiguration()` during
+ * `api.init()`, etc).
+ *
+ * Scoped to configurations a file actually touched: when `configFileSources`
+ * has no `'file'`-sourced key (a pure env-only deployment, no drydock.yml or
+ * an empty one), this returns `{ errors: [] }` without constructing a single
+ * component. That's deliberate, not an optimization — every one of today's
+ * env-only call sites (registerComponents' try/warn/continue for triggers,
+ * registries and authentications; api.init()'s unconditional section-schema
+ * reads) already runs unchanged, so gating on "did a file contribute
+ * anything" is what keeps this function from turning a previously-degraded-
+ * but-running env-only deployment into a hard startup failure. A real
+ * drydock.yml gets the full, stricter walk this slice exists for.
+ *
+ * Dynamically imports `./file/validate.js` (rather than a static import) so
+ * this module and that one — which reads `ddEnvVars` and the discoverer
+ * functions back from here — don't form a circular import. Never invoked at
+ * this module's own top level: the real startup sequence (`app/index.ts`)
+ * calls it explicitly, before registry.init(), so an import of this module
+ * for any other reason (the hundreds of test files that only want
+ * `getLogLevel()` or similar) never triggers it.
+ */
+export async function validateStartupConfiguration(): Promise<{
+  errors: Array<{ path: string; envKey: string; message: string }>;
+}> {
+  const hasFileSourcedValue = Object.values(configFileSources).includes('file');
+  if (!hasFileSourcedValue) {
+    return { errors: [] };
+  }
+  const { validateConfiguration } = await import('./file/validate.js');
+  return validateConfiguration(ddEnvVars);
+}
+
+/**
+ * Apply the per-key delta a successful configuration reload computed
+ * (roadmap 7.1 slice 6, `configuration/file/reload.ts`) to the running
+ * `ddEnvVars`/`configFileSources` singletons, in place — the same mutate-
+ * don't-reassign discipline step 3 above already follows, so every module
+ * that imported either binding at its own import time keeps seeing live
+ * values.
+ *
+ * Deliberately narrow: `envDelta`/`sourcesDelta` carry only the keys
+ * `reload.ts` decided to actually apply (reloadable-section keys that
+ * changed), never every key in the new file — a restart-required key that
+ * changed is reported in the reload's `restart` diff but must never reach
+ * here, and an unchanged key has no reason to. A `value`/`source` of
+ * `undefined` for a key means the key is gone in the new file (and not
+ * re-supplied by the real environment either): deleted outright, rather
+ * than left present with an `undefined` value, so a later
+ * `Object.keys(ddEnvVars)` walk (`get()` above, every section getter) never
+ * sees it.
+ *
+ * `newInterpolatedKeys` — `reload.ts`'s full, whole-file interpolated-keys
+ * set for the reload just applied (the same set it hands `setConfigFileLayer`)
+ * — keeps `configFileInterpolatedKeys` in sync for exactly the keys this
+ * call already touches: a touched key present in `newInterpolatedKeys` is
+ * added, and one that's absent (no longer interpolated, now a literal file
+ * value, genuinely environment-owned, or removed outright) is deleted.
+ * Reading the *whole-file* set rather than a pre-narrowed one is safe
+ * precisely because the loop below only ever looks up keys already in
+ * `envDelta`'s narrow domain — a restart-required key's interpolation
+ * status in the new file is never consulted here, matching every other
+ * per-key mutation in this function.
+ */
+export function applyConfigurationReload(
+  envDelta: Record<string, string | undefined>,
+  sourcesDelta: Record<string, ConfigValueSource | undefined>,
+  newInterpolatedKeys: ReadonlySet<string> = new Set(),
+): void {
+  for (const [key, value] of Object.entries(envDelta)) {
+    if (value === undefined) {
+      delete ddEnvVars[key];
+    } else {
+      ddEnvVars[key] = value;
+    }
+  }
+  for (const [key, source] of Object.entries(sourcesDelta)) {
+    if (source === undefined) {
+      delete configFileSources[key];
+    } else {
+      configFileSources[key] = source;
+    }
+  }
+  for (const key of Object.keys(envDelta)) {
+    if (envDelta[key] !== undefined && newInterpolatedKeys.has(key)) {
+      configFileInterpolatedKeys.add(key);
+    } else {
+      configFileInterpolatedKeys.delete(key);
+    }
+  }
+}
 
 export function getVersion() {
   const configuredVersion = ddEnvVars.DD_VERSION?.trim();
@@ -212,6 +358,14 @@ export function getLocalWatcherEnabled() {
   return ddEnvVars.DD_LOCAL_WATCHER?.trim().toLowerCase() !== 'false';
 }
 
+export function getDefaultDigestWatch(): boolean | undefined {
+  const { value, error } = DEFAULT_DIGEST_WATCH_SCHEMA.validate(ddEnvVars.DD_DEFAULTS_WATCH_DIGEST);
+  if (error) {
+    throw error;
+  }
+  return value;
+}
+
 function envFlagEnabled(value: string | undefined) {
   return value?.trim().toLowerCase() === 'true';
 }
@@ -247,30 +401,32 @@ export function getPortwingAuthorizedKeysPath(): string | undefined {
   return raw || undefined;
 }
 
+// Longest suffix first: `_MAINTENANCE_WINDOW` is a prefix of the other two as a string, so a
+// shorter-first walk would never reach `_MAINTENANCE_WINDOW_TZ` / `_MAINTENANCE_WINDOW_SCOPE`
+// if the match were ever loosened from endsWith to includes.
+export const WATCHER_MAINTENANCE_ENV_ALIASES = [
+  ['_MAINTENANCE_WINDOW_SCOPE', 'maintenancewindowscope'],
+  ['_MAINTENANCE_WINDOW_TZ', 'maintenancewindowtz'],
+  ['_MAINTENANCE_WINDOW', 'maintenancewindow'],
+] as const;
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';
-  const tzSuffix = '_MAINTENANCE_WINDOW_TZ';
-  const windowSuffix = '_MAINTENANCE_WINDOW';
 
   if (!envKeyUpper.startsWith(prefix)) {
     return undefined;
   }
 
-  if (envKeyUpper.endsWith(tzSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -tzSuffix.length);
+  for (const [suffix, key] of WATCHER_MAINTENANCE_ENV_ALIASES) {
+    if (!envKeyUpper.endsWith(suffix)) {
+      continue;
+    }
+    const watcherName = envKeyUpper.slice(prefix.length, -suffix.length);
     if (!watcherName) {
       return undefined;
     }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindowtz' };
-  }
-
-  if (envKeyUpper.endsWith(windowSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -windowSuffix.length);
-    if (!watcherName) {
-      return undefined;
-    }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindow' };
+    return { watcherName: watcherName.toLowerCase(), key };
   }
 
   return undefined;
@@ -305,6 +461,8 @@ function normalizeWatcherMaturityEnvAliases(
   watcherConfigurations: Record<string, Record<string, unknown>>,
 ) {
   const aliases = [
+    ['_MATURITY_SKIP_RELEASES', 'maturityskipreleases'],
+    ['_MATURITY_RELEASE_FALLBACK_DAYS', 'maturityreleasefallbackdays'],
     ['_MATURITY_MIN_AGE_DAYS', 'maturityminagedays'],
     ['_MATURITY_MODE', 'maturitymode'],
   ] as const;
@@ -385,7 +543,7 @@ function mergeRecords(
  * `ddEnvVars`/`get()` from it during startup), so pulling in trigger-domain
  * modules here risks a require cycle.
  */
-const ACTION_TRIGGER_ENV_TYPES = new Set(['docker', 'dockercompose', 'command']);
+const ACTION_TRIGGER_ENV_TYPES = new Set(['docker', 'dockercompose', 'portainer', 'command']);
 
 /**
  * Suggest the DD_ACTION_ / DD_NOTIFICATION_ replacement for a detected
@@ -454,6 +612,27 @@ export function getWatcherConfigurations() {
 }
 
 /**
+ * Whether a watcher's `socket` was explicitly configured (env var or config
+ * file — both already merged into `ddEnvVars` by the time this runs) rather
+ * than left unset for the Docker watcher's Joi schema to default.
+ *
+ * `resolveDockerSocketPath` (docker-socket-resolution.ts) needs this signal:
+ * without it, an operator who explicitly sets
+ * `DD_WATCHER_<name>_SOCKET=/var/run/docker.sock` is indistinguishable, once
+ * Joi has filled in the same default for an unset socket, from one who never
+ * configured a socket at all — and gets silently rerouted to a detected
+ * Podman socket instead of the failure they'd expect (#10.4 forward-port
+ * review finding 1). Deliberately a side-channel lookup rather than a field
+ * added to the watcher configuration object: Docker.ts's Joi schema (and its
+ * line-count ratchet in Docker.structure.test.ts) has no room for an extra
+ * key, and validation would reject one it doesn't declare.
+ */
+export function isWatcherSocketExplicitlyConfigured(watcherName: string): boolean {
+  const watcherConfiguration = getWatcherConfigurations()[watcherName.toLowerCase()];
+  return Boolean(watcherConfiguration && Object.hasOwn(watcherConfiguration, 'socket'));
+}
+
+/**
  * Get trigger configurations.
  */
 export function getTriggerConfigurations() {
@@ -474,10 +653,46 @@ export function getRegistryConfigurations() {
 
 /**
  * Get authentication configurations.
+ *
+ * `DD_AUTH_TOTP_*` (the TOTP key ring and active key id, read directly by
+ * `loadTotpKeyringFromEnv`) is not an authentication provider. Excluded here
+ * so it isn't discovered as a provider literally named `totp`, the same reason
+ * `getAgentConfigurations` excludes `DD_AGENT_ALLOW_INSECURE_SECRET`.
  * @returns {*}
  */
 export function getAuthenticationConfigurations() {
-  return get('dd.auth', ddEnvVars);
+  const authEnvVars = Object.fromEntries(
+    Object.entries(ddEnvVars).filter(([key]) => !key.toUpperCase().startsWith('DD_AUTH_TOTP_')),
+  );
+  return get('dd.auth', authEnvVars);
+}
+
+/**
+ * Get two-factor (TOTP) settings.
+ *
+ * `DD_AUTH_TOTP_ALLOWHTTP` is the one operator switch under the prefix: it
+ * lets factor management run over plain HTTP, which is refused otherwise
+ * because the seed and the recovery codes are shown in those responses. The
+ * key ring and its active key id share the prefix but are secrets with a
+ * loader of their own (`loadTotpKeyringFromEnv`), so this schema passes them
+ * by: they are neither validated nor returned here.
+ *
+ * Only the switch is handed to the validator, rather than everything under
+ * the prefix the way the other section getters do. A Joi error keeps the whole
+ * object it was given, and the key ring must never ride out of here in one.
+ */
+export function getTotpConfiguration(): { allowhttp: boolean } {
+  const configurationSchema = joi.object().keys({
+    allowhttp: joi.boolean().default(false),
+  });
+
+  const configurationToValidate = configurationSchema.validate({
+    allowhttp: ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP,
+  });
+  if (configurationToValidate.error) {
+    throw configurationToValidate.error;
+  }
+  return configurationToValidate.value;
 }
 
 /**
@@ -495,9 +710,22 @@ export function getAgentConfigurations() {
 
 /**
  * Get Input configurations.
+ *
+ * `DD_STORE_DB_FILE` is excluded from the generic dotted-path walk below: its
+ * two-word suffix would otherwise land as a nested `db.file`
+ * (`get()` treats every `_` after the prefix as a path separator, the same
+ * reason `getAgentConfigurations` excludes `DD_AGENT_ALLOW_INSECURE_SECRET`
+ * above), while every caller of this store configuration wants it as a flat
+ * `dbFile` alongside `path` and `file`.
  */
 export function getStoreConfiguration() {
-  return get('dd.store', ddEnvVars);
+  const { DD_STORE_DB_FILE: dbFileEnvVar, ...storeEnvVars } = ddEnvVars;
+  const configuration = get('dd.store', storeEnvVars) as Record<string, unknown>;
+  const dbFile = dbFileEnvVar?.trim();
+  if (dbFile) {
+    configuration.dbFile = dbFile;
+  }
+  return configuration;
 }
 
 /**

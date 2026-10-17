@@ -97,7 +97,8 @@
       "updatesAvailable": "Mevcut Güncellemeler",
       "updateDetail": "{fresh} yeni · {mature} mevcut",
       "securityIssues": "Güvenlik Sorunları",
-      "registries": "Kayıt Defterleri"
+      "registries": "Kayıt Defterleri",
+      "approvals": "Onaylar"
     },
     "updateKind": {
       "major": "Ana",
@@ -106,9 +107,9 @@
       "digest": "İmaj güncellemesi"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Şu anda açık",
+      "scheduled": "Planlandı",
+      "openingSoon": "Yakında açılacak"
     },
     "dataLoadFailed": "Kontrol paneli verileri yüklenemedi",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

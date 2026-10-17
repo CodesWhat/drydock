@@ -1,4 +1,5 @@
 import { readJsonResponse } from '../utils/api';
+import { readHttpError } from './error-response';
 
 export type UpdateMode = 'notify' | 'manual' | 'auto';
 
@@ -10,8 +11,7 @@ interface Settings {
 async function getSettings(): Promise<Settings> {
   const response = await fetch('/api/v1/settings', { credentials: 'include' });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<Settings>(response);
 }
@@ -24,8 +24,7 @@ async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
     body: JSON.stringify(settings),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<Settings>(response);
 }
@@ -36,8 +35,7 @@ async function clearIconCache(): Promise<{ cleared: number }> {
     credentials: 'include',
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<{ cleared: number }>(response);
 }

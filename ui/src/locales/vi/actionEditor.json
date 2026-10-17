@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Chính sách hành động",
+    "edit": "Chỉnh sửa chính sách hành động",
+    "boundary": "Chỉ chỉnh sửa chính sách lập lịch. Lưu không thực thi hành động, lệnh, bản cập nhật hay thông báo. Thông tin xác thực và cài đặt thực thi vẫn chỉ đọc. Chế độ thủ công toàn cục và điều kiện đủ của container vẫn áp dụng.",
+    "actionUnavailable": "Hành động cụ thể này không có trong bản chụp của trình chỉnh sửa.",
+    "apiUnavailable": "Máy chủ này không cung cấp API chỉnh sửa chính sách hành động.",
+    "reset": "Xóa giá trị ghi đè trong tệp / kế thừa cài đặt",
+    "orderHelp": "Cho phép giá trị âm và số thập phân. Cơ chế kế thừa thứ tự hiện có cũng có thể ảnh hưởng đến các hành động và thông báo khác cùng tên.",
+    "concurrencyHelp": "Một số nguyên dương. Xóa giá trị ghi đè trong tệp sẽ khôi phục cài đặt kế thừa. Với Compose, giới hạn này áp dụng cho các dự án độc lập, không phải các dịch vụ trong cùng một tệp.",
+    "invalidNumber": "Nhập một số hữu hạn. Để kế thừa cài đặt, hãy xóa rõ ràng giá trị ghi đè trong tệp.",
+    "invalidConcurrency": "Nhập một số nguyên dương. Để kế thừa cài đặt, hãy xóa rõ ràng giá trị ghi đè trong tệp.",
+    "fields": {
+      "auto": "Thực thi tự động",
+      "order": "Thứ tự thực thi",
+      "concurrency": "Cập nhật đồng thời"
+    },
+    "autoModes": {
+      "all": "Tất cả container đủ điều kiện",
+      "oninclude": "Container được đưa vào rõ ràng",
+      "onauto": "Container được chính sách hành động tự động cho phép",
+      "none": "Không thực thi tự động"
+    }
+  }
+}

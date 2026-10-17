@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Authentification à deux facteurs",
+    "description": "Demandez un code de votre application d'authentification, en plus de votre mot de passe, à chaque connexion.",
+    "loading": "Chargement de l'état de l'authentification à deux facteurs",
+    "retry": "Réessayer",
+    "status": {
+      "off": "Désactivée",
+      "on": "Activée",
+      "onSince": "Activée depuis le {date}",
+      "recoveryRemaining": "{count} code de récupération restant | {count} codes de récupération restants",
+      "recoveryNone": "Il ne reste aucun code de récupération. Générez un nouvel ensemble avant de perdre l'accès à votre application d'authentification.",
+      "recoveryLow": "Il vous reste peu de codes de récupération. Générez un nouvel ensemble.",
+      "pending": "Configuration démarrée, en attente d'un code. Elle expire à {time}."
+    },
+    "unavailable": {
+      "notLocal": "L'authentification à deux facteurs n'est disponible que pour les comptes locaux connectés avec un mot de passe. Si c'est votre cas, déconnectez-vous puis reconnectez-vous.",
+      "httpsRequired": "La configuration à deux facteurs nécessite HTTPS. Ouvrez Drydock en HTTPS ou demandez à un administrateur de définir DD_AUTH_TOTP_ALLOWHTTP=true si le réseau est de confiance.",
+      "noKeyRing": "La configuration à deux facteurs n'est pas disponible sur ce serveur. Un administrateur doit d'abord configurer un trousseau de chiffrement.",
+      "recoverySession": "Vous vous êtes connecté avec un code de récupération, cette action n'est donc pas autorisée. Connectez-vous avec un code de votre application d'authentification."
+    },
+    "actions": {
+      "enable": "Activer",
+      "replace": "Remplacer l'authentificateur",
+      "regenerate": "Nouveaux codes de récupération",
+      "remove": "Désactiver",
+      "cancelSetup": "Annuler la configuration",
+      "cancel": "Annuler"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Confirmez que c'est bien vous",
+        "replace": "Confirmez que c'est bien vous pour remplacer votre authentificateur",
+        "regenerate": "Confirmez que c'est bien vous pour obtenir de nouveaux codes de récupération",
+        "remove": "Confirmez que c'est bien vous pour désactiver l'authentification à deux facteurs"
+      },
+      "hint": "Saisissez votre mot de passe. Rien n'est conservé après cette étape.",
+      "hintWithCode": "Saisissez votre mot de passe et un code actuel. Rien n'est conservé après cette étape.",
+      "passwordLabel": "Mot de passe",
+      "passwordPlaceholder": "Saisissez votre mot de passe",
+      "codeLabel": "Code d'authentification",
+      "codePlaceholder": "Code à 6 chiffres",
+      "recoveryLabel": "Code de récupération",
+      "recoveryPlaceholder": "Saisissez un code de récupération",
+      "useRecovery": "Utiliser un code de récupération",
+      "useCode": "Utiliser un code d'authentification",
+      "submit": {
+        "enable": "Continuer",
+        "replace": "Continuer",
+        "regenerate": "Générer de nouveaux codes",
+        "remove": "Désactiver l'authentification à deux facteurs",
+        "busy": "Vérification..."
+      }
+    },
+    "scan": {
+      "heading": "Scannez avec votre application d'authentification",
+      "instructions": "Ouvrez votre application d'authentification, ajoutez un compte et scannez ce code. Saisissez ensuite le code à 6 chiffres qu'elle affiche.",
+      "replaceNote": "Votre authentificateur actuel continue de fonctionner jusqu'à ce que vous confirmiez le nouveau.",
+      "qrLabel": "QR code pour configurer la vérification en deux étapes",
+      "qrFailed": "Le QR code n'a pas pu être affiché. Saisissez plutôt la clé de configuration.",
+      "secretLabel": "Impossible de scanner ? Saisissez cette clé de configuration",
+      "copySecret": "Copier la clé",
+      "copied": "Copié",
+      "expiresAt": "Cette configuration expire à {time}.",
+      "codeLabel": "Code d'authentification",
+      "codeHint": "Saisissez le code à 6 chiffres de votre application d'authentification.",
+      "codePlaceholder": "Code à 6 chiffres",
+      "confirm": "Confirmer et activer",
+      "confirming": "Confirmation..."
+    },
+    "codes": {
+      "heading": "Enregistrez vos codes de récupération",
+      "description": "Chaque code ne fonctionne qu'une fois si vous perdez votre application d'authentification. C'est la seule fois où ils sont affichés.",
+      "copy": "Copier les codes",
+      "copied": "Copié",
+      "download": "Télécharger",
+      "fileHeading": "Codes de récupération Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "J'ai enregistré ces codes",
+      "done": "Terminé",
+      "downloadFailed": "Votre navigateur n'a pas téléchargé le fichier. Copiez plutôt les codes."
+    },
+    "remove": {
+      "header": "Désactiver l'authentification à deux facteurs ?",
+      "message": "La connexion ne demandera plus que votre mot de passe, et vos autres sessions seront fermées.",
+      "accept": "Désactiver"
+    },
+    "notice": {
+      "enabled": "L'authentification à deux facteurs est activée.",
+      "replaced": "Votre nouvel authentificateur est actif.",
+      "regenerated": "Vos nouveaux codes de récupération sont actifs. Les anciens ne fonctionnent plus.",
+      "removed": "L'authentification à deux facteurs est désactivée."
+    },
+    "errors": {
+      "load": "Impossible de charger l'état de l'authentification à deux facteurs.",
+      "network": "Impossible de joindre le serveur. Réessayez.",
+      "generic": "Une erreur s'est produite. Réessayez.",
+      "sessionEnded": "Votre session a pris fin. Reconnectez-vous.",
+      "reauthFailed": "Le mot de passe ou le code ne correspond pas. Vérifiez-les et réessayez.",
+      "locked": "Trop de tentatives. Réessayez dans {time}.",
+      "lockedLater": "Trop de tentatives. Réessayez plus tard.",
+      "busy": "Une autre vérification est encore en cours. Réessayez dans un instant.",
+      "invalidRequest": "Saisissez votre mot de passe et un code valide.",
+      "codeFormat": "Saisissez les 6 chiffres de votre application d'authentification.",
+      "codeWrong": "Ce code n'a pas fonctionné. Vérifiez-le et réessayez.",
+      "enrollmentExpired": "Cette configuration a expiré. Recommencez.",
+      "enrollmentGone": "Cette configuration a été fermée après trop de codes erronés. Recommencez.",
+      "stateChanged": "Les réglages à deux facteurs ont changé ailleurs. Vérifiez-les et réessayez.",
+      "notActive": "L'authentification à deux facteurs n'est pas activée."
+    }
+  }
+}

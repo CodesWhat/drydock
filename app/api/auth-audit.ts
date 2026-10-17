@@ -1,9 +1,10 @@
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { recordAuditEvent } from './audit-events.js';
 import type { AuthRequest } from './auth-types.js';
+import { getIdentityUsername } from './principal.js';
 
 function getAuditUsername(req: AuthRequest): string {
-  return typeof req.user?.username === 'string' ? req.user.username : 'unknown';
+  return getIdentityUsername(req) ?? 'unknown';
 }
 
 export function recordLoginAuditEvent(

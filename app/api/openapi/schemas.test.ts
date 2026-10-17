@@ -1,5 +1,24 @@
 import { openApiSchemas } from './schemas.js';
 
+test('documents release maturity settings, sources and the soft release blocker', () => {
+  for (const schema of [
+    openApiSchemas.ContainerDeclarativeUpdatePolicy,
+    openApiSchemas.ContainerUpdatePolicy,
+  ]) {
+    expect(schema.properties).toMatchObject({
+      maturitySkipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+      maturityReleaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
+    });
+  }
+  expect(openApiSchemas.ContainerUpdatePolicySources.properties.maturitySkipReleases).toEqual({
+    type: 'string',
+    enum: ['env', 'group', 'label', 'override'],
+  });
+  expect(openApiSchemas.UpdateBlocker.properties.reason.enum).toContain(
+    'maturity-releases-not-reached',
+  );
+});
+
 describe('scanner runtime OpenAPI schemas', () => {
   test('documents each runtime provider with its tool status, provider, and role', () => {
     expect(openApiSchemas.SecurityRuntimeProviderStatus).toStrictEqual({
@@ -112,6 +131,95 @@ describe('action-policy OpenAPI schemas (spec-6.0.1-action-policy.md)', () => {
   test('documents the dd.action.auto label on ContainerResource', () => {
     expect(openApiSchemas.ContainerResource.properties.actionTriggerAuto).toMatchObject({
       type: 'string',
+    });
+  });
+
+  test('documents label override ownership on containers and the override dependency source', () => {
+    expect(openApiSchemas.ContainerResource.properties.labelOwnedSources).toEqual({
+      $ref: '#/components/schemas/LabelOwnedSources',
+    });
+    expect(Object.keys(openApiSchemas.LabelOwnedSources.properties)).toHaveLength(9);
+    expect(openApiSchemas.LabelOwnedSources.properties.displayName.enum).toContain('override');
+    expect(openApiSchemas.DependencyGraphEdge.properties.source.enum).toEqual([
+      'label',
+      'compose',
+      'override',
+    ]);
+  });
+
+  test('a label override patch allows at most nine changes and no extra properties', () => {
+    expect(openApiSchemas.LabelOverridePatchRequest).toMatchObject({
+      additionalProperties: false,
+      required: ['revision', 'changes'],
+      properties: { changes: { minItems: 1, maxItems: 9 } },
+    });
+    expect(openApiSchemas.LabelOverrideChangeResult.required).toContain('changed');
+  });
+});
+
+describe('group policy OpenAPI schemas', () => {
+  test('names the group layer as an update-policy source on every field', () => {
+    for (const field of Object.values(openApiSchemas.ContainerUpdatePolicySources.properties)) {
+      expect(field.enum).toStrictEqual(['env', 'group', 'label', 'override']);
+    }
+  });
+
+  test('records the resolved group policy on a container', () => {
+    expect(openApiSchemas.ContainerResource.properties.groupPolicy).toStrictEqual({
+      $ref: '#/components/schemas/ContainerGroupPolicySnapshot',
+    });
+    expect(openApiSchemas.ContainerGroupPolicySnapshot.required).toStrictEqual([
+      'id',
+      'group',
+      'revision',
+      'updatePolicy',
+      'actions',
+    ]);
+  });
+
+  test('a policy with members extends the policy fields with the member roster', () => {
+    expect(Object.keys(openApiSchemas.GroupPolicyWithMembers.properties)).toStrictEqual([
+      ...Object.keys(openApiSchemas.GroupPolicy.properties),
+      'members',
+    ]);
+    expect(openApiSchemas.GroupPolicyWithMembers.required).toStrictEqual([
+      ...openApiSchemas.GroupPolicy.required,
+      'members',
+    ]);
+  });
+});
+
+describe('group policy action rule OpenAPI schemas (spec 7.3 slice 2a)', () => {
+  test('GroupPolicyActions accepts only restricting rules', () => {
+    expect(openApiSchemas.GroupPolicyActions).toMatchObject({
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        updateMode: { type: 'string', enum: ['manual', 'notify'] },
+        exclude: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+      },
+    });
+    expect(openApiSchemas.GroupPolicyActions.properties.updateMode.enum).not.toContain('auto');
+  });
+
+  test('names the group-notify-only blocker', () => {
+    expect(openApiSchemas.UpdateBlocker.properties.reason.enum).toContain('group-notify-only');
+  });
+
+  test('UpdateEligibility reflects the binding update mode and who set it', () => {
+    expect(openApiSchemas.UpdateEligibility.properties.updateMode).toStrictEqual({
+      $ref: '#/components/schemas/UpdateEligibilityUpdateMode',
+    });
+    expect(openApiSchemas.UpdateEligibility.required).not.toContain('updateMode');
+    expect(openApiSchemas.UpdateEligibilityUpdateMode).toMatchObject({
+      type: 'object',
+      required: ['value', 'source'],
+      additionalProperties: false,
+      properties: {
+        value: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+        source: { type: 'string', enum: ['global', 'group'] },
+        group: { type: 'string' },
+      },
     });
   });
 });

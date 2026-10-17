@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent } from 'vue';
+import { i18n } from '@/boot/i18n';
 import {
   deleteOutboxEntry,
   getOutboxEntries,
@@ -160,6 +161,121 @@ describe('NotificationOutboxView', () => {
     mockGetOutboxEntries.mockResolvedValue(makeResponse());
     mockRetryOutboxEntry.mockResolvedValue(makeEntry({ status: 'pending' }));
     mockDeleteOutboxEntry.mockResolvedValue(undefined);
+  });
+
+  describe('localized real-service failures', () => {
+    let previousLocale: typeof i18n.global.locale.value;
+    let wrapper: Awaited<ReturnType<typeof mountView>> | undefined;
+
+    beforeEach(async () => {
+      previousLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'fr';
+      const service = await vi.importActual<typeof import('@/services/notification-outbox')>(
+        '@/services/notification-outbox',
+      );
+      mockGetOutboxEntries.mockImplementation(service.getOutboxEntries);
+      mockRetryOutboxEntry.mockImplementation(service.retryOutboxEntry);
+      mockDeleteOutboxEntry.mockImplementation(service.deleteOutboxEntry);
+      vi.stubGlobal('fetch', vi.fn());
+    });
+
+    afterEach(() => {
+      wrapper?.unmount();
+      wrapper = undefined;
+      i18n.global.locale.value = previousLocale;
+      vi.unstubAllGlobals();
+    });
+
+    const invalidEnvelopes = [
+      { name: 'absent diagnostic', body: '{}' },
+      { name: 'empty diagnostic', body: '{"error":""}' },
+      { name: 'blank diagnostic', body: '{"error":"  "}' },
+      { name: 'non-string diagnostic', body: '{"error":42}' },
+      { name: 'null envelope', body: 'null' },
+      { name: 'malformed JSON', body: '{broken' },
+    ];
+
+    it.each(invalidEnvelopes)('localizes a load failure with $name', async ({ body }) => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(body, {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      wrapper = await mountView();
+      expect(wrapper.text()).toContain("Impossible de charger la boîte d'envoi");
+      expect(wrapper.text()).not.toContain('Failed to load outbox');
+    });
+
+    it.each(invalidEnvelopes)('localizes a retry failure with $name', async ({ body }) => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json(makeResponse()))
+        .mockResolvedValueOnce(
+          new Response(body, { status: 500, headers: { 'content-type': 'application/json' } }),
+        );
+      wrapper = await mountView();
+      await wrapper
+        .get('button[aria-label="Réessayer l\'entrée de la boîte d\'envoi"]')
+        .trigger('click');
+      await flushPromises();
+      expect(mockToast.error).toHaveBeenCalledWith('Impossible de réessayer update-available');
+    });
+
+    it.each(invalidEnvelopes)('localizes a discard failure with $name', async ({ body }) => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json(makeResponse()))
+        .mockResolvedValueOnce(
+          new Response(body, { status: 500, headers: { 'content-type': 'application/json' } }),
+        );
+      wrapper = await mountView();
+      await wrapper
+        .get('button[aria-label="Rejeter l\'entrée de la boîte d\'envoi"]')
+        .trigger('click');
+      await flushPromises();
+      expect(mockToast.error).toHaveBeenCalledWith('Impossible de rejeter update-available');
+    });
+
+    it('preserves a real server diagnostic and recovers after a successful reload', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json({ error: '  Provider diagnostic  ' }, { status: 503 }))
+        .mockResolvedValueOnce(Response.json(makeResponse()));
+      wrapper = await mountView();
+      expect(wrapper.text()).toContain('Provider diagnostic');
+      const refresh = wrapper.findAll('button').find((button) => button.text() === 'Actualiser')!;
+      await refresh.trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).not.toContain('Provider diagnostic');
+      expect(wrapper.text()).toContain('update-available');
+    });
+
+    it.each(['Réessayer', 'Rejeter'])('preserves the server diagnostic for %s', async (action) => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json(makeResponse()))
+        .mockResolvedValueOnce(
+          Response.json({ error: '  Provider diagnostic  ' }, { status: 409 }),
+        );
+      wrapper = await mountView();
+      const button = wrapper.findAll('button').find((candidate) => candidate.text() === action)!;
+      await button.trigger('click');
+      await flushPromises();
+      expect(mockToast.error).toHaveBeenCalledWith('  Provider diagnostic  ');
+    });
+
+    it('reloads the real list after retry succeeds', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(Response.json(makeResponse()))
+        .mockResolvedValueOnce(Response.json(makeEntry({ status: 'pending' })))
+        .mockResolvedValueOnce(Response.json(makeResponse([])));
+      wrapper = await mountView();
+      await wrapper
+        .get('button[aria-label="Réessayer l\'entrée de la boîte d\'envoi"]')
+        .trigger('click');
+      await flushPromises();
+      expect(mockToast.success).toHaveBeenCalledWith('Remis en file : update-available');
+      expect(wrapper.text()).not.toContain('update-available');
+      expect(fetch).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe('initial load', () => {

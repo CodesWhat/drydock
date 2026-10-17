@@ -79,6 +79,7 @@ reviews:
     - "!CHANGELOG.md"
     # Immutable release archives are byte-bound to their published source by
     # scripts/release-docs-archive.test.mjs. Review the manifest and contract.
+    - "!content/docs/v1.7/**"
     - "!content/docs/v1.6/**"
 
   path_instructions:

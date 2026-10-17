@@ -44,6 +44,9 @@ import {
   isTerminalContainerUpdateOperationStatus,
   type TerminalContainerUpdateOperationStatus,
 } from '../model/container-update-operation.js';
+import type { InventoryRefreshOptions } from '../model/inventory-refresh.js';
+import { stripAgentLabelOwnedState, toAgentPayload } from '../model/label-owned.js';
+import { shouldCollectReleaseMaturity } from '../model/maturity-policy.js';
 import { applyUpdatePolicyOverrides, getUpdatePolicyOverrides } from '../model/update-policy.js';
 import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
@@ -56,12 +59,16 @@ import { getRequestedOperationId } from '../triggers/providers/docker/update-run
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
+import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js';
+import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
-import { ddRegistryLookupImage, ddRegistryLookupUrl } from '../watchers/providers/docker/label.js';
+import { AgentInventoryRefresh } from './agent-inventory.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import { StandardKeyRotation } from './standard-key-rotation.js';
+import { createRotationRequest } from './standard-key-rotation-client.js';
 
 let controllerSbomStorage: SbomStorage | undefined;
 
@@ -89,6 +96,7 @@ export interface AgentClientConfig {
   signingkeyid?: string;
   // Required when authmode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
   signingkey?: string;
+  rotationdir?: string;
 }
 
 interface AgentClientRuntimeInfo {
@@ -240,6 +248,7 @@ interface RemoteTriggerErrorPayload {
 interface AgentUpdateOperationChangedPayload {
   operationId: string;
   containerName: string;
+  triggerName?: string;
   status: ContainerUpdateOperationStatus;
   containerId?: string;
   newContainerId?: string;
@@ -300,6 +309,8 @@ export class AgentClient {
   private readonly axiosOptions: AxiosRequestConfig;
   // Parsed once at construction when authmode is 'ed25519'; undefined in token mode.
   private readonly ed25519PrivateKey?: KeyObject;
+  private readonly keyRotation?: StandardKeyRotation;
+  private rotationRecovery?: Promise<void>;
   public isConnected: boolean;
   /**
    * True only while this agent's components are being replaced — the span
@@ -326,6 +337,8 @@ export class AgentClient {
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private readonly controllerDockerTransportWatchers: Set<string>;
+  private readonly inventoryRefreshWatchers = new Set<string>();
+  private readonly inventory: AgentInventoryRefresh;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
   /**
@@ -347,6 +360,18 @@ export class AgentClient {
     if (this.config.authmode === 'ed25519') {
       this.ed25519PrivateKey = this.loadSigningKey();
     }
+    if (this.config.rotationdir) {
+      if (this.config.authmode !== 'ed25519') {
+        throw new Error('Managed key rotation requires Ed25519 authentication');
+      }
+      this.keyRotation = new StandardKeyRotation(
+        resolveConfiguredPath(this.config.rotationdir, {
+          label: `${name} signing credential directory`,
+        }),
+        name,
+        { keyId: this.config.signingkeyid as string, privatePem: this.config.signingkey as string },
+      );
+    }
 
     this.isConnected = false;
     this.isRegisteringComponents = false;
@@ -362,6 +387,58 @@ export class AgentClient {
     this.watcherSnapshotCache = new Map();
     this.controllerDockerTransportWatchers = new Set();
     this.statsChangedTimer = undefined;
+    this.inventory = new AgentInventoryRefresh({
+      agent: name,
+      isConnected: () => this.isConnected && !this.stopped,
+      onMutation: () => this.scheduleStatsChanged(),
+      request: async (type, watcherName, options) => {
+        const target = `/api/watchers/${encodeURIComponent(type)}/${encodeURIComponent(watcherName)}/inventory`;
+        const body = { operationId: options.operationId };
+        try {
+          const response = await axios.post(`${this.baseUrl}${target}`, body, {
+            ...this.buildRequestConfig('POST', target, body),
+            signal: options.signal,
+          });
+          return response.data;
+        } catch (error) {
+          const failure = error as { code?: string; response?: { status?: number } } | null;
+          const status = failure?.code === 'ECONNABORTED' ? 504 : failure?.response?.status;
+          const messages: Record<number, string> = {
+            404: 'Component not found',
+            501: 'Inventory refresh is not supported by this watcher',
+            503: 'Agent is disconnected',
+            504: 'Inventory refresh timed out',
+          };
+          throw new InventoryRefreshOperationError(
+            status && messages[status] ? status : 500,
+            status && messages[status] ? messages[status] : 'Agent inventory refresh failed',
+          );
+        }
+      },
+    });
+  }
+
+  isInventoryRefreshSupported(type: string, name: string): boolean {
+    return (
+      type === 'docker' && this.inventoryRefreshWatchers.has(watcherSnapshotCacheKey(type, name))
+    );
+  }
+
+  async refreshInventory(type: string, name: string, options: InventoryRefreshOptions = {}) {
+    if (!this.isConnected || this.stopped)
+      throw new InventoryRefreshOperationError(503, 'Agent is disconnected');
+    if (!this.isInventoryRefreshSupported(type, name))
+      throw new InventoryRefreshOperationError(
+        501,
+        'Inventory refresh is not supported by this watcher',
+      );
+    const id = `${this.name}.${type}.${name}`;
+    const watcher = registry.getState().watcher[id];
+    return this.inventory.refresh(type, name, {
+      ...options,
+      isCurrent: () =>
+        registry.getState().watcher[id] === watcher && (options.isCurrent?.() ?? true),
+    });
   }
 
   getWatcherSnapshot(
@@ -508,15 +585,17 @@ export class AgentClient {
     path: string,
     data?: unknown,
   ): AxiosRequestConfig {
-    if (!this.ed25519PrivateKey || !this.config.signingkeyid) {
+    const privateKey = this.keyRotation?.identity.privateKey ?? this.ed25519PrivateKey;
+    const keyId = this.keyRotation?.identity.keyId ?? this.config.signingkeyid;
+    if (!privateKey || !keyId) {
       return this.axiosOptions;
     }
     const signedHeaders = signRequest({
       method,
       path,
       body: this.serializeBodyForSigning(data),
-      keyId: this.config.signingkeyid,
-      privateKey: this.ed25519PrivateKey,
+      keyId,
+      privateKey,
     });
     return {
       ...this.axiosOptions,
@@ -555,6 +634,20 @@ export class AgentClient {
     this.startSse();
   }
 
+  getSigningKeyRotationStatus() {
+    if (this.edgeAdapter) return this.edgeAdapter.getSigningKeyRotationStatus();
+    return this.keyRotation ? { enabled: true, ...this.keyRotation.status() } : { enabled: false };
+  }
+
+  async rotateSigningKey(action: 'rotate' | 'abort') {
+    if (this.edgeAdapter) return this.edgeAdapter.rotateSigningKey(action);
+    if (!this.keyRotation || this.stopped) {
+      throw new Error('Managed key rotation is not enabled or the agent is stopped');
+    }
+    const request = createRotationRequest(this.baseUrl, this.axiosOptions);
+    return action === 'abort' ? this.keyRotation.abort(request) : this.keyRotation.rotate(request);
+  }
+
   /**
    * Forward one Docker Engine API request through a standard or edge Portwing
    * connection. The exact origin-form target is preserved for Docker routing
@@ -569,14 +662,22 @@ export class AgentClient {
     if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
       throw new Error('Docker API request target must be an origin-form path');
     }
+    const decodedPath = decodeURIComponent(new URL(target, 'http://agent.invalid').pathname);
+    if (decodedPath.startsWith('/_portwing/auth/rotation')) {
+      throw new Error('The key rotation namespace is reserved for credential management');
+    }
 
     if (this.edgeAdapter) {
       let edgeBody: unknown;
       if (body && body.length > 0) {
-        try {
-          edgeBody = JSON.parse(body.toString('utf8'));
-        } catch {
-          throw new Error('Edge Docker API request body must be valid JSON');
+        if (this.edgeAdapter.supportsRequestBodyStream) {
+          edgeBody = body;
+        } else {
+          try {
+            edgeBody = JSON.parse(body.toString('utf8'));
+          } catch {
+            throw new Error('Edge Docker API request body must be valid JSON');
+          }
         }
       }
       const response = await (isStreamingDockerTarget(target)
@@ -831,6 +932,9 @@ export class AgentClient {
         },
       };
     }
+    // Spec 7.5: an agent reports what it declares. Controller overrides never flow to or
+    // from agents, so any label-owned state in the payload is dropped before the store.
+    container = stripAgentLabelOwnedState(container);
     container.agent = this.name;
     if (
       this.controllerDockerTransportWatchers.has(container.watcher) &&
@@ -869,7 +973,9 @@ export class AgentClient {
     };
 
     if (existing) {
-      containerReport.container = storeContainer.updateContainer(container);
+      containerReport.container = storeContainer.updateContainer(container, {
+        labelOwned: 'declared',
+      });
       // existing is the old state (from store), container is new state (from Agent)
       // But storeContainer.updateContainer returns the NEW state object with validation/methods
       // We use existing.resultChanged() to compare with the new state
@@ -897,16 +1003,20 @@ export class AgentClient {
    * (`container-init.ts`) does that translation for containers the controller watches
    * directly, but nothing in the agent path ever ran it, so `dd.registry.lookup.image`
    * (and its legacy alias `dd.registry.lookup.url`) silently did nothing for any
-   * agent-reported container. Mirrors `container-init.ts`'s own label precedence
-   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias) and
-   * never overwrites a value the agent already reported.
+   * agent-reported container. Shares `container-init.ts`'s
+   * `resolveLookupImageFromContainerLabels` (called here with no overrides — the agent
+   * path has none of its own) for the label precedence
+   * (`dd.registry.lookup.image` before the legacy `dd.registry.lookup.url` alias), and
+   * never overwrites a value the agent already reported — checked before that shared
+   * helper ever runs, since the agent path's precedence (an agent-reported lookupUrl or
+   * lookupImage beats the label) differs from `container-init.ts`'s own call site.
    */
   private applyRegistryLookupLabels(container: Container): Container {
     if (container.image.registry.lookupImage || container.image.registry.lookupUrl) {
       return container;
     }
     const labels = container.labels ?? {};
-    const lookupImage = labels[ddRegistryLookupImage] || labels[ddRegistryLookupUrl];
+    const lookupImage = resolveLookupImageFromContainerLabels(labels, {});
     if (!lookupImage) {
       return container;
     }
@@ -961,12 +1071,39 @@ export class AgentClient {
         merged[field] = existingRecord[field];
       }
     }
+    // `image.digest.watch` is derived from the `dd.watch.digest` label by the
+    // controller's own bridged Docker watcher (AgentWatcher's
+    // PortwingDockerBridge), never by Portwing itself — Portwing hardcodes
+    // `image.digest.watch` to false on every report of its own "live runtime
+    // state" since it does not do digest watching. Nothing else in this merge
+    // restores it (the field lives on `image`, which isn't in
+    // `controllerOwnedFields`), so without this, a later Portwing report
+    // wholesale-replaces the store's `image` and silently turns digest
+    // watching back off (DR-38).
+    if (existing.image?.digest) {
+      const mergedImage = merged.image as Container['image'] | undefined;
+      if (mergedImage) {
+        merged.image = {
+          ...mergedImage,
+          digest: {
+            ...mergedImage.digest,
+            watch: existing.image.digest.watch,
+          },
+        };
+      }
+    }
     return merged as unknown as Container;
   }
 
   private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {
+    this.inventory.invalidate();
+    this.inventoryRefreshWatchers.clear();
     this.controllerDockerTransportWatchers.clear();
     for (const descriptor of descriptors) {
+      if (descriptor.type === 'docker' && descriptor.metadata?.inventoryRefreshSupported === true)
+        this.inventoryRefreshWatchers.add(
+          watcherSnapshotCacheKey(descriptor.type, descriptor.name),
+        );
       if (isControllerDockerTransportWatcher(descriptor)) {
         this.controllerDockerTransportWatchers.add(descriptor.name);
       }
@@ -1158,6 +1295,14 @@ export class AgentClient {
       this.buildRequestConfig('GET', '/api/containers'),
     );
     const containers = response.data;
+    if (!Array.isArray(containers)) {
+      this.log.warn(
+        `Handshake for agent ${sanitizeLogParam(this.name)} received a non-array /api/containers body (${typeof containers}); aborting before deregistering triggers`,
+      );
+      throw new Error(
+        `Handshake failed for agent ${this.name}: /api/containers returned ${typeof containers}, expected an array`,
+      );
+    }
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
     // isRegisteringComponents is true for the entire deregister → re-register
@@ -1255,6 +1400,7 @@ export class AgentClient {
   }
 
   stop() {
+    this.inventory.invalidate();
     this.stopped = true;
     const activeSseStream = this.activeSseStream;
     this.activeSseStream = undefined;
@@ -1300,6 +1446,7 @@ export class AgentClient {
       return;
     }
     const reconnectDelay = delay ?? this.getNextReconnectDelayMs();
+    this.inventory.invalidate();
     const wasConnected = this.isConnected;
     this.isConnected = false;
     // A disconnect is never a "still registering" state — it's a hard loss of
@@ -1418,6 +1565,24 @@ export class AgentClient {
   }
 
   startSse() {
+    if (this.keyRotation?.hasPending) {
+      if (!this.rotationRecovery) {
+        this.rotationRecovery = this.rotateSigningKey('rotate')
+          .then(() => undefined)
+          .catch(() => {
+            this.log.warn('Managed signing key rotation is pending recovery');
+          })
+          .finally(() => {
+            this.rotationRecovery = undefined;
+            this.openSse();
+          });
+      }
+      return;
+    }
+    this.openSse();
+  }
+
+  private openSse() {
     if (this.stopped) {
       return;
     }
@@ -1760,6 +1925,25 @@ export class AgentClient {
     return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
   }
 
+  private qualifyAgentTriggerName(
+    triggerName: string | undefined,
+    existingTriggerName?: string,
+  ): string | undefined {
+    if (existingTriggerName !== undefined) {
+      return existingTriggerName;
+    }
+    if (triggerName === undefined) {
+      return undefined;
+    }
+    if (triggerName.startsWith(`${this.name}.`)) {
+      return triggerName;
+    }
+    if (triggerName.indexOf('.') !== triggerName.lastIndexOf('.')) {
+      return undefined;
+    }
+    return `${this.name}.${triggerName}`;
+  }
+
   /**
    * Resolve the operation id to use when processing a lifecycle event from
    * the agent.
@@ -1788,7 +1972,12 @@ export class AgentClient {
     const payload = data as Record<string, unknown>;
     const operationId = toNonEmptyString(payload.operationId);
     const containerName = toNonEmptyString(payload.containerName);
+    const triggerName = toOptionalString(payload.triggerName);
     if (!operationId || !containerName || !isContainerUpdateOperationStatus(payload.status)) {
+      return undefined;
+    }
+    const normalizedTriggerName = this.qualifyAgentTriggerName(triggerName);
+    if (triggerName !== undefined && normalizedTriggerName === undefined) {
       return undefined;
     }
 
@@ -1796,6 +1985,7 @@ export class AgentClient {
       operationId,
       containerName,
       status: payload.status,
+      ...(normalizedTriggerName !== undefined ? { triggerName: normalizedTriggerName } : {}),
       ...(toOptionalString(payload.containerId) !== undefined
         ? { containerId: toOptionalString(payload.containerId) }
         : {}),
@@ -1846,6 +2036,7 @@ export class AgentClient {
   private buildAgentOperationBase(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1863,17 +2054,26 @@ export class AgentClient {
       id: this.resolveAgentOperationId(payload.operationId),
       kind: 'container-update' as const,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName) !== undefined
+        ? { triggerName: this.qualifyAgentTriggerName(payload.triggerName) }
+        : {}),
       agent: this.name,
       ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
-      ...(containerSnapshot !== undefined ? { container: containerSnapshot } : {}),
+      // The wire payload from an agent is untyped JSON; the store only ever
+      // reads named Container fields off it (identityKey, agent, watcher,
+      // labels), so this cast is a trust boundary, not a shape guarantee.
+      ...(containerSnapshot !== undefined
+        ? { container: containerSnapshot as unknown as Container }
+        : {}),
     };
   }
 
   private ensureAgentOperationForTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     containerId?: string;
     newContainerId?: string;
     container?: Record<string, unknown>;
@@ -1906,6 +2106,15 @@ export class AgentClient {
         if (isActiveContainerUpdateOperationStatus(existing.status)) {
           updateOperationStore.updateOperation(operationId, {
             containerName: payload.containerName,
+            ...(this.qualifyAgentTriggerName(payload.triggerName, existing.triggerName) !==
+            undefined
+              ? {
+                  triggerName: this.qualifyAgentTriggerName(
+                    payload.triggerName,
+                    existing.triggerName,
+                  ),
+                }
+              : {}),
             agent: base.agent,
             /* v8 ignore next -- watcher is optional when an agent event lacks container metadata. */
             ...(base.watcher !== undefined ? { watcher: base.watcher } : {}),
@@ -1942,6 +2151,7 @@ export class AgentClient {
   private markAgentOperationTerminal(payload: {
     operationId: string;
     containerName: string;
+    triggerName?: string;
     status: TerminalContainerUpdateOperationStatus;
     containerId?: string;
     newContainerId?: string;
@@ -1957,6 +2167,11 @@ export class AgentClient {
     updateOperationStore.markOperationTerminal(operationId, {
       status: payload.status,
       containerName: payload.containerName,
+      ...(this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName) !== undefined
+        ? {
+            triggerName: this.qualifyAgentTriggerName(payload.triggerName, existing?.triggerName),
+          }
+        : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),
@@ -2148,6 +2363,11 @@ export class AgentClient {
 
   async handleEvent(eventName: string, data: unknown) {
     switch (eventName) {
+      case 'dd:inventory-added':
+      case 'dd:inventory-updated':
+      case 'dd:inventory-removed':
+        this.inventory.handleEvent(eventName, data);
+        return;
       case 'dd:ack':
         this.handleAckEvent(data);
         return;
@@ -2297,7 +2517,7 @@ export class AgentClient {
           ...(operationId !== undefined ? { operationId } : {}),
         };
       } else {
-        payload = container;
+        payload = toAgentPayload(container);
       }
       this.log.debug(
         `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
@@ -2339,10 +2559,14 @@ export class AgentClient {
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType) && runtimeContext !== undefined) {
         body = containers.map((container) => {
           const operationId = getRequestedOperationId(container, runtimeContext);
-          return operationId !== undefined ? { ...container, operationId } : container;
+          const declared = toAgentPayload(container);
+          return operationId !== undefined ? { ...declared, operationId } : declared;
         });
       } else {
-        body = containers;
+        const projected = containers.map(toAgentPayload);
+        body = projected.every((payload, index) => payload === containers[index])
+          ? containers
+          : projected;
       }
       const target = `/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`;
       await axios.post(
@@ -2455,10 +2679,15 @@ export class AgentClient {
   async watch(watcherType: string, watcherName: string) {
     try {
       const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`;
+      const requested = storeContainer
+        .getContainers({ agent: this.name, watcher: watcherName })
+        .filter(shouldCollectReleaseMaturity)
+        .map((container) => container.id);
+      const body = requested.length > 0 ? { collectReleaseMaturityFor: requested } : {};
       const response = await axios.post<ContainerReport[]>(
         `${this.baseUrl}${target}`,
-        {},
-        this.buildRequestConfig('POST', target, {}),
+        body,
+        this.buildRequestConfig('POST', target, body),
       );
       const reports = response.data;
       const containers = reports.map((report) => report.container);
@@ -2491,10 +2720,11 @@ export class AgentClient {
   async watchContainer(watcherType: string, watcherName: string, container: Container) {
     try {
       const target = `/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}/container/${encodeURIComponent(container.id)}`;
+      const body = shouldCollectReleaseMaturity(container) ? { collectReleaseMaturity: true } : {};
       const response = await axios.post<ContainerReport>(
         `${this.baseUrl}${target}`,
-        {},
-        this.buildRequestConfig('POST', target, {}),
+        body,
+        this.buildRequestConfig('POST', target, body),
       );
       const report = response.data;
 

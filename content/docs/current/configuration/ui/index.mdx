@@ -17,7 +17,7 @@ On supported desktop and Android browsers, a dismissible install banner appears 
 
 The installed app (and the regular browser tab) is backed by a service worker that precaches the SPA shell — the HTML, JS, and CSS needed to boot Drydock — so the dashboard still loads without a network connection. The service worker updates itself automatically in the background and takes over immediately on the next load; there's no "update available" prompt to act on and no way to get stuck on a stale shell.
 
-<Callout type="info">All `/api/*` requests are always network-only and are never served from the service worker's cache, offline or not. Drydock is a live dashboard — showing stale container/update state would be worse than a request failing outright, so API calls always hit the live server and surface a normal connection error when it's unreachable. The same exclusion covers every other path the server owns rather than the SPA: `/auth/*` (including the OIDC `/auth/oidc/<name>/cb` callback), `/health`, and `/metrics`. Navigating to one of those always reaches the server, never the cached app shell.</Callout>
+<Callout type="info">All `/api/*` requests are always network-only and are never served from the service worker's cache, offline or not. Drydock is a live dashboard — showing stale container/update state would be worse than a request failing outright, so API calls always hit the live server and surface a normal connection error when it's unreachable.</Callout>
 
 ## Themes
 
@@ -128,6 +128,10 @@ Data views that expose view-mode controls toggle between table and card presenta
 
 Toggle between modes using the view mode buttons in the toolbar where they are available. The choice is persisted per view. Below ~640px the layout automatically reflows to cards and the now-redundant toggle is hidden. Utility pages with naturally tabular data may use table-only presentation. The old three-way `list` (accordion) mode was removed in v1.6 — it's table or cards.
 
+### Agent Table Spacing
+
+The Agents toolbar offers **Normal spacing** (the default) and **Compact spacing**. Compact spacing reduces table-row padding without shrinking the row's interactive target below 44px. The choice is saved per browser and participates in **Sync across devices** when enabled. It does not change other views, column visibility or card layout; the control is hidden while cards are shown, and the saved spacing returns with the table.
+
 ### Column Visibility
 
 Containers, Agents, Audit, Security, Servers, and Watchers each expose a column show/hide picker in the toolbar, letting you hide low-priority columns from the table. Hidden columns are persisted per view and have no effect in card mode.
@@ -139,6 +143,10 @@ On Containers, a column you still have checked "on" but that responsive sizing f
 Turn on stack grouping in the Containers toolbar to organize rows by group. Docker-derived group priority is `dd.group` → Compose project → Swarm namespace → ungrouped.
 
 To change the presentation without redeploying a container, open its **More** menu and choose **Set group**. Enter an existing or new group name, or clear the override to return to the Docker-derived group. Browser overrides take precedence only in this UI; they do not write Docker labels or change the container-groups API response. They are stored with the rest of the UI preferences and sync to other signed-in devices when **Sync across devices** is enabled.
+
+To share grouping by a Docker label, select **Label** in the grouping control and enter the exact label key. The address updates automatically, for example `/containers?group-by-label=com.example.team`. Opening that link selects label grouping even if the browser previously used stack grouping. Label keys are case-sensitive; let the browser encode special characters rather than encoding the key before entering it.
+
+If a link contains both `groupByStack=true` (or `1`) and `group-by-label`, explicit stack grouping wins. Switching grouping modes or clearing the label removes `group-by-label` without removing unrelated query fields. Navigating from a label-group link to a URL without that parameter clears label grouping; an empty parameter also clears it. A fresh page load without a grouping parameter keeps saved grouping preferences.
 
 ### Card Sorting
 
@@ -160,6 +168,10 @@ A dismissible banner appears at the top of the dashboard to surface release note
 ## Detail Panels
 
 Clicking any row in a data view opens a slide-in detail panel with contextual information and actions. Detail panels are available on all views: Containers, Watchers, Registries, Triggers, Auth, Agents, and Security.
+
+### Labels tab and label overrides
+
+The container **Labels** tab always shows the labels exactly as Docker reports them. A Drydock [label override](/docs/configuration/watchers#override-labels-with-the-api) never changes that list, label search or label grouping. It only changes the effective value Drydock uses for the display name, icon, dependencies and notification or action routing, so the container name, icon and dependency markers elsewhere in the UI show the override once one is set. There is no override editor in the UI yet: set and reset overrides through the [API](/docs/api/container#label-overrides).
 
 ## Language / Locale
 

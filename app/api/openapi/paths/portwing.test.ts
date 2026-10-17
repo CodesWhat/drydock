@@ -125,6 +125,19 @@ describe('portwingPaths', () => {
       expect(postPath.responses[401]).toStrictEqual(errorResponse('Authentication required'));
     });
 
+    test('403 response covers an API key caller and a recovery-code session', () => {
+      expect(postPath.responses[403]).toStrictEqual(
+        errorResponse(
+          'The caller is an API key, or the calling session signed in with a recovery code',
+        ),
+      );
+    });
+
+    test('description documents the recovery-code refusal and its reason', () => {
+      expect(postPath.description).toContain('recovery code');
+      expect(postPath.description).toContain('`details.reason` of `recovery-assurance`');
+    });
+
     test('409 response is duplicate key error', () => {
       expect(postPath.responses[409]).toStrictEqual(
         errorResponse('An active key with this keyId already exists'),

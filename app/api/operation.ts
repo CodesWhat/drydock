@@ -7,6 +7,7 @@ import {
 } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -39,6 +40,6 @@ function cancelOperation(req: Request<{ id: string }>, res: Response) {
 
 export function init() {
   router.use(nocache());
-  router.post('/:id/cancel', cancelOperation);
+  router.post('/:id/cancel', scoped('containers:update', cancelOperation));
   return router;
 }

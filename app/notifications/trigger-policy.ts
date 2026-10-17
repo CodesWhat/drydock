@@ -96,3 +96,33 @@ export function normalizeNotificationTriggerIds(
     ),
   ).sort();
 }
+
+export interface OrphanedNotificationRuleReference {
+  ruleId: string;
+  triggerId: string;
+}
+
+/**
+ * Every `(ruleId, triggerId)` pair among `rules` whose `triggerId` no longer
+ * resolves against `allowedTriggerIds` (spec-7.1-config-file.md section 4.3):
+ * a configuration reload that renames or removes a trigger orphans the DB
+ * rules that reference it by id. Reuses `resolveNotificationTriggerIds`'s
+ * own shorthand-matching rules — the same ones a rule write
+ * (`api/notification.ts`) already uses to decide whether a trigger reference
+ * is valid — so a reference that would be accepted on write is never flagged
+ * as orphaned here. Callers report the result; this never mutates a rule.
+ */
+export function findOrphanedNotificationRuleReferences(
+  rules: readonly { id: string; triggers: readonly string[] }[],
+  allowedTriggerIds: Set<string>,
+): OrphanedNotificationRuleReference[] {
+  const orphaned: OrphanedNotificationRuleReference[] = [];
+  for (const rule of rules) {
+    for (const triggerId of rule.triggers) {
+      if (resolveNotificationTriggerIds(triggerId, allowedTriggerIds).length === 0) {
+        orphaned.push({ ruleId: rule.id, triggerId });
+      }
+    }
+  }
+  return orphaned;
+}

@@ -2,6 +2,7 @@ import express from 'express';
 import nocache from 'nocache';
 import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import * as storeApp from '../store/app.js';
+import { scoped } from './route-scopes.js';
 
 /**
  * App infos router.
@@ -30,6 +31,6 @@ function getAppInfos(req, res) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getAppInfos);
+  router.get('/', scoped('read', getAppInfos));
   return router;
 }

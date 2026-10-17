@@ -1,3 +1,4 @@
+import { i18n } from '@/boot/i18n';
 import {
   connectContainerStatsStream,
   connectStatsSummaryStream,
@@ -55,9 +56,11 @@ describe('stats service', () => {
   });
 
   it('throws when container stats request fails', async () => {
-    mockFetch.mockResolvedValue({ ok: false, statusText: 'Nope' });
+    mockFetch.mockResolvedValue({ ok: false, status: 503, statusText: 'Nope' });
 
-    await expect(getContainerStats('c1')).rejects.toThrow('Failed to get container stats: Nope');
+    await expect(getContainerStats('c1')).rejects.toThrow(
+      `${i18n.global.t('containerComponents.stats.loadFailed')} (c1) (HTTP 503): Nope`,
+    );
   });
 
   it('normalizes malformed container stats snapshots and history entries', async () => {

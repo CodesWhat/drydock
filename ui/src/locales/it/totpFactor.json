@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Autenticazione a due fattori",
+    "description": "Richiedi un codice dalla tua app di autenticazione, oltre alla password, a ogni accesso.",
+    "loading": "Caricamento dello stato dell'autenticazione a due fattori",
+    "retry": "Riprova",
+    "status": {
+      "off": "Disattivata",
+      "on": "Attiva",
+      "onSince": "Attiva dal {date}",
+      "recoveryRemaining": "{count} codice di recupero rimasto | {count} codici di recupero rimasti",
+      "recoveryNone": "Non restano codici di recupero. Genera un nuovo set prima di perdere l'accesso alla tua app di autenticazione.",
+      "recoveryLow": "Stai finendo i codici di recupero. Genera un nuovo set.",
+      "pending": "Configurazione avviata, in attesa di un codice. Scade alle {time}."
+    },
+    "unavailable": {
+      "notLocal": "L'autenticazione a due fattori è disponibile solo per gli account locali con accesso tramite password. Se è il tuo caso, esci e accedi di nuovo.",
+      "httpsRequired": "La configurazione a due fattori richiede HTTPS. Apri Drydock tramite HTTPS oppure chiedi a un amministratore di impostare DD_AUTH_TOTP_ALLOWHTTP=true se la rete è attendibile.",
+      "noKeyRing": "La configurazione a due fattori non è disponibile su questo server. Un amministratore deve prima configurare un portachiavi di cifratura.",
+      "recoverySession": "Hai effettuato l'accesso con un codice di recupero, quindi questa azione non è consentita. Accedi con un codice della tua app di autenticazione."
+    },
+    "actions": {
+      "enable": "Attiva",
+      "replace": "Sostituisci autenticatore",
+      "regenerate": "Nuovi codici di recupero",
+      "remove": "Disattiva",
+      "cancelSetup": "Annulla configurazione",
+      "cancel": "Annulla"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Conferma che sei tu",
+        "replace": "Conferma che sei tu per sostituire il tuo autenticatore",
+        "regenerate": "Conferma che sei tu per ottenere nuovi codici di recupero",
+        "remove": "Conferma che sei tu per disattivare l'autenticazione a due fattori"
+      },
+      "hint": "Inserisci la tua password. Dopo questo passaggio non viene conservato nulla.",
+      "hintWithCode": "Inserisci la tua password e un codice attuale. Dopo questo passaggio non viene conservato nulla.",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Inserisci la tua password",
+      "codeLabel": "Codice di autenticazione",
+      "codePlaceholder": "Codice a 6 cifre",
+      "recoveryLabel": "Codice di recupero",
+      "recoveryPlaceholder": "Inserisci un codice di recupero",
+      "useRecovery": "Usa un codice di recupero",
+      "useCode": "Usa un codice di autenticazione",
+      "submit": {
+        "enable": "Continua",
+        "replace": "Continua",
+        "regenerate": "Genera nuovi codici",
+        "remove": "Disattiva autenticazione a due fattori",
+        "busy": "Verifica in corso..."
+      }
+    },
+    "scan": {
+      "heading": "Scansiona con la tua app di autenticazione",
+      "instructions": "Apri la tua app di autenticazione, aggiungi un account e scansiona questo codice. Poi inserisci il codice a 6 cifre che mostra.",
+      "replaceNote": "Il tuo autenticatore attuale continua a funzionare finché non confermi quello nuovo.",
+      "qrLabel": "Codice QR per configurare la verifica in due passaggi",
+      "qrFailed": "Non è stato possibile disegnare il codice QR. Inserisci invece la chiave di configurazione.",
+      "secretLabel": "Non riesci a scansionare? Inserisci questa chiave di configurazione",
+      "copySecret": "Copia chiave",
+      "copied": "Copiato",
+      "expiresAt": "Questa configurazione scade alle {time}.",
+      "codeLabel": "Codice di autenticazione",
+      "codeHint": "Inserisci il codice a 6 cifre della tua app di autenticazione.",
+      "codePlaceholder": "Codice a 6 cifre",
+      "confirm": "Conferma e attiva",
+      "confirming": "Conferma in corso..."
+    },
+    "codes": {
+      "heading": "Salva i tuoi codici di recupero",
+      "description": "Ogni codice funziona una sola volta se perdi la tua app di autenticazione. Questa è l'unica volta in cui vengono mostrati.",
+      "copy": "Copia codici",
+      "copied": "Copiato",
+      "download": "Scarica",
+      "fileHeading": "Codici di recupero Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Ho salvato questi codici",
+      "done": "Fatto",
+      "downloadFailed": "Il browser non ha scaricato il file. Copia invece i codici."
+    },
+    "remove": {
+      "header": "Disattivare l'autenticazione a due fattori?",
+      "message": "Per accedere servirà di nuovo solo la password e le tue altre sessioni verranno chiuse.",
+      "accept": "Disattiva"
+    },
+    "notice": {
+      "enabled": "L'autenticazione a due fattori è attiva.",
+      "replaced": "Il tuo nuovo autenticatore è attivo.",
+      "regenerated": "I tuoi nuovi codici di recupero sono attivi. Quelli vecchi non funzionano più.",
+      "removed": "L'autenticazione a due fattori è disattivata."
+    },
+    "errors": {
+      "load": "Impossibile caricare lo stato dell'autenticazione a due fattori.",
+      "network": "Impossibile raggiungere il server. Riprova.",
+      "generic": "Qualcosa è andato storto. Riprova.",
+      "sessionEnded": "La tua sessione è terminata. Accedi di nuovo.",
+      "reauthFailed": "La password o il codice non corrispondono. Controllali e riprova.",
+      "locked": "Troppi tentativi. Riprova tra {time}.",
+      "lockedLater": "Troppi tentativi. Riprova più tardi.",
+      "busy": "Un'altra verifica è ancora in corso. Riprova tra un momento.",
+      "invalidRequest": "Inserisci la tua password e un codice valido.",
+      "codeFormat": "Inserisci le 6 cifre della tua app di autenticazione.",
+      "codeWrong": "Il codice non ha funzionato. Controllalo e riprova.",
+      "enrollmentExpired": "Questa configurazione è scaduta. Ricomincia.",
+      "enrollmentGone": "Questa configurazione è stata chiusa dopo troppi codici errati. Ricomincia.",
+      "stateChanged": "Le impostazioni a due fattori sono cambiate altrove. Controllale e riprova.",
+      "notActive": "L'autenticazione a due fattori non è attiva."
+    }
+  }
+}

@@ -10,6 +10,8 @@ export const configurationValid = {
   auto: 'all',
   order: 100,
   autoremovetimeout: 10000,
+  pulltimeout: 600000,
+  helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:
     '${isDigestUpdate ? "New image available for container " + container.name + " (tag " + currentTag + ")" : "New " + container.updateKind.kind + " found for container " + container.name}',
@@ -41,8 +43,10 @@ vi.mock('../../../configuration/index.js', async () => {
 });
 
 const mockIsMemoryStore = vi.hoisted(() => vi.fn());
+const mockSaveStore = vi.hoisted(() => vi.fn());
 vi.mock('../../../store/index.js', () => ({
   isMemoryStore: (...args: any[]) => mockIsMemoryStore(...args),
+  save: (...args: any[]) => mockSaveStore(...args),
 }));
 
 const mockOffloadSbomDocuments = vi.hoisted(() => vi.fn());
@@ -133,9 +137,9 @@ const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
-const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
-const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetActiveOperationByContainerIdentity = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../../../store/update-operation.js', () => ({
@@ -143,12 +147,12 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
-  getInProgressOperationByContainerName: (...args: any[]) =>
-    mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerIdentity: (...args: any[]) =>
+    mockGetInProgressOperationByContainerIdentity(...args),
   getInProgressOperationByContainerId: (...args: any[]) =>
     mockGetInProgressOperationByContainerId(...args),
-  getActiveOperationByContainerName: (...args: any[]) =>
-    mockGetActiveOperationByContainerName(...args),
+  getActiveOperationByContainerIdentity: (...args: any[]) =>
+    mockGetActiveOperationByContainerIdentity(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
   OperationCancelledError: class OperationCancelledError extends Error {
@@ -171,7 +175,7 @@ vi.mock('../../../registry', () => ({
 
 /** Default registry state used by the Docker trigger test suite */
 function createDefaultRegistryState() {
-  return {
+  const state = {
     watcher: {
       'docker.test': {
         getId: () => 'docker.test',
@@ -264,6 +268,8 @@ function createDefaultRegistryState() {
       },
     },
   };
+  state.watcher['docker.local'] = state.watcher['docker.test'];
+  return state;
 }
 
 // --- Shared factories and helpers ---
@@ -438,7 +444,17 @@ export function registerCommonDockerBeforeEach() {
     vi.resetAllMocks();
     mockGetState.mockImplementation(createDefaultRegistryState);
     docker.configuration = configurationValid;
+    // The update-concurrency semaphore is created lazily and cached per
+    // instance (so it can bound concurrency across separate trigger() calls,
+    // not just within one triggerBatch()) — reset it whenever configuration
+    // is reset so a test that sets `concurrency` doesn't inherit a semaphore
+    // sized by whatever ran before it against this shared `docker` instance.
+    docker.updateSemaphore = undefined;
     docker.log = log;
+    docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: '123456789',
+      name: 'container-name',
+    });
     mockGetSecurityConfiguration.mockReturnValue({
       enabled: false,
       scanner: '',
@@ -465,6 +481,7 @@ export function registerCommonDockerBeforeEach() {
     });
     mockGetStoreConfiguration.mockReturnValue({ path: '/test/store' });
     mockIsMemoryStore.mockReturnValue(true);
+    mockSaveStore.mockResolvedValue(undefined);
     mockOffloadSbomDocuments.mockImplementation(async ({ sbom }) => sbom);
     mockCreateSbomStorage.mockReturnValue(mockSbomStorage);
     mockResolveConfiguredPath.mockImplementation((value: string) => value);
@@ -489,7 +506,7 @@ export function registerCommonDockerBeforeEach() {
       ...operation,
     }));
     mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
-    mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
   });
@@ -501,6 +518,7 @@ export function getDockerTestMocks() {
     mockGetSecurityConfiguration,
     mockGetStoreConfiguration,
     mockIsMemoryStore,
+    mockSaveStore,
     mockOffloadSbomDocuments,
     mockCreateSbomStorage,
     mockSbomStorage,
@@ -520,9 +538,9 @@ export function getDockerTestMocks() {
     mockUpdateOperation,
     mockGetOperationById,
     mockMarkOperationTerminal,
-    mockGetInProgressOperationByContainerName,
+    mockGetInProgressOperationByContainerIdentity,
     mockGetInProgressOperationByContainerId,
-    mockGetActiveOperationByContainerName,
+    mockGetActiveOperationByContainerIdentity,
     mockGetActiveOperationByContainerId,
     mockIsOperationCancelRequested,
     mockSyncComposeFileTag,

@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Actief sinds {duration}",
+    "apiResponse": {
+      "html": "{context} heeft HTML in plaats van JSON teruggegeven. Controleer of de API-server of de demosimulaties actief zijn.",
+      "contentType": "{context} heeft {contentType} in plaats van JSON teruggegeven.",
+      "invalidJson": "{context} heeft ongeldige JSON teruggegeven."
+    },
     "loading": "Laden…",
     "back": "Terug",
     "cancel": "Annuleren",
@@ -9,8 +15,8 @@
     "close": "Sluiten",
     "retry": "Opnieuw proberen",
     "unknown": "onbekend",
-    "yes": "yes",
-    "no": "no",
+    "yes": "ja",
+    "no": "nee",
     "errorSummary": {
       "rateLimitHit": "Ratelimiet van register bereikt",
       "accessDenied": "Toegang tot register geweigerd",
@@ -22,13 +28,13 @@
       "signatureFailed": "Handtekeningverificatie mislukt"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Aangepast"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Zojuist"
     },
     "imageAge": {
-      "now": "now"
+      "now": "nu"
     }
   }
 }

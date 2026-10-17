@@ -38,7 +38,10 @@ vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
 vi.mock('axios');
-vi.mock('./maintenance.js', () => ({
+// Partial: isScanGatedByMaintenanceWindow stays real so the maintenancewindowscope
+// branches are exercised rather than restated here.
+vi.mock('./maintenance.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./maintenance.js')>()),
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
   hasNarrowMinuteField: vi.fn(() => false),
@@ -156,6 +159,7 @@ describe('Docker Watcher', () => {
     storeContainer.getContainer.mockReturnValue(undefined);
     storeContainer.insertContainer.mockImplementation((c) => c);
     storeContainer.updateContainer.mockImplementation((c) => c);
+    storeContainer.updateContainerFields.mockImplementation((_id, patch) => patch);
     storeContainer.deleteContainer.mockImplementation(() => {});
 
     // Setup registry mock
@@ -299,9 +303,9 @@ describe('Docker Watcher', () => {
       };
       storeContainer.getContainer.mockReturnValue(storedContainer);
       const writtenStatuses: string[] = [];
-      storeContainer.updateContainer.mockImplementation((container) => {
-        writtenStatuses.push(container.status);
-        return container;
+      storeContainer.updateContainerFields.mockImplementation((_id, patch) => {
+        writtenStatuses.push(patch.status);
+        return { ...storedContainer, ...patch };
       });
 
       await docker.register('watcher', 'docker', 'test', { watchevents: false });
@@ -362,9 +366,9 @@ describe('Docker Watcher', () => {
       };
       storeContainer.getContainer.mockReturnValue(storedContainer);
       const writtenStatuses: string[] = [];
-      storeContainer.updateContainer.mockImplementation((container) => {
-        writtenStatuses.push(container.status);
-        return container;
+      storeContainer.updateContainerFields.mockImplementation((_id, patch) => {
+        writtenStatuses.push(patch.status);
+        return { ...storedContainer, ...patch };
       });
 
       await docker.register('watcher', 'docker', 'test', { watchevents: false });
@@ -559,7 +563,7 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from(event));
 
       expect(mockContainer.inspect).toHaveBeenCalled();
-      expect(storeContainer.updateContainer).toHaveBeenCalled();
+      expect(storeContainer.updateContainerFields).toHaveBeenCalled();
     });
 
     test('should update container name on rename events', async () => {
@@ -589,7 +593,15 @@ describe('Docker Watcher', () => {
 
       expect(existingContainer.name).toBe('renamed-container');
       expect(existingContainer.displayName).toBe('renamed-container');
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'container123',
+        {
+          name: 'renamed-container',
+          displayName: 'renamed-container',
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should ignore removed wud display-name labels when processing events', async () => {
@@ -613,7 +625,21 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"rename","id":"container123"}\n'));
 
       expect(existingContainer.displayName).toBe('renamed-container');
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'container123',
+        {
+          name: 'renamed-container',
+          labels: { 'wud.display.name': 'Custom Label Name' },
+          displayName: 'renamed-container',
+          tagFamily: 'strict',
+          tagPinInfo: true,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should skip store update when inspect payload does not change tracked fields', async () => {
@@ -636,7 +662,7 @@ describe('Docker Watcher', () => {
 
       await docker.onDockerEvent(Buffer.from('{"Action":"start","id":"container123"}\n'));
 
-      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainerFields).not.toHaveBeenCalled();
     });
 
     test('should compute fallback display name even when image metadata is missing', async () => {
@@ -692,7 +718,7 @@ describe('Docker Watcher', () => {
 
       await docker.onDockerEvent(Buffer.from('{"Action":"start","id":"container123"}\n'));
 
-      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainerFields).not.toHaveBeenCalled();
       expect(docker.watchCronDebounced).toHaveBeenCalledTimes(1);
     });
 
@@ -934,7 +960,26 @@ describe('Docker Watcher', () => {
       expect(existing.excludeTags).toBe('^alpha');
       expect(existing.tagFamily).toBe('loose');
       expect(existing.tagPinInfo).toBe(false);
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c-wiring',
+        {
+          labels: {
+            'dd.tag.include': '^3\\.',
+            'dd.tag.exclude': '^alpha',
+            'dd.tag.family': 'loose',
+            'dd.tag.pin.info': 'false',
+          },
+          includeTags: '^3\\.',
+          excludeTags: '^alpha',
+          tagFamily: 'loose',
+          tagPinInfo: false,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('restores watcher tag-policy defaults when direct labels are removed on an event', async () => {
@@ -1006,7 +1051,20 @@ describe('Docker Watcher', () => {
       await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
       expect(existing.labels).toEqual({ 'dd.display.name': 'Custom Name', new: 'label' });
       expect(existing.displayName).toBe('Custom Name');
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c1',
+        {
+          labels: { 'dd.display.name': 'Custom Name', new: 'label' },
+          displayName: 'Custom Name',
+          tagFamily: 'strict',
+          tagPinInfo: true,
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: {},
+          updatePolicySources: {},
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('should not update when custom display name label matches existing value', async () => {
@@ -1029,7 +1087,7 @@ describe('Docker Watcher', () => {
 
       await docker.onDockerEvent(Buffer.from('{"Action":"update","id":"c1"}\n'));
 
-      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainerFields).not.toHaveBeenCalled();
     });
 
     test('should update runtime details when inspect metadata changes', async () => {
@@ -1064,7 +1122,18 @@ describe('Docker Watcher', () => {
         volumes: ['/srv/data:/data'],
         env: [{ key: 'APP_ENV', value: 'prod' }],
       });
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+      expect(storeContainer.updateContainerFields).toHaveBeenCalledWith(
+        'c1',
+        {
+          details: {
+            ports: ['0.0.0.0:8080->80/tcp'],
+            volumes: ['/srv/data:/data'],
+            env: [{ key: 'APP_ENV', value: 'prod' }],
+          },
+        },
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
   });
 });

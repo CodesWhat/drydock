@@ -97,7 +97,8 @@
       "updatesAvailable": "Доступные обновления",
       "updateDetail": "{fresh} новых · {mature} зрелых",
       "securityIssues": "Проблемы безопасности",
-      "registries": "Реестры"
+      "registries": "Реестры",
+      "approvals": "Одобрения"
     },
     "updateKind": {
       "major": "Мажорное",
@@ -106,9 +107,9 @@
       "digest": "Обновление образа"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Открыто сейчас",
+      "scheduled": "Запланировано",
+      "openingSoon": "Скоро откроется"
     },
     "dataLoadFailed": "Не удалось загрузить данные панели управления",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

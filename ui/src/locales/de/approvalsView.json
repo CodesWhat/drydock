@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Zusammenfassung der Genehmigungen konnte nicht geladen werden",
+      "detailLoadFailed": "Genehmigung konnte nicht geladen werden",
+      "approveFailed": "Update konnte nicht genehmigt werden",
+      "rejectFailed": "Update konnte nicht abgelehnt werden",
+      "deferFailed": "Update konnte nicht verschoben werden"
+    },
+    "ofCount": "{count} angezeigt",
+    "refresh": "Aktualisieren",
+    "loading": "Genehmigungen werden geladen…",
+    "loadError": "Genehmigungen konnten nicht geladen werden",
+    "notifyModeBanner": "Der Aktualisierungsmodus ist notify. Genehmigungen sind deaktiviert, bis der Modus auf manual oder auto gesetzt wird.",
+    "tabs": {
+      "pending": "Ausstehend",
+      "deferred": "Zurückgestellt",
+      "decided": "Entschieden"
+    },
+    "columns": {
+      "container": "Container",
+      "image": "Image",
+      "version": "Version",
+      "scan": "Scan",
+      "age": "Alter"
+    },
+    "semver": {
+      "major": "Hauptversion",
+      "minor": "Nebenversion",
+      "patch": "Patch",
+      "prerelease": "Vorabversion",
+      "unknown": "Unbekannt"
+    },
+    "actions": {
+      "notesAriaLabel": "Versionshinweise und Gründe für das Zurückhalten anzeigen",
+      "approve": "Genehmigen",
+      "approveAriaLabel": "Aktualisierung genehmigen",
+      "approveDisabledNotify": "Aktualisierungsmodus ist notify; Genehmigen ist deaktiviert",
+      "reject": "Ablehnen",
+      "rejectAriaLabel": "Aktualisierung ablehnen",
+      "defer": "Zurückstellen",
+      "deferAriaLabel": "Aktualisierung zurückstellen"
+    },
+    "detail": {
+      "loading": "Details werden geladen…",
+      "holdReasons": "Gründe für das Zurückhalten",
+      "viewFullNotes": "Vollständige Hinweise anzeigen",
+      "empty": "Keine Versionshinweise oder Gründe für das Zurückhalten dieser Aktualisierung"
+    },
+    "empty": {
+      "pending": "Keine ausstehenden Genehmigungen",
+      "deferred": "Keine zurückgestellten Genehmigungen",
+      "decided": "Noch keine entschiedenen Genehmigungen",
+      "all": "Keine Genehmigungen"
+    },
+    "confirm": {
+      "cancel": "Abbrechen",
+      "approve": {
+        "header": "Aktualisierung genehmigen",
+        "message": "Aktualisierung von {name} auf {toRef} genehmigen?",
+        "softBlockerSuffix": "\n\nFür diese Aktualisierung bestehen noch Gründe für das Zurückhalten:\n{list}",
+        "acceptLabel": "Genehmigen"
+      },
+      "reject": {
+        "header": "Aktualisierung ablehnen",
+        "message": "Aktualisierung von {name} auf {toRef} ablehnen? Sie wird nicht automatisch angewendet.",
+        "acceptLabel": "Ablehnen"
+      },
+      "defer": {
+        "header": "Aktualisierung zurückstellen",
+        "message": "Aktualisierung für {name} um {days} Tage zurückstellen?",
+        "acceptLabel": "Zurückstellen"
+      }
+    },
+    "toast": {
+      "approved": "Genehmigung für {name} angefordert",
+      "approveFailed": "{name} konnte nicht genehmigt werden",
+      "rejected": "Aktualisierung für {name} abgelehnt",
+      "rejectFailed": "{name} konnte nicht abgelehnt werden",
+      "deferred": "Aktualisierung für {name} zurückgestellt",
+      "deferFailed": "{name} konnte nicht zurückgestellt werden"
+    }
+  }
+}

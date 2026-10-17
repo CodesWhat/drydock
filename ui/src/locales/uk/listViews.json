@@ -42,6 +42,30 @@
       "info": "Інформація"
     },
     "actions": {
+      "webhook-watch": "Перевірка через вебхук",
+      "webhook-watch-container": "Перевірка контейнера через вебхук",
+      "webhook-update": "Оновлення через вебхук",
+      "mqtt-command-update": "Команда оновлення MQTT",
+      "security-scan-skipped": "Перевірку безпеки пропущено",
+      "scanner-asset-pull-started": "Завантаження образу сканера розпочато",
+      "scanner-asset-pull-succeeded": "Образ сканера завантажено",
+      "scanner-asset-pull-failed": "Помилка завантаження образу сканера",
+      "scanner-asset-warm-started": "Підготовку сканера розпочато",
+      "scanner-asset-warm-succeeded": "Підготовку сканера завершено",
+      "scanner-asset-warm-failed": "Помилка підготовки сканера",
+      "container-unhealthy": "Контейнер несправний",
+      "env-reveal": "Змінні середовища показано",
+      "debug-dump": "Дані налагодження завантажено",
+      "config-read": "Конфігурацію прочитано",
+      "config-validated": "Конфігурацію перевірено",
+      "config-reloaded": "Конфігурацію перезавантажено",
+      "config-written": "Конфігурацію записано",
+      "update-approved": "Оновлення схвалено",
+      "update-rejected": "Оновлення відхилено",
+      "update-deferred": "Оновлення відкладено",
+      "api-key-created": "Ключ API створено",
+      "api-key-revoked": "Ключ API відкликано",
+      "api-key-auth-failed": "Помилка автентифікації за ключем API",
       "container-update": "Оновлення контейнера",
       "container-added": "Контейнер додано",
       "container-removed": "Контейнер видалено",
@@ -49,6 +73,13 @@
       "container-stop": "Зупинка контейнера",
       "container-restart": "Перезапуск контейнера",
       "auth-login": "Вхід з автентифікацією",
+      "totp-recovery-used": "Використано код відновлення",
+      "totp-enrollment-started": "Розпочато налаштування двофакторної автентифікації",
+      "totp-enabled": "Двофакторну автентифікацію увімкнено",
+      "totp-replaced": "Двофакторну автентифікацію замінено",
+      "totp-disabled": "Двофакторну автентифікацію вимкнено",
+      "totp-recovery-codes-replaced": "Коди відновлення замінено",
+      "totp-break-glass": "Офлайн-відновлення двофакторної автентифікації",
       "authenticated": "Автентифіковано",
       "authfail": "Помилка автентифікації",
       "hook-configured": "Хук налаштовано",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Автооновлення заблоковано",
       "update-policy-override-set": "Перевизначення політики оновлення встановлено",
       "update-policy-override-cleared": "Перевизначення політики оновлення очищено",
+      "group-policy-set": "Політику групи встановлено",
+      "group-policy-cleared": "Політику групи очищено",
+      "label-override-set": "Перевизначення мітки встановлено",
+      "label-override-cleared": "Перевизначення мітки очищено",
       "auto-rollback": "Автовідкат",
       "rollback": "Відкат",
       "preview": "Попередній перегляд",
       "agent-disconnect": "Відключення агента",
       "notification-delivery-failed": "Помилка доставки сповіщення",
       "security-alert": "Попередження безпеки",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Період очікування завершено",
+      "image-prune": "Очищення образу"
     },
     "target": {
       "container": "Контейнер",
-      "agent": "Агент"
+      "agent": "Агент",
+      "group": "Група"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Зрілості досягнуто",
         "description": "Коли оновлення, стримане політикою зрілості, стає застосовним"
+      },
+      "update-pending-approval": {
+        "name": "Оновлення очікує на схвалення",
+        "description": "Коли оновлення в ручному режимі потрапляє в чергу схвалення"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Чисто"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "образи",
+      "scanned": "проскановано"
     },
     "fixableBadge": "{count} виправлення",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Фільтр за назвою...",
     "clear": "Очистити",
     "emptyFiltered": "Жоден тригер не відповідає вашим фільтрам",
-    "testContainerName": "Test Container",
+    "testContainerName": "Тестовий контейнер",
     "columns": {
       "trigger": "Тригер",
       "type": "Тип",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Завантаження спостерігачів...",
     "loadError": "Не вдалося завантажити спостерігачів",
-    "soon": "soon",
+    "soon": "незабаром",
     "filterPlaceholder": "Фільтр за назвою...",
     "clear": "Очистити",
     "emptyFiltered": "Жоден спостерігач не відповідає вашим фільтрам",

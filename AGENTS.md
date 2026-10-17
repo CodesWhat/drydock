@@ -4,13 +4,13 @@ Guidance for coding agents working in this repository.
 
 ## What is Drydock?
 
-Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 20 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
+Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 21 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
 
 ## Repository structure
 
 This is a multi-workspace repo; each JS/TS workspace manages its own `package.json`:
 
-- **`app/`** — Backend (TypeScript, Express, LokiJS). Compiles with `tsc` directly, no bundler.
+- **`app/`** — Backend (TypeScript, Express, SQLite on the v1.8 development line). Compiles with `tsc` directly, no bundler.
 - **`ui/`** — Frontend (Vue 3, Tailwind CSS 4, Vite SPA).
 - **`e2e/`** — Cucumber API/stream contracts + Playwright browser tests.
 - **`content/docs/`** — Versioned MDX documentation, the source of truth for published docs.
@@ -32,8 +32,8 @@ npm run lint:fix         # biome check --fix .
 # Frontend — run from ui/
 npm run build            # icons + fonts extraction, then vite build
 npm run serve             # dev server on port 8080
-npm run typecheck         # tsc --noEmit
-npm run test:unit         # vitest run --coverage (100% threshold enforced)
+npm run typecheck         # vue-tsc --noEmit (TypeScript and Vue SFCs)
+npm run test:unit         # vitest run --coverage (TS 100%, measured SFC floors)
 npx vitest run tests/path/to/file.spec.ts   # single test file
 npm run lint             # biome check .
 npm run lint:fix         # biome check --fix .
@@ -71,11 +71,11 @@ Each component type (watcher, registry, trigger, authentication) extends a base 
 - **Watchers** (`app/watchers/`) — monitor containers via the Docker socket, reading `dd.watch`/`dd.tag.*` labels.
 - **Registries** (`app/registries/`) — query image registries for available tags; 23 providers share auth patterns via `BaseRegistry`.
 - **Triggers** (`app/triggers/`) — send notifications or execute actions on update; category-scoped `DD_ACTION_*`/`DD_NOTIFICATION_*`. The legacy `DD_TRIGGER_*` env vars and `dd.trigger.*` labels are removed as of v1.7.0 — a leftover `DD_TRIGGER_*` variable now fails startup; see `DEPRECATIONS.md`.
-- **Store** (`app/store/`) — LokiJS in-memory database, persisted to `/store/dd.json`.
+- **Store** (`app/store/`) — SQLite persisted to `/store/dd.sqlite` on v1.8, with a one-time import of the legacy `/store/dd.json` used by v1.7 and earlier.
 - **Agents** (`app/agent/`) — controller-agent distributed architecture; agents run remote watchers/triggers, including Portwing edge/standard agents.
 - **API** (`app/api/`) — Express REST API with SSE for real-time updates.
 
-Configuration is env-var only, `DD_` prefix, nested via underscores (e.g. `DD_REGISTRY_HUB_PUBLIC_AUTH`); secret-file support via `DD_PASSWORD__FILE`.
+Configuration uses `DD_` environment variables nested via underscores (e.g. `DD_REGISTRY_HUB_PUBLIC_AUTH`), with secret-file support via `DD_PASSWORD__FILE`. v1.8 also loads `drydock.yml` beneath environment overrides and exposes revision-checked editors for selected local file-owned fields. See `content/docs/current/configuration/config-file/index.mdx`; database-owned settings and per-container labels remain separate.
 
 ## Testing patterns
 
@@ -91,9 +91,9 @@ Configuration is env-var only, `DD_` prefix, nested via underscores (e.g. `DD_RE
 
 ## Coverage policy
 
-**100% line/branch/function/statement coverage is enforced for both `app/` and `ui/`.** This is a hard gate, not a target — the pre-push `coverage` step and CI both fail under it. External contributors aren't expected to hit this bar; per `CONTRIBUTING.md`, the maintainer brings PRs up to 100% during merge.
+**100% line/branch/function/statement coverage remains enforced for configured backend sources and UI `src/**/*.ts`.** UI coverage also includes every `src/**/*.vue`, including unimported SFCs, with separate aggregate floors: statements 87.54%, branches 81.57%, functions 84.39%, lines 87.89%. These floors capture the measured baseline and are raised explicitly after verified improvements; they are not per-component 100% claims. Existing exclusions for typecheck fixtures, declarations, types directories and dependencies remain. SFC metrics include script and generated-template mappings; `npm run typecheck` separately checks scripts and templates. Passing typecheck does not establish runtime coverage or mutation quality. The thresholds are hard gates. External contributors aren't expected to meet them; the maintainer brings PRs up to the configured thresholds during merge.
 
-When coverage fails, read `.coverage-gaps.json` (gitignored, written by `scripts/coverage-gaps.mjs`) for the exact files, uncovered lines, and branch ids, parsed from `lcov.info`.
+When coverage fails, read the Vitest threshold diagnostic and `.coverage-gaps.json` (gitignored, written by `scripts/coverage-gaps.mjs`) for files, uncovered lines and branch ids parsed from `lcov.info`. The gap file is an uncovered-source inventory, not a list of individual SFC threshold failures.
 
 ## Commit convention
 
@@ -129,7 +129,7 @@ Add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:`
 8. `workflow-tests` — `npm run test:workflows` (CI/workflow invariants, outside the app suite)
 9. `typecheck-ui` — `npm run typecheck --prefix ui`
 10. `web-scripts-test` — `npm run test:scripts --prefix apps/web`, only when a push touches `apps/web/**`
-11. `coverage` — sharded `app`+`ui` parallel vitest with the 100% threshold above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
+11. `coverage` — sharded `app`+`ui` parallel vitest with the configured thresholds above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
 12. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 11)
 13. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
 14. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed

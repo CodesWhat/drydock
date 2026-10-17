@@ -86,6 +86,50 @@ test.each(['starting', 'healthy', 'unhealthy'])('validate round-trips health=%s'
   expect(container.validate(createValidContainer({ health })).health).toBe(health);
 });
 
+test('validate retains the candidate software version independently of the installed version', () => {
+  const input = createValidContainer({ result: { tag: 'latest', softwareVersion: '2026.8.2' } });
+  Object.assign(input.image, { softwareVersion: '2026.7.5' });
+  const result = container.validate(input);
+  expect(result.result).toHaveProperty('softwareVersion', '2026.8.2');
+  expect(result.image.softwareVersion).toBe('2026.7.5');
+});
+
+test.each(['updatePolicy', 'updatePolicyOverrides'])(
+  'validate bounds release maturity in %s',
+  (field) => {
+    for (const policy of [
+      { maturitySkipReleases: -1 },
+      { maturitySkipReleases: 101 },
+      { maturitySkipReleases: 1.5 },
+      { maturityReleaseFallbackDays: -1 },
+      { maturityReleaseFallbackDays: 366 },
+    ]) {
+      expect(() => container.validate(createValidContainer({ [field]: policy }))).toThrow();
+    }
+  },
+);
+
+test('validate rejects malformed candidate release evidence', () => {
+  for (const releaseMaturity of [
+    { version: '2.0.2', family: '2', earlierReleases: -1 },
+    { version: '2.0.2', family: '2', earlierReleases: 1.5 },
+    { earlierReleases: 2 },
+  ]) {
+    expect(() =>
+      container.validate(createValidContainer({ result: { releaseMaturity } })),
+    ).toThrow();
+  }
+});
+
+test.each([{}, [], true, 'v'.repeat(257)])(
+  'validate rejects unusable candidate software version %j',
+  (softwareVersion) => {
+    expect(() =>
+      container.validate(createValidContainer({ result: { softwareVersion } })),
+    ).toThrow();
+  },
+);
+
 test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
   expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
 });
@@ -413,6 +457,21 @@ test('testable_isUpdateSuppressed should return false when no suppression rule a
       },
     ),
   ).toBe(false);
+});
+
+test('release maturity suppresses automatic updates even after the day gate passes', () => {
+  const current = createValidContainer({
+    updateDetectedAt: new Date(Date.now() - daysToMs(20)).toISOString(),
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+    result: {
+      tag: '2.0.2',
+      releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 1 },
+    },
+  });
+  const updateKind = { kind: 'tag', remoteValue: '2.0.2', semverDiff: 'patch' };
+  expect(container.testable_isUpdateSuppressed(current, updateKind)).toBe(true);
+  current.result.releaseMaturity.earlierReleases = 2;
+  expect(container.testable_isUpdateSuppressed(current, updateKind)).toBe(false);
 });
 
 test('testable_isUpdateSuppressed should ignore skip lists without matching kinds and remote values', () => {
@@ -1216,6 +1275,47 @@ test('model should reject empty error message', async () => {
   expect(() => {
     container.validate(createContainerWithError(''));
   }).toThrow('ValidationError: "error.message" is not allowed to be empty');
+});
+
+describe('group policy snapshot validation', () => {
+  const snapshot = {
+    id: 'policy-1',
+    group: 'payments',
+    revision: 2,
+    updatePolicy: { maturityMode: 'mature', skipTags: ['1.0.0'] },
+    actions: { updateMode: 'manual', exclude: ['docker.local'] },
+  };
+
+  test('accepts a group snapshot and group as an update-policy source', () => {
+    const validated = container.validate(
+      createValidContainer({
+        groupPolicy: snapshot,
+        updatePolicy: { maturityMode: 'mature' },
+        updatePolicySources: { maturityMode: 'group', skipTags: 'group' },
+      }),
+    );
+
+    expect(validated.groupPolicy).toEqual(snapshot);
+    expect(validated.updatePolicySources).toEqual({ maturityMode: 'group', skipTags: 'group' });
+  });
+
+  test.each([
+    ['a revision below 1', { revision: 0 }],
+    ['an empty group', { group: '' }],
+    ['an automatic update mode', { actions: { updateMode: 'auto' } }],
+    ['an out-of-range minimum age', { updatePolicy: { maturityMinAgeDays: 0 } }],
+    ['a missing actions body', { actions: undefined }],
+  ])('rejects a snapshot with %s', (_case, change) => {
+    expect(() =>
+      container.validate(createValidContainer({ groupPolicy: { ...snapshot, ...change } })),
+    ).toThrow('groupPolicy');
+  });
+
+  test('rejects an unknown update-policy source', () => {
+    expect(() =>
+      container.validate(createValidContainer({ updatePolicySources: { skipTags: 'fleet' } })),
+    ).toThrow('updatePolicySources.skipTags');
+  });
 });
 
 test('validate should allow and preserve unknown future fields (forward compatibility)', () => {

@@ -76,6 +76,95 @@ describe('Trigger Router', () => {
     });
   });
 
+  describe('API key scope, resolved from the trigger type', () => {
+    function keyRequest(scopes: string[], params: Record<string, string>) {
+      return {
+        params,
+        body: { id: 'c1' },
+        principal: { kind: 'api-key', keyId: 'abcdef012345', name: 'ci', scopes },
+      };
+    }
+
+    // docker/dockercompose/portainer dispatch a real container update through
+    // requestContainerUpdate; command executes a configured host command. All
+    // four are actions, so none of them is a test-fire.
+    const ACTION_TYPES = ['docker', 'dockercompose', 'portainer', 'command'];
+
+    test.each(ACTION_TYPES)(
+      'a triggers:test-only key running a %s trigger gets 403 and dispatches nothing',
+      async (triggerType) => {
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+        const res = createMockResponse();
+
+        await runTrigger(keyRequest(['triggers:test'], { type: triggerType, name: 'update' }), res);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'API key is missing the required scope',
+          details: { requiredScope: 'containers:update' },
+        });
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test.each(ACTION_TYPES)(
+      'the same refusal applies to the agent-qualified %s route, before the agent is resolved',
+      async (triggerType) => {
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+        const handler = getRemoteTriggerHandler();
+        const res = createMockResponse();
+
+        await handler(
+          keyRequest(['triggers:test'], { type: triggerType, name: 'update', agent: 'agent-1' }),
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(spy).not.toHaveBeenCalled();
+        // Refusing before the lookup keeps the 404 from naming which agents exist.
+        expect(agent.getAgent).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test('a containers:update key reaches the docker trigger', async () => {
+      const res = createMockResponse();
+
+      await runTrigger(keyRequest(['containers:update'], { type: 'docker', name: 'update' }), res);
+
+      expect(res.status).not.toHaveBeenCalledWith(403);
+    });
+
+    test('a triggers:test key still reaches a notification trigger', async () => {
+      const res = createMockResponse();
+
+      await runTrigger(keyRequest(['triggers:test'], { type: 'slack', name: 'default' }), res);
+
+      expect(res.status).not.toHaveBeenCalledWith(403);
+    });
+
+    test('a containers:update key does not inherit the notification test-fire', async () => {
+      const res = createMockResponse();
+
+      await runTrigger(keyRequest(['containers:update'], { type: 'slack', name: 'default' }), res);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'API key is missing the required scope',
+        details: { requiredScope: 'triggers:test' },
+      });
+    });
+
+    test('a session is not gated by either scope', async () => {
+      const res = createMockResponse();
+
+      await runTrigger({ params: { type: 'docker', name: 'update' }, body: { id: 'c1' } }, res);
+
+      expect(res.status).not.toHaveBeenCalledWith(403);
+    });
+  });
+
   describe('runTrigger', () => {
     test('should return 400 when no container in body', async () => {
       const req = {

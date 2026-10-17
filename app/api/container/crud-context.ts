@@ -31,17 +31,13 @@ export interface WatchContainersBody {
 
 interface UpdateOperationStoreApi {
   listActiveOperations?: () => unknown[];
-  getOperationsByContainerName: (containerName: string) => unknown[];
+  getOperationsByContainerIdentity: (identityKey: string | undefined) => unknown[];
   getOperationsByContainerId: (containerId: string) => unknown[];
-  getInProgressOperationByContainerName: (
-    containerName: string,
-    identity?: { agent?: string; watcher?: string },
+  getInProgressOperationByContainerIdentity: (
+    identityKey: string | undefined,
   ) => unknown | undefined;
   getInProgressOperationByContainerId: (containerId: string) => unknown | undefined;
-  getActiveOperationByContainerName: (
-    containerName: string,
-    identity?: { agent?: string; watcher?: string },
-  ) => unknown | undefined;
+  getActiveOperationByContainerIdentity: (identityKey: string | undefined) => unknown | undefined;
   getActiveOperationByContainerId: (containerId: string) => unknown | undefined;
 }
 

@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "グループポリシー",
+    "title": "グループポリシー",
+    "description": "グループごとに1つのポリシー。現在のすべてのメンバーと、あとから参加するコンテナに適用されます。",
+    "ownership": "Drydock に保存され、Docker ラベルには保存されません。更新ポリシーのフィールドでは、メンバーのラベルとコンテナ単位の上書きが引き続き優先されます。",
+    "newPolicy": "新規ポリシー",
+    "loading": "グループポリシーを読み込み中…",
+    "empty": "グループやポリシーはまだありません。グループは dd.group、Compose プロジェクト、Swarm スタックから取得されます。",
+    "memberCount": "{count} 個のコンテナ | {count} 個のコンテナ",
+    "noMembers": "現在のメンバーはいません。今後のメンバーに適用されます",
+    "hosts": "ホスト: {hosts}",
+    "controller": "コントローラー",
+    "noPolicy": "ポリシーなし",
+    "whitespaceNotice": "名前の先頭または末尾に空白があります。␣ で表示しています。",
+    "edit": "編集",
+    "create": "ポリシーを作成",
+    "readOnly": "グループポリシーを変更できるのは管理者のみです。この画面は読み取り専用です。",
+    "summary": {
+      "maturityMode": "成熟度: {value}",
+      "minAge": "最短経過日数: {days}日",
+      "skipTags": "スキップするタグ: {count}",
+      "skipDigests": "スキップするダイジェスト: {count}",
+      "updateMode": "更新: {mode}",
+      "exclude": "除外するトリガー: {count}"
+    },
+    "editor": {
+      "titleCreate": "新規グループポリシー",
+      "titleEdit": "グループポリシー: {group}",
+      "groupName": "グループ名",
+      "groupNameHelp": "完全一致で照合されます。大文字小文字と空白も区別されます。",
+      "groupNameInvalid": "空白でないグループ名を入力してください。",
+      "maturityMode": "成熟度モード",
+      "maturityOptions": {
+        "inherit": "継承",
+        "all": "すべての更新",
+        "mature": "成熟したもののみ"
+      },
+      "minAge": "最短経過日数 (日)",
+      "minAgeHelp": "1〜365 の整数の日数。継承する場合は空欄にします。",
+      "minAgeInvalid": "1〜365 の整数を入力してください。",
+      "skipTags": "スキップするタグ",
+      "skipDigests": "スキップするダイジェスト",
+      "listHelp": "1行に1つ、またはカンマ区切りで入力します。",
+      "updateMode": "自動更新",
+      "updateModeOptions": {
+        "inherit": "継承",
+        "manual": "手動のみ",
+        "notify": "通知のみ"
+      },
+      "updateModeHelp": "グループのルールは制限のみ可能です。現在のグローバルモード: {mode}。",
+      "exclude": "除外するアクショントリガー",
+      "excludeHelp": "トリガーの ID または名前。必要に応じて :threshold を付けます。1行に1つ、またはカンマ区切りで入力します。",
+      "noFields": "少なくとも1つのフィールドを設定するか、ポリシーを削除してください。",
+      "remove": "ポリシーを削除",
+      "conflict": "このポリシーは他のユーザーによって変更されました。再読み込みしてから、変更をもう一度適用してください。下書きは再読み込みするまで保持されます。",
+      "reload": "再読み込み",
+      "notFound": "このポリシーはもう存在しません。再読み込みして最新の一覧を確認してください。",
+      "forbidden": "グループポリシーを変更するには管理者権限が必要です。"
+    },
+    "remove": {
+      "header": "グループポリシーを削除",
+      "message": "グループ {group} のポリシーを削除しますか？メンバーはラベル、ウォッチャー、グローバルの値に戻ります。",
+      "accept": "削除"
+    },
+    "saved": "ポリシーを保存しました。{members} 個のコンテナを更新しました。 | ポリシーを保存しました。{members} 個のコンテナを更新しました。",
+    "removed": "ポリシーを削除しました。{members} 個のコンテナを更新しました。 | ポリシーを削除しました。{members} 個のコンテナを更新しました。",
+    "warningsTitle": "警告",
+    "errors": {
+      "load": "グループポリシーを読み込めませんでした",
+      "requestFailed": "グループポリシーのリクエストに失敗しました (HTTP {status})",
+      "unknown": "グループポリシーを保存できませんでした"
+    }
+  }
+}

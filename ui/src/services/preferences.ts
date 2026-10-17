@@ -1,6 +1,7 @@
 import { PREFERENCES_API_VERSION } from '../preferences';
 import type { PreferencesSchema } from '../preferences/schema';
 import { readJsonResponse } from '../utils/api';
+import { readHttpError } from './error-response';
 
 interface PreferencesEnvelope {
   apiVersion: number;
@@ -13,8 +14,7 @@ interface PreferencesEnvelope {
 async function getPreferences(): Promise<PreferencesEnvelope> {
   const response = await fetch('/api/v1/preferences', { credentials: 'include' });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<PreferencesEnvelope>(response);
 }
@@ -30,8 +30,7 @@ async function updatePreferences(
     body: JSON.stringify({ apiVersion: PREFERENCES_API_VERSION, schemaVersion, preferences }),
   });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || `HTTP ${response.status}`);
+    throw new Error(await readHttpError(response));
   }
   return readJsonResponse<PreferencesEnvelope>(response);
 }

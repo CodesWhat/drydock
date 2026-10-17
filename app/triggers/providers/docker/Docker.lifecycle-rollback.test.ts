@@ -12,7 +12,7 @@ import {
 registerCommonDockerBeforeEach();
 const {
   mockAuditCounterInc,
-  mockGetInProgressOperationByContainerName,
+  mockGetInProgressOperationByContainerIdentity,
   mockGetState,
   mockInsertAudit,
   mockMarkOperationTerminal,
@@ -247,12 +247,12 @@ describe('auto-rollback health monitor integration', () => {
   }
 
   function createNotFoundError() {
-    return Object.assign(new Error('no such image: my-registry/test/test:1.24'), {
+    return Object.assign(new Error('no such image: my-registry/test/test:1.0.0@sha256:kept'), {
       statusCode: 404,
     });
   }
 
-  test('pullRollbackImage should resolve pull credentials and pull a backup reference that is not on the host', async () => {
+  test('pullRollbackImage should resolve pull credentials and pull a digest-pinned backup reference that is not on the host', async () => {
     const getAuthPull = vi.fn().mockResolvedValue({ username: 'robot', password: 'secret' });
     stubRollbackRegistry(getAuthPull);
     const pullImageSpy = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
@@ -264,7 +264,7 @@ describe('auto-rollback health monitor integration', () => {
     // rather than the tag it was recorded under (DR-110).
     await docker.pullRollbackImage(
       dockerApi,
-      'my-registry/test/test@sha256:kept',
+      'my-registry/test/test:1.0.0@sha256:kept',
       createTriggerContainer(),
       logContainer,
     );
@@ -273,7 +273,7 @@ describe('auto-rollback health monitor integration', () => {
     expect(pullImageSpy).toHaveBeenCalledWith(
       dockerApi,
       { username: 'robot', password: 'secret' },
-      'my-registry/test/test@sha256:kept',
+      'my-registry/test/test:1.0.0@sha256:kept',
       logContainer,
     );
   });
@@ -293,12 +293,12 @@ describe('auto-rollback health monitor integration', () => {
     // network call on most registries (DR-110).
     await docker.pullRollbackImage(
       dockerApi,
-      'my-registry/test/test:1.24',
+      'my-registry/test/test:1.0.0@sha256:kept',
       createTriggerContainer(),
       logContainer,
     );
 
-    expect(dockerApi.getImage).toHaveBeenCalledWith('my-registry/test/test:1.24');
+    expect(dockerApi.getImage).toHaveBeenCalledWith('my-registry/test/test:1.0.0@sha256:kept');
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(getAuthPull).not.toHaveBeenCalled();
     expect(logContainer.info).toHaveBeenCalledWith(
@@ -317,7 +317,7 @@ describe('auto-rollback health monitor integration', () => {
 
     await docker.pullRollbackImage(
       dockerApi,
-      'my-registry/test/test:1.24',
+      'my-registry/test/test:1.0.0@sha256:kept',
       createTriggerContainer(),
       logContainer,
     );
@@ -325,7 +325,7 @@ describe('auto-rollback health monitor integration', () => {
     expect(pullImageSpy).toHaveBeenCalledWith(
       dockerApi,
       { username: 'robot', password: 'secret' },
-      'my-registry/test/test:1.24',
+      'my-registry/test/test:1.0.0@sha256:kept',
       logContainer,
     );
     expect(logContainer.info).not.toHaveBeenCalledWith(expect.stringContaining('skipping pull'));
@@ -344,12 +344,12 @@ describe('auto-rollback health monitor integration', () => {
     await expect(
       docker.pullRollbackImage(
         dockerApi,
-        'my-registry/test/test:1.24',
+        'my-registry/test/test:1.0.0@sha256:kept',
         createTriggerContainer(),
         logContainer,
       ),
     ).rejects.toThrow(
-      'Backup image my-registry/test/test:1.24 is neither on the host nor pullable: toomanyrequests: You have reached your pull rate limit',
+      'Backup image my-registry/test/test:1.0.0@sha256:kept is neither on the host nor pullable: toomanyrequests: You have reached your pull rate limit',
     );
     expect(pullImageSpy).toHaveBeenCalledTimes(1);
   });
@@ -556,15 +556,15 @@ describe('additional docker trigger coverage', () => {
 
   test('maybeNotifySelfUpdate should notify immediately for drydock image', async () => {
     const logContainer = createMockLog('info');
-
-    await docker.maybeNotifySelfUpdate(
-      {
-        image: {
-          name: 'drydock',
-        },
+    const container = {
+      id: '123456789',
+      image: {
+        name: 'drydock',
       },
-      logContainer,
-    );
+    };
+    await docker.selfUpdateOrchestrator.classifySelfUpdate(container, {});
+
+    await docker.maybeNotifySelfUpdate(container, logContainer);
 
     expect(logContainer.info).toHaveBeenCalledWith(
       'Self-update detected — notifying UI before proceeding',
@@ -621,7 +621,6 @@ describe('additional docker trigger coverage', () => {
 
   test('cleanupOldImages should skip tag pruning when tag is retained for rollback', async () => {
     const backupStore = await import('../../../store/backup.js');
-    const storeContainer = await import('../../../store/container.js');
     docker.configuration.prune = true;
     vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
       {
@@ -646,14 +645,11 @@ describe('additional docker trigger coverage', () => {
         kind: 'tag',
       },
     };
-    vi.mocked(storeContainer.getContainers).mockReturnValue([container] as any);
-
     await docker.cleanupOldImages({}, registryProvider, container, logContainer);
 
     expect(backupStore.getBackupsForContainer).toHaveBeenCalledWith({
       containerName: 'container-name',
       containerIdentityKey: '::test::container-name',
-      includeLegacy: true,
     });
     expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
     expect(removeImageSpy).not.toHaveBeenCalled();
@@ -1314,7 +1310,7 @@ describe('executeContainerUpdate', () => {
     };
     const context = createContainerUpdateContext({ dockerApi });
     const logContainer = createMockLog('info', 'warn', 'debug');
-    mockGetInProgressOperationByContainerName.mockReturnValue({
+    mockGetInProgressOperationByContainerIdentity.mockReturnValue({
       id: 'op-recover-1',
       containerName: 'container-name',
       oldName: 'container-name',

@@ -89,7 +89,7 @@ The `/metrics` endpoint supports three authentication modes, evaluated in order:
          - targets: ['drydock:3000']
    ```
 
-2. **Session / basic auth fallback** — When no `DD_SERVER_METRICS_TOKEN` is set and `DD_SERVER_METRICS_AUTH` is not `false`, the endpoint falls back to the same session/basic auth used by the rest of the API.
+2. **Registered authenticator chain fallback** — When no `DD_SERVER_METRICS_TOKEN` is set and `DD_SERVER_METRICS_AUTH` is not `false`, the endpoint falls back to the registered authenticator chain used by the rest of the API, including the session authenticator plus configured providers such as Basic or OIDC. Because this mode accepts a user password, failed attempts are capped at 100 per IP per 15 minutes. Only failures count, so a scrape that authenticates is never charged against the budget however often it runs.
 
 3. **No auth** — Set `DD_SERVER_METRICS_AUTH=false` to expose metrics without any authentication (suitable for isolated networks):
 
@@ -145,6 +145,10 @@ dd_legacy_input_total{source="label",key="dd.trigger.include"} 1
 # TYPE dd_watcher_maintenance_skip_total counter
 dd_watcher_maintenance_skip_total{type="docker",name="local"} 0
 
+# HELP dd_watcher_maintenance_deferred_updates_total The number of automatic updates deferred by a maintenance window, one per container per dispatch evaluation, including containers deferred because a dependency was
+# TYPE dd_watcher_maintenance_deferred_updates_total counter
+dd_watcher_maintenance_deferred_updates_total{type="docker",name="local"} 0
+
 # HELP dd_webhook_total Total count of webhook operations
 # TYPE dd_webhook_total counter
 dd_webhook_total{action="watch"} 1
@@ -176,6 +180,8 @@ drydock_digest_cache_misses_total 3
 
 When a watcher logger cannot be initialized, drydock falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total`.
 
+The two maintenance-window counters measure different things and are not interchangeable. `dd_watcher_maintenance_skip_total` counts whole scan cycles the window skipped, so it only moves on a watcher running `MAINTENANCE_WINDOW_SCOPE=scan`; under the default `install` scope no scan is ever skipped and it stays at zero. `dd_watcher_maintenance_deferred_updates_total` counts automatic updates held back for the window, one sample per container per dispatch evaluation, so a batch that defers fifty containers adds fifty and the next scan that still finds them deferred adds fifty more. A container held back because something it depends on was deferred is counted too, labelled by its own watcher.
+
 `dd_legacy_input_total` tracks active compatibility inputs such as the deprecated `dd.trigger.include` / `dd.trigger.exclude` container labels, plus historical observations retained for the lifetime of the process. The `DD_TRIGGER_*` environment variable prefix was removed in v1.7.0 and now fails startup outright, so it can no longer increment this counter — see [Deprecation Schedule](/docs/deprecations#legacy-trigger-prefix). Removed `WUD_*` variables and `wud.*` labels no longer increment it because they are ignored. No data is sent to external services.
 
 ### Auth Abuse Observability
@@ -187,6 +193,7 @@ Use the auth metrics below to detect brute-force and username-enumeration activi
 - `drydock_auth_username_mismatch_total` counter
 - `drydock_auth_account_locked_total` gauge
 - `drydock_auth_ip_locked_total` gauge
+- `drydock_auth_api_key_failure_total` counter, every rejected API key authentication attempt, including those the audit-entry throttle (at most one entry per source key per minute) suppresses from the audit trail
 
 #### Prometheus alerting rules
 
@@ -247,6 +254,19 @@ groups:
           description: >-
             p95 login duration is {{ $value | printf "%.2f" }}s for provider={{ $labels.provider }}.
             Possible causes: slow OIDC IdP, high bcrypt cost, resource contention.
+
+      # API key authentication abuse, more than 10 rejected key attempts in 5 minutes
+      - alert: DrydockApiKeyAuthFailureRate
+        expr: increase(drydock_auth_api_key_failure_total[5m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API key authentication failure rate on Drydock"
+          description: >-
+            {{ $value | printf "%.0f" }} rejected API key authentication attempts in the last 5
+            minutes. This counter includes attempts the audit-entry throttle suppresses, so it
+            can be elevated even when the audit trail looks quiet.
 ```
 
 Tune thresholds to match your baseline traffic. A single-operator instance will rarely see 10 failures in 5 minutes under normal use; busier multi-user deployments may need higher values.
@@ -263,6 +283,7 @@ Use these PromQL queries as a starting point for a Grafana dashboard row dedicat
 | Active lockouts | Stat / gauge | `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` (separate stats or combined bar gauge) |
 | Login latency p50 / p95 / p99 | Time series | `histogram_quantile(0.50, sum by (le) (rate(drydock_auth_login_duration_seconds_bucket[5m])))` (repeat for `0.95` and `0.99`) |
 | Success ratio | Gauge (percent) | `sum(rate(drydock_auth_login_total{outcome="success"}[5m])) / sum(rate(drydock_auth_login_total[5m]))` |
+| API key authentication failure rate | Time series | `rate(drydock_auth_api_key_failure_total[5m])` |
 
 Set the "Login outcomes" panel to use the `outcome` label as the legend and color `success` green, `invalid` yellow, `locked` orange, `error` red for quick visual scanning.
 

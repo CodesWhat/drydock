@@ -9,16 +9,20 @@ import type {
 import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
+import type { ReleaseMaturityEvidence } from '../tag/version-population.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
   ContainerUpdateOperationKind,
 } from './container-update-operation.js';
+import type { LabelOwnedState } from './label-owned.js';
 import {
-  getMaturityStartMs,
   getUpdateAgeMs,
+  isMaturityGatePending,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
+  MATURITY_RELEASE_FALLBACK_DAYS_MAX,
+  MATURITY_SKIP_RELEASES_MAX,
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
@@ -92,6 +96,8 @@ export interface ContainerResult {
   suggestedTag?: string;
   digest?: string;
   created?: string;
+  softwareVersion?: string;
+  releaseMaturity?: ReleaseMaturityEvidence;
   publishedAt?: string;
   publishedAtTrusted?: boolean;
   link?: string;
@@ -126,19 +132,42 @@ export interface ContainerDeclarativeUpdatePolicy {
   skipDigests?: string[];
   maturityMode?: 'all' | 'mature';
   maturityMinAgeDays?: number;
+  maturitySkipReleases?: number;
+  maturityReleaseFallbackDays?: number;
 }
 
 export interface ContainerUpdatePolicy extends ContainerDeclarativeUpdatePolicy {
   snoozeUntil?: string;
 }
 
-export type ContainerUpdatePolicySource = 'env' | 'label' | 'override';
+export type ContainerUpdatePolicySource = 'env' | 'group' | 'label' | 'override';
 export type ContainerUpdatePolicySources = Partial<
   Record<keyof ContainerDeclarativeUpdatePolicy, ContainerUpdatePolicySource>
 >;
 export interface ContainerUpdatePolicyDeclarative {
   env: ContainerDeclarativeUpdatePolicy;
   label: ContainerDeclarativeUpdatePolicy;
+}
+
+/** Group action rules only restrict, so `auto` is not a value a group can hold. */
+export type ContainerGroupPolicyUpdateMode = 'manual' | 'notify';
+
+export interface ContainerGroupPolicyActions {
+  updateMode?: ContainerGroupPolicyUpdateMode;
+  exclude?: string[];
+}
+
+/**
+ * The group policy a container's last store write applied (spec 7.3). Re-derived from the
+ * container's current labels and the current policy on every write, never carried over
+ * from a predecessor, and absent when no policy applies.
+ */
+export interface ContainerGroupPolicySnapshot {
+  id: string;
+  group: string;
+  revision: number;
+  updatePolicy: ContainerDeclarativeUpdatePolicy;
+  actions: ContainerGroupPolicyActions;
 }
 
 export interface ContainerSecurityState {
@@ -217,12 +246,13 @@ export interface Container {
   triggerInclude?: string;
   /** @deprecated compat mirror. */
   triggerExclude?: string;
-  // Dependency-ordering fields (#219). Derived, not persisted independently —
-  // re-resolved from the container's labels/compose file every watch cycle,
-  // same pattern as actionTriggerInclude/includeTags above. See
-  // app/dependencies/dependency-graph.ts for how these are consumed.
+  // Dependency-ordering fields (#219). Re-resolved from the container's
+  // labels/compose file every watch cycle, and persisted in the store's
+  // containers.dependency_config column the way actionTriggerInclude is in
+  // trigger_config. See app/dependencies/dependency-graph.ts for how these
+  // are consumed.
   dependsOn?: string[];
-  dependsOnSource?: 'label' | 'compose';
+  dependsOnSource?: 'label' | 'compose' | 'override';
   dependsOnAction?: 'update' | 'restart';
   tagPinned?: boolean;
   tagPinGated?: boolean;
@@ -230,6 +260,9 @@ export interface Container {
   updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
   updatePolicyOverrides?: ContainerUpdatePolicy;
   updatePolicySources?: ContainerUpdatePolicySources;
+  groupPolicy?: ContainerGroupPolicySnapshot;
+  /** Spec 7.5: the declared layer and effective sources behind the label-owned fields. */
+  labelOwned?: LabelOwnedState;
   security?: ContainerSecurityState;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
@@ -346,6 +379,31 @@ const containerSecuritySbomSchema = joi
   })
   .or('documents', 'documentRefs');
 
+/** One declarative update-policy layer: env, group or label. */
+export const containerDeclarativeUpdatePolicySchema = joi.object({
+  skipTags: joi.array().items(joi.string()),
+  skipDigests: joi.array().items(joi.string()),
+  maturityMode: joi.string().valid('all', 'mature'),
+  maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+  maturityReleaseFallbackDays: joi
+    .number()
+    .integer()
+    .min(0)
+    .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
+  maturityMinAgeDays: joi
+    .number()
+    .integer()
+    .min(MATURITY_MIN_AGE_DAYS_MIN)
+    .max(MATURITY_MIN_AGE_DAYS_MAX),
+});
+
+export const containerGroupPolicyActionsSchema = joi.object({
+  updateMode: joi.string().valid('manual', 'notify'),
+  exclude: joi.array().items(joi.string()),
+});
+
+const UPDATE_POLICY_SOURCE_VALUES = ['env', 'group', 'label', 'override'];
+
 // Container data schema
 const schema = joi.object({
   id: joi.string().min(1).required(),
@@ -373,7 +431,7 @@ const schema = joi.object({
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   dependsOn: joi.array().items(joi.string()).optional(),
-  dependsOnSource: joi.string().valid('label', 'compose').optional(),
+  dependsOnSource: joi.string().valid('label', 'compose', 'override').optional(),
   dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
@@ -382,6 +440,12 @@ const schema = joi.object({
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
+    maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+    maturityReleaseFallbackDays: joi
+      .number()
+      .integer()
+      .min(0)
+      .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
     maturityMinAgeDays: joi
       .number()
       .integer()
@@ -389,32 +453,20 @@ const schema = joi.object({
       .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicyDeclarative: joi.object({
-    env: joi.object({
-      skipTags: joi.array().items(joi.string()),
-      skipDigests: joi.array().items(joi.string()),
-      maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi
-        .number()
-        .integer()
-        .min(MATURITY_MIN_AGE_DAYS_MIN)
-        .max(MATURITY_MIN_AGE_DAYS_MAX),
-    }),
-    label: joi.object({
-      skipTags: joi.array().items(joi.string()),
-      skipDigests: joi.array().items(joi.string()),
-      maturityMode: joi.string().valid('all', 'mature'),
-      maturityMinAgeDays: joi
-        .number()
-        .integer()
-        .min(MATURITY_MIN_AGE_DAYS_MIN)
-        .max(MATURITY_MIN_AGE_DAYS_MAX),
-    }),
+    env: containerDeclarativeUpdatePolicySchema,
+    label: containerDeclarativeUpdatePolicySchema,
   }),
   updatePolicyOverrides: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
     snoozeUntil: joi.string().isoDate(),
     maturityMode: joi.string().valid('all', 'mature'),
+    maturitySkipReleases: joi.number().integer().min(0).max(MATURITY_SKIP_RELEASES_MAX),
+    maturityReleaseFallbackDays: joi
+      .number()
+      .integer()
+      .min(0)
+      .max(MATURITY_RELEASE_FALLBACK_DAYS_MAX),
     maturityMinAgeDays: joi
       .number()
       .integer()
@@ -422,10 +474,26 @@ const schema = joi.object({
       .max(MATURITY_MIN_AGE_DAYS_MAX),
   }),
   updatePolicySources: joi.object({
-    skipTags: joi.string().valid('env', 'label', 'override'),
-    skipDigests: joi.string().valid('env', 'label', 'override'),
-    maturityMode: joi.string().valid('env', 'label', 'override'),
-    maturityMinAgeDays: joi.string().valid('env', 'label', 'override'),
+    skipTags: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    skipDigests: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityMode: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityMinAgeDays: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturitySkipReleases: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+    maturityReleaseFallbackDays: joi.string().valid(...UPDATE_POLICY_SOURCE_VALUES),
+  }),
+  groupPolicy: joi.object({
+    id: joi.string().min(1).required(),
+    group: joi.string().min(1).required(),
+    revision: joi.number().integer().min(1).required(),
+    updatePolicy: containerDeclarativeUpdatePolicySchema.required(),
+    actions: containerGroupPolicyActionsSchema.required(),
+  }),
+  // Spec 7.5. Built and read by the store (`model/label-owned.ts`), so only its shape is checked.
+  labelOwned: joi.object({
+    v: joi.number().valid(1).required(),
+    declared: joi.object().required(),
+    declaredSources: joi.object().required(),
+    sources: joi.object().required(),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,
@@ -481,6 +549,12 @@ const schema = joi.object({
     suggestedTag: joi.string().min(1),
     digest: joi.string(),
     created: joi.string().isoDate(),
+    softwareVersion: joi.string().max(256),
+    releaseMaturity: joi.object({
+      version: joi.string().max(256).required(),
+      family: joi.string().max(256).required(),
+      earlierReleases: joi.number().integer().min(0).max(Number.MAX_SAFE_INTEGER).required(),
+    }),
     publishedAt: joi.string().isoDate(),
     publishedAtTrusted: joi.boolean(),
     link: joi.string(),
@@ -703,13 +777,8 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     }
   }
 
-  if (updatePolicy.maturityMode === 'mature') {
-    const maturityStartMs = getMaturityStartMs(container);
-    const maturityMinAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
-    const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
-    if (maturityStartMs === undefined || Date.now() - maturityStartMs < maturityMinAgeMs) {
-      return true;
-    }
+  if (isMaturityGatePending(container)) {
+    return true;
   }
 
   if (
@@ -1147,6 +1216,28 @@ const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
 const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service';
 
 /**
+ * The Compose project/service pair a container's `com.docker.compose.*`
+ * labels carry, when both are present and non-empty. `undefined` for a
+ * container that was never started by Compose (or is missing one of the
+ * pair) — the only case that means anything here is having both.
+ */
+export function getComposeProjectService(
+  container: Pick<Container, 'labels'>,
+): { project: string; service: string } | undefined {
+  const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+  const composeService = container.labels?.[COMPOSE_SERVICE_LABEL];
+  if (
+    typeof composeProject === 'string' &&
+    composeProject.length > 0 &&
+    typeof composeService === 'string' &&
+    composeService.length > 0
+  ) {
+    return { project: composeProject, service: composeService };
+  }
+  return undefined;
+}
+
+/**
  * Build a stable per-container identity key that survives container recreates
  * but still discriminates between same-named siblings (e.g. two `pi-hole`
  * services in different compose projects, or a service vs container created
@@ -1163,15 +1254,9 @@ export function deriveContainerIdentityKey(container: Container): string | undef
     return undefined;
   }
   const agent = typeof container.agent === 'string' ? container.agent : '';
-  const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
-  const composeService = container.labels?.[COMPOSE_SERVICE_LABEL];
-  if (
-    typeof composeProject === 'string' &&
-    composeProject.length > 0 &&
-    typeof composeService === 'string' &&
-    composeService.length > 0
-  ) {
-    return `${agent}::${container.watcher}::compose:${composeProject}/${composeService}`;
+  const composeProjectService = getComposeProjectService(container);
+  if (composeProjectService) {
+    return `${agent}::${container.watcher}::compose:${composeProjectService.project}/${composeProjectService.service}`;
   }
   return `${agent}::${container.watcher}::${container.name}`;
 }

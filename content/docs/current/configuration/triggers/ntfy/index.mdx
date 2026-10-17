@@ -18,7 +18,15 @@ The `ntfy` trigger lets you send container update notifications via [Ntfy](https
 | `DD_NOTIFICATION_NTFY_{trigger_name}_AUTH_TOKEN` | ⚪ | Bearer token (if bearer auth is enabled) | | |
 | `DD_NOTIFICATION_NTFY_{trigger_name}_AUTH_USER` | ⚪ | User (if basic auth is enabled) | | |
 | `DD_NOTIFICATION_NTFY_{trigger_name}_PRIORITY` | ⚪ | The Ntfy message priority | Integer between `0` and `5` [see here](https://docs.ntfy.sh/publish/#message-priority) | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_PRIORITIES_{event}` | ⚪ | Per-event priority override. Falls back to `PRIORITY` when unset for that event | `event` is one of `UPDATEAVAILABLE`, `UPDATEAPPLIED`, `UPDATEFAILED`, `SECURITYALERT`, `CONTAINERUNHEALTHY`, `MATURITYCLEARED`, `AGENTDISCONNECT`, `AGENTRECONNECT`; value is an integer between `0` and `5` | |
 | `DD_NOTIFICATION_NTFY_{trigger_name}_TOPIC` | ⚪ | The Ntfy topic name | | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_TOPICS_{event}` | ⚪ | Per-event topic override. Falls back to `TOPIC` when unset for that event | `event` is one of `UPDATEAVAILABLE`, `UPDATEAPPLIED`, `UPDATEFAILED`, `SECURITYALERT`, `CONTAINERUNHEALTHY`, `MATURITYCLEARED`, `AGENTDISCONNECT`, `AGENTRECONNECT` | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_ACTION` | ⚪ | Action button type for slot `n` (`0`-`2`, up to 3 actions) | `view`, `http` | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_LABEL` | ⚪ | Action button label for slot `n`. Supports the same `${...}` template variables as `SIMPLETITLE`/`SIMPLEBODY` | | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_URL` | ⚪ | Action button URL for slot `n`. Supports the same `${...}` template variables as `SIMPLETITLE`/`SIMPLEBODY` | | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_METHOD` | ⚪ | HTTP method for an `http` action in slot `n` | | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_BODY` | ⚪ | Request body for an `http` action in slot `n`. Supports the same `${...}` template variables as `SIMPLETITLE`/`SIMPLEBODY` | | |
+| `DD_NOTIFICATION_NTFY_{trigger_name}_ACTIONS_{n}_CLEAR` | ⚪ | Whether the notification is cleared from the phone after the `http` action runs | `true`, `false` | |
 | `DD_NOTIFICATION_NTFY_{trigger_name}_URL` | ⚪ | The Ntfy server url | The `http` or `https` ntfy server address | `https://ntfy.sh` |
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
@@ -82,3 +90,94 @@ docker run \
 ```
 </Tab>
 </Tabs>
+
+### Route a failed update to a separate topic
+
+<Tabs items={["Docker Compose (Topic routing)", "Docker (Topic routing)"]}>
+<Tab value="Docker Compose (Topic routing)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
+      - DD_NOTIFICATION_NTFY_SH_TOPICS_UPDATEFAILED=xxxxyyyyzzzz-alerts
+```
+
+</Tab>
+<Tab value="Docker (Topic routing)">
+```bash
+docker run \
+  -e DD_NOTIFICATION_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
+  -e DD_NOTIFICATION_NTFY_SH_TOPICS_UPDATEFAILED="xxxxyyyyzzzz-alerts" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+An update that succeeds still publishes to `xxxxyyyyzzzz`; only `update-failed` events publish to `xxxxyyyyzzzz-alerts`. Every other event kind (`update-available`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `agent-disconnect`, `agent-reconnect`) falls back to `TOPIC` the same way.
+
+### Raise the priority of a security alert
+
+<Tabs items={["Docker Compose (Priority routing)", "Docker (Priority routing)"]}>
+<Tab value="Docker Compose (Priority routing)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
+      - DD_NOTIFICATION_NTFY_SH_PRIORITY=2
+      - DD_NOTIFICATION_NTFY_SH_PRIORITIES_SECURITYALERT=5
+```
+
+</Tab>
+<Tab value="Docker (Priority routing)">
+```bash
+docker run \
+  -e DD_NOTIFICATION_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
+  -e DD_NOTIFICATION_NTFY_SH_PRIORITY="2" \
+  -e DD_NOTIFICATION_NTFY_SH_PRIORITIES_SECURITYALERT="5" \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+### Add an action button linking back to the container
+
+<Tabs items={["Docker Compose (Action buttons)", "Docker (Action buttons)"]}>
+<Tab value="Docker Compose (Action buttons)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ...
+    environment:
+      - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
+      - DD_NOTIFICATION_NTFY_SH_ACTIONS_0_ACTION=view
+      - DD_NOTIFICATION_NTFY_SH_ACTIONS_0_LABEL=Open $${container.name}
+      - DD_NOTIFICATION_NTFY_SH_ACTIONS_0_URL=https://drydock.example.com/containers/$${container.name}
+```
+
+</Tab>
+<Tab value="Docker (Action buttons)">
+```bash
+docker run \
+  -e DD_NOTIFICATION_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
+  -e DD_NOTIFICATION_NTFY_SH_ACTIONS_0_ACTION="view" \
+  -e 'DD_NOTIFICATION_NTFY_SH_ACTIONS_0_LABEL=Open ${container.name}' \
+  -e 'DD_NOTIFICATION_NTFY_SH_ACTIONS_0_URL=https://drydock.example.com/containers/${container.name}' \
+  ...
+  codeswhat/drydock
+```
+</Tab>
+</Tabs>
+
+`label` and `url` (and `body` for an `http` action) render through the same [template variables](/docs/configuration/triggers/#template-variable-reference) as `SIMPLETITLE`/`SIMPLEBODY`. Up to 3 actions can be configured, in slots `0`-`2`.

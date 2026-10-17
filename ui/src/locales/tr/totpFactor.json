@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "İki aşamalı kimlik doğrulama",
+    "description": "Her oturum açışta, parolanıza ek olarak kimlik doğrulama uygulamanızdan bir kod isteyin.",
+    "loading": "İki aşamalı doğrulama durumu yükleniyor",
+    "retry": "Yeniden dene",
+    "status": {
+      "off": "Kapalı",
+      "on": "Açık",
+      "onSince": "{date} tarihinden beri açık",
+      "recoveryRemaining": "Kalan kurtarma kodu: {count}",
+      "recoveryNone": "Kurtarma kodu kalmadı. Kimlik doğrulama uygulamanıza erişimi kaybetmeden önce yeni bir set oluşturun.",
+      "recoveryLow": "Kurtarma kodlarınız azalıyor. Yeni bir set oluşturun.",
+      "pending": "Kurulum başladı ve bir kod bekliyor. {time} saatinde sona erer."
+    },
+    "unavailable": {
+      "notLocal": "İki aşamalı kimlik doğrulama yalnızca parolayla oturum açmış yerel hesaplar için kullanılabilir. Bu sizin hesabınızsa oturumu kapatıp yeniden açın.",
+      "httpsRequired": "İki aşamalı kurulum için HTTPS gerekir. Drydock'u HTTPS üzerinden açın veya ağ güvenilirse bir yöneticiden DD_AUTH_TOTP_ALLOWHTTP=true ayarlamasını isteyin.",
+      "noKeyRing": "İki aşamalı kurulum bu sunucuda kullanılamıyor. Önce bir yöneticinin şifreleme anahtarlığını yapılandırması gerekir.",
+      "recoverySession": "Kurtarma koduyla oturum açtığınız için bu işleme izin verilmiyor. Kimlik doğrulama uygulamanızdaki bir kodla oturum açın."
+    },
+    "actions": {
+      "enable": "Aç",
+      "replace": "Doğrulayıcıyı değiştir",
+      "regenerate": "Yeni kurtarma kodları",
+      "remove": "Kapat",
+      "cancelSetup": "Kurulumu iptal et",
+      "cancel": "İptal"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Siz olduğunuzu doğrulayın",
+        "replace": "Doğrulayıcınızı değiştirmek için siz olduğunuzu doğrulayın",
+        "regenerate": "Yeni kurtarma kodları almak için siz olduğunuzu doğrulayın",
+        "remove": "İki aşamalı doğrulamayı kapatmak için siz olduğunuzu doğrulayın"
+      },
+      "hint": "Parolanızı girin. Bu adımdan sonra hiçbir şey saklanmaz.",
+      "hintWithCode": "Parolanızı ve geçerli bir kodu girin. Bu adımdan sonra hiçbir şey saklanmaz.",
+      "passwordLabel": "Parola",
+      "passwordPlaceholder": "Parolanızı girin",
+      "codeLabel": "Doğrulama kodu",
+      "codePlaceholder": "6 haneli kod",
+      "recoveryLabel": "Kurtarma kodu",
+      "recoveryPlaceholder": "Bir kurtarma kodu girin",
+      "useRecovery": "Kurtarma kodu kullan",
+      "useCode": "Doğrulama kodu kullan",
+      "submit": {
+        "enable": "Devam",
+        "replace": "Devam",
+        "regenerate": "Yeni kodlar oluştur",
+        "remove": "İki aşamalı doğrulamayı kapat",
+        "busy": "Denetleniyor..."
+      }
+    },
+    "scan": {
+      "heading": "Kimlik doğrulama uygulamanızla tarayın",
+      "instructions": "Kimlik doğrulama uygulamanızı açın, bir hesap ekleyin ve bu kodu tarayın. Ardından uygulamanın gösterdiği 6 haneli kodu girin.",
+      "replaceNote": "Mevcut doğrulayıcınız, yenisini onaylayana kadar çalışmaya devam eder.",
+      "qrLabel": "İki adımlı doğrulamayı kurmak için QR kodu",
+      "qrFailed": "QR kodu çizilemedi. Bunun yerine kurulum anahtarını girin.",
+      "secretLabel": "Tarayamıyor musunuz? Bu kurulum anahtarını girin",
+      "copySecret": "Anahtarı kopyala",
+      "copied": "Kopyalandı",
+      "expiresAt": "Bu kurulum {time} saatinde sona erer.",
+      "codeLabel": "Doğrulama kodu",
+      "codeHint": "Kimlik doğrulama uygulamanızdaki 6 haneli kodu girin.",
+      "codePlaceholder": "6 haneli kod",
+      "confirm": "Onayla ve aç",
+      "confirming": "Onaylanıyor..."
+    },
+    "codes": {
+      "heading": "Kurtarma kodlarınızı kaydedin",
+      "description": "Kimlik doğrulama uygulamanızı kaybederseniz her kod yalnızca bir kez işe yarar. Kodlar yalnızca şimdi gösterilir.",
+      "copy": "Kodları kopyala",
+      "copied": "Kopyalandı",
+      "download": "İndir",
+      "fileHeading": "Drydock kurtarma kodları",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Bu kodları kaydettim",
+      "done": "Bitti",
+      "downloadFailed": "Tarayıcınız dosyayı indirmedi. Bunun yerine kodları kopyalayın."
+    },
+    "remove": {
+      "header": "İki aşamalı kimlik doğrulama kapatılsın mı?",
+      "message": "Oturum açmak için yine yalnızca parolanız gerekecek ve diğer oturumlarınız sonlandırılacak.",
+      "accept": "Kapat"
+    },
+    "notice": {
+      "enabled": "İki aşamalı kimlik doğrulama açık.",
+      "replaced": "Yeni doğrulayıcınız etkin.",
+      "regenerated": "Yeni kurtarma kodlarınız etkin. Eskileri artık çalışmaz.",
+      "removed": "İki aşamalı kimlik doğrulama kapalı."
+    },
+    "errors": {
+      "load": "İki aşamalı doğrulama durumu yüklenemedi.",
+      "network": "Sunucuya ulaşılamadı. Yeniden deneyin.",
+      "generic": "Bir şeyler ters gitti. Yeniden deneyin.",
+      "sessionEnded": "Oturumunuz sona erdi. Yeniden oturum açın.",
+      "reauthFailed": "Parola veya kod eşleşmedi. Kontrol edip yeniden deneyin.",
+      "locked": "Çok fazla deneme. {time} sonra yeniden deneyin.",
+      "lockedLater": "Çok fazla deneme. Daha sonra yeniden deneyin.",
+      "busy": "Başka bir denetim hâlâ sürüyor. Birazdan yeniden deneyin.",
+      "invalidRequest": "Parolanızı ve geçerli bir kod girin.",
+      "codeFormat": "Kimlik doğrulama uygulamanızdaki 6 haneyi girin.",
+      "codeWrong": "Bu kod işe yaramadı. Kontrol edip yeniden deneyin.",
+      "enrollmentExpired": "Bu kurulumun süresi doldu. Baştan başlayın.",
+      "enrollmentGone": "Bu kurulum, çok fazla yanlış koddan sonra kapatıldı. Baştan başlayın.",
+      "stateChanged": "İki aşamalı ayarlar başka bir yerde değişti. Gözden geçirip yeniden deneyin.",
+      "notActive": "İki aşamalı kimlik doğrulama açık değil."
+    }
+  }
+}

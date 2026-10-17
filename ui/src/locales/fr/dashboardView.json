@@ -97,7 +97,8 @@
       "updatesAvailable": "Mises à jour disponibles",
       "updateDetail": "{fresh} nouvelles · {mature} matures",
       "securityIssues": "Problèmes de sécurité",
-      "registries": "Registries"
+      "registries": "Registries",
+      "approvals": "Approbations"
     },
     "updateKind": {
       "major": "Majeure",
@@ -106,9 +107,9 @@
       "digest": "Mise à jour d'image"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "Ouverte maintenant",
+      "scheduled": "Planifiée",
+      "openingSoon": "Ouverture prochaine"
     },
     "dataLoadFailed": "Impossible de charger les données du tableau de bord",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

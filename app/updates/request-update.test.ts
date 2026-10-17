@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
   mockGetOperationById,
   mockGetActiveOperationByContainerId,
-  mockGetActiveOperationByContainerName,
-  mockGetRecentTerminalSucceededOperationByContainerName,
-  mockHasOtherActiveOperationByContainerName,
+  mockGetActiveOperationByContainerIdentity,
+  mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  mockHasOtherActiveOperationByContainerIdentity,
   mockInsertOperation,
   mockMarkOperationTerminal,
   mockGetState,
@@ -24,9 +24,9 @@ const {
   return {
     mockGetOperationById: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
-    mockGetActiveOperationByContainerName: vi.fn(),
-    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
-    mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+    mockGetActiveOperationByContainerIdentity: vi.fn(),
+    mockGetRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+    mockHasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
     mockInsertOperation: vi.fn(),
     mockMarkOperationTerminal: vi.fn(),
     mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
@@ -50,10 +50,10 @@ vi.mock('../store/settings.js', () => ({
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: mockGetOperationById,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
-  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
-  getRecentTerminalSucceededOperationByContainerName:
-    mockGetRecentTerminalSucceededOperationByContainerName,
-  hasOtherActiveOperationByContainerName: mockHasOtherActiveOperationByContainerName,
+  getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
+  getRecentTerminalSucceededOperationByContainerIdentity:
+    mockGetRecentTerminalSucceededOperationByContainerIdentity,
+  hasOtherActiveOperationByContainerIdentity: mockHasOtherActiveOperationByContainerIdentity,
   insertOperation: mockInsertOperation,
   markOperationTerminal: mockMarkOperationTerminal,
 }));
@@ -76,12 +76,15 @@ vi.mock('./dependency-restart.js', () => ({
   restartDependentContainer: mockRestartDependentContainer,
 }));
 
+import * as groupPolicyStore from '../store/group-policy.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import {
   buildAcceptedUpdateRuntimeContext,
   dispatchAccepted,
   dispatchAcceptedGroups,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
+  isUpdateModeAdmissionRejection,
   requestContainerUpdate,
   requestContainerUpdates,
   runAcceptedContainerUpdates,
@@ -124,7 +127,7 @@ describe('request-update', () => {
     vi.clearAllMocks();
     mockGetOperationById.mockReturnValue(undefined);
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-    mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+    mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockStatSync.mockReturnValue({ isSocket: () => false });
     mockGetUpdateMode.mockReturnValue('auto');
@@ -195,6 +198,41 @@ describe('request-update', () => {
     expect(accepted.operationId).toEqual(expect.any(String));
   });
 
+  // #946: the maintenance window scopes what drydock does on its own. A manual request is
+  // never gated by it, whichever scope the owning watcher is configured with, because
+  // admission passes no maintenanceWindowOpen into computeUpdateEligibility at all.
+  test.each(['install', 'scan'] as const)(
+    'a manual update outside a closed maintenance window is admitted under scope=%s',
+    async (maintenancewindowscope) => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      };
+      mockGetState.mockReturnValue({
+        trigger: {},
+        watcher: {
+          'docker.local': {
+            type: 'docker',
+            name: 'local',
+            configuration: {
+              maintenancewindow: '* 2-3 * * *',
+              maintenancewindowscope,
+              maintenancewindowopen: false,
+            },
+            isMaintenanceWindowOpen: () => false,
+          },
+        },
+      });
+
+      const accepted = await requestContainerUpdate(createContainer({ watcher: 'local' }), {
+        trigger,
+      });
+
+      expect(accepted.operationId).toEqual(expect.any(String));
+    },
+  );
+
   test('requestContainerUpdate enqueues an operation and runs the provided trigger with the operation id', async () => {
     const trigger = {
       type: 'docker',
@@ -209,6 +247,7 @@ describe('request-update', () => {
       expect.objectContaining({
         containerId: 'c1',
         containerName: 'nginx',
+        triggerName: 'docker.update',
         status: 'queued',
         phase: 'queued',
       }),
@@ -467,6 +506,316 @@ describe('request-update', () => {
       statusCode: 400,
       message: 'Trigger is not a container update trigger',
     });
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger without local Compose identity', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+    };
+
+    await expect(requestContainerUpdate(createContainer(), { trigger })).rejects.toMatchObject<
+      Partial<UpdateRequestError>
+    >({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided local Portainer trigger for an agent container', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          agent: 'remote-1',
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger for digest updates before enqueue', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          updateKind: { kind: 'digest', remoteValue: 'sha256:new' },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger for unknown updates before enqueue', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          updateKind: { kind: 'unknown' },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 404,
+      message: 'No docker trigger found for this container',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger excluded by the container policy', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'all' },
+    };
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger } });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerExclude: 'portainer.update',
+        }),
+        { trigger },
+      ),
+    ).rejects.toThrow("Trigger excluded by container label dd.action.exclude='portainer.update'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger not included by the container policy', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger } });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerInclude: 'docker',
+        }),
+        { trigger },
+      ),
+    ).rejects.toThrow("Trigger not matched by container label dd.action.include='docker'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('uses the generic not-included message when no include label is present', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Trigger not matched by container label dd.action.include.',
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Docker trigger when Portainer is explicitly included', async () => {
+    const dockerTrigger = {
+      type: 'docker',
+      trigger: vi.fn(),
+      getId: () => 'docker.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'docker.update': dockerTrigger,
+        'portainer.update': portainerTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(createContainer({ actionTriggerInclude: 'portainer' }), {
+        trigger: dockerTrigger,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='portainer'.",
+    });
+    expect(dockerTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Docker Compose trigger when Portainer is explicitly included', async () => {
+    const dockerComposeTrigger = {
+      type: 'dockercompose',
+      trigger: vi.fn(),
+      getId: () => 'dockercompose.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'dockercompose.update': dockerComposeTrigger,
+        'portainer.update': portainerTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(createContainer({ actionTriggerInclude: 'portainer' }), {
+        trigger: dockerComposeTrigger,
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='portainer'.",
+    });
+    expect(dockerComposeTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate rejects a provided Portainer trigger when Docker Compose is explicitly included', async () => {
+    const portainerTrigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'oninclude' },
+    };
+    const dockerComposeTrigger = {
+      type: 'dockercompose',
+      trigger: vi.fn(),
+      getId: () => 'dockercompose.update',
+      configuration: { auto: 'oninclude' },
+    };
+    mockGetState.mockReturnValue({
+      trigger: {
+        'portainer.update': portainerTrigger,
+        'dockercompose.update': dockerComposeTrigger,
+      },
+    });
+
+    await expect(
+      requestContainerUpdate(
+        createContainer({
+          actionTriggerInclude: 'dockercompose',
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+        }),
+        { trigger: portainerTrigger },
+      ),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: "Trigger not matched by container label dd.action.include='dockercompose'.",
+    });
+    expect(portainerTrigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+  });
+
+  test('enqueueContainerUpdate rejects an explicitly provided Portainer trigger excluded for automatic dispatch', async () => {
+    const trigger = {
+      type: 'portainer',
+      trigger: vi.fn(),
+      getId: () => 'portainer.update',
+      configuration: { auto: 'all' },
+    };
+
+    await expect(
+      enqueueContainerUpdate(
+        createContainer({
+          labels: {
+            'com.docker.compose.project': 'demo',
+            'com.docker.compose.service': 'web',
+          },
+          actionTriggerExclude: 'portainer.update',
+        }),
+        { trigger, source: 'automatic' },
+      ),
+    ).rejects.toThrow("Trigger excluded by container label dd.action.exclude='portainer.update'.");
+    expect(trigger.trigger).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
   });
 
   test('enqueueContainerUpdate rejects when no docker trigger is found', async () => {
@@ -1645,7 +1994,9 @@ describe('request-update', () => {
         Partial<UpdateRequestError>
       >({
         statusCode: 404,
-        message: expect.stringContaining('No docker or dockercompose action trigger is configured'),
+        message: expect.stringContaining(
+          'No docker, dockercompose, or portainer action trigger is configured',
+        ),
       });
     });
 
@@ -1877,6 +2228,54 @@ describe('request-update', () => {
       });
       expect(trigger.trigger).not.toHaveBeenCalled();
       expect(mockInsertOperation).not.toHaveBeenCalled();
+    });
+
+    test('names the Drydock override when the exclude or include that blocks it is an override', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { auto: 'oninclude', threshold: 'all' },
+        getId: () => 'docker.update',
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+      const labelOwned = (sources: Record<string, string>) => ({
+        v: 1,
+        declared: {},
+        declaredSources: {},
+        sources,
+      });
+      const provided = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.other',
+      };
+
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            actionTriggerExclude: 'docker.update',
+            labelOwned: labelOwned({ actionTriggerExclude: 'override' }),
+          }),
+          { trigger: provided },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger excluded by the Drydock override of dd.action.exclude='docker.update'.",
+      });
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            actionTriggerInclude: 'other-app',
+            labelOwned: labelOwned({ actionTriggerInclude: 'override' }),
+          }),
+          { trigger: provided },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: "Trigger not matched by the Drydock override of dd.action.include='other-app'.",
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
     });
 
     test('rejects manual update with 409 when trigger-not-included blocker fires (hard flip, spec-6.0.1-action-policy.md slice 6)', async () => {
@@ -2187,7 +2586,7 @@ describe('request-update', () => {
       // The NEW container has a different Docker ID (recreated), so by-id lookup misses.
       // The by-name lookup SHOULD block the enqueue because agent+watcher match.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined); // new ID not found
-      mockGetActiveOperationByContainerName.mockReturnValue({
+      mockGetActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-existing',
         status: 'in-progress',
         containerId: 'old-container-id', // modern op: has containerId
@@ -2210,7 +2609,7 @@ describe('request-update', () => {
     test('allows fresh enqueue when the previously active op is terminal (succeeded)', async () => {
       // After Op1 completes successfully (terminal), Op2 for the same name should be allowed.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // no active op
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // no active op
 
       const trigger = {
         type: 'docker',
@@ -2227,10 +2626,11 @@ describe('request-update', () => {
     test('cross-agent non-collision: agent-A does not get 409 when agent-B has active op for same name', async () => {
       // agent-B has an in-progress op for "drydock-agent", agent-A should NOT be blocked.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // scoped call returns undefined
 
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockResolvedValue(undefined),
         getId: () => 'docker.update',
       };
@@ -2250,7 +2650,7 @@ describe('request-update', () => {
     test('cross-watcher non-collision: different watcher does not block enqueue', async () => {
       // watcher-2 has an op for "web", watcher-1 should not be blocked.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined); // scoped call returns undefined
 
       const trigger = {
         type: 'docker',
@@ -2268,7 +2668,7 @@ describe('request-update', () => {
     test('legacy op (no container snapshot) still blocks enqueue', async () => {
       // Legacy row without a container snapshot — backward-compatible block.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue({
+      mockGetActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-legacy',
         status: 'queued',
         // no container snapshot
@@ -2308,7 +2708,7 @@ describe('request-update', () => {
       }));
 
       // A recent succeeded op for the same container name exists
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2348,7 +2748,7 @@ describe('request-update', () => {
       }));
 
       // No recent success
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
         trigger,
@@ -2367,6 +2767,7 @@ describe('request-update', () => {
       });
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(docker404Error),
         getId: () => 'docker.update',
       };
@@ -2376,11 +2777,13 @@ describe('request-update', () => {
         containerName: 'web',
         status: 'queued',
         phase: 'queued',
-        container: { id: 'c-agent-a', name: 'web', watcher: 'local', agent: 'agent-A' },
+        containerIdentityKey: 'agent-A::local::web',
       }));
-      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
-        (_containerName, _windowMs, identity) =>
-          identity?.agent === 'agent-A'
+      // The identity-scoped lookup naturally excludes agent-B's success — it's a
+      // different identity key, not a filtered-out match.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockImplementation(
+        (identityKey: string | undefined) =>
+          identityKey === 'agent-A::local::web'
             ? undefined
             : { id: 'prev-agent-b', containerName: 'web', status: 'succeeded' },
       );
@@ -2391,10 +2794,9 @@ describe('request-update', () => {
       );
       await flushAsyncWork();
 
-      expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
-        'web',
+      expect(mockGetRecentTerminalSucceededOperationByContainerIdentity).toHaveBeenCalledWith(
+        'agent-A::local::web',
         expect.any(Number),
-        { agent: 'agent-A', watcher: 'local' },
       );
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
         accepted.operationId,
@@ -2420,7 +2822,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2454,7 +2856,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
 
       const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
         trigger,
@@ -2476,6 +2878,7 @@ describe('request-update', () => {
       });
       const trigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(conflict409Error),
         getId: () => 'docker.update',
       };
@@ -2485,13 +2888,13 @@ describe('request-update', () => {
         containerName: 'nginx',
         status: 'queued',
         phase: 'queued',
-        container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+        containerIdentityKey: 'agent-A::local::nginx',
       }));
 
       // No recent success yet — the winner is still running
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      // But another active op exists for the same container+identity
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      // But another active op exists for the same container identity
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
 
       const accepted = await requestContainerUpdate(
         createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
@@ -2504,10 +2907,9 @@ describe('request-update', () => {
         expect.objectContaining({ status: 'expired' }),
       );
       // Confirm the operation's own id was forwarded as the exclusion id
-      expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
-        'nginx',
+      expect(mockHasOtherActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        'agent-A::local::nginx',
         accepted.operationId,
-        { agent: 'agent-A', watcher: 'local' },
       );
     });
 
@@ -2526,7 +2928,7 @@ describe('request-update', () => {
         phase: 'queued',
       }));
 
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue({
         id: 'prev-op',
         containerName: 'nginx',
         status: 'succeeded',
@@ -2563,11 +2965,13 @@ describe('request-update', () => {
 
       const winnerTrigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn(() => winnerPull.promise),
         getId: () => 'docker.update',
       };
       const loserTrigger = {
         type: 'docker',
+        agent: 'agent-A',
         trigger: vi.fn().mockRejectedValue(loserConflict409),
         getId: () => 'docker.update',
       };
@@ -2588,7 +2992,7 @@ describe('request-update', () => {
             containerName: 'nginx',
             status: 'queued',
             phase: 'queued',
-            container: { id: 'c-winner', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+            containerIdentityKey: 'agent-A::local::nginx',
           };
         }
         return {
@@ -2596,7 +3000,9 @@ describe('request-update', () => {
           containerName: 'nginx',
           status: 'queued',
           phase: 'queued',
-          container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+          // The loser's identity must be present for the has-other-active-op
+          // branch (#421) to fire below.
+          containerIdentityKey: 'agent-A::local::nginx',
         };
       });
 
@@ -2608,11 +3014,11 @@ describe('request-update', () => {
       // Winner is now in-flight (promise unresolved).
 
       // (2) Loser: active-lock 409 arrives while winner is in flight.
-      // hasOtherActiveOperationByContainerName returns true to classify as expired.
-      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
-      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      // hasOtherActiveOperationByContainerIdentity returns true to classify as expired.
+      mockGetRecentTerminalSucceededOperationByContainerIdentity.mockReturnValue(undefined);
+      mockHasOtherActiveOperationByContainerIdentity.mockReturnValue(true);
       mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
 
       const loserAccepted = await requestContainerUpdate(
         createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
@@ -2647,6 +3053,238 @@ describe('request-update', () => {
       );
       expect(expiredCalls).toHaveLength(1);
       expect(failedCalls).toHaveLength(1);
+    });
+  });
+  // Spec 7.3 slice 2a: a group policy's updateMode is a ceiling composed with the global mode.
+  describe('group policy ceiling', () => {
+    type Actions = { updateMode?: 'manual' | 'notify'; exclude?: string[] };
+    const policy = (actions: Actions) => ({
+      id: 'policy-1',
+      group: 'payments',
+      revision: 1,
+      updatePolicy: {},
+      actions,
+    });
+    const dockerTrigger = () => ({
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    });
+    const member = (actions: Actions, extra: Record<string, unknown> = {}) =>
+      createContainer({ groupPolicy: policy(actions), ...extra });
+
+    test('global auto with a manual group rejects automatic admission and names the group', async () => {
+      const trigger = dockerTrigger();
+      await expect(
+        enqueueContainerUpdate(member({ updateMode: 'manual' }), { trigger, source: 'automatic' }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Group policy 'payments' allows manual updates only",
+      });
+      expect(mockInsertOperation).not.toHaveBeenCalled();
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a manual group still admits a manual request, so Update stays enabled', async () => {
+      const accepted = await requestContainerUpdate(member({ updateMode: 'manual' }), {
+        trigger: dockerTrigger(),
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    test('a member include or auto label cannot lift the group ceiling', async () => {
+      const container = member(
+        { updateMode: 'manual' },
+        { actionTriggerInclude: 'docker.update', actionTriggerAuto: 'docker.update' },
+      );
+      await expect(
+        enqueueContainerUpdate(container, { trigger: dockerTrigger(), source: 'automatic' }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    });
+
+    test.each([
+      ['auto', 'automatic'],
+      ['auto', 'manual'],
+      ['manual', 'automatic'],
+      ['manual', 'manual'],
+    ] as const)(
+      'a notify group rejects every source (global %s, %s request) with the notifications message',
+      async (globalMode, source) => {
+        mockGetUpdateMode.mockReturnValue(globalMode);
+        await expect(
+          enqueueContainerUpdate(member({ updateMode: 'notify' }), {
+            trigger: dockerTrigger(),
+            source,
+          }),
+        ).rejects.toMatchObject({
+          statusCode: 409,
+          message: "Group policy 'payments' allows notifications only",
+        });
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      },
+    );
+
+    test('a group cannot relax global: global notify stays notify and is attributed to global', async () => {
+      mockGetUpdateMode.mockReturnValue('notify');
+      await expect(
+        requestContainerUpdate(member({ updateMode: 'manual' }), { trigger: dockerTrigger() }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Update mode is notify; Drydock will not apply updates',
+      });
+    });
+
+    test('global manual with a manual group keeps the global automatic rejection message', async () => {
+      mockGetUpdateMode.mockReturnValue('manual');
+      await expect(
+        enqueueContainerUpdate(member({ updateMode: 'manual' }), {
+          trigger: dockerTrigger(),
+          source: 'automatic',
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Update mode is manual; automatic updates are disabled',
+      });
+    });
+
+    test('an exclude-only group leaves admission under the global mode', async () => {
+      const accepted = await enqueueContainerUpdate(member({ exclude: ['docker.other'] }), {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    test('a provided trigger excluded by the group is rejected and names the group', async () => {
+      const other = {
+        type: 'docker',
+        trigger: vi.fn(),
+        getId: () => 'docker.other',
+        configuration: { auto: 'all' },
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger() } });
+      await expect(
+        requestContainerUpdate(member({ exclude: ['docker.other:minor', 'other'] }), {
+          trigger: other,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Trigger excluded by group policy 'payments' (docker.other:minor,other).",
+      });
+      expect(other.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a label exclusion keeps the attribution when the group excludes the same trigger', async () => {
+      const other = {
+        type: 'docker',
+        trigger: vi.fn(),
+        getId: () => 'docker.other',
+        configuration: { auto: 'all' },
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': dockerTrigger() } });
+      await expect(
+        requestContainerUpdate(
+          member({ exclude: ['docker.other'] }, { actionTriggerExclude: 'docker.other' }),
+          { trigger: other },
+        ),
+      ).rejects.toMatchObject({
+        message: "Trigger excluded by container label dd.action.exclude='docker.other'.",
+      });
+    });
+
+    test('a group exclusion is a hard eligibility blocker for the resolved trigger too', async () => {
+      const resolved = { ...dockerTrigger(), configuration: { auto: 'all', threshold: 'all' } };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': resolved } });
+      await expect(
+        requestContainerUpdate(
+          createContainer({
+            image: { name: 'nginx', tag: { value: '1.0.0' } },
+            result: { tag: '1.1.0' },
+            groupPolicy: policy({ exclude: ['docker.update'] }),
+          }),
+        ),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Trigger excluded by group policy 'payments' (docker.update).",
+      });
+    });
+
+    test('isUpdateModeAdmissionRejection recognises a group mode rejection like a global one', () => {
+      for (const message of [
+        "Group policy 'payments' allows manual updates only",
+        "Group policy 'payments' allows notifications only",
+      ]) {
+        expect(isUpdateModeAdmissionRejection({ statusCode: 409, message })).toBe(true);
+        expect(isUpdateModeAdmissionRejection({ statusCode: 500, message })).toBe(false);
+      }
+      expect(
+        isUpdateModeAdmissionRejection({
+          statusCode: 409,
+          message: "Trigger excluded by group policy 'payments' (docker.update).",
+        }),
+      ).toBe(false);
+    });
+
+    test('a container with no group policy is untouched', async () => {
+      const accepted = await enqueueContainerUpdate(createContainer(), {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(accepted.operationId).toEqual(expect.any(String));
+    });
+
+    // A scan builds the container, then a policy is saved, then the trigger enqueues it.
+    describe('a policy saved after the container was built', () => {
+      const labels = { 'com.docker.compose.project': 'payments' };
+      let db: ReturnType<typeof createMigratedMemoryDatabase>;
+
+      beforeEach(() => {
+        db = createMigratedMemoryDatabase();
+        groupPolicyStore.createCollections(db);
+      });
+
+      afterEach(() => {
+        groupPolicyStore.clearCollectionForTesting();
+        db.close();
+      });
+
+      test('rejects automatic admission under the current group ceiling', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+
+        await expect(
+          enqueueContainerUpdate(stale, { trigger: dockerTrigger(), source: 'automatic' }),
+        ).rejects.toMatchObject({
+          statusCode: 409,
+          message: "Group policy 'payments' allows manual updates only",
+        });
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      });
+
+      test('rejects an automatic trigger the current group excludes', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy(
+          'payments',
+          { actions: { exclude: ['docker.update'] } },
+          'u',
+        );
+
+        await expect(
+          enqueueContainerUpdate(stale, { trigger: dockerTrigger(), source: 'automatic' }),
+        ).rejects.toMatchObject({ statusCode: 409 });
+      });
+
+      test('a manual request still reads the container as handed in', async () => {
+        const stale = createContainer({ labels });
+        groupPolicyStore.insertGroupPolicy('payments', { actions: { updateMode: 'manual' } }, 'u');
+
+        const accepted = await enqueueContainerUpdate(stale, {
+          trigger: dockerTrigger(),
+          source: 'manual',
+        });
+
+        expect(accepted.operationId).toEqual(expect.any(String));
+      });
     });
   });
 });

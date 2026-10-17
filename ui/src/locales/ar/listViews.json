@@ -42,6 +42,30 @@
       "info": "معلومات"
     },
     "actions": {
+      "webhook-watch": "مراقبة عبر Webhook",
+      "webhook-watch-container": "مراقبة حاوية عبر Webhook",
+      "webhook-update": "تحديث عبر Webhook",
+      "mqtt-command-update": "أمر تحديث MQTT",
+      "security-scan-skipped": "تم تخطي الفحص الأمني",
+      "scanner-asset-pull-started": "بدأ سحب صورة الماسح",
+      "scanner-asset-pull-succeeded": "نجح سحب صورة الماسح",
+      "scanner-asset-pull-failed": "فشل سحب صورة الماسح",
+      "scanner-asset-warm-started": "بدأ تجهيز الماسح",
+      "scanner-asset-warm-succeeded": "نجح تجهيز الماسح",
+      "scanner-asset-warm-failed": "فشل تجهيز الماسح",
+      "container-unhealthy": "حاوية غير سليمة",
+      "env-reveal": "تم إظهار متغيرات البيئة",
+      "debug-dump": "تم تنزيل بيانات التصحيح",
+      "config-read": "تمت قراءة الإعدادات",
+      "config-validated": "تم التحقق من الإعدادات",
+      "config-reloaded": "أُعيد تحميل الإعدادات",
+      "config-written": "تمت كتابة الإعدادات",
+      "update-approved": "تمت الموافقة على التحديث",
+      "update-rejected": "رُفض التحديث",
+      "update-deferred": "أُجل التحديث",
+      "api-key-created": "أُنشئ مفتاح API",
+      "api-key-revoked": "أُلغي مفتاح API",
+      "api-key-auth-failed": "فشلت المصادقة بمفتاح API",
       "container-update": "تحديث الحاوية",
       "container-added": "إضافة الحاوية",
       "container-removed": "إزالة الحاوية",
@@ -49,6 +73,13 @@
       "container-stop": "إيقاف الحاوية",
       "container-restart": "إعادة تشغيل الحاوية",
       "auth-login": "تسجيل الدخول",
+      "totp-recovery-used": "استخدام رمز الاسترداد",
+      "totp-enrollment-started": "بدء تسجيل المصادقة الثنائية",
+      "totp-enabled": "تم تفعيل المصادقة الثنائية",
+      "totp-replaced": "تم استبدال المصادقة الثنائية",
+      "totp-disabled": "تم تعطيل المصادقة الثنائية",
+      "totp-recovery-codes-replaced": "تم استبدال رموز الاسترداد",
+      "totp-break-glass": "استرداد المصادقة الثنائية دون اتصال",
       "authenticated": "تمت المصادقة",
       "authfail": "فشل المصادقة",
       "hook-configured": "تم تكوين الخطاف",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "التحديث التلقائي محظور",
       "update-policy-override-set": "تم تعيين تجاوز سياسة التحديث",
       "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
+      "group-policy-set": "تم تعيين سياسة المجموعة",
+      "group-policy-cleared": "تم مسح سياسة المجموعة",
+      "label-override-set": "تم تعيين تجاوز التسمية",
+      "label-override-cleared": "تم مسح تجاوز التسمية",
       "auto-rollback": "تراجع تلقائي",
       "rollback": "تراجع",
       "preview": "معاينة",
       "agent-disconnect": "قطع اتصال الوكيل",
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "انتهت فترة الانتظار",
+      "image-prune": "تنظيف الصورة"
     },
     "target": {
       "container": "الحاوية",
-      "agent": "الوكيل"
+      "agent": "الوكيل",
+      "group": "المجموعة"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "اكتمل النضج",
         "description": "عندما يصبح تحديث محجوب بسياسة النضج قابلاً للتطبيق"
+      },
+      "update-pending-approval": {
+        "name": "التحديث في انتظار الموافقة",
+        "description": "عند دخول تحديث في الوضع اليدوي إلى قائمة انتظار الموافقة"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "نظيف"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "صور",
+      "scanned": "تم فحصها"
     },
     "fixableBadge": "{count} قابلة للإصلاح",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا توجد مشغّلات تطابق عوامل التصفية",
-    "testContainerName": "Test Container",
+    "testContainerName": "حاوية اختبار",
     "columns": {
       "trigger": "المشغّل",
       "type": "النوع",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "جارٍ تحميل المراقبين...",
     "loadError": "فشل تحميل المراقبين",
-    "soon": "soon",
+    "soon": "قريبًا",
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا يوجد مراقبون يطابقون عوامل التصفية",

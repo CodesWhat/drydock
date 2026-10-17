@@ -74,6 +74,39 @@ export function extractChangelogEntry(changelog, version) {
   return content.slice(startIndex, endIndex).trim();
 }
 
+export function extractReleaseNotes(changelog, version) {
+  const entry = extractChangelogEntry(changelog, version);
+  const startMarker = '<!-- release-summary:start -->';
+  const endMarker = '<!-- release-summary:end -->';
+  const start = entry.indexOf(startMarker);
+  const end = entry.indexOf(endMarker);
+  let notes = entry;
+
+  if (start !== -1 || end !== -1) {
+    if (
+      start === -1 ||
+      end === -1 ||
+      start !== entry.lastIndexOf(startMarker) ||
+      end !== entry.lastIndexOf(endMarker) ||
+      end <= start
+    ) {
+      throw new Error('Release summary needs exactly one ordered start/end marker pair');
+    }
+    const summary = entry.slice(start + startMarker.length, end).trim();
+    if (!summary) {
+      throw new Error('Release summary must not be empty');
+    }
+    notes = `${entry.slice(0, start).trimEnd()}\n\n${summary}`;
+  }
+
+  if (notes.length > 100000) {
+    throw new Error(
+      'Release notes entry exceeds the 100000-character budget; add a compact release summary',
+    );
+  }
+  return notes;
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const version = args.version;
@@ -84,7 +117,14 @@ function main() {
   }
 
   const changelog = readFileSync(file, 'utf8');
-  const entry = extractChangelogEntry(changelog, version);
+  const format = args.format ?? 'entry';
+  if (!['entry', 'release'].includes(format)) {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+  const entry =
+    format === 'release'
+      ? extractReleaseNotes(changelog, version)
+      : extractChangelogEntry(changelog, version);
   console.log(entry);
 }
 

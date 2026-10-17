@@ -15,12 +15,12 @@ export const SITE_CONFIG = {
   /** Brand name shown in the header, footer, and metadata. */
   name: "Drydock",
   /** Current release version shown in the hero badge. */
-  version: "1.7.0-rc.24",
+  version: "1.8.0-rc.1",
   /** Short product tagline used in page titles and OG metadata. */
   tagline: "Container Update Monitoring",
   /** Default meta / OpenGraph / Twitter description. */
   description:
-    "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger updates and notifications across 20 services.",
+    "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger updates and notifications across 21 services.",
   /** Production domain (no protocol, no trailing slash). */
   domain: "getdrydock.com",
   /** GitHub owner/org. */

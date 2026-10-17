@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "{duration} süredir çalışıyor",
+    "apiResponse": {
+      "html": "{context}, JSON yerine HTML döndürdü. API sunucusunun veya demo simülasyonlarının çalıştığını kontrol edin.",
+      "contentType": "{context}, JSON yerine {contentType} döndürdü.",
+      "invalidJson": "{context} geçersiz JSON döndürdü."
+    },
     "loading": "Yükleniyor…",
     "back": "Geri",
     "cancel": "İptal",
@@ -9,8 +15,8 @@
     "close": "Kapat",
     "retry": "Yeniden dene",
     "unknown": "bilinmiyor",
-    "yes": "yes",
-    "no": "no",
+    "yes": "evet",
+    "no": "hayır",
     "errorSummary": {
       "rateLimitHit": "Kayıt defteri istek sınırı aşıldı",
       "accessDenied": "Kayıt defteri erişimi reddedildi",
@@ -22,13 +28,13 @@
       "signatureFailed": "İmza doğrulaması başarısız oldu"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Özel"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Az önce"
     },
     "imageAge": {
-      "now": "now"
+      "now": "şimdi"
     }
   }
 }

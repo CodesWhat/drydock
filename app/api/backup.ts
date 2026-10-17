@@ -8,7 +8,11 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../triggers/providers/docker/created-container-candidate.js';
-import { buildRollbackImageReference, createContainerBackupScope } from '../util/backup.js';
+import {
+  createContainerBackupScope,
+  RollbackDigestRequiredError,
+  resolveRollbackImageReference,
+} from '../util/backup.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
@@ -19,16 +23,20 @@ import {
 } from './docker-trigger.js';
 import { sendErrorResponse } from './error-response.js';
 import { handleContainerActionError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'backup' });
+const PORTAINER_ROLLBACK_UNSUPPORTED_ERROR =
+  'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.';
+
+function isPortainerOriginatedBackup(backup: { triggerName?: string }): boolean {
+  return typeof backup.triggerName === 'string' && /(^|\.)portainer\./i.test(backup.triggerName);
+}
 
 const router = express.Router();
 
 function getContainerBackupScope(container: Parameters<typeof createContainerBackupScope>[0]) {
-  return createContainerBackupScope(
-    container,
-    storeContainer.getContainers({ name: container.name }),
-  );
+  return createContainerBackupScope(container);
 }
 
 /**
@@ -101,20 +109,44 @@ async function rollbackContainer(req: Request, res: Response) {
     return;
   }
 
-  const trigger = findDockerTriggerForContainer(registry.getState().trigger, container);
+  const triggers = registry.getState().trigger;
+  if (isPortainerOriginatedBackup(backup)) {
+    sendErrorResponse(res, 409, PORTAINER_ROLLBACK_UNSUPPORTED_ERROR);
+    return;
+  }
+  const trigger = findDockerTriggerForContainer(triggers, container, {
+    triggerTypes: ['docker', 'dockercompose'],
+  });
   if (!trigger) {
+    const portainerTrigger = findDockerTriggerForContainer(triggers, container, {
+      triggerTypes: ['portainer'],
+    });
+    if (portainerTrigger) {
+      sendErrorResponse(res, 409, PORTAINER_ROLLBACK_UNSUPPORTED_ERROR);
+      return;
+    }
     sendErrorResponse(res, 404, NO_DOCKER_TRIGGER_FOUND_ERROR);
     return;
   }
 
   const latestBackup = backup;
-  const backupImage = buildRollbackImageReference(latestBackup);
 
   try {
     const watcher = trigger.getWatcher(container);
     const { dockerApi } = watcher;
     const reg = registry.getState().registry[container.image.registry.name];
     const auth = await reg.getAuthPull();
+
+    // Backups written before digest capture carry no imageDigest; resolve one
+    // from the retained local image so a registry retag between the backup
+    // and this rollback can't change what gets deployed (DR-43).
+    const backupImage = await resolveRollbackImageReference(
+      trigger,
+      dockerApi,
+      container,
+      latestBackup,
+      log,
+    );
 
     // Pull the backup image
     await trigger.pullImage(dockerApi, auth, backupImage, log);
@@ -148,6 +180,10 @@ async function rollbackContainer(req: Request, res: Response) {
       backup: latestBackup,
     });
   } catch (e: unknown) {
+    if (e instanceof RollbackDigestRequiredError) {
+      sendErrorResponse(res, 409, e.message);
+      return;
+    }
     // recreateContainer may have created a replacement before a later step
     // (e.g. an additional-network connect) failed. The prior container was
     // already stopped/removed above, so reclaim the orphan so it doesn't
@@ -171,12 +207,12 @@ async function rollbackContainer(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/backups', getBackups);
-  router.get('/:id/backups', getContainerBackups);
+  router.get('/backups', scoped('read', getBackups));
+  router.get('/:id/backups', scoped('read', getContainerBackups));
   router.post(
     '/:id/rollback',
     requireDestructiveActionConfirmation('container-rollback'),
-    rollbackContainer,
+    scoped('containers:update', rollbackContainer),
   );
   return router;
 }

@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Em execução há {duration}",
+    "apiResponse": {
+      "html": "{context} retornou HTML em vez de JSON. Verifique se o servidor da API ou as simulações de demonstração estão em execução.",
+      "contentType": "{context} retornou {contentType} em vez de JSON.",
+      "invalidJson": "{context} retornou JSON inválido."
+    },
     "loading": "Carregando…",
     "back": "Voltar",
     "cancel": "Cancelar",
@@ -9,8 +15,8 @@
     "close": "Fechar",
     "retry": "Tentar novamente",
     "unknown": "desconhecido",
-    "yes": "yes",
-    "no": "no",
+    "yes": "sim",
+    "no": "não",
     "errorSummary": {
       "rateLimitHit": "Limite de taxa do registry atingido",
       "accessDenied": "Acesso ao registry negado",
@@ -22,13 +28,13 @@
       "signatureFailed": "Falha na verificação de assinatura"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Personalizado"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Agora"
     },
     "imageAge": {
-      "now": "now"
+      "now": "agora"
     }
   }
 }

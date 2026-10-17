@@ -21,7 +21,6 @@
  *   Docker.ts / ContainerUpdateExecutor.ts / request-update.ts → duplicate-op-classification
  */
 
-import type { ContainerIdentityFilter } from '../store/update-operation.js';
 import * as updateOperationStore from '../store/update-operation.js';
 
 /** 15-minute window for "was there a recent success?" look-back. */
@@ -112,14 +111,15 @@ export function isDuplicateStyleError(error: unknown): boolean {
 }
 
 /**
- * Given an error and the affected container name, decide whether to mark the
- * operation `expired` (benign duplicate, silent) or `failed` (genuine failure,
- * emits update-failed notification).
+ * Given an error and the affected container's durable identity key (roadmap
+ * 7-STORE, slice 10, spec 2.3), decide whether to mark the operation
+ * `expired` (benign duplicate, silent) or `failed` (genuine failure, emits
+ * update-failed notification).
  *
  * Returns `'expired'` when ANY of the following hold:
  *   1. The error is a duplicate-style vanish AND a terminal `succeeded`
- *      operation for `containerName` exists within the last `windowMs`
- *      milliseconds (optionally filtered by agent+watcher identity).
+ *      operation for `identityKey` exists within the last `windowMs`
+ *      milliseconds.
  *   2. The error is an active-update conflict (409 + active-lock message from
  *      the agent endpoint) AND `excludeOperationId` is provided — the caller
  *      identifies itself, so the remote lock is authoritative and no store
@@ -127,31 +127,29 @@ export function isDuplicateStyleError(error: unknown): boolean {
  *      prevent a crafted 409 body from suppressing genuine update-failed
  *      notifications.
  *   3. The error is a duplicate-style vanish, `excludeOperationId` is provided,
- *      `identity.watcher` is present (so the match is trustworthy), AND another
- *      active (in-progress or queued) operation exists for `containerName` with
- *      the same identity.  Without both guards, legacy rows (no container
- *      snapshot) could cross-match containers on different agents that happen to
- *      share a name (issue #421 cross-agent masking risk).
+ *      `identityKey` is present (so the match is trustworthy), AND another
+ *      active (in-progress or queued) operation exists for the same identity.
+ *      Without both guards, legacy rows (no identity) could cross-match
+ *      containers on different agents that happen to share a name (issue #421
+ *      cross-agent masking risk).
  *
  * Returns `'failed'` in all other cases.
  */
 export function classifyDuplicateOpTerminalStatus(
   error: unknown,
-  containerName: string,
+  identityKey: string | undefined,
   windowMs = DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
-  identity?: ContainerIdentityFilter,
   excludeOperationId?: string,
 ): 'expired' | 'failed' {
   if (!isDuplicateStyleError(error)) {
     return 'failed';
   }
 
-  // (1) Recent succeeded operation for the same container — the update already
-  // completed before our operation arrived.
-  const recentSuccess = updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
-    containerName,
+  // (1) Recent succeeded operation for the same container identity — the
+  // update already completed before our operation arrived.
+  const recentSuccess = updateOperationStore.getRecentTerminalSucceededOperationByContainerIdentity(
+    identityKey,
     windowMs,
-    identity,
   );
   if (recentSuccess) {
     return 'expired';
@@ -168,19 +166,16 @@ export function classifyDuplicateOpTerminalStatus(
   // (3) Issue #421: in the duplicate-request race the winning update may still
   // be in flight when the loser's 409 arrives, so no succeeded row exists yet.
   // Require both excludeOperationId (caller must identify itself) AND
-  // identity.watcher (so legacy rows without a container snapshot can never
-  // cross-match containers from different agents that share a name).
+  // identityKey (so legacy rows without an identity can never cross-match
+  // containers from different agents that share a name).
   // Rows older than DD_UPDATE_OPERATION_ACTIVE_TTL_MS are treated as expired
-  // by the freshness check inside hasOtherActiveOperationByContainerName, so
-  // the TTL should not be set below the longest expected pull (audit follow-up).
+  // by the freshness check inside hasOtherActiveOperationByContainerIdentity,
+  // so the TTL should not be set below the longest expected pull (audit
+  // follow-up).
   if (
     excludeOperationId &&
-    identity?.watcher &&
-    updateOperationStore.hasOtherActiveOperationByContainerName(
-      containerName,
-      excludeOperationId,
-      identity,
-    )
+    identityKey &&
+    updateOperationStore.hasOtherActiveOperationByContainerIdentity(identityKey, excludeOperationId)
   ) {
     return 'expired';
   }

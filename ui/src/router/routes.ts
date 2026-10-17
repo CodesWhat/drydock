@@ -14,7 +14,7 @@
  *  - `?container=`  — container filter (AuditView)
  *  - `?from=`       — date range start (AuditView)
  *  - `?to=`         — date range end (AuditView)
- *  - `?status=`     — outbox entry status (NotificationOutboxView)
+ *  - `?status=`     — outbox entry status (NotificationOutboxView); also approval queue status (ApprovalsView)
  *  - `?next=`       — post-login redirect (auth guard)
  *
  * Rule: use query params for shareable/bookmarkable state;
@@ -32,9 +32,11 @@ export const ROUTES = {
   AGENTS: '/agents',
   TRIGGERS: '/triggers',
   WATCHERS: '/watchers',
+  IMAGES: '/images',
   AUTH: '/auth',
   NOTIFICATIONS: '/notifications',
   NOTIFICATION_OUTBOX: '/notifications/outbox',
   AUDIT: '/audit',
   LOGS: '/logs',
+  APPROVALS: '/approvals',
 } as const;

@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "تم النسخ!",
       "clickToCopy": "انقر للنسخ",
-      "failed": "Copy failed"
+      "failed": "فشل النسخ"
     },
     "dataFilterBar": {
       "filters": "الفلاتر",
@@ -23,8 +23,8 @@
       "viewMode": "وضع العرض",
       "viewModeLabel": "عرض {label}",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "جدول",
+        "cards": "بطاقات"
       }
     },
     "dataTable": {

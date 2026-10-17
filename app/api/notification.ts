@@ -10,6 +10,7 @@ import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -185,8 +186,8 @@ function previewNotificationTemplates(req, res) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getNotificationRules);
-  router.patch('/:id', updateNotificationRule);
-  router.post('/:id/preview', previewNotificationTemplates);
+  router.get('/', scoped('read', getNotificationRules));
+  router.patch('/:id', scoped('admin', updateNotificationRule));
+  router.post('/:id/preview', scoped('triggers:test', previewNotificationTemplates));
   return router;
 }

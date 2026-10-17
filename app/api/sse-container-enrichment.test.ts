@@ -1,16 +1,22 @@
 var {
   mockGetState,
   mockGetActiveOperationByContainerId,
-  mockGetActiveOperationByContainerName,
+  mockGetActiveOperationByContainerIdentity,
   mockGetAgent,
+  mockGetUpdateMode,
 } = vi.hoisted(() => {
   return {
     mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
     mockGetActiveOperationByContainerId: vi.fn(() => undefined),
-    mockGetActiveOperationByContainerName: vi.fn(() => undefined),
+    mockGetActiveOperationByContainerIdentity: vi.fn(() => undefined),
     mockGetAgent: vi.fn(() => undefined),
+    mockGetUpdateMode: vi.fn(() => 'auto' as 'notify' | 'manual' | 'auto'),
   };
 });
+
+vi.mock('../store/settings.js', () => ({
+  getUpdateMode: mockGetUpdateMode,
+}));
 
 vi.mock('../registry/index.js', () => ({
   getState: mockGetState,
@@ -22,21 +28,59 @@ vi.mock('../agent/manager.js', () => ({
 
 vi.mock('../store/update-operation.js', () => ({
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
-  getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
+  getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
 }));
 
+import { toApiContainer } from './container/shared.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 
 describe('enrichContainerLifecyclePayloadWithEligibility', () => {
   beforeEach(() => {
     mockGetState.mockClear();
     mockGetActiveOperationByContainerId.mockClear();
-    mockGetActiveOperationByContainerName.mockClear();
+    mockGetActiveOperationByContainerIdentity.mockClear();
     mockGetAgent.mockClear();
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
-    mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+    mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetAgent.mockReturnValue(undefined);
+    mockGetUpdateMode.mockReturnValue('auto');
+  });
+
+  describe('update mode reflection', () => {
+    const updatePayload = (overrides: Record<string, unknown> = {}) =>
+      ({
+        id: 'c1',
+        name: 'mysql',
+        image: { tag: { value: '9.6.0' } },
+        result: { tag: '9.7.0' },
+        ...overrides,
+      }) as any;
+
+    test('carries the global update mode on the eligibility', () => {
+      mockGetUpdateMode.mockReturnValue('manual');
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+      expect(result.updateEligibility.updateMode).toEqual({ value: 'manual', source: 'global' });
+    });
+
+    test('names the group when its policy is stricter than the global mode', () => {
+      const result = enrichContainerLifecyclePayloadWithEligibility(
+        updatePayload({
+          groupPolicy: {
+            id: 'policy-1',
+            group: 'payments',
+            revision: 1,
+            updatePolicy: {},
+            actions: { updateMode: 'manual' },
+          },
+        }),
+      ) as any;
+      expect(result.updateEligibility.updateMode).toEqual({
+        value: 'manual',
+        source: 'group',
+        group: 'payments',
+      });
+    });
   });
 
   describe('malformed payload guard', () => {
@@ -97,6 +141,49 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       expect(result.status).toBe('running');
       expect(result.extra).toBe(42);
       expect(result.updateEligibility).toBeDefined();
+    });
+  });
+
+  describe('projected payload', () => {
+    test('names the Drydock override in the eligibility message', () => {
+      mockGetState.mockReturnValue({
+        trigger: {
+          'docker.update': {
+            type: 'docker',
+            configuration: { auto: 'oninclude', threshold: 'all' },
+            getId: () => 'docker.update',
+          },
+        },
+        watcher: {},
+      } as never);
+      const projected = toApiContainer({
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: {
+          registry: { name: 'hub', url: 'docker.io' },
+          name: 'library/nginx',
+          tag: { value: '1.0.0', semver: true },
+          digest: { watch: false },
+        },
+        result: { tag: '1.1.0' },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+        actionTriggerInclude: 'other.trigger',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerInclude: 'override' },
+        },
+      }) as any;
+
+      const result = enrichContainerLifecyclePayloadWithEligibility(projected) as any;
+
+      expect(
+        result.updateEligibility.blockers.find((b: any) => b.reason === 'trigger-not-included')
+          ?.message,
+      ).toBe("Trigger not matched by the Drydock override of dd.action.include='other.trigger'.");
     });
   });
 
@@ -202,13 +289,13 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
           (b: { reason: string }) => b.reason === 'active-operation',
         ),
       ).toBe(true);
-      // byName must NOT have been called because byId was truthy
-      expect(mockGetActiveOperationByContainerName).not.toHaveBeenCalled();
+      // byIdentity must NOT have been called because byId was truthy
+      expect(mockGetActiveOperationByContainerIdentity).not.toHaveBeenCalled();
     });
 
-    test('byId returns undefined, byName returns valid queued operation → active-operation blocker added', () => {
+    test('byId returns undefined, byIdentity returns valid queued operation → active-operation blocker added', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValueOnce({
+      mockGetActiveOperationByContainerIdentity.mockReturnValueOnce({
         id: 'op-2',
         status: 'queued',
         updatedAt: '2026-04-26T00:00:00Z',
@@ -224,10 +311,10 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       ).toBe(true);
     });
 
-    test('byName operation with another container id is ignored', () => {
+    test('byIdentity operation with another container id is ignored', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
       // The scoped call now returns undefined for cross-agent ops.
-      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerIdentity.mockReturnValueOnce(undefined);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
@@ -239,17 +326,17 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       ).toBe(false);
     });
 
-    test('byName operation from a different agent is not used for enrichment', () => {
-      // The scoped getActiveOperationByContainerName returns undefined because the
+    test('byIdentity operation from a different agent is not used for enrichment', () => {
+      // The scoped getActiveOperationByContainerIdentity returns undefined because the
       // op belongs to agent-B while the payload container belongs to agent-A.
       // Use updatePayload() (no watcher) so isSelfUpdateAvailable does not throw.
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerIdentity.mockReturnValueOnce(undefined);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
 
-      // No active-operation blocker because the scoped byName call returned undefined.
+      // No active-operation blocker because the scoped byIdentity call returned undefined.
       expect(result.updateEligibility).toBeDefined();
       expect(
         result.updateEligibility.blockers.some(
@@ -258,9 +345,9 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       ).toBe(false);
     });
 
-    test('both byId and byName return undefined → no active-operation blocker', () => {
+    test('both byId and byIdentity return undefined → no active-operation blocker', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerIdentity.mockReturnValueOnce(undefined);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;

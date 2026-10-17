@@ -1,5 +1,4 @@
 import crypto from 'node:crypto';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import {
@@ -16,7 +15,7 @@ import {
 import { deriveContainerIdentityKey, fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
-import { buildImageReference } from '../../../registries/image-reference.js';
+import { buildImageReference, cleanRegistryUrl } from '../../../registries/image-reference.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
@@ -33,13 +32,15 @@ import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
-import { isMemoryStore } from '../../../store/index.js';
-import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
+import { isMemoryStore, save as saveStore } from '../../../store/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { resolveActionConcurrency } from '../../../updates/action-concurrency.js';
 import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
+import { Semaphore } from '../../../updates/lock-primitives.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { getDockerWatcherSourceKey } from '../../../watchers/providers/docker/container-init.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -51,12 +52,14 @@ import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
-import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
+import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
+import type { SelfUpdateDockerApi, SelfUpdateObservedHelperRuntime } from './self-update-types.js';
 import UpdateLifecycleExecutor, {
   type PostPullHookOptions,
   type SelfUpdateLifecycleResult,
@@ -64,9 +67,10 @@ import UpdateLifecycleExecutor, {
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 const PULL_PROGRESS_LOG_INTERVAL_MS = 2000;
+const DEFAULT_PULL_TIMEOUT_MS = 600_000;
+const MAX_SIGNED_32_BIT_TIMEOUT_MS = 2_147_483_647;
 const NON_SELF_UPDATE_HEALTH_TIMEOUT_MS = 120_000;
 const NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS = 1_000;
-const TRIGGER_BATCH_CONCURRENCY = 3;
 
 type ComposeRollbackTerminalPatch =
   | {
@@ -95,6 +99,8 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   prune: boolean;
   dryrun: boolean;
   autoremovetimeout: number;
+  pulltimeout: number;
+  helpercompletiontimeout: number;
   backupcount: number;
 }
 
@@ -104,6 +110,48 @@ type ContainerFullNameReference = {
   name: string;
   watcher?: unknown;
 };
+
+type DirectLocalDockerWatcher = {
+  agent?: unknown;
+  configuration?: {
+    host?: unknown;
+    socket?: unknown;
+    protocol?: unknown;
+    port?: unknown;
+  };
+  dockerApi: unknown;
+};
+
+type AuthoritativeLocalDockerRuntime = {
+  dockerApi: unknown;
+  identity: { id: string; name: string };
+  sourceKey: string;
+};
+
+function normalizeNonEmptyString(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized === '' ? undefined : normalized;
+}
+
+function isDirectLocalDockerWatcher(
+  registryId: string,
+  watcher: unknown,
+): watcher is DirectLocalDockerWatcher {
+  if (!registryId.startsWith('docker.') || !watcher || typeof watcher !== 'object') {
+    return false;
+  }
+  const candidate = watcher as DirectLocalDockerWatcher;
+  if (normalizeNonEmptyString(candidate.agent)) {
+    return false;
+  }
+  if (normalizeNonEmptyString(candidate.configuration?.host)) {
+    return false;
+  }
+  return !!candidate.dockerApi;
+}
 
 function getPreferredLabelValue(labels, ddKey, _logger?) {
   return labels?.[ddKey];
@@ -153,38 +201,6 @@ function getComposeRollbackTerminalPatch(error: unknown): ComposeRollbackTermina
   }
 
   return undefined;
-}
-
-function getOperationIdentityFilter(operation: {
-  agent?: unknown;
-  watcher?: unknown;
-  container?: { agent?: unknown; watcher?: unknown };
-}): ContainerIdentityFilter | undefined {
-  const container = operation.container;
-  /* v8 ignore next 6 -- operation identity filters are requested for watcher-scoped operations. */
-  const watcher =
-    typeof container?.watcher === 'string'
-      ? container.watcher
-      : typeof operation.watcher === 'string'
-        ? operation.watcher
-        : undefined;
-
-  if (!watcher) {
-    return undefined;
-  }
-
-  /* v8 ignore next 5 -- container snapshots carry agent when the operation is agent-owned. */
-  const agent =
-    typeof container?.agent === 'string'
-      ? container.agent
-      : typeof operation.agent === 'string'
-        ? operation.agent
-        : undefined;
-
-  return {
-    ...(agent !== undefined ? { agent } : {}),
-    watcher,
-  };
 }
 
 function getRollbackStateContainerId(
@@ -340,6 +356,14 @@ type RollbackTelemetryPayload = {
 
 type PulledImageIdentityOutcome = {
   imageIdentity?: string;
+  /**
+   * The local image ID the pull resolved to, carried on the outcomes that
+   * could not be bound to a manifest digest. It is not a security binding and
+   * the gate still refuses to run against it, but it is an immutable handle on
+   * the exact image that was pulled, which is what lets a caller recreate
+   * several containers from one image without a digest (DR-54).
+   */
+  localImageId?: string;
   unboundWarn: boolean;
   reason?: string;
 };
@@ -347,6 +371,56 @@ type PulledImageIdentityOutcome = {
 type PulledImageIdentityBinding = {
   imageIdentity?: string;
   skipSecurityGate?: boolean;
+};
+
+/**
+ * The image that was actually pulled, as the identity-binding code sees it:
+ * the reference string handed to the pull, plus the parsed repository parts of
+ * that same reference with any `@sha256:...` suffix already removed.
+ */
+type PulledImageReference = {
+  reference: string;
+  parsedImage: { domain?: string; path?: string };
+  /** The pulled tag, trimmed. Undefined for a digest-only `repo@sha256:...`. */
+  tag?: string;
+};
+
+/**
+ * What the caller knows about the pull that the binding code cannot work out
+ * for itself.
+ *
+ * Passing this object at all says the caller, not the binder, names the image
+ * this pull is for. It replaces the update candidate's digest
+ * (`container.result.digest`) as the tie-break between several `RepoDigests`,
+ * and it makes an unresolved tie fail closed instead of picking one candidate
+ * deterministically: a manual rollback pulls the image its backup retained,
+ * which the candidate's digest describes nothing about (DR-64).
+ */
+type PulledImageIdentityOptions = {
+  /**
+   * The digest to prefer when the daemon records several `RepoDigests` for the
+   * pulled repository, or `null` for "no preference, and do not fall back to
+   * the update candidate's digest". The field is required so that the empty
+   * object cannot express the same thing by accident: dropping the candidate
+   * tie-break is a decision, not a default.
+   */
+  preferredDigest: string | null;
+};
+
+/**
+ * How `selectPulledRepoDigest` breaks a tie between several `RepoDigests`, and
+ * what it does when nothing breaks it.
+ */
+type PulledDigestTieBreak = {
+  /** The digest to prefer, when the caller or the watcher knows one. */
+  preferredDigest?: string;
+  /**
+   * True when the caller named the image this pull is for. Every candidate
+   * still standing at the end is then a manifest that caller has already said
+   * this pull is not, so the digest resolves to nothing and the binding policy
+   * decides, rather than a lexicographic pick deploying one of them (DR-64).
+   */
+  callerPinned: boolean;
 };
 
 type PulledImageInspectApi = {
@@ -405,6 +479,28 @@ class Docker<
 
   rollbackMonitor: RollbackMonitor;
 
+  /**
+   * Persistent per-instance semaphore gating every real container update
+   * this action executes, regardless of caller. Sized once per instance so
+   * it bounds concurrency across ALL entry points, not just calls that
+   * happen to share one triggerBatch() invocation:
+   * runAcceptedContainerUpdates() (manual "Update All", dependency-chain
+   * updates, startup recovery) dispatches one trigger() call per container
+   * from its own wave-worker pool, with no batch boundary of its own — a
+   * pLimit created fresh inside trigger() would never see those sibling
+   * calls and would not bound anything. A persistent Semaphore does,
+   * because every trigger() call on this instance acquires from the same
+   * pool of permits.
+   */
+  protected updateSemaphore?: Semaphore;
+
+  protected getUpdateSemaphore(): Semaphore {
+    if (!this.updateSemaphore) {
+      this.updateSemaphore = new Semaphore(resolveActionConcurrency(this.configuration));
+    }
+    return this.updateSemaphore;
+  }
+
   constructor() {
     super();
 
@@ -436,8 +532,13 @@ class Docker<
       emitSelfUpdateStarting,
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
       resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
+      resolveObserverNetworkMode: () => this.resolveObserverNetworkMode(),
+      resolveObservedHelperRuntime: (context, container) =>
+        this.resolveObservedHelperRuntime(context, container),
+      finalizeObservedHelperOperation: (operationId, status, lastError) =>
+        this.finalizeObservedHelperOperation(operationId, status, lastError),
       resolveHelperImage: (container) => {
-        if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
+        if (this.isSelfUpdate(container)) {
           return undefined;
         }
         const drydockContainer = storeContainer
@@ -709,7 +810,20 @@ class Docker<
       prune: this.joi.boolean().default(false),
       dryrun: this.joi.boolean().default(false),
       autoremovetimeout: this.joi.number().default(10_000),
+      pulltimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
+      helpercompletiontimeout: this.joi
+        .number()
+        .integer()
+        .positive()
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
+      concurrency: this.joi.number().integer().positive().optional(),
     });
   }
 
@@ -895,29 +1009,79 @@ class Docker<
   async pullImage(dockerApi, auth, newImage, logContainer) {
     logContainer.info(`Pull image ${newImage}`);
     try {
-      const pullStream = await dockerApi.pull(newImage, {
-        authconfig: auth,
-      });
       const pullProgressLogger = this.createPullProgressLogger(logContainer, newImage);
+      const pullTimeout = this.configuration.pulltimeout ?? DEFAULT_PULL_TIMEOUT_MS;
+      const abortController = new AbortController();
+      let pullStream;
 
-      await new Promise((resolve, reject) =>
-        dockerApi.modem.followProgress(
-          pullStream,
-          (error, output) => {
-            if (Array.isArray(output) && output.length > 0) {
-              pullProgressLogger.onDone(output.at(-1));
-            }
-            if (error) {
-              reject(error);
-            } else {
-              resolve(undefined);
-            }
-          },
-          (progressEvent) => {
-            pullProgressLogger.onProgress(progressEvent);
-          },
-        ),
-      );
+      await new Promise<void>((resolve, reject) => {
+        let settled = false;
+        const settle = (error?: unknown) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        };
+        const destroyPullStream = (stream) => {
+          if (typeof stream?.destroy !== 'function') {
+            return;
+          }
+          try {
+            stream.destroy();
+          } catch {
+            // The timeout remains the authoritative failure if stream cleanup throws.
+          }
+        };
+        const timeout = setTimeout(() => {
+          const timeoutError = new Error(`Pull image ${newImage} timed out after ${pullTimeout}ms`);
+          settle(timeoutError);
+          abortController.abort(timeoutError);
+          destroyPullStream(pullStream);
+        }, pullTimeout);
+
+        void dockerApi
+          .pull(newImage, {
+            authconfig: auth,
+            abortSignal: abortController.signal,
+          })
+          .then(
+            (stream) => {
+              pullStream = stream;
+              if (settled) {
+                destroyPullStream(stream);
+                return;
+              }
+              try {
+                dockerApi.modem.followProgress(
+                  stream,
+                  (error, output) => {
+                    if (settled) {
+                      return;
+                    }
+                    if (Array.isArray(output) && output.length > 0) {
+                      pullProgressLogger.onDone(output.at(-1));
+                    }
+                    settle(error);
+                  },
+                  (progressEvent) => {
+                    if (!settled) {
+                      pullProgressLogger.onProgress(progressEvent);
+                    }
+                  },
+                );
+              } catch (error: unknown) {
+                settle(error);
+              }
+            },
+            (error) => settle(error),
+          );
+      });
       logContainer.info(`Image ${newImage} pulled with success`);
     } catch (e: unknown) {
       logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);
@@ -958,7 +1122,7 @@ class Docker<
    * removed (DR-110).
    *
    * `rollbackImage` is whatever `buildRollbackImageReference` produced, so a
-   * backup with a captured digest pulls `repo@sha256:...` and the daemon
+   * backup with a captured digest pulls `repo:tag@sha256:...` and the daemon
    * resolves it by digest: a retag between the backup and the rollback cannot
    * change what comes back.
    *
@@ -1420,7 +1584,7 @@ class Docker<
     return { error: 'Container not found in Docker' };
   }
 
-  async buildHookConfig(container, context?) {
+  async buildHookConfig(container, context?, _runtimeContext?: unknown) {
     return this.hookExecutor.resolveHookConfig(container, context);
   }
 
@@ -1578,6 +1742,139 @@ class Docker<
     return this.selfUpdateOrchestrator.isSelfUpdate(container);
   }
 
+  async classifySelfUpdate(container) {
+    const imageName = container?.image?.name;
+    if (imageName !== 'drydock' && !imageName?.endsWith('/drydock')) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    let candidateWatcher: unknown;
+    try {
+      candidateWatcher = this.getWatcher(container);
+    } catch {
+      candidateWatcher = undefined;
+    }
+    if (!candidateWatcher) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'authoritative');
+    }
+    const candidateRegistryId = container?.agent
+      ? `${container.agent}.docker.${container.watcher}`
+      : `docker.${container.watcher}`;
+    if (!isDirectLocalDockerWatcher(candidateRegistryId, candidateWatcher)) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      return this.selfUpdateOrchestrator.classifySelfUpdateAsIndeterminate(container);
+    }
+    const candidateSourceKey = getDockerWatcherSourceKey(candidateWatcher as never);
+    if (candidateSourceKey !== localRuntime.sourceKey) {
+      return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
+    }
+    return this.selfUpdateOrchestrator.classifySelfUpdateFromIdentity(
+      container,
+      localRuntime.identity,
+    );
+  }
+
+  async resolveAuthoritativeLocalDockerRuntime(): Promise<AuthoritativeLocalDockerRuntime | null> {
+    const uniqueSources = new Map<string, DirectLocalDockerWatcher>();
+    for (const [registryId, watcher] of Object.entries(getState().watcher)) {
+      if (!isDirectLocalDockerWatcher(registryId, watcher)) {
+        continue;
+      }
+      uniqueSources.set(getDockerWatcherSourceKey(watcher as never), watcher);
+    }
+    if (uniqueSources.size !== 1) {
+      return null;
+    }
+    const [sourceKey, watcher] = uniqueSources.entries().next().value as [
+      string,
+      DirectLocalDockerWatcher,
+    ];
+    let identity: { id: string; name: string } | null;
+    try {
+      identity = await this.selfUpdateOrchestrator.resolveSelfContainerIdentity(watcher.dockerApi);
+    } catch {
+      identity = null;
+    }
+    if (!identity?.id || !identity.name) {
+      return null;
+    }
+    return { dockerApi: watcher.dockerApi, identity, sourceKey };
+  }
+
+  async resolveObserverNetworkMode(): Promise<string> {
+    const directLocalWatchers = Object.entries(getState().watcher).filter(([registryId, watcher]) =>
+      isDirectLocalDockerWatcher(registryId, watcher),
+    );
+    if (directLocalWatchers.length === 0) {
+      throw new Error('Observed self-update requires an authoritative local Docker watcher');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      throw new Error('Observed self-update could not resolve the local Drydock container');
+    }
+    return `container:${localRuntime.identity.id}`;
+  }
+
+  async resolveObservedHelperRuntime(context, container): Promise<SelfUpdateObservedHelperRuntime> {
+    if (normalizeNonEmptyString(container?.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    let targetWatcher: unknown;
+    try {
+      targetWatcher = this.getWatcher(container);
+    } catch (error: unknown) {
+      throw new Error(`Infrastructure helper watcher is unavailable: ${getErrorMessage(error)}`);
+    }
+    const targetWatcherRuntime = targetWatcher as DirectLocalDockerWatcher;
+    if (normalizeNonEmptyString(targetWatcherRuntime.agent)) {
+      throw new Error('Infrastructure helper updates are unsupported for agent-owned watchers');
+    }
+    if (
+      normalizeNonEmptyString(targetWatcherRuntime.configuration?.host) &&
+      !this.findDockerSocketBind(context.currentContainerSpec)
+    ) {
+      throw new Error('Infrastructure helper updates are unsupported for remote Docker watchers');
+    }
+    const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();
+    if (!localRuntime) {
+      throw new Error('Infrastructure helper update requires one direct local Docker watcher');
+    }
+    const stableDockerApi = localRuntime.dockerApi as SelfUpdateDockerApi;
+    if (
+      typeof stableDockerApi.createContainer !== 'function' ||
+      typeof stableDockerApi.getContainer !== 'function'
+    ) {
+      throw new Error('Infrastructure helper update requires stable local Docker control');
+    }
+    const targetId = context.currentContainerSpec?.Id;
+    const targetName = context.currentContainerSpec?.Name?.replace(/^\/+/, '');
+    let targetInspect: { Id?: unknown; Name?: unknown };
+    try {
+      const targetHandle = (await Promise.resolve(stableDockerApi.getContainer(targetId))) as {
+        inspect?: () => Promise<{ Id?: unknown; Name?: unknown }>;
+      };
+      if (typeof targetHandle?.inspect !== 'function') {
+        throw new Error('stable Docker target handle is not inspectable');
+      }
+      targetInspect = await targetHandle.inspect();
+    } catch (error: unknown) {
+      throw new Error(
+        `Infrastructure target is not proven on the local Docker daemon: ${getErrorMessage(error)}`,
+      );
+    }
+    const inspectedName =
+      typeof targetInspect.Name === 'string' ? targetInspect.Name.replace(/^\/+/, '') : '';
+    if (targetInspect.Id !== targetId || inspectedName !== targetName) {
+      throw new Error('Infrastructure target identity does not match the local Docker daemon');
+    }
+    return {
+      dockerApi: stableDockerApi,
+      networkMode: `container:${localRuntime.identity.id}`,
+    };
+  }
+
   isInfrastructureUpdate(container) {
     return this.selfUpdateOrchestrator.isInfrastructureUpdate(container);
   }
@@ -1616,6 +1913,7 @@ class Docker<
       context,
       triggerName: this.getId(),
       runtimeContext,
+      isCurrentProcess: this.isSelfUpdate(container),
     });
   }
 
@@ -1639,6 +1937,34 @@ class Docker<
 
   async markSelfUpdateOperationSkipped(operationId: string, lastError: string): Promise<void> {
     markSelfUpdateOperationSkippedFromStore(operationId, lastError);
+  }
+
+  async finalizeObservedHelperOperation(
+    operationId: string,
+    status: 'succeeded' | 'rolled-back' | 'failed',
+    lastError?: string,
+  ): Promise<void> {
+    const operation =
+      status === 'succeeded'
+        ? updateOperationStore.markOperationTerminal(operationId, {
+            status: 'succeeded',
+            phase: 'succeeded',
+          })
+        : status === 'rolled-back'
+          ? updateOperationStore.markOperationTerminal(operationId, {
+              status: 'rolled-back',
+              phase: 'rolled-back',
+              ...(lastError ? { lastError } : {}),
+            })
+          : updateOperationStore.markOperationTerminal(operationId, {
+              status: 'failed',
+              phase: 'failed',
+              ...(lastError ? { lastError } : {}),
+            });
+    if (!operation || operation.status !== status) {
+      throw new Error(`Failed to durably finalize observed helper operation ${operationId}`);
+    }
+    await saveStore();
   }
 
   async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {
@@ -1670,12 +1996,14 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
   ): Promise<PulledImageIdentityBinding> {
     const outcome = await this.capturePulledImageIdentity(
       dockerApi,
       imageReference,
       container,
       logContainer,
+      options,
     );
     if (outcome.unboundWarn) {
       this.recordUnboundSecurityWarning(container, outcome.reason);
@@ -1689,8 +2017,17 @@ class Docker<
     imageReference: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
+    // Compose-file-once resolves one digest per service from a single,
+    // arbitrarily-picked replica (DR-42), so that resolution must not apply
+    // *that* replica's binding policy: `required` would abort the whole batch
+    // over one container's label, and `disabled` would silently drop a bind
+    // failure every other replica still needs to see. Overriding to `optional`
+    // there gets the raw `{ imageIdentity | reason }` back without either
+    // failure mode; each container then applies its own policy to that result.
+    bindingPolicyOverride?: 'required' | 'optional' | 'disabled',
   ): Promise<PulledImageIdentityOutcome> {
-    const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+    const bindingPolicy = bindingPolicyOverride ?? this.getPostPullIdentityBindingPolicy(container);
     if (typeof dockerApi.getImage !== 'function') {
       return this.handleMissingPulledImageIdentity(
         container,
@@ -1699,13 +2036,15 @@ class Docker<
       );
     }
 
+    let localImageId: string | undefined;
     try {
       const imageInspect = await dockerApi.getImage(imageReference).inspect();
       const imageId = imageInspect?.Id?.trim();
+      localImageId = imageId;
       const imageWithoutDigest = imageReference.split('@', 1)[0];
       const parsedImage = parse(imageWithoutDigest);
       const referenceCandidates = this.getPulledImageRepositoryCandidates(parsedImage);
-      const matchingRepoDigest = imageInspect?.RepoDigests?.find((repoDigest) => {
+      const matchingRepoDigests = (imageInspect?.RepoDigests ?? []).filter((repoDigest) => {
         const separatorIndex = repoDigest.indexOf('@');
         if (separatorIndex <= 0 || separatorIndex === repoDigest.length - 1) {
           return false;
@@ -1715,6 +2054,20 @@ class Docker<
         return referenceCandidates.includes(repo) && /^sha256:[0-9a-f]+$/i.test(digest);
       });
       const tag = parsedImage.tag?.trim();
+      // Which digest breaks a tie is the caller's to say. The update path has
+      // the candidate the watcher resolved for this container; a rollback has
+      // only what its backup captured, and reading the candidate here anyway
+      // would pin the rollback to the manifest it is undoing (DR-64).
+      const preferredDigest = options
+        ? (options.preferredDigest ?? undefined)
+        : container?.result?.digest;
+      const matchingRepoDigest = await this.selectPulledRepoDigest(
+        matchingRepoDigests,
+        container,
+        logContainer,
+        { reference: imageReference, parsedImage, tag },
+        { preferredDigest, callerPinned: Boolean(options) },
+      );
       if (imageId && matchingRepoDigest && tag) {
         const separatorIndex = matchingRepoDigest.indexOf('@');
         const repo = matchingRepoDigest.substring(0, separatorIndex);
@@ -1736,11 +2089,147 @@ class Docker<
       );
     }
 
-    return this.handleMissingPulledImageIdentity(
-      container,
-      bindingPolicy,
-      'Docker image inspection returned no local ID and matching manifest digest',
-    );
+    return {
+      ...this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        'Docker image inspection returned no local ID and matching manifest digest',
+      ),
+      localImageId,
+    };
+  }
+
+  /**
+   * Disambiguate multiple `RepoDigests` entries that match the pulled image's
+   * repository. Docker never drops a stale entry: when a multi-arch index is
+   * republished without touching this platform's layers, the local image ID
+   * can carry both the old and the new manifest digest for the same repo
+   * (`[repo@OLD, repo@NEW]`). Picking the wrong one pins the security gate,
+   * cosign verification and the scan to a manifest that was never the one
+   * gated for this update, while the operation still reports success.
+   *
+   * Prefers the digest the pulled reference itself names when it is
+   * digest-pinned, then `tieBreak.preferredDigest`, the digest the caller
+   * already knows describes this pull: the candidate the watcher resolved
+   * during discovery on the update path, the backup record's captured digest
+   * on a rollback. Falls back to a registry manifest lookup, which is cheap
+   * when the same image was already resolved earlier in the same poll cycle
+   * (BaseRegistry caches it).
+   *
+   * What happens when none of those answers depends on who asked. The update
+   * path picks deterministically and logs every candidate, so the ambiguity is
+   * visible instead of silently picked. A caller that named the image this
+   * pull is for (`tieBreak.callerPinned`, the rollback path) gets nothing: a
+   * lexicographic pick between manifests it has already said this pull is not
+   * would deploy, gate and report one of them at random, so the image is left
+   * unbound and the binding policy refuses or warns instead (DR-64).
+   */
+  protected async selectPulledRepoDigest(
+    candidates: string[],
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    pulled: PulledImageReference,
+    tieBreak: PulledDigestTieBreak,
+  ): Promise<string | undefined> {
+    if (candidates.length <= 1) {
+      return candidates[0];
+    }
+
+    const digestOf = (repoDigest: string) => repoDigest.substring(repoDigest.indexOf('@') + 1);
+
+    // A digest-pinned pull already names the manifest the daemon resolved, so
+    // the reference outranks anything read off the still-running container.
+    // Matching it here also keeps the digest out of the lookup below, which
+    // would otherwise have to append it to a reference that already carries one.
+    const referenceSeparatorIndex = pulled.reference.indexOf('@');
+    if (referenceSeparatorIndex >= 0) {
+      const referenceDigest = pulled.reference.substring(referenceSeparatorIndex + 1);
+      const pinned = candidates.find((candidate) => digestOf(candidate) === referenceDigest);
+      if (pinned) {
+        return pinned;
+      }
+    }
+
+    const { preferredDigest } = tieBreak;
+    if (typeof preferredDigest === 'string' && /^sha256:[0-9a-f]+$/i.test(preferredDigest)) {
+      const preferred = candidates.find((candidate) => digestOf(candidate) === preferredDigest);
+      if (preferred) {
+        return preferred;
+      }
+    }
+
+    try {
+      const lookupImage = this.buildPulledManifestLookupImage(container, pulled);
+      if (lookupImage) {
+        const registry = this.resolveRegistryManager(container, logContainer, {
+          allowAnonymousFallback: true,
+        });
+        if (registry && typeof registry.getImageManifestDigest === 'function') {
+          const manifest = await registry.getImageManifestDigest(lookupImage);
+          if (typeof manifest?.digest === 'string') {
+            const resolved = candidates.find(
+              (candidate) => digestOf(candidate) === manifest.digest,
+            );
+            if (resolved) {
+              return resolved;
+            }
+          }
+        }
+      }
+    } catch {
+      // Best-effort disambiguation only. Fall through to the deterministic pick.
+    }
+
+    const ambiguity = `Multiple manifest digests match the pulled image repository for ${container?.name}: [${candidates.join(', ')}]`;
+    // Nothing here names the manifest that was pulled, and the caller pinned
+    // this pull to an image none of these candidates has been shown to be.
+    // Deploying whichever one sorts first is a coin flip the rollback contract
+    // does not allow, so hand back nothing and let the policy decide (DR-64).
+    if (tieBreak.callerPinned) {
+      logContainer.warn(
+        `${ambiguity}; none of them is the manifest this pull was pinned to, leaving the image unbound`,
+      );
+      return undefined;
+    }
+    const sorted = [...candidates].sort();
+    const chosen = sorted[0];
+    logContainer.warn(`${ambiguity}; picked ${chosen}`);
+    return chosen;
+  }
+
+  /**
+   * Build the image descriptor the fallback manifest lookup queries.
+   *
+   * `container.image` describes what the container is still *running*, so its
+   * tag names a different manifest than the one that was just pulled on any
+   * tag update, and on every rollback, where the reference is the backup's
+   * older tag. Binding the security gate and the deployment to that manifest
+   * gates an image nobody pulled, so repository and tag both come from the
+   * pulled reference instead.
+   *
+   * A Docker reference carries neither the registry's v2 API URL nor its
+   * credentials, so those stay on `container.image`, and the repository is
+   * only taken from the reference while it sits under that same registry.
+   * A repository from anywhere else would be queried against the wrong
+   * endpoint with the wrong auth.
+   *
+   * Returns undefined for a digest-only `repo@sha256:...` pull. The reference
+   * has already answered what that manifest is, and quietly querying the
+   * container's own tag instead is the mis-binding this exists to prevent.
+   */
+  protected buildPulledManifestLookupImage(container, pulled: PulledImageReference) {
+    if (!pulled.tag) {
+      return undefined;
+    }
+    const containerImage = container.image;
+    const repository = [pulled.parsedImage.domain, pulled.parsedImage.path]
+      .filter(Boolean)
+      .join('/');
+    const registryPrefix = `${cleanRegistryUrl(containerImage.registry.url)}/`;
+    const name = repository.startsWith(registryPrefix)
+      ? repository.substring(registryPrefix.length)
+      : containerImage.name;
+    return { ...containerImage, name, tag: { ...containerImage.tag, value: pulled.tag } };
   }
 
   protected getPulledImageRepositoryCandidates(parsedImage: { domain?: string; path?: string }) {
@@ -1841,6 +2330,17 @@ class Docker<
     return securityConfiguration.availabilityPolicy === 'warn' ? 'optional' : 'required';
   }
 
+  /**
+   * Public alias of {@link getPostPullIdentityBindingPolicy} for callers
+   * outside this class, such as the manual rollback API in
+   * `app/util/backup.ts`, which needs the same required/optional/disabled
+   * decision to know whether an unresolvable rollback digest should refuse
+   * the rollback or fall back to the mutable tag with a warning.
+   */
+  getRollbackIdentityBindingPolicy(container): 'required' | 'optional' | 'disabled' {
+    return this.getPostPullIdentityBindingPolicy(container);
+  }
+
   async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
@@ -1904,10 +2404,7 @@ class Docker<
   }
 
   resolveContainerBackupScope(container) {
-    return createContainerBackupScope(
-      container,
-      storeContainer.getContainers({ name: container.name }) ?? [],
-    );
+    return createContainerBackupScope(container);
   }
 
   async runPreRuntimeUpdateLifecycle(context, container, logContainer, _runtimeContext?: unknown) {
@@ -2016,11 +2513,25 @@ class Docker<
    * Delegates the actual runtime update to `performContainerUpdate()` which
    * subclasses can override.
    */
-  async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    const selfUpdate = this.isSelfUpdate(container);
-    const bypassGlobalCap = selfUpdate || this.isInfrastructureUpdate(container);
-    let selfUpdateOperationId: string | undefined;
-    return withContainerUpdateLocks(
+  async runContainerUpdateLifecycle(
+    container,
+    runtimeContext?: unknown,
+    options?: {
+      lifecycleAlreadyAcquired?: boolean;
+      selfUpdateClassification?: SelfUpdateClassification;
+      onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
+    },
+  ) {
+    const selfUpdateClassification =
+      options?.selfUpdateClassification ?? (await this.classifySelfUpdate(container));
+    if (selfUpdateClassification === 'indeterminate') {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+      throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+    }
+    const selfUpdate = selfUpdateClassification === 'current';
+    const exclusiveUpdate = selfUpdate || this.isInfrastructureUpdate(container);
+    let exclusiveUpdateOperationId: string | undefined;
+    const lifecycle = withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
@@ -2031,7 +2542,8 @@ class Docker<
           );
           let result: unknown = lifecycleResult;
           if (isSelfUpdateLifecycleResult(lifecycleResult)) {
-            selfUpdateOperationId = lifecycleResult.operationId;
+            exclusiveUpdateOperationId = lifecycleResult.operationId;
+            options?.onSelfUpdateOperationId?.(exclusiveUpdateOperationId, lifecycleResult.updated);
             result = lifecycleResult.updated;
           }
           if (result !== false && requestedOperationId) {
@@ -2049,6 +2561,10 @@ class Docker<
           }
           return result;
         } catch (error: unknown) {
+          if (selfUpdate && error instanceof RetainSelfUpdateLifecycleError) {
+            exclusiveUpdateOperationId = error.operationId;
+            options?.onSelfUpdateOperationId?.(error.operationId, true);
+          }
           const operation = requestedOperationId
             ? updateOperationStore.getOperationById(requestedOperationId)
             : undefined;
@@ -2103,9 +2619,8 @@ class Docker<
           } else if (
             classifyDuplicateOpTerminalStatus(
               error,
-              operation.containerName,
+              operation.containerIdentityKey,
               undefined,
-              getOperationIdentityFilter(operation),
               operation.id,
             ) === 'expired'
           ) {
@@ -2126,39 +2641,63 @@ class Docker<
         }
       },
       {
-        bypassGlobalCap,
-        exclusive: selfUpdate,
+        bypassGlobalCap: exclusiveUpdate,
+        exclusive: exclusiveUpdate,
+        skipLifecycleGate: options?.lifecycleAlreadyAcquired === true,
+        skipUpdateLocks: options?.lifecycleAlreadyAcquired === true,
         retainExclusiveOnResult: (result) =>
-          result === true && selfUpdateOperationId
-            ? { operationId: selfUpdateOperationId }
+          selfUpdate && result === true && exclusiveUpdateOperationId
+            ? { operationId: exclusiveUpdateOperationId }
+            : undefined,
+        retainExclusiveOnError: (error) =>
+          error instanceof RetainSelfUpdateLifecycleError
+            ? { operationId: error.operationId }
             : undefined,
       },
     );
+    try {
+      return await lifecycle;
+    } finally {
+      this.selfUpdateOrchestrator.clearSelfUpdateClassification(container);
+    }
   }
 
   /**
    * Update the container.
+   *
+   * The fan-out limit is DD_UPDATE_CONCURRENCY (default 1), or this action's
+   * own DD_ACTION_DOCKER_<NAME>_CONCURRENCY override when set. This is the
+   * single choke point where the docker action executes container updates
+   * concurrently: every caller (triggerBatch()'s own fan-out, and
+   * runAcceptedContainerUpdates()'s per-container dispatch for manual bulk
+   * updates, dependency chains, and startup recovery) funnels through this
+   * one method, so they all draw from the same permit pool.
+   * Dockercompose.triggerBatch resolves the same value for its own
+   * (compose-file-scoped) fan-out.
    * @param container the container
    * @returns {Promise<void>}
    */
   async trigger(container, runtimeContext?: unknown) {
-    await this.runContainerUpdateLifecycle(container, runtimeContext);
+    const release = await this.getUpdateSemaphore().acquire();
+    try {
+      await this.runContainerUpdateLifecycle(container, runtimeContext);
+    } finally {
+      release();
+    }
   }
 
   /**
-   * Update the containers.
+   * Update the containers. Concurrency is bounded by trigger()'s own
+   * persistent semaphore, so this fan-out needs no limiter of its own.
    * @param containers
    * @returns {Promise<unknown[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<unknown[]> {
-    const limit = pLimit(TRIGGER_BATCH_CONCURRENCY);
     return Promise.all(
       containers.map((container) =>
-        limit(() =>
-          runtimeContext === undefined
-            ? this.trigger(container)
-            : this.trigger(container, runtimeContext),
-        ),
+        runtimeContext === undefined
+          ? this.trigger(container)
+          : this.trigger(container, runtimeContext),
       ),
     );
   }

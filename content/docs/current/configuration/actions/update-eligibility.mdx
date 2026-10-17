@@ -15,15 +15,26 @@ A container is **eligible** when an update exists *and* no blocker applies. What
 
 Choose the mode under **Settings → General → Update mode**. The setting applies to the whole Drydock server, not just the current browser or user.
 
-| Mode | Detection and notifications | Manual UI/API updates | Automatic action triggers |
-| --- | --- | --- | --- |
-| `notify` | Enabled | Refused | Suppressed |
-| `manual` | Enabled | Enabled, subject to eligibility | Suppressed |
-| `auto` | Enabled | Enabled, subject to eligibility | Enabled, subject to trigger configuration and eligibility |
+| Mode | Detection and notifications | Manual UI/API updates | Automatic action triggers | [Approval queue](/docs/configuration/actions/approvals) |
+| --- | --- | --- | --- | --- |
+| `notify` | Enabled | Refused | Suppressed | No rows — nothing is admissible to queue |
+| `manual` | Enabled | Enabled, subject to eligibility | Suppressed | Every eligible candidate queues |
+| `auto` | Enabled | Enabled, subject to eligibility | Enabled, subject to trigger configuration and eligibility | Only candidates a configured trigger will not auto-dispatch |
 
 Fresh installations default to `manual`. When an existing installation upgrades from a version with no `updateMode` setting, Drydock migrates it to `auto` so configured automatic updates do not silently stop. Changing the mode later takes effect server-wide.
 
 In `notify` mode the Update Status panel leads with **Notifications only — Drydock won't apply updates** and keeps diagnostic conditions behind **Show details**. Attempts to update through Drydock are rejected; continue to use your external update tooling.
+
+### Group policy ceiling
+
+A [group policy](/docs/configuration/groups) can lower the update mode for the containers in one group. The mode that applies to a container is the more restrictive of the global mode and its group's, ordered `notify`, `manual`, `auto`. A group can never raise it, so a group `manual` under global `notify` stays `notify`.
+
+- **Group `manual`** behaves like global `manual` for that container. Automatic triggers skip it, its candidate queues for approval, and the Update button stays enabled.
+- **Group `notify`** locks the Update button with the `group-notify-only` blocker. Global `notify` has no blocker and keeps its banner, because it applies to the whole server. A per-container restriction travels on the per-container channel instead.
+
+A member's `dd.action.auto` or `dd.action.include` label does not lift the ceiling. Each container's `updateEligibility.updateMode` reports `{ value, source, group? }`, where `source` is `group` only when the group is strictly more restrictive.
+
+<Callout type="info">A soft blocker never hides a candidate from the [approval queue](/docs/configuration/actions/approvals) — it becomes one of the row's hold reasons instead, shown next to the release notes. Only a hard blocker keeps a candidate out (an existing row is left alone, since the blocker may still lift).</Callout>
 
 ## Where blockers appear
 
@@ -50,7 +61,9 @@ A **hard** blocker never reaches this dialog: the Update button is disabled and 
 
 > Outside maintenance window — auto update deferred until the window opens.
 
-Someone has set a maintenance window on this container's watcher (`DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW`), and right now the clock is outside it. Drydock is telling you it wouldn't have applied this update by itself yet. It has no bearing on the manual update you just asked for: click **Update anyway** and it runs.
+Someone has set a maintenance window on this container's watcher (`DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW`), and right now the clock is outside it. Drydock is telling you it wouldn't have applied this update by itself yet. It found the update on its ordinary schedule and is holding the install until the window opens. It has no bearing on the manual update you just asked for: click **Update anyway** and it runs.
+
+The same hold applies to a container watched by a remote agent: the dialog reads the window state the agent reports, and the controller defers that container's automatic install the same way, catching up once the agent's next report shows the window open.
 
 Two things commonly cause this line to show up more than expected:
 
@@ -69,8 +82,10 @@ This is also independent of the maturity gate. A candidate can be past its matur
 | `skip-tag` | **Tag skipped** | Soft | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
 | `skip-digest` | **Digest skipped** | Soft | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
 | `maturity-not-reached` | **Maturing** | Soft | Container's effective `maturityMode` is `mature` and the update has not yet aged past `maturityMinAgeDays` days. The blocker message identifies the active policy tier (`env`, `label`, or `override`). The gate measures elapsed time from the earliest known point the update existed: for Docker Hub and GHCR (including lscr.io), Drydock uses the registry's real publish timestamp (`last_updated` / `updated_at`), so an image already soaked in the registry longer than the threshold clears immediately on first detection. For all other registries (ACR, ECR, GCR, Quay, Harbor, etc.) the OCI image-config `created` field is a build date, not a reliable push date, so the gate falls back to `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update. The gate clock survives container recreation as long as the same candidate remains pending; a changed tag, digest, or mutable-tag image restarts the soak. The candidate remains visible while held, and the detail view shows a live countdown plus the exact local `liftableAt` date and time. The blocker's `details.clockSource` (`publishedAt` or `detectedAt`) and `details.clockStartAt` (ISO timestamp) identify which clock won; the Update Status panel renders them as the single clock-sourced explanation line instead of a generic countdown. As soon as the gate lifts, Drydock fires a dedicated `maturity-cleared` notification instead of waiting for the next scan's generic `update-available` notification — see [Event Types](/docs/configuration/triggers#event-types) and [Maturity Gate Sweep](/docs/configuration/triggers#maturity-gate-sweep). | Wait for the gate to lift, use **Update Now**, change the active label/watcher setting, add a UI override, or **Revert** an override to the declarative value. |
+| `maturity-releases-not-reached` | **Maturing** | Soft | v1.8.0-rc.1: the candidate has fewer than `maturitySkipReleases` earlier stable releases in its family, or its evidence is unavailable. `details.evidenceAvailable` distinguishes these cases. A deadline exists only for an explicit age fallback with a known clock. See [release-count maturity](/docs/api/container#release-count-maturity-unreleased-v18). | Wait for evidence, configure an explicit age fallback, change the policy, or confirm a manual update. |
 | `threshold-not-reached` | **Below threshold** | Soft | The matching trigger's `threshold` (e.g. `major`) is more restrictive than the detected update kind (e.g. `minor`). | Lower the trigger's `THRESHOLD` env var, or wait for an update that meets it. |
-| `trigger-excluded` | **Trigger excluded** | Hard | Container's `dd.action.exclude` label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
+| `trigger-excluded` | **Trigger excluded** | Hard | Container's `dd.action.exclude` label matches the candidate trigger, or the container's [group policy](/docs/configuration/groups) excludes it. The label wins the attribution when both match. For a group exclusion the message names the group and the matching entries, and `details` carries `excludedBy: "group"`, `group` and `policyId`. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. For a group exclusion, change the group policy or move the container with `dd.group`. |
+| `group-notify-only` | **Group notify only** | Hard | The container's [group policy](/docs/configuration/groups) sets `actions.updateMode` to `notify`, so Drydock won't apply updates to it. `details` carries `group` and `policyId`. | Change the group policy, or move the container to another group with `dd.group`. |
 | `trigger-not-included` | **Trigger filtered** | Hard | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` label naming the trigger. The label is missing or doesn't list this trigger. Under `AUTO=onauto`, automatic dispatch instead requires a `dd.action.auto` label match — `dd.action.include` alone only grants manual access in that mode. | Add `dd.action.include=<trigger-name>` to the container's labels (or `dd.action.auto=<trigger-name>` when the trigger is configured with `AUTO=onauto`), or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=true` on the trigger to fire on every matching container. |
 | `agent-mismatch` | **Agent mismatch** | Hard | A `docker` / `dockercompose` trigger exists, but its `agent` doesn't match the container's agent. | Configure a trigger on the container's agent, or move the container to the trigger's agent. |
 | `no-update-trigger-configured` | **No trigger** | Hard | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
@@ -78,7 +93,7 @@ This is also independent of the maturity gate. A candidate can be past its matur
 | `rollback-container` | **Rollback** | Hard | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
 | `active-operation` | **In progress** | Hard | An update is queued or already running for this container. | Wait for completion. |
 | `no-update-available` | **No actionable update** | Hard/internal | No actionable image update was detected. A pinned container may still have an informational newer-version insight; the insight does not bypass this internal short-circuit. | N/A |
-| `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Container-list and SSE responses enrich this live watcher state for both local and agent-owned containers. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. See [what the dialog is telling you](#maintenance-window-closed-in-the-update-dialog). | Click **Update anyway** to apply it now, wait for the next window, or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ` — remembering the expression is matched per minute, so `* 2-3 * * *` keeps the window open where `0 2-3 * * *` opens it for one minute. |
+| `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync, and applies the deferred update when the window opens. Container-list and SSE responses enrich this live watcher state for both local and agent-owned containers. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. See [what the dialog is telling you](#maintenance-window-closed-in-the-update-dialog). | Click **Update anyway** to apply it now, wait for the next window, or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`, remembering the expression is matched per minute, so `* 2-3 * * *` keeps the window open where `0 2-3 * * *` opens it for one minute. |
 
 <Callout type="info">The Update Status panel shows **Up to date** only when neither an actionable update nor an informational `updateInsight` exists. An insight-only pinned container instead shows an informational newer-version state with no update action. The panel also avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
 
@@ -163,6 +178,7 @@ Fields:
 - `blockers[].liftableAt` — ISO timestamp when a time-limited blocker (snooze, maturity) will clear automatically.
 - `blockers[].details` — reason-specific payload (skipped tag, threshold value, agent IDs, etc.). Schema is per-reason and may grow over time.
 - `actionPolicy` — the resolved per-trigger access policy for this container's best-matching `docker` / `dockercompose` trigger, omitted when no compatible trigger exists at all (`no-update-trigger-configured`) or the agents don't match (`agent-mismatch`). See below.
+- `updateMode` — present when the server supplies the global mode: `{ value, source, group? }`, the update mode that binds this container. `source` is `global`, or `group` when the container's group policy is strictly more restrictive.
 - `evaluatedAt` — ISO timestamp of the evaluation. Recomputed on every container update and watcher run.
 
 For maturity blockers, the UI treats `liftableAt` as the **gate eligibility time**. It is not a guaranteed deployment timestamp: automatic actions run after a watcher observes the now-mature candidate, and maintenance windows, security checks, trigger filters, queues, or an offline agent can delay application further.
@@ -187,3 +203,4 @@ A trigger's `AUTO` mode doesn't only decide whether `actionPolicy.state` can bec
 - [Triggers](/docs/configuration/triggers) — `THRESHOLD`, `AUTO`, and per-trigger `INCLUDE` / `EXCLUDE` env vars.
 - [Triggers — Maturity Gate Sweep](/docs/configuration/triggers#maturity-gate-sweep) — `DD_MATURITY_SWEEP_CRON` and the `maturity-cleared` notification fired when this gate lifts.
 - [Watchers — Labels](/docs/configuration/watchers#labels) — `dd.action.include` / `dd.action.exclude`.
+- [Approval Queue](/docs/configuration/actions/approvals) — the manual-mode candidate set as a work list, with the same hard/soft blocker split.

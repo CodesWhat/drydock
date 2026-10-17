@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "복사됨!",
       "clickToCopy": "클릭하여 복사",
-      "failed": "Copy failed"
+      "failed": "복사 실패"
     },
     "dataFilterBar": {
       "filters": "필터",
@@ -23,8 +23,8 @@
       "viewMode": "보기 모드",
       "viewModeLabel": "{label} 보기",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "표",
+        "cards": "카드"
       }
     },
     "dataTable": {

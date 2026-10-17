@@ -1,19 +1,41 @@
+import { i18n } from '../boot/i18n';
+import type { ApiAgent, ApiAgentIdentity } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 const BASE_URL = '/api/v1/agents';
 
-interface ApiAgent {
-  name: string;
-  connected: boolean;
-  host?: string;
-  port?: string | number;
-  [key: string]: unknown;
+export async function getAgentRoster(): Promise<ApiAgentIdentity[]> {
+  const response = await fetch(`${BASE_URL}/roster`, { credentials: 'include' });
+  if (!response.ok) throw new Error(`Failed to get agent roster: ${response.status}`);
+  const payload = await readJsonResponse(response);
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    !('data' in payload) ||
+    !Array.isArray(payload.data)
+  ) {
+    throw new Error('Invalid agent roster response');
+  }
+  return payload.data.map((item: unknown) => {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      !('name' in item) ||
+      typeof item.name !== 'string' ||
+      item.name.length === 0
+    ) {
+      throw new Error('Invalid agent roster response');
+    }
+    return { name: item.name };
+  });
 }
 
 export async function getAgents(): Promise<ApiAgent[]> {
   const response = await fetch(BASE_URL, { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get agents: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('agentsView.list.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
   return extractCollectionData<ApiAgent>(payload);

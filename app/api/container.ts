@@ -20,32 +20,34 @@ import {
 import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
+import * as groupPolicyStore from '../store/group-policy.js';
+import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
-import { uniqStrings } from '../util/string-array.js';
-import { recordAuditEvent } from './audit-events.js';
 import { mapComponentsToList } from './component.js';
 import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
+import { createEffectivePolicyHandler } from './container/handlers/effective-policy.js';
 import { createLogHandlers } from './container/logs.js';
 import { createSecurityHandlers } from './container/security.js';
 import {
   getErrorStatusCode,
-  redactContainerRuntimeEnv,
-  redactContainersRuntimeEnv,
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
+  toApiContainer,
+  toApiContainers,
 } from './container/shared.js';
 import { type ContainerSortMode, sortContainers } from './container/sorting.js';
 import { createStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
-import { createUpdatePolicyHandlers } from './container/update-policy.js';
+import { updatePolicyHandlers } from './container/update-policy-writer.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { DYNAMIC_SCOPE, SESSION_ONLY, scoped } from './route-scopes.js';
 import { broadcastScanCompleted, broadcastScanStarted } from './sse.js';
 
 const log = logger.child({ component: 'container' });
@@ -183,8 +185,8 @@ const crudHandlers = createCrudHandlers({
     getErrorStatusCode,
   },
   securityApi: {
-    redactContainerRuntimeEnv,
-    redactContainersRuntimeEnv,
+    redactContainerRuntimeEnv: toApiContainer,
+    redactContainersRuntimeEnv: toApiContainers,
     auditStore,
   },
 });
@@ -199,17 +201,17 @@ const triggerHandlers = createTriggerHandlers({
   log,
 });
 
+const effectivePolicyHandler = createEffectivePolicyHandler({
+  getContainer: (id) => storeContainer.getContainer(id),
+  getTriggers,
+  getUpdateMode,
+  withCurrentGroupPolicy: groupPolicyStore.withCurrentGroupPolicy,
+  toApiContainer,
+});
+
 const containerStatsCollector = createContainerStatsCollector({
   getContainerById: (id) => storeContainer.getContainer(id),
   getWatchers: () => registry.getState().watcher || {},
-});
-
-const updatePolicyHandlers = createUpdatePolicyHandlers({
-  storeContainer,
-  uniqStrings,
-  getErrorMessage,
-  redactContainerRuntimeEnv,
-  recordAuditEvent,
 });
 
 const securityHandlers = createSecurityHandlers({
@@ -224,7 +226,7 @@ const securityHandlers = createSecurityHandlers({
   fullName,
   broadcastScanStarted,
   broadcastScanCompleted,
-  redactContainerRuntimeEnv,
+  redactContainerRuntimeEnv: toApiContainer,
   getErrorMessage,
   getContainerImageFullName,
   getContainerRegistryAuth,
@@ -294,11 +296,14 @@ export function init() {
     : {};
 
   router.use(nocache());
-  router.get('/', crudHandlers.getContainers);
-  router.post('/watch', crudHandlers.watchContainers);
-  router.get('/summary', crudHandlers.getContainerSummary);
-  router.get('/recent-status', getContainerRecentStatus);
-  router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);
+  router.get('/', scoped('read', crudHandlers.getContainers));
+  router.post('/watch', scoped('containers:watch', crudHandlers.watchContainers));
+  router.get('/summary', scoped('read', crudHandlers.getContainerSummary));
+  router.get('/recent-status', scoped('read', getContainerRecentStatus));
+  router.get(
+    '/security/vulnerabilities',
+    scoped('read', crudHandlers.getContainerSecurityVulnerabilities),
+  );
   router.post(
     '/scan-all',
     rateLimit({
@@ -310,27 +315,43 @@ export function init() {
       message: 'Bulk scan rate limit exceeded. Max 1 per 60 seconds.',
       ...identityAwareRateLimitOptions,
     }),
-    bulkSecurityHandlers.scanAll,
+    scoped('containers:watch', bulkSecurityHandlers.scanAll),
   );
-  router.get('/stats', getLegacyAggregateStats);
-  router.get('/:id/stats', statsHandlers.getContainerStats);
-  router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
-  router.get('/:id/intermediate-release-notes', crudHandlers.getContainerIntermediateReleaseNotes);
-  router.get('/:id/release-notes', crudHandlers.getContainerReleaseNotes);
-  router.get('/:id', crudHandlers.getContainer);
-  router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);
+  router.get('/stats', scoped('read', getLegacyAggregateStats));
+  router.get('/:id/stats', scoped('read', statsHandlers.getContainerStats));
+  router.get('/:id/stats/stream', scoped('read', statsHandlers.streamContainerStats));
+  router.get(
+    '/:id/intermediate-release-notes',
+    scoped('read', crudHandlers.getContainerIntermediateReleaseNotes),
+  );
+  router.get('/:id/release-notes', scoped('read', crudHandlers.getContainerReleaseNotes));
+  router.get('/:id', scoped('read', crudHandlers.getContainer));
+  router.get('/:id/update-operations', scoped('read', crudHandlers.getContainerUpdateOperations));
   router.delete(
     '/:id',
     requireDestructiveActionConfirmation('container-delete'),
-    crudHandlers.deleteContainer,
+    scoped('admin', crudHandlers.deleteContainer),
   );
-  router.get('/:id/triggers', triggerHandlers.getContainerTriggers);
-  router.post('/:id/triggers/:triggerType/:triggerName', triggerHandlers.runTrigger);
-  router.post('/:id/triggers/:triggerType/:triggerName/:triggerAgent', triggerHandlers.runTrigger);
-  router.patch('/:id/update-policy', updatePolicyHandlers.patchContainerUpdatePolicy);
-  router.post('/:id/watch', crudHandlers.watchContainer);
-  router.get('/:id/vulnerabilities', securityHandlers.getContainerVulnerabilities);
-  router.get('/:id/sbom', securityHandlers.getContainerSbom);
+  router.get('/:id/triggers', scoped('read', triggerHandlers.getContainerTriggers));
+  router.get('/:id/effective-policy', scoped('read', effectivePolicyHandler));
+  // The one route whose required scope depends on a path parameter: a
+  // docker/dockercompose trigger needs containers:update, a notification
+  // trigger needs triggers:test. Resolved in the handler, not here.
+  router.post(
+    '/:id/triggers/:triggerType/:triggerName',
+    scoped(DYNAMIC_SCOPE, triggerHandlers.runTrigger),
+  );
+  router.post(
+    '/:id/triggers/:triggerType/:triggerName/:triggerAgent',
+    scoped(DYNAMIC_SCOPE, triggerHandlers.runTrigger),
+  );
+  router.patch(
+    '/:id/update-policy',
+    scoped('containers:update', updatePolicyHandlers.patchContainerUpdatePolicy),
+  );
+  router.post('/:id/watch', scoped('containers:watch', crudHandlers.watchContainer));
+  router.get('/:id/vulnerabilities', scoped('read', securityHandlers.getContainerVulnerabilities));
+  router.get('/:id/sbom', scoped('read', securityHandlers.getContainerSbom));
   router.post(
     '/:id/env/reveal',
     rateLimit({
@@ -341,7 +362,7 @@ export function init() {
       validate: { xForwardedForHeader: false },
       ...identityAwareRateLimitOptions,
     }),
-    crudHandlers.revealContainerEnv,
+    scoped(SESSION_ONLY, crudHandlers.revealContainerEnv),
   );
   router.post(
     '/:id/scan',
@@ -353,8 +374,8 @@ export function init() {
       validate: { xForwardedForHeader: false },
       ...identityAwareRateLimitOptions,
     }),
-    securityHandlers.scanContainer,
+    scoped('containers:watch', securityHandlers.scanContainer),
   );
-  router.get('/:id/logs', logHandlers.getContainerLogs);
+  router.get('/:id/logs', scoped('read', logHandlers.getContainerLogs));
   return router;
 }

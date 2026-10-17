@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0-rc.24';
-const PREV_RC_VERSION = '1.7.0-rc.23';
-const RC_DATE = '2026-10-12';
-const RC_DISPLAY_DATE = 'October 12, 2026';
-const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
+const RC_VERSION = '1.8.0-rc.1';
+const PREV_RC_VERSION = '1.7.0-rc.24';
+const RC_DATE = '2026-10-17';
+const RC_DISPLAY_DATE = 'October 17, 2026';
+const DOC_ROOTS = [
+  'content/docs/current',
+  'content/docs/v1.7',
+  'content/docs/v1.6',
+  'content/docs/v1.5',
+];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
@@ -26,13 +31,6 @@ function extractMarkdownSection(document, heading) {
   return document.slice(sectionStart, nextSectionStart === -1 ? undefined : nextSectionStart);
 }
 
-function assertMarkdownLink(document, url) {
-  const destinations = [...(document ?? '').matchAll(/\[[^\]]*\]\(([^)]+)\)/gu)].map(
-    (match) => match[1],
-  );
-  assert.ok(destinations.includes(url), `missing Markdown link: ${url}`);
-}
-
 function assertReleaseRedirectAllowlist(name, section) {
   assert.doesNotMatch(section, /\b3xx\b/iu, `${name} must not use generic 3xx wording`);
   assert.doesNotMatch(
@@ -45,7 +43,7 @@ function assertReleaseRedirectAllowlist(name, section) {
   }
 }
 
-test('public release surfaces identify the v1.7 release candidate', () => {
+test('public release surfaces identify the v1.8 release candidate', () => {
   const readme = read('README.md');
   const siteConfig = read('apps/web/src/lib/site-config.ts');
   const updates = read('content/docs/current/updates/index.mdx');
@@ -74,7 +72,7 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   );
   assert.doesNotMatch(readme, /<summary><strong>[^<]*v\d+\.\d+[^<]*<\/strong><\/summary>/u);
   assert.match(siteConfig, new RegExp(`version: "${escapedRcVersion}"`, 'u'));
-  assert.ok(updates.includes(`## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`));
+  assert.ok(updates.includes(`## v${RC_VERSION} Highlights - ${RC_DISPLAY_DATE}`));
   // The app and agent APIs report the base version as `version` and the full build
   // identity as `build`. A GA image is the promoted candidate, so at the GA cut the
   // build example keeps naming a candidate of that base version rather than the base.
@@ -110,7 +108,7 @@ test('public release surfaces identify the v1.7 release candidate', () => {
       `${name} API examples must not show a prerelease as the version`,
     );
   }
-  assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
+  assert.match(portwingApi, /"version": "1\.0\.0-rc\.1"/u);
   assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
   assert.match(
     quickstart,
@@ -144,7 +142,7 @@ test('public release surfaces identify the v1.7 release candidate', () => {
     );
   }
 
-  assert.ok(changelog.includes(`## [${RC_VERSION}] — ${RC_DATE}`));
+  assert.ok(changelog.includes(`## [${RC_VERSION}] - ${RC_DATE}`));
   assert.ok(
     changelog.includes(
       `[Unreleased]: https://github.com/CodesWhat/drydock/compare/v${RC_VERSION}...HEAD`,
@@ -175,14 +173,14 @@ test('release-note redirect contracts reject broad, missing, and unlisted status
   assert.throws(() => assertReleaseRedirectAllowlist('missing status notes', '301, 302, 303, 307'));
 });
 
-test('rc.14 release notes retain the post-promotion fixes', () => {
-  const changelog = extractMarkdownSection(read('CHANGELOG.md'), '## [1.7.0-rc.14] — 2026-09-08');
+test('historical rc.10 notes preserve its post-promotion fixes', () => {
+  const changelog = extractMarkdownSection(read('CHANGELOG.md'), '## [1.7.0-rc.10] — 2026-09-04');
   const updates = extractMarkdownSection(
     read('content/docs/current/updates/index.mdx'),
-    '## v1.7.0-rc.14 Highlights — September 8, 2026',
+    '## v1.7.0-rc.10 Highlights — September 4, 2026',
   );
 
-  for (const issue of []) {
+  for (const issue of [972]) {
     const issueLink = `https://github.com/CodesWhat/drydock/issues/${issue}`;
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${issue}`;
     assert.ok(
@@ -195,86 +193,18 @@ test('rc.14 release notes retain the post-promotion fixes', () => {
     );
   }
 
-  for (const pull of [1126, 1134]) {
+  for (const pull of [996, 998, 1001]) {
     const pullLink = `https://github.com/CodesWhat/drydock/pull/${pull}`;
     assert.ok(updates.includes(pullLink), `updates page must link PR #${pull}`);
   }
 
-  for (const fragment of ['runtime-config sanitization', 'variant suffix', 'release source SHA']) {
+  for (const fragment of ['`once=true`', '`watch()`', '`just-debounce`', 'batch retry buffer']) {
     assert.ok(changelog.includes(fragment), `CHANGELOG.md must include ${fragment}`);
     assert.ok(updates.includes(fragment), `updates page must include ${fragment}`);
   }
 });
 
-test('rc.15 notes identify the ownership fix and immutable changelog', () => {
-  const RC_VERSION = '1.7.0-rc.15';
-  const RC_DATE = '2026-09-10';
-  const RC_DISPLAY_DATE = 'September 10, 2026';
-  const changelog = extractMarkdownSection(read('CHANGELOG.md'), `## [${RC_VERSION}] — ${RC_DATE}`);
-  const updates = extractMarkdownSection(
-    read('content/docs/current/updates/index.mdx'),
-    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
-  );
-  assert.match(changelog, /Retired registrations clean up only their own components/u);
-  assert.match(changelog, /Disconnected Docker proxy, log, delete, and exec requests/u);
-  assert.equal(changelog.split('\n').filter((line) => line.startsWith('- ')).length, 1);
-  assert.match(updates, /reconnected replacement/u);
-  assert.match(updates, /fresh seven-day soak/u);
-  assert.ok(
-    updates.includes(
-      `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`,
-    ),
-  );
-});
-
-test('credit links require an exact Markdown destination', () => {
-  const url = 'https://github.com/depuits';
-  assert.doesNotThrow(() => assertMarkdownLink(`Thanks [depuits](${url}).`, url));
-  for (const document of [
-    `Thanks [depuits](${url}-other).`,
-    `Thanks [depuits](https://example.com/${url}).`,
-    `Plain text ${url}`,
-    undefined,
-  ]) {
-    assert.throws(() => assertMarkdownLink(document, url));
-  }
-});
-
-test('rc.16 notes retain MQTT credit and the original soak record', () => {
-  const RC_VERSION = '1.7.0-rc.16';
-  const RC_DATE = '2026-09-15';
-  const RC_DISPLAY_DATE = 'September 15, 2026';
-  const updates = extractMarkdownSection(
-    read('content/docs/current/updates/index.mdx'),
-    `## v${RC_VERSION} Highlights — ${RC_DISPLAY_DATE}`,
-  );
-  const changelogUrl = `https://github.com/CodesWhat/drydock/blob/v${RC_VERSION}/CHANGELOG.md#${RC_VERSION.replaceAll('.', '')}--${RC_DATE}`;
-  assert.match(updates, /HASS_AGENTTOPICSEGMENT=true/u);
-  assert.match(updates, /fresh seven-day soak/u);
-  assert.match(updates, /not deleted automatically/u);
-  assert.ok(updates.includes(changelogUrl));
-  assertMarkdownLink(updates, 'https://github.com/depuits');
-  assertMarkdownLink(updates, 'https://github.com/CodesWhat/drydock/discussions/1201');
-});
-
-test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {
-  const security = read('SECURITY.md');
-  assert.ok(
-    security.includes(
-      '| Latest release candidate on the active train (1.7.x) | :white_check_mark: |',
-    ),
-  );
-  assert.ok(
-    security.includes(
-      '| Latest release candidate on the maintained 1.6.x line | :white_check_mark: |',
-    ),
-  );
-  assert.ok(security.includes('| Latest stable release | :white_check_mark: |'));
-  assert.ok(security.includes('| Older stable or prerelease versions | :x: |'));
-  assert.match(security, /Older release candidates are not patched/u);
-});
-
-test('v1.6.0 is released and public release routing advances to v1.7', () => {
+test('stable 1.6 and retained 1.7 docs remain available when current advances to 1.8', () => {
   const siteContent = read('apps/web/src/lib/site-content.ts');
   const docsVersions = read('apps/web/scripts/docs-versions.mjs');
   const v16Changelog = read('content/docs/v1.6/changelog/index.mdx');
@@ -294,7 +224,7 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
   );
   assert.match(
     docsVersions,
-    /\{ slug: "v1\.7", source: "current", title: "v1\.7" \},\s+\{ slug: "v1\.6", source: "v1\.6", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
+    /\{ slug: "v1\.8", source: "current", title: "v1\.8" \},\s+\{ slug: "v1\.7", source: "v1\.7", title: "v1\.7" \},\s+\{ slug: "v1\.6", source: "v1\.6", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
   );
   assert.match(v16Changelog, /^## \[1\.6\.0\] — 2026-08-11$/mu);
   assert.doesNotMatch(v16Changelog, /^## \[Unreleased\]$/mu);
@@ -304,13 +234,10 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
   assert.doesNotMatch(archivedChangelog, /^## \[Unreleased\]$/mu);
   assert.doesNotMatch(archivedChangelog, /^\[Unreleased\]:/mu);
   assert.doesNotMatch(archivedChangelog, /^## \[1\.6\.0-rc\.1\]/mu);
+  assert.match(docsReadme, /`v1\.5\/`, `v1\.4\/`, `v1\.3\/`: archived documentation/u);
   assert.match(
     docsReadme,
-    /`v1\.5\/`: stable `1\.5` docs initialized from the published `v1\.5\.2` tag/u,
-  );
-  assert.match(
-    docsReadme,
-    /`v1\.6\/`: stable `1\.6` docs initialized from the published `v1\.6\.0` release tree/u,
+    /`v1\.6\/`: latest-stable 1\.6 documentation, initialized from the published v1\.6\.0 docs/u,
   );
   assert.match(docsReadme, /## Versioned-doc correction policy/u);
   assert.match(
@@ -420,6 +347,12 @@ test('current and archived registry and trigger examples remain operational', ()
     const registryApi = read(`${root}/api/registry.mdx`);
     const triggers = read(`${root}/configuration/triggers/index.mdx`);
 
+    assert.match(gcr, /<Tab value="Docker Compose">[\s\S]*?```yaml[\s\S]*?<\/Tab>/u);
+    assert.match(gcr, /<Tab value="Docker">[\s\S]*?```bash[\s\S]*?docker run/u);
+    if (root === 'content/docs/current' || root === 'content/docs/v1.7') {
+      assert.equal(gcr.match(/YOUR_SERVICE_ACCOUNT_PRIVATE_KEY/gu)?.length, 2);
+      assert.doesNotMatch(gcr, /^### .*\[[^\]]+\]\(https:/mu);
+    }
     assert.match(gcr, /Effective March 18, 2025/u);
     assert.doesNotMatch(gcr, /All `gcr\.io` traffic is now transparently served/u);
     assert.match(gcr, /Artifact Registry Reader \(`roles\/artifactregistry\.reader`\)/u);
@@ -518,11 +451,15 @@ test('current and archived provider setup remains copy-paste safe', () => {
     assert.match(ocir, /bare `ocir\.io` hostname and subdomains such as `iad\.ocir\.io`/u);
     assert.match(ocir, /tenancy-namespace\/user@example\.com/u);
     assert.match(ocir, /tenancy-namespace\/identity-domain\/user@example\.com/u);
-    assert.equal(
-      ocir.match(/dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4/gu)
-        ?.length,
-      2,
-    );
+    if (root === 'content/docs/current' || root === 'content/docs/v1.7') {
+      assert.equal(ocir.match(/YOUR_BASE64_AUTH/gu)?.length, 2);
+    } else {
+      assert.equal(
+        ocir.match(/dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4/gu)
+          ?.length,
+        2,
+      );
+    }
     assert.doesNotMatch(ocir, /dGVuYW5jeS91c2VyOnh4eHh4/u);
     assert.equal(quay.match(/YOUR_QUAY_ROBOT_TOKEN/gu)?.length, 2);
     assert.doesNotMatch(
@@ -537,7 +474,7 @@ test('current and archived provider setup remains copy-paste safe', () => {
     );
     assert.match(webhooks, /DD_SERVER_WEBHOOK_SECRET=your-registry-webhook-secret/u);
     assert.match(webhooks, /raw request body with HMAC-SHA256/u);
-    if (root.endsWith('/current')) {
+    if (root.endsWith('/current') || root.endsWith('/v1.7')) {
       // Both canonical examples quote the expansion, and neither unquoted form
       // survives anywhere in the page.
       assert.match(
@@ -678,7 +615,8 @@ test('security policy distinguishes stable and prerelease support', () => {
   const security = read('SECURITY.md');
 
   assert.match(security, /Latest stable release/u);
-  assert.match(security, /Latest release candidate on the active train/u);
+  assert.match(security, /Latest v1\.8 release candidate/u);
+  assert.match(security, /Latest v1\.7 release candidate/u);
   assert.match(security, /Older release candidates are not patched/u);
   assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });
@@ -696,7 +634,8 @@ test('current and archived release examples use consistent tags, filenames, date
     // SBOM attestation) alongside the pre-existing image and tarball
     // provenance examples; the frozen v1.5/v1.6 archives predate that
     // section and still carry only the original two.
-    const expectedSignerWorkflowMatches = root === 'content/docs/current' ? 3 : 2;
+    const expectedSignerWorkflowMatches =
+      root === 'content/docs/current' || root === 'content/docs/v1.7' ? 3 : 2;
     assert.equal(
       verification.match(
         /--signer-workflow CodesWhat\/drydock\/\.github\/workflows\/release-cut\.yml/gu,

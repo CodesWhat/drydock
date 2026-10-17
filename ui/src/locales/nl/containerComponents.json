@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Agentlijst niet beschikbaar. Sommige geconfigureerde agents kunnen ontbreken.",
+      "title": "Vlootstatus",
+      "description": "Status van de hele vloot. Inventarisatie ontdekt containers zonder registers te controleren of updates uit te voeren.",
+      "reload": "Status herladen",
+      "refresh": "Inventaris vernieuwen",
+      "configured": "Geconfigureerd",
+      "connected": "Verbonden",
+      "disconnected": "Verbinding verbroken",
+      "unavailable": "Niet beschikbaar",
+      "agentUnavailable": "Agentstatus niet beschikbaar. Bewaarde gegevens kunnen verouderd zijn.",
+      "watcherUnavailable": "Watchermetadata niet beschikbaar. Bewaarde gegevens kunnen verouderd zijn.",
+      "total": "{count} container | {count} containers",
+      "lastKnown": "Laatst bekend",
+      "lastSeen": "Laatst gezien: {value}",
+      "unsupported": "Alle doelen vereisen Docker-watchers die inventarisvernieuwing ondersteunen.",
+      "complete": "Inventaris volledig",
+      "partial": "Inventaris onvolledig",
+      "reloadFailed": "Containerlijst kon niet worden herladen. Inventarisresultaten blijven zichtbaar."
+    },
+    "fleetBulk": {
+      "label": "Acties voor gefilterde vloot",
+      "updateAll": "Alles bijwerken ({count})",
+      "snoozePatch": "Alle patches uitstellen",
+      "patchCount": "{count} patchkandidaten",
+      "duration": "Uitstelduur",
+      "days": "{count} dag | {count} dagen",
+      "untilDate": "Tot datum",
+      "date": "Uitstellen tot en met datum",
+      "snoozeConfirm": "{count} patchkandidaten uitstellen?",
+      "snoozeScope": "Deze containers hebben patchkandidaten. Stel al hun updates uit voor {duration}, niet alleen patches. De gefilterde actuele lijst geldt, niet de aangevinkte selectie. Een datum geldt tot het einde van de lokale dag.",
+      "snoozeResult": "Uitgesteld: {succeeded}. Mislukt: {failed}.",
+      "refreshFailed": "Beleid opgeslagen, maar lijst vernieuwen mislukt. Laad de lijst opnieuw.",
+      "disabled": "Containeracties uitgeschakeld. Geen beleid gewijzigd.",
+      "invalid": "Ongeldige duur. Geen beleid gewijzigd.",
+      "busy": "Er loopt al een andere actie. Geen extra beleid gewijzigd."
+    },
+    "fleetDimensions": {
+      "groupBy": "Groeperen op",
+      "none": "Geen groepering",
+      "agent": "Agent",
+      "registry": "Register",
+      "status": "Status",
+      "tagType": "Tagtype",
+      "label": "Label",
+      "groupLabel": "Groeperen op labelsleutel",
+      "allAgents": "Alle agents",
+      "allRegistries": "Alle registeradressen",
+      "all": "Alle tagtypen",
+      "specific": "Specifieke tag",
+      "floating": "Zwevende tag",
+      "digest": "Digest vastgezet",
+      "semver": "Versietag",
+      "tag": "Tag zonder versie",
+      "unknown": "Onbekend",
+      "local": "Lokale watchers",
+      "running": "Actief",
+      "stopped": "Gestopt",
+      "labelKey": "Labelsleutel",
+      "labelMatch": "Labelvergelijking",
+      "labelValue": "Labelwaarde",
+      "exists": "Heeft label",
+      "equals": "Gelijk aan",
+      "missing": "Label ontbreekt",
+      "missingLabel": "Geen label",
+      "emptyValue": "Lege waarde"
+    },
     "fullPageActions": {
       "updateWorkflow": "Werkstroom bijwerken",
       "actionsGroup": "Acties",
@@ -28,8 +95,9 @@
       "clearSkips": "Wis overslaan",
       "clearPolicy": "Duidelijk beleid",
       "overridden": "Overschreven",
+      "groupSource": "Groep: {group}",
       "revert": "Terugzetten",
-      "revertAll": "Terugzetten naar declaratief",
+      "revertAll": "Terugzetten naar overgenomen beleid",
       "snoozedUntil": "Gesnoozed tot:",
       "maturityMode": "Volwassenheidsmodus:",
       "matureOnlyMinimum": "Alleen rijp ({days}d minimum)",
@@ -58,6 +126,12 @@
       "runningButton": "Actief...",
       "runButton": "Uitvoeren",
       "noTriggersAssociated": "Er zijn geen triggers gekoppeld aan deze container",
+      "unavailableTriggers": "Niet-beschikbare triggers",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Behoort tot een andere agent dan deze container.",
+        "structuralIncompatibility": "Compose-project, -service of -bestand komt niet overeen met deze container.",
+        "labelScope": "Uitgesloten door de dd.action/dd.notification include- of exclude-labels van deze container."
+      },
       "backupsRollback": "Back-ups en terugdraaien",
       "rollingBack": "Terugrollen...",
       "rollbackLatest": "Laatste terugdraaien",
@@ -71,7 +145,13 @@
       "versionLabel": "Versie:",
       "rollbackReasonLabel": "Reden voor terugdraaien:",
       "lastErrorLabel": "Laatste fout:",
-      "noUpdateOperations": "Er zijn nog geen updatebewerkingen geregistreerd"
+      "noUpdateOperations": "Er zijn nog geen updatebewerkingen geregistreerd",
+      "skipReleases": "Vroege releases overslaan",
+      "skipReleasesHint": "Sla de eerste N verschillende stabiele releases per familie over: een SemVer-hoofdversie of CalVer-maand. 0 schakelt deze blokkade uit.",
+      "releaseFallbackDays": "Uitzondering op leeftijd (dagen)",
+      "releaseFallbackHint": "Sta na dit aantal dagen toe als releasegegevens ontbreken of het aantal niet is bereikt. 0 schakelt de uitzondering uit. De minimumleeftijd blijft gelden.",
+      "releasePolicySummary": "Sla de eerste {count} releases per familie over.",
+      "releaseFallbackSummary": "Uitzondering op het aantal releases na {days} dagen."
     },
     "fullPageDetail": {
       "statusUpdating": "Updaten",
@@ -111,7 +191,7 @@
       "volumes": "Volumes",
       "composeFiles": "Compose-bestanden",
       "version": "Versie",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Softwareversie",
       "currentLabel": "Huidig:",
       "latestLabel": "Nieuwste:",
       "digestLabel": "Digest:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "Geen poorten zichtbaar",
       "notConfigured": "Niet geconfigureerd",
       "noVolumesMounted": "Geen volumes gemonteerd",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Actieve tijd",
+      "uptimeAriaLabel": "Actieve tijd van container"
     },
     "containerLogs": {
       "title": "Containerlogboeken",
       "download": "Downloaden",
       "allLevels": "Alle niveaus",
       "downloadError": "Kan logboeken niet downloaden",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Laatste {count} regels",
+      "tailAll": "Alle regels",
+      "statusPaused": "Gepauzeerd",
+      "statusLive": "Actief",
+      "statusOffline": "Niet verbonden",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Containers laden...",
+      "fleetUpdateProgress": "Containers bijwerken: {done} van {total}",
+      "fleetUpdateProgressRunning": "Nu bezig: {names}",
+      "fleetUpdateProgressRunningMore": "Nu bezig: {names} en nog {more}",
       "searchPlaceholder": "Zoek naam of image...",
       "allStatuses": "Alle statussen",
       "running": "Actief",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "Container bijwerken",
-      "thisContainer": "this container",
+      "thisContainer": "deze container",
       "confirmTagChange": "{name} bijwerken? Hiermee wordt de imagetag gewijzigd van :{currentTag} naar :{newTag}{kind}.",
       "confirmDigestChange": "{name} bijwerken? Er is een nieuwere versie van :{currentTag} beschikbaar (digestwijziging).",
       "confirmLatest": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
       "updating": "Updaten...",
       "update": "Bijwerken",
-      "updateFailed": "Update failed"
+      "updateFailed": "Bijwerken mislukt"
     },
     "floatingTag": {
       "badgeText": "zwevend label",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · ontgrendelt op {date}",
       "maturityClockPublished": "Kandidaat gepubliceerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gepubliceerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
       "maturityClockDetected": "Kandidaat gedetecteerd op {date} — nog {count} dag tot het minimum van {minDays} dagen | Kandidaat gedetecteerd op {date} — nog {count} dagen tot het minimum van {minDays} dagen",
+      "groupManualOnly": "Het groepsbeleid '{group}' staat alleen handmatige updates toe. Drydock past deze niet automatisch toe.",
       "updateButton": "Nu bijwerken",
       "blockedButton": "Update geblokkeerd",
       "notificationsOnlyButton": "Alleen meldingen",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Geen update-trigger geconfigureerd",
         "self-update-unavailable": "Zelfupdate niet beschikbaar",
         "maintenance-window-closed": "Onderhoudsvenster gesloten",
-        "dry-run-trigger": "Triggerconfiguratie in dry-run-modus"
+        "group-notify-only": "Groep staat alleen meldingen toe",
+        "group-manual-only": "Groep vereist handmatige updates",
+        "dry-run-trigger": "Triggerconfiguratie in dry-run-modus",
+        "maturity-releases-not-reached": "Volwassenheidsbeleid wachtend"
       },
       "actions": {
         "editPolicy": "Updatebeleid bewerken",
@@ -439,25 +526,28 @@
         "configureTriggers": "Updatetriggers configureren",
         "configureThreshold": "Triggerdrempel configureren",
         "configureSelfUpdate": "Zelfupdate configureren",
-        "configureMaintenance": "Onderhoudsvenster configureren"
-      }
+        "configureMaintenance": "Onderhoudsvenster configureren",
+        "editGroupPolicy": "Groepsbeleid bewerken"
+      },
+      "releaseMaturityCount": "Wachten op stabiele releases in familie {family}: {count} van {required} eerdere releases beschikbaar.",
+      "releaseMaturityUnavailable": "Releasegegevens voor deze kandidaat zijn niet beschikbaar. Automatische updates blijven tegengehouden."
     },
     "maturityBadge": {
       "new": "{duration} geleden gedetecteerd"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Annuleren",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
+        "header": "Container stoppen",
+        "message": "{name} stoppen?",
         "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "successMessage": "Gestopt: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Container herstarten",
+        "message": "{name} herstarten?",
+        "acceptLabel": "Herstarten",
+        "successMessage": "Herstart: {name}"
       },
       "forceUpdate": {
         "header": "Update forceren",
@@ -505,6 +595,19 @@
         "failedDetail": "Kan de afhankelijkheidsketen voor {name} niet bijwerken.",
         "staleChainTitle": "Afhankelijkheidsketen is gewijzigd",
         "staleChainDetail": "De afhankelijkheidsketen voor {name} is gewijzigd sinds het laatste voorbeeld. Open het updatedialoogvenster opnieuw om de huidige keten te bekijken voordat je bevestigt."
+      },
+      "bulkUpdate": {
+        "header": "1 container bijwerken | {count} containers bijwerken",
+        "accept": "1 container bijwerken | {count} containers bijwerken",
+        "acceptWithParents": "1 bovenliggende container toevoegen en bijwerken | {count} bovenliggende containers toevoegen en bijwerken",
+        "dispatchHeading": "Worden bijgewerkt",
+        "blockedHeading": "Geblokkeerd, blijft ongewijzigd",
+        "softOverridesHeading": "Bijwerken ondanks waarschuwingen",
+        "skippedHeading": "Overgeslagen",
+        "staleParentsHeading": "Bovenliggende containers met updates in behandeling, toegevoegd bij bevestiging",
+        "agentCountInfo": "Omvat {count} agents; elke agent voert zijn eigen updates uit.",
+        "stackCountInfo": "Omvat {count} stacks.",
+        "successMessage": "Update gestart voor 1 container | Update gestart voor {count} containers"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "Recheck mislukt voor {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} vermelding",
+      "entryCountPlural": "{count} vermeldingen",
       "kindLabels": {
         "tag": "tag",
         "digest": "samenvatting"
@@ -561,14 +664,16 @@
         "setAll": "Volwassenheidsbeleid ingesteld om alle updates toe te staan",
         "skipped": "Huidige update voor {name} overgeslagen",
         "removeSkip": "Overgeslagen {kind} {value} verwijderd",
-        "revertField": "{field} teruggezet naar declaratief beleid",
-        "revertAll": "Alle overschrijvingen teruggezet naar declaratief beleid",
+        "revertField": "{field} teruggezet naar overgenomen beleid",
+        "revertAll": "Alle overschrijvingen teruggezet naar overgenomen beleid",
         "failedTitle": "Beleidsupdate mislukt: {name}",
         "failedDetail": "Kan beleid niet bijwerken"
       },
       "validation": {
         "snoozeDate": "Selecteer een geldige snoozedatum",
-        "maturityAge": "Voer een volwassenheidsleeftijd in tussen {min} en {max} dagen"
+        "maturityAge": "Voer een volwassenheidsleeftijd in tussen {min} en {max} dagen",
+        "maturityReleases": "Voer een geheel aantal releases van 0 tot 100 in.",
+        "maturityFallback": "Voer voor de uitzondering een geheel aantal dagen van 0 tot 365 in."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "In wachtrij",
+        "pulling": "Image downloaden",
+        "scanning": "Image scannen",
+        "sbom-generating": "SBOM genereren",
+        "pull-failed": "Downloaden van image mislukt",
+        "prepare": "Update voorbereiden",
+        "dryrun": "Proefuitvoering",
+        "renamed": "Container hernoemd",
+        "new-created": "Nieuwe container aangemaakt",
+        "old-stopped": "Oude container gestopt",
+        "new-started": "Nieuwe container gestart",
+        "health-gate": "Gezondheidscontrole",
+        "health-gate-passed": "Gezondheidscontrole geslaagd",
+        "succeeded": "Geslaagd",
+        "failed": "Mislukt",
+        "recovered-cleanup-temp": "Hersteld: tijdelijke containers opgeruimd",
+        "recovered-rollback": "Hersteld: terugdraaien voltooid",
+        "recovered-active": "Hersteld: actieve container behouden",
+        "recovery-failed": "Herstel mislukt",
+        "recovery-missing-containers": "Herstel: containers ontbreken",
+        "rollback-started": "Terugdraaien gestart",
+        "rolled-back": "Teruggedraaid",
+        "rollback-deferred": "Terugdraaien uitgesteld",
+        "rollback-failed": "Terugdraaien mislukt",
+        "expired": "Verlopen",
+        "skipped-dependency": "Overgeslagen vanwege afhankelijkheid",
+        "in-progress": "Bezig",
+        "update-runtime-failed": "Uitvoering van update mislukt",
+        "create-new-failed": "Aanmaken van nieuwe container mislukt",
+        "stop-old-failed": "Stoppen van oude container mislukt",
+        "start-new-failed": "Starten van nieuwe container mislukt",
+        "health-gate-failed": "Gezondheidscontrole mislukt",
+        "cancelled": "Geannuleerd",
+        "compose-runtime-refresh-failed": "Vernieuwen van Compose-runtimestatus mislukt"
+      },
       "timestampUnknown": "Onbekend",
       "loadFailed": "Kan back-ups niet laden",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Expliciet",
+        "inherited": "Overgenomen",
+        "unknown": "Onbekend"
       },
       "timeoutDefault": "60000ms (standaard)",
       "preAbortYes": "Update afbreken bij een mislukte pre-hook",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
+        "overview": "Overzicht",
+        "stats": "Statistieken",
         "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "environment": "Omgeving",
+        "labels": "Etiketten",
+        "actions": "Acties"
       }
     },
     "logViewer": {
       "invalidRegex": "Ongeldige reguliere expressie"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Afhankelijk van",
+      "requiredBy": "Vereist door",
+      "cycle": "Onderdeel van een afhankelijkheidscyclus",
+      "toggle": "Afhankelijkheden tonen",
+      "updateGroup": "Afhankelijkheidsgroep bijwerken ({count})",
+      "staleParentsWarning": "{name} is afhankelijk van {parents}, dat ook een update in behandeling heeft. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen een verouderd bovenliggend onderdeel blijven draaien. | {name} is afhankelijk van {parents}, die ook updates in behandeling hebben. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen verouderde bovenliggende onderdelen blijven draaien.",
+      "staleParentsOverflow": "en {count} meer",
+      "staleParentsAccept": "Toch bijwerken"
+    },
+    "selection": {
+      "selectRow": "{name} selecteren",
+      "selectAll": "Alle zichtbare containers selecteren",
+      "barLabel": "Geselecteerde containers",
+      "count": "1 container geselecteerd | {count} containers geselecteerd",
+      "updateSelected": "Selectie bijwerken",
+      "clear": "Wissen",
+      "reasons": {
+        "stale": "niet meer in de lijst",
+        "inFlight": "wordt al bijgewerkt",
+        "noUpdate": "geen update beschikbaar"
+      }
     }
   }
 }

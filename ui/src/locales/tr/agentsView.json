@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Ajan tablosu aralığı",
+        "normal": "Normal aralık",
+        "compact": "Dar aralık"
+      },
       "loading": "Aracılar yükleniyor...",
       "filterPlaceholder": "Ada göre filtrele...",
       "clearFilter": "Temizle",

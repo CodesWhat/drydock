@@ -1,5 +1,6 @@
 import {
   doesNotificationTriggerReferenceMatchId,
+  findOrphanedNotificationRuleReferences,
   getNotificationTriggerIdsFromState,
   isNotificationTriggerType,
   normalizeNotificationTriggerIds,
@@ -87,5 +88,37 @@ describe('notification trigger policy', () => {
   test('doesNotificationTriggerReferenceMatchId should reject missing references and single-segment ids that do not match', () => {
     expect(doesNotificationTriggerReferenceMatchId(undefined, 'slack.ops')).toBe(false);
     expect(doesNotificationTriggerReferenceMatchId('ops', 'slack')).toBe(false);
+  });
+
+  test('findOrphanedNotificationRuleReferences should flag a reference to a removed trigger', () => {
+    const rules = [{ id: 'update-available', triggers: ['slack.ops'] }];
+    expect(findOrphanedNotificationRuleReferences(rules, new Set())).toEqual([
+      { ruleId: 'update-available', triggerId: 'slack.ops' },
+    ]);
+  });
+
+  test('findOrphanedNotificationRuleReferences should flag a reference to a renamed trigger', () => {
+    const rules = [{ id: 'update-available', triggers: ['slack.old-ops'] }];
+    expect(findOrphanedNotificationRuleReferences(rules, new Set(['slack.new-ops']))).toEqual([
+      { ruleId: 'update-available', triggerId: 'slack.old-ops' },
+    ]);
+  });
+
+  test('findOrphanedNotificationRuleReferences should return nothing when every reference still resolves', () => {
+    const rules = [
+      { id: 'update-available', triggers: ['slack.ops'] },
+      { id: 'update-failed', triggers: [] },
+    ];
+    expect(findOrphanedNotificationRuleReferences(rules, new Set(['slack.ops']))).toEqual([]);
+  });
+
+  test('findOrphanedNotificationRuleReferences should report one entry per orphaned reference across multiple rules', () => {
+    const rules = [
+      { id: 'update-available', triggers: ['slack.ops', 'smtp.ops'] },
+      { id: 'update-failed', triggers: ['slack.ops'] },
+    ];
+    expect(findOrphanedNotificationRuleReferences(rules, new Set(['slack.ops']))).toEqual([
+      { ruleId: 'update-available', triggerId: 'smtp.ops' },
+    ]);
   });
 });

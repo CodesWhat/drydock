@@ -28,6 +28,22 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
 
+## Two-factor (TOTP)
+
+Local Basic accounts can add a TOTP second factor through the [two-factor management API](/docs/api#two-factor-management). Enrolling, replacing or removing a factor is only allowed over HTTPS or from loopback, because those responses carry the TOTP secret and the recovery codes.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_TOTP_KEYRING__FILE` | ⚪ | Path to the key ring file that encrypts the stored TOTP secrets. Nobody can enroll without it | Path to a readable file | none |
+| `DD_AUTH_TOTP_ACTIVE_KEY_ID` | ⚪ | Id of the key ring key new secrets are encrypted under. Set it whenever the key ring is set | A key id from the key ring | none |
+| `DD_AUTH_TOTP_ALLOWHTTP` | ⚪ | Allow two-factor enrollment and management over plain HTTP from any address | `true`, `false` | `false` |
+
+<Callout type="warn">With `DD_AUTH_TOTP_ALLOWHTTP=true`, the TOTP secret, the recovery codes and the password sent with each management call cross the network unencrypted. Anyone who can read that traffic can copy the second factor as it's being set up, which leaves the account with no second factor in practice. Drydock logs a warning at startup while it's on. Prefer HTTPS, or `DD_SERVER_TRUSTPROXY` behind a TLS-terminating proxy, and leave this unset.</Callout>
+
+`DD_AUTH_TOTP_ALLOWHTTP` is read at startup. Any value other than `true` or `false` is a configuration error and Drydock won't start. In `drydock.yml` it's `auth.totp.allowhttp`.
+
+The key ring format, key rotation, recovering an account that lost its device or its recovery codes, what a lost key ring means, and what happens when an enrolled account is renamed are on the [two-factor key ring and recovery](/docs/configuration/authentications/two-factor) page.
+
 Currently, the following strategies are supported:
 
 - [**Basic**](/docs/configuration/authentications/basic)
@@ -57,7 +73,7 @@ environment:
 | Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Starts fail-closed — protected API requests return `401`; auth discovery/status stays public; `/health` returns `503` |
 | Upgrade, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
 
-Drydock detects an upgrade by the presence of an existing store file (`/store/dd.json`). If the file exists, the install is treated as an upgrade; if it does not, it is treated as a fresh install.
+Drydock identifies an existing installation from its saved application metadata. In v1.8.0-rc.1 builds this record lives in SQLite and is carried across by the one-time JSON import; the presence of `dd.json` alone does not determine whether an installation is an upgrade. Both upgrades and fresh installs require configured authentication or explicit anonymous-access confirmation.
 
 ### Upgrading
 
@@ -68,7 +84,7 @@ To restore access, either:
 1. **Configure authentication** — set `DD_AUTH_BASIC_<name>_USER` and `DD_AUTH_BASIC_<name>_HASH` (or use [OIDC](/docs/configuration/authentications/oidc)).
 2. **Explicitly opt in to anonymous access** — set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
 
-<Callout type="warn">This release also renames the session cookie (`connect.sid` → `drydock.sid`), which signs out every existing session once on upgrade — Basic and OIDC alike. There's nothing to migrate; users just log back in.</Callout>
+<Callout type="warn">v1.6.0-rc.3 renamed the session cookie (`connect.sid` → `drydock.sid`). Upgrading from a build that still used the old name signs out existing sessions once, Basic and OIDC alike; users log back in. This earlier cookie change is separate from the v1.8 SQLite import.</Callout>
 
 ## Fail-closed auth enforcement
 

@@ -45,7 +45,10 @@ vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
 vi.mock('axios');
-vi.mock('./maintenance.js', () => ({
+// Partial: isScanGatedByMaintenanceWindow stays real so the maintenancewindowscope
+// branches are exercised rather than restated here.
+vi.mock('./maintenance.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./maintenance.js')>()),
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
   hasNarrowMinuteField: vi.fn(() => false),
@@ -58,6 +61,7 @@ import mockCron from 'node-cron';
 import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
+import * as containerInit from './container-init.js';
 import * as dockerHelpers from './docker-helpers.js';
 import * as maintenance from './maintenance.js';
 
@@ -460,6 +464,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 2 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
       docker.log = createMockLog(['info']);
       docker.watch = vi.fn().mockResolvedValue([]);
@@ -474,6 +479,139 @@ describe('Docker Watcher', () => {
       docker.clearMaintenanceWindowQueue();
     });
 
+    test('should run the scan outside the window under the default install scope', async () => {
+      const maintenanceInc = vi.fn();
+      mockPrometheus.getMaintenanceSkipCounter.mockReturnValue({
+        labels: vi.fn().mockReturnValue({ inc: maintenanceInc }),
+      });
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 2 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      await docker.watchFromCron();
+
+      expect(docker.configuration.maintenancewindowscope).toBe('install');
+      expect(docker.watch).toHaveBeenCalledTimes(1);
+      expect(docker.maintenanceWindowWatchQueued).toBe(false);
+      expect(maintenanceInc).not.toHaveBeenCalled();
+    });
+
+    // #946 finding 2: the arm a digest flush takes lands hours after the scan that produced
+    // the reports, so it is only ever seen by a LATER cron tick. That tick used to clear it
+    // unconditionally, which under the install scope meant nothing was left to apply the
+    // deferred install when the window opened, every day, forever.
+    test('an ordinary tick outside the window keeps a catch-up armed by a digest flush', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      // 08:00 digest flush: Trigger.deferAutoUpdateForMaintenanceWindow arms the catch-up.
+      docker.queueMaintenanceWindowWatch();
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+
+      // 12:00 ordinary cron tick, window still closed.
+      await docker.watchFromCron();
+
+      expect(docker.watch).toHaveBeenCalledTimes(1);
+      expect(docker.maintenanceWindowWatchQueued).toBe(true);
+      expect(docker.maintenanceWindowQueueTimeout).toBeDefined();
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
+      docker.clearMaintenanceWindowQueue();
+    });
+
+    // #946 D1: this tick is the one that consumes the arm, and consuming it cancels the
+    // 60s poll that used to be the only announcer, so the tick has to announce or the
+    // digest trigger's deferred install waits for the next digest cron.
+    test('a tick inside an open window clears a catch-up armed by a webhook scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+
+      docker.queueMaintenanceWindowWatch();
+      await docker.watchFromCron();
+
+      expect(docker.maintenanceWindowWatchQueued).toBe(false);
+      expect(docker.maintenanceWindowQueueTimeout).toBeUndefined();
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+    });
+
+    test('a failed announcement is logged and does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to announce the maintenance window opening'),
+      );
+    });
+
+    test('a failed announcement on a logger with no warn still does not fail the scan', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info']);
+      docker.watch = vi.fn().mockResolvedValue([]);
+      event.emitMaintenanceWindowOpened.mockRejectedValue(new Error('handler exploded'));
+
+      docker.queueMaintenanceWindowWatch();
+
+      await expect(docker.watchFromCron()).resolves.toEqual([]);
+      expect(docker.log.warn).toBeUndefined();
+    });
+
+    test('should report the next cron run as nextRunAt under the install scope', async () => {
+      maintenance.isInMaintenanceWindow.mockReturnValue(false);
+      maintenance.getNextMaintenanceWindow.mockReturnValue(new Date('2026-02-13T04:00:00.000Z'));
+      mockCron.createTask.mockReturnValue({
+        destroy: vi.fn(),
+        timeMatcher: {
+          getNextMatch: vi.fn(() => new Date('2026-02-13T03:00:00.000Z')),
+        },
+      });
+
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 * * * *',
+        maintenancewindow: '0 4 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      // Even with a catch-up queued for a deferred install, the scan itself is on its cron.
+      docker.maintenanceWindowWatchQueued = true;
+
+      expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T03:00:00.000Z');
+    });
+
     test('should execute queued watch when maintenance window opens', async () => {
       vi.useFakeTimers();
       try {
@@ -483,6 +621,7 @@ describe('Docker Watcher', () => {
           cron: '0 * * * *',
           maintenancewindow: '0 2 * * *',
           maintenancewindowtz: 'UTC',
+          maintenancewindowscope: 'scan',
         });
         docker.log = createMockLog(['info', 'warn']);
         docker.watch = vi.fn().mockResolvedValue([]);
@@ -501,6 +640,54 @@ describe('Docker Watcher', () => {
       }
     });
 
+    // #946 finding 3: the catch-up scan re-buffers for a digest trigger and nothing else,
+    // so the watcher announces the opening and the trigger flushes what it deferred.
+    test('announces the window opening after the catch-up scan has run', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      const order: string[] = [];
+      docker.watch = vi.fn().mockImplementation(async () => {
+        order.push('watch');
+        return [];
+      });
+      event.emitMaintenanceWindowOpened.mockImplementation(async () => {
+        order.push('emit');
+      });
+
+      // Armed by a deferral, then the window opens under the 60s poll.
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).toHaveBeenCalledWith({ watcherId: 'docker.test' });
+      // Announced only after the scan, so the deferred containers are back in the store with
+      // fresh state before any trigger flushes on them.
+      expect(order).toEqual(['watch', 'emit']);
+    });
+
+    test('does not announce a window opening when the catch-up scan throws', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        cron: '0 */6 * * *',
+        maintenancewindow: '* 2-3 * * *',
+        maintenancewindowtz: 'UTC',
+      });
+      docker.log = createMockLog(['info', 'warn']);
+      docker.watch = vi.fn().mockRejectedValue(new Error('socket gone'));
+
+      docker.maintenanceWindowWatchQueued = true;
+      maintenance.isInMaintenanceWindow.mockReturnValue(true);
+      await docker.checkQueuedMaintenanceWindowWatch();
+
+      expect(event.emitMaintenanceWindowOpened).not.toHaveBeenCalled();
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to run queued maintenance watch'),
+      );
+    });
+
     test('should clear queued maintenance watch when normal cron runs inside window', async () => {
       vi.useFakeTimers();
       try {
@@ -510,6 +697,7 @@ describe('Docker Watcher', () => {
           cron: '0 * * * *',
           maintenancewindow: '0 2 * * *',
           maintenancewindowtz: 'UTC',
+          maintenancewindowscope: 'scan',
         });
         docker.log = createMockLog(['info']);
         docker.watch = vi.fn().mockResolvedValue([]);
@@ -640,6 +828,7 @@ describe('Docker Watcher', () => {
       expect(docker.getMetadata()).toStrictEqual({
         lastRunAt: undefined,
         nextRunAt: undefined,
+        inventoryRefreshSupported: true,
       });
 
       await docker.watch();
@@ -675,6 +864,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 4 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
       docker.maintenanceWindowWatchQueued = true;
 
@@ -698,6 +888,7 @@ describe('Docker Watcher', () => {
         cron: '0 * * * *',
         maintenancewindow: '0 4 * * *',
         maintenancewindowtz: 'UTC',
+        maintenancewindowscope: 'scan',
       });
 
       expect(docker.getMetadata().nextRunAt).toBe('2026-02-13T04:00:00.000Z');
@@ -731,6 +922,7 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchContainer).toHaveBeenCalledWith(container, {
         useRegistryPollCache: true,
+        scanGeneration: 0,
       });
     });
 
@@ -942,10 +1134,124 @@ describe('Docker Watcher', () => {
       expect(docker.watchContainer).toHaveBeenCalledTimes(1);
       expect(docker.watchContainer).toHaveBeenCalledWith(regularContainer, {
         useRegistryPollCache: true,
+        scanGeneration: 0,
       });
       expect(result).toHaveLength(1);
       expect(docker.log.debug).toHaveBeenCalledWith(
         expect.stringContaining('Skipping scheduled poll'),
+      );
+    });
+
+    // DR-72: a scan already inside watch() when the watcher is deregistered
+    // must not let its per-container processing or its final aggregate step
+    // land any side effect once the stale scan settles.
+    test('discards a stale scan settling after deregistration without emitting a report, a snapshot, or a store write', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'stale-container', name: 'stale-container' };
+      let resolveGetContainers: (value: unknown[]) => void = () => undefined;
+      const pendingGetContainers = new Promise<unknown[]>((resolve) => {
+        resolveGetContainers = resolve;
+      });
+      docker.getContainers = vi.fn().mockReturnValue(pendingGetContainers);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+
+      const watchPromise = docker.watch();
+
+      // Settles after the scan has already claimed a generation and is
+      // sitting on the pending container listing.
+      await docker.deregisterComponent();
+      resolveGetContainers([container]);
+
+      const result = await watchPromise;
+
+      expect(result).toEqual([]);
+      expect(docker.mapContainerToContainerReport).not.toHaveBeenCalled();
+      expect(event.emitContainerReport).not.toHaveBeenCalled();
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.insertContainer).not.toHaveBeenCalled();
+      expect(docker.lastRunAt).toBeUndefined();
+    });
+
+    // Control for the test above: the same scan, same container, but no
+    // deregistration — every side effect still lands normally.
+    test('a scan that settles without deregistration still emits the report and writes the snapshot', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'live-container', name: 'live-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+
+      const result = await docker.watch();
+
+      expect(result).toHaveLength(1);
+      expect(docker.mapContainerToContainerReport).toHaveBeenCalledTimes(1);
+      expect(event.emitContainerReport).toHaveBeenCalled();
+      expect(event.emitContainerReports).toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).toHaveBeenCalled();
+      expect(docker.lastRunAt).toBeDefined();
+    });
+
+    // DR-72 review finding #4: watch() awaits emitContainerReport() inside the
+    // per-container fallback loop for a container whose own processing
+    // rejected. A handler on that emit can run long enough for
+    // deregisterComponent() to land before it resolves, and the loop must
+    // discard the scan right there instead of pushing the fallback report and
+    // continuing on to the batch emit and snapshot.
+    test('discards the scan when deregistered from inside the fallback report emitter', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'failed-container', name: 'failed-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.watchContainer = vi.fn().mockRejectedValue(new Error('Processing failed'));
+      event.emitContainerReport.mockImplementationOnce(async () => {
+        await docker.deregisterComponent();
+      });
+
+      const result = await docker.watch();
+
+      expect(result).toEqual([]);
+      expect(event.emitContainerReports).not.toHaveBeenCalled();
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('emitting a fallback container report'),
+      );
+    });
+
+    // DR-72 review finding #4: watch() awaits emitContainerReport() and
+    // emitContainerReports() handlers, either of which can run long enough for
+    // deregisterComponent() to land before they resolve. Without a recheck after
+    // each await, a scan that goes stale mid-emit could still start the
+    // snapshot emit right after.
+    test('discards the scan and skips the snapshot when deregistered from inside the batch report emitter', async () => {
+      docker.log = {
+        ...createMockLog(['warn', 'debug']),
+        child: vi.fn().mockReturnValue(createMockLog(['warn', 'debug'])),
+      };
+      const container = { id: 'mid-emit-container', name: 'mid-emit-container' };
+      docker.getContainers = vi.fn().mockResolvedValue([container]);
+      docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
+      docker.mapContainerToContainerReport = vi.fn((c) => ({ container: c, changed: false }));
+      event.emitContainerReports.mockImplementationOnce(async () => {
+        await docker.deregisterComponent();
+      });
+
+      const result = await docker.watch();
+
+      expect(result).toEqual([]);
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('emitting the batch container report'),
       );
     });
   });
@@ -1026,6 +1332,35 @@ describe('Docker Watcher', () => {
       await getContainersPromise;
 
       expect(findControllerLocalWatcherClaimingContainerId('id-a')).toBeUndefined();
+    });
+
+    // DR-72 review finding #2: getContainers() used to call pruneOldContainers()
+    // unconditionally after listContainers() settled, even if the watcher was
+    // deregistered while the listing was still pending. Pruning the store off a
+    // listing gathered for a scan nobody wants any more could delete or update
+    // persisted container state on behalf of a torn-down watcher.
+    test('skips pruneOldContainers when the watcher is deregistered while listContainers() is pending', async () => {
+      await docker.register('watcher', 'docker', 'local', { watchbydefault: false });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+      const pruneSpy = vi.spyOn(containerInit, 'pruneOldContainers').mockResolvedValue(undefined);
+
+      let resolveListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingListContainers = new Promise<unknown[]>((resolve) => {
+        resolveListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingListContainers);
+
+      // A fresh watcher's scanGeneration starts at 0; passed through the way
+      // watch() threads its own captured value in.
+      const getContainersPromise = docker.getContainers(undefined, { scanGeneration: 0 });
+
+      await docker.deregisterComponent();
+      resolveListContainers([{ Id: 'id-a', Labels: {}, Names: ['/a'] }]);
+      const result = await getContainersPromise;
+
+      expect(Array.isArray(result)).toBe(true);
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(docker.log.debug).toHaveBeenCalledWith(expect.stringContaining('Skipping prune'));
     });
 
     test("records only the newest generation's ids when an older getContainers() call settles later", async () => {
@@ -1281,6 +1616,40 @@ describe('Docker Watcher', () => {
 
       const result = await docker.watchFromCron();
       expect(result).toEqual([]);
+    });
+
+    // DR-72 review finding #3: AgentWatcher.watch() calls its delegate
+    // DockerWatcher's watch() directly, bypassing this cron orchestration
+    // entirely. Under the old single-counter design that direct call self-
+    // minted a new scanGeneration on the same shared field the cron run used
+    // to identify itself, so the cron run's finally check never matched again
+    // once the direct call resolved, and isCronWatchInProgress stuck true
+    // forever - nothing else ever cleared it. cronRunGeneration is now a
+    // field only this orchestration mints or reads, so a plain watch() call
+    // like the delegate's can't collide with it.
+    test('a concurrent direct watch() call does not leave isCronWatchInProgress stuck after the cron scan settles', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      await docker.register('watcher', 'docker', 'test', { cron: '0 * * * *' });
+      docker.log = createMockLog(['info', 'warn', 'debug']);
+
+      let resolveCronListContainers: (value: unknown[]) => void = () => undefined;
+      const pendingCronListContainers = new Promise<unknown[]>((resolve) => {
+        resolveCronListContainers = resolve;
+      });
+      mockDockerApi.listContainers.mockImplementationOnce(() => pendingCronListContainers);
+
+      const cronPromise = docker.watchFromCron();
+
+      // Simulates AgentWatcher.watch() calling delegate.watch() directly
+      // while the cron scan above is still awaiting its own getContainers().
+      await docker.watch();
+
+      expect(docker.isCronWatchInProgress).toBe(true);
+
+      resolveCronListContainers([]);
+      await cronPromise;
+
+      expect(docker.isCronWatchInProgress).toBe(false);
     });
   });
 

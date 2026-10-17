@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { h, nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useColumnVisibility } from '@/composables/useColumnVisibility';
+import DataTableContract from './fixtures/DataTableContract.vue';
 
 const columns = [
   { key: 'name', label: 'Name', sortable: true },
@@ -32,6 +33,45 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
 }
 
 describe('DataTable', () => {
+  it('opts into compact body spacing without changing headers or legacy compact callers', async () => {
+    const wrapper = factory({ showActions: true, compact: true });
+    try {
+      expect(wrapper.find('td').classes()).toContain('py-3');
+      expect(wrapper.find('.dd-data-table-actions-cell').classes()).toContain('py-3');
+      await wrapper.setProps({ density: 'compact' });
+      for (const cell of wrapper.findAll('tbody td')) {
+        expect(cell.classes()).toContain('py-1.5');
+        expect(cell.classes()).toContain('h-[44px]');
+        expect(cell.classes()).not.toContain('py-3');
+      }
+      expect(wrapper.find('th').classes()).toContain('py-2.5');
+      await wrapper.find('tbody tr').trigger('keydown', { key: 'Enter' });
+      expect(wrapper.emitted('row-click')?.[0]).toEqual([rows[0]]);
+      await wrapper.find('th').trigger('click');
+      expect(wrapper.emitted('update:sortKey')?.[0]).toEqual(['name']);
+      await wrapper.setProps({ density: 'normal' });
+      expect(wrapper.find('td').classes()).toContain('py-3');
+      expect(wrapper.find('td').classes()).not.toContain('h-[44px]');
+    } finally {
+      wrapper.unmount();
+    }
+  });
+
+  it('preserves typed row, header, cell and mixed-row action contracts', async () => {
+    const wrapper = mount(DataTableContract, {
+      global: { stubs: { AppIcon: { template: '<span />' } } },
+    });
+
+    expect(wrapper.find('th').text()).toBe('SCORE');
+    expect(wrapper.find('tbody tr').text()).toBe('Alpha: 2.5');
+    expect(wrapper.findAll('table')[1].find('tbody tr').text()).toBe('0: Scores');
+    await wrapper.find('tbody tr').trigger('click');
+    expect(wrapper.find('output').text()).toBe('Alpha: 2.5');
+    await wrapper.find('button').trigger('click');
+    expect(wrapper.find('output').text()).toBe('Beta: 3.0');
+    wrapper.unmount();
+  });
+
   describe('column headers', () => {
     it('renders a <th> for each column', () => {
       const w = factory();
@@ -1099,6 +1139,29 @@ describe('DataTable', () => {
       const w = factory({}, { 'cell-name': ({ row }: any) => `Custom: ${row.name}` });
       const firstCell = w.findAll('tbody tr')[0].findAll('td')[0];
       expect(firstCell.text()).toContain('Custom: Alpha');
+    });
+  });
+
+  describe('header slots', () => {
+    it('replaces the header content with a header-<key> slot and passes the column', () => {
+      const w = factory({}, { 'header-name': ({ column }: any) => `Custom: ${column.label}` });
+      const nameHeader = w.findAll('thead th')[0];
+      expect(nameHeader.text()).toBe('Custom: Name');
+    });
+
+    it('keeps sorting, aria-sort, and the resize handle working with a header-<key> slot supplied', async () => {
+      const w = factory(
+        { sortKey: 'name', sortAsc: true },
+        { 'header-name': ({ column }: any) => `Custom: ${column.label}` },
+      );
+      const nameHeader = w.findAll('thead th')[0];
+
+      expect(nameHeader.attributes('aria-sort')).toBe('ascending');
+      expect(nameHeader.find('[role="separator"]').exists()).toBe(true);
+
+      await nameHeader.trigger('click');
+      expect(w.emitted('update:sortAsc')?.[0]).toEqual([false]);
+      expect(w.emitted('update:sortKey')).toBeUndefined();
     });
   });
 

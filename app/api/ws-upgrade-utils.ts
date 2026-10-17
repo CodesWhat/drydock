@@ -2,11 +2,14 @@ import { type IncomingMessage, ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
+import type { AuthenticatedPrincipal } from './principal.js';
 import {
   getAuthenticatedRouteRateLimitKey,
   type IdentityAwareRateLimitRequestLike,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { validateSessionUser } from './session-principal.js';
+import { readSessionUsername } from './session-user.js';
 
 const log = logger.child({ component: 'ws-upgrade-utils' });
 
@@ -19,9 +22,8 @@ export type SessionMiddleware = (
 export type UpgradeRequest = IncomingMessage & {
   session?: { passport?: { user?: unknown } };
   sessionID?: unknown;
-  isAuthenticated?: () => boolean;
   ip?: string;
-  user?: { username?: unknown };
+  principal?: AuthenticatedPrincipal;
 };
 
 /**
@@ -206,8 +208,13 @@ export function isAuthenticatedSession(
   options: IsAuthenticatedSessionOptions = {},
 ): boolean {
   const { anonymousAuthActive = false } = options;
-  const passportSession = request.session?.passport;
-  return passportSession?.user !== undefined || anonymousAuthActive;
+  // An upgrade never runs the authenticator chain, so it has to ask the same
+  // validator HTTP restoration asks. Presence of a stored user is not enough:
+  // a stale, legacy-after-enrollment or malformed one must read as absent.
+  const storedUser = request.session?.passport?.user;
+  const sessionValid =
+    storedUser !== undefined && validateSessionUser(storedUser).status === 'valid';
+  return sessionValid || anonymousAuthActive;
 }
 
 export function getDefaultRateLimitKey(request: UpgradeRequest): string {
@@ -331,43 +338,20 @@ export function createIdentityAwareUpgradeRateLimitKeyResolver(
   };
 }
 
-function getUsernameFromPassportSessionUser(passportUser: unknown): unknown {
-  if (!passportUser) {
-    return undefined;
+/**
+ * The identity to charge this upgrade to.
+ *
+ * An upgrade never runs the authenticator chain — it only gets the session
+ * middleware — so the principal is reconstructed from the stored session
+ * payload unless a caller already attached one.
+ */
+function getUpgradeRateLimitPrincipal(request: UpgradeRequest): AuthenticatedPrincipal | undefined {
+  if (request.principal) {
+    return request.principal;
   }
 
-  if (typeof passportUser === 'object') {
-    return (passportUser as { username?: unknown }).username;
-  }
-
-  if (typeof passportUser !== 'string') {
-    return undefined;
-  }
-
-  try {
-    const parsedUser = JSON.parse(passportUser);
-    if (!parsedUser || typeof parsedUser !== 'object') {
-      return undefined;
-    }
-    return (parsedUser as { username?: unknown }).username;
-  } catch {
-    return undefined;
-  }
-}
-
-function getUpgradeRateLimitUser(
-  request: UpgradeRequest,
-): IdentityAwareRateLimitRequestLike['user'] | undefined {
-  if (request.user) {
-    return request.user;
-  }
-
-  const username = getUsernameFromPassportSessionUser(request.session?.passport?.user);
-  if (username === undefined) {
-    return undefined;
-  }
-
-  return { username };
+  const username = readSessionUsername(request.session?.passport?.user);
+  return { kind: 'session', username: username ?? '' };
 }
 
 function toIdentityAwareUpgradeRateLimitRequest(
@@ -376,8 +360,12 @@ function toIdentityAwareUpgradeRateLimitRequest(
 ): IdentityAwareRateLimitRequestLike {
   return {
     ip: request.socket.remoteAddress,
-    isAuthenticated: () => authenticated === true,
     sessionID: request.sessionID,
-    user: getUpgradeRateLimitUser(request),
+    // An unauthenticated upgrade carries no principal at all, so it keys by
+    // address exactly as it did when isAuthenticated() answered false. The
+    // strict comparison is deliberate: a truthy non-boolean is not an
+    // authenticated request, which is what `authenticated === true` meant here
+    // before the principal replaced the isAuthenticated() thunk.
+    principal: authenticated === true ? getUpgradeRateLimitPrincipal(request) : undefined,
   };
 }

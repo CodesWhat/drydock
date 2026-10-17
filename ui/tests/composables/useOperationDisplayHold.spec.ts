@@ -844,6 +844,203 @@ describe('useOperationDisplayHold', () => {
       await vi.advanceTimersByTimeAsync(1500);
       expect(hold.heldOperations.value.has(operation.id)).toBe(false);
     });
+
+    function poisonedContainers(reason: string): readonly Container[] {
+      return new Proxy([], {
+        get() {
+          throw new Error(reason);
+        },
+        has() {
+          throw new Error(reason);
+        },
+      }) as unknown as Container[];
+    }
+
+    it('early-outs without touching the containers array when there are no holds', async () => {
+      const hold = await loadComposable();
+
+      expect(() =>
+        hold.reconcileHoldsAgainstContainers(
+          poisonedContainers('containers must not be touched when there are no holds'),
+          Date.now(),
+        ),
+      ).not.toThrow();
+    });
+
+    it('early-outs without touching the containers array when no hold is eligible for reconciliation', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-all-ineligible' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+      // Trim into the settle window so remainingActiveWindow <= OPERATION_DISPLAY_HOLD_MS
+      hold.scheduleHeldOperationRelease({ operationId: operation.id, now: t0 });
+
+      expect(() =>
+        hold.reconcileHoldsAgainstContainers(
+          poisonedContainers('containers must not be touched when no hold is eligible'),
+          t0,
+        ),
+      ).not.toThrow();
+
+      // Untouched: still in the settle window set by scheduleHeldOperationRelease above.
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+
+    it('picks the lower-index container when two containers share the same id', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-dup-id' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'dup-id',
+        containerName: 'web',
+        now: t0,
+      });
+
+      // Two containers share the same id. Array#find would return the one at
+      // index 0 (no active operation → eligible for reconcile); the index-1
+      // container is still active. The id map must keep the first occurrence
+      // so the reconcile decision matches find's lowest-index behaviour.
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({ id: 'dup-id', name: 'web', updateOperation: undefined }),
+          makeContainer({
+            id: 'dup-id',
+            name: 'web',
+            updateOperation: makeOperation({ id: 'op-reconcile-dup-id', status: 'in-progress' }),
+          }),
+        ],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+
+    it('resolves the lowest index across two matching containerIds and a matching identityKey', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-multi-candidate' });
+      const t0 = Date.now();
+
+      // Tracks two container ids (post-recreate) plus an identityKey. All three
+      // candidates resolve to containers, at different indices — the earliest
+      // index must win, exercising the index comparison against a bestIndex
+      // already set by an earlier candidate (both the second containerId lookup
+      // and the identityKey lookup compare against it and lose).
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'id-a',
+        newContainerId: 'id-b',
+        identityKey: 'shared-identity',
+        containerName: 'web',
+        now: t0,
+      });
+
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({
+            id: 'id-a',
+            identityKey: 'other',
+            name: 'web',
+            updateOperation: undefined,
+          }),
+          makeContainer({
+            id: 'id-b',
+            identityKey: 'other-2',
+            name: 'web',
+            updateOperation: makeOperation({
+              id: 'op-reconcile-multi-candidate',
+              status: 'in-progress',
+            }),
+          }),
+          makeContainer({
+            id: 'no-such-id',
+            identityKey: 'shared-identity',
+            name: 'web',
+            updateOperation: makeOperation({
+              id: 'op-reconcile-multi-candidate',
+              status: 'in-progress',
+            }),
+          }),
+        ],
+        t0,
+      );
+
+      // The index-0 container ('id-a') wins over both the index-1 ('id-b') and
+      // index-2 (identityKey) candidates, and it has no active operation, so the
+      // hold reconciles.
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+
+    it('picks the lower-index container when two containers share the same identityKey', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-dup-identity' });
+      const t0 = Date.now();
+
+      // No containerId/newContainerId — this hold can only be matched by identityKey.
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        identityKey: 'shared-identity',
+        containerName: 'web',
+        now: t0,
+      });
+
+      // Two containers share the same identityKey. The index-0 container has no
+      // active operation (eligible), the index-1 one is still active. The
+      // identityKey map must keep the first occurrence.
+      hold.reconcileHoldsAgainstContainers(
+        [
+          makeContainer({
+            id: 'container-x',
+            identityKey: 'shared-identity',
+            name: 'web',
+            updateOperation: undefined,
+          }),
+          makeContainer({
+            id: 'container-y',
+            identityKey: 'shared-identity',
+            name: 'web',
+            updateOperation: makeOperation({
+              id: 'op-reconcile-dup-identity',
+              status: 'in-progress',
+            }),
+          }),
+        ],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+
+    it('falls back to the linear scan for a name-only hold (no containerId/newContainerId/identityKey)', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-reconcile-name-only' });
+      const t0 = Date.now();
+
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerName: 'web',
+        now: t0,
+      });
+
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'some-other-id', name: 'web', updateOperation: undefined })],
+        t0,
+      );
+
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
   });
 
   it('getHeldOperation skips a hold whose displayUntil has already passed (line 142 branch)', async () => {

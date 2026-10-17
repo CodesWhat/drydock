@@ -1,0 +1,25 @@
+{
+  "notificationEditor": {
+    "title": "Zasady powiadomień",
+    "edit": "Edytuj zasady powiadomień",
+    "boundary": "Edytuj zasady dostarczania i szablony podsumowania bezpieczeństwa. Zapis nie testuje wyzwalacza ani nie wysyła powiadomienia. Dane uwierzytelniające, miejsca docelowe i ustawienia wykonania pozostają tylko do odczytu.",
+    "providerForced": "Ta wartość jest kontrolowana przez dostawcę i nie można jej tutaj edytować.",
+    "triggerUnavailable": "Ten konkretny wyzwalacz powiadomień jest niedostępny w migawce edytora.",
+    "apiUnavailable": "Ten serwer nie udostępnia API edytora zasad powiadomień.",
+    "fields": {
+      "threshold": "Próg aktualizacji",
+      "once": "Powiadom tylko raz",
+      "mode": "Tryb wysyłania",
+      "securitymode": "Tryb wysyłania alertów bezpieczeństwa",
+      "digestcron": "Harmonogram podsumowania (cron)",
+      "resolvenotifications": "Wysyłaj powiadomienia o rozwiązaniu",
+      "securitydigesttitle": "Tytuł podsumowania bezpieczeństwa",
+      "securitydigestbody": "Treść podsumowania bezpieczeństwa"
+    },
+    "templateHelp": "Usunięcie szablonu przywraca wbudowane wartości domyślne podczas renderowania. Szablony nie mogą być puste. Edycja szablonu nie zmienia trybu dostarczania powiadomień bezpieczeństwa.",
+    "templateUnavailable": "Ten serwer nie udostępnia tego pola szablonu.",
+    "templateEmpty": "Szablony nie mogą być puste. Wpisz tekst lub jawnie usuń wartość z pliku.",
+    "providerUnsupported": "Ten dostawca nie obsługuje szablonów podsumowania bezpieczeństwa.",
+    "interpolationHelp": "Całe wartości, takie jak {reference} lub {fallback}, korzystają z interpolacji zmiennych środowiskowych YAML i po ponownym wczytaniu stają się tylko do odczytu. Wyrażenia skanowania, takie jak {expression}, pozostają edytowalne. Nie umieszczaj sekretów w szablonach."
+  }
+}

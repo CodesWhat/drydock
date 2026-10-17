@@ -5,7 +5,10 @@ import { createHash } from 'node:crypto';
 import { byString, byValues } from 'sort-es';
 import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
-import type { ContainerLifecycleEventPayload } from '../event/index.js';
+import type {
+  ContainerLifecycleEventContext,
+  ContainerLifecycleEventPayload,
+} from '../event/index.js';
 import * as container from '../model/container.js';
 import { toPositiveInteger } from '../util/parse.js';
 
@@ -22,23 +25,40 @@ import {
   deriveContainerIdRetentionKey,
   getCandidateIdentityFields,
   getCanonicalContainerName,
+  getComposeProjectService,
   hasCandidateIdentityChanged,
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
+import { getContainerGroup } from '../model/container-group.js';
+import { toContainerGroupPolicySnapshot } from '../model/group-policy.js';
+import {
+  applyLabelOwnedState,
+  buildLabelOwnedState,
+  captureDeclaredFromFlat,
+  inferDeclaredSources,
+  LABEL_OWNED_FIELDS,
+  type LabelOwnedDeclared,
+  type LabelOwnedState,
+  parseLabelOwnedState,
+  pickLabelOwnedFlat,
+} from '../model/label-owned.js';
 import { isMaturityGatePending } from '../model/maturity-policy.js';
 import {
   applyDeclarativeUpdatePolicy,
+  applyGroupUpdatePolicyLayer,
   applyUpdatePolicyOverrides,
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
 import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
+import type { Database, Row } from './db/driver.js';
+import * as groupPolicyStore from './group-policy.js';
+import * as labelOverrideStore from './label-override.js';
 import * as updateLifecycleCacheStore from './update-lifecycle-cache.js';
 import * as updatePolicyRetentionCacheStore from './update-policy-retention-cache.js';
-import { initCollection } from './util.js';
 
-let containers: ReturnType<typeof initCollection> | undefined;
+let db: Database | undefined;
 const containersQueryCache = new Map<string, container.Container[]>();
 const containersQueryCacheReverseIndex = new Map<string, Map<string, Set<string>>>();
 const containersQueryCacheAlwaysInvalidateKeys = new Set<string>();
@@ -56,7 +76,6 @@ const DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_UPDATE_POLICY_RETENTION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
-const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
 const UNSAFE_QUERY_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const CONTAINER_QUERY_CONTROL_KEYS = new Set(['excludeRollbackContainers']);
 const STABLE_UNDEFINED_SENTINEL = '__undefined__';
@@ -92,20 +111,32 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 // dropped, and isUpdateSuppressed() reads an absent policy as "no gating" rather than
 // "default gating", so the very next update fires with no soak at all.
 //
-// Unlike the security-state and lifecycle caches this is deliberately NOT gated behind
-// isLocalContainer: the #386 exclusion exists because runtime state is meaningless across
-// agents, whereas updatePolicy is set on the controller and must survive for agent-owned
-// containers too — that is precisely the topology #496 was reported against.
+// Unlike the security-state cache this is deliberately NOT gated behind isLocalContainer:
+// the #386 exclusion exists because runtime state is meaningless across agents, whereas
+// updatePolicy is set on the controller and must survive for agent-owned containers too —
+// that is precisely the topology #496 was reported against.
 //
 // Because it does hold agent-owned containers it must key on deriveContainerIdentityKey
 // (`${agent}::${watcher}::${name}`, or the compose project/service form), not on the
-// `watcher::name` toCacheKey the other two caches use. Those can get away with the shorter
-// key precisely because they only ever hold local containers; here, two agents each running
-// a `local` watcher with a container named `myapp` would otherwise share one slot and leak
-// one deployment's update policy into another's.
+// `watcher::name` toCacheKey the security-state cache still uses. That one can get away
+// with the shorter key precisely because it only ever holds local containers; here, two
+// agents each running a `local` watcher with a container named `myapp` would otherwise
+// share one slot and leak one deployment's update policy into another's. The lifecycle
+// cache below used to key on the shorter `watcher::name` form too — it is gated behind
+// isLocalContainer, so two agents never collided — but roadmap 7-STORE slice 7 unified it
+// onto the same identity key, so a container recreated under a new name (a compose service
+// redeployed with a new container name, for instance) now inherits its predecessor's
+// maturity clock the same way it already inherited the retained update policy.
 type UpdatePolicyRetentionCacheEntry = {
   updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
+  /**
+   * #1280: canonical name of the container the entry was stashed from. Replicas of one
+   * compose service share the identity key, and this is what tells them apart (see
+   * takeIdentityRetainedUpdatePolicyEntry). Absent on an entry stashed before it was
+   * recorded.
+   */
+  containerName?: string;
 };
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
@@ -726,6 +757,12 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.health !== incoming.health) {
     return true;
   }
+  if (existing.name !== incoming.name) {
+    return true;
+  }
+  if (existing.displayName !== incoming.displayName) {
+    return true;
+  }
   if (existing.error?.message !== incoming.error?.message) {
     return true;
   }
@@ -735,10 +772,25 @@ function hasContainerChangedWithSecurityHashes(
   if (getUpdatePolicyComparisonKey(existing) !== getUpdatePolicyComparisonKey(incoming)) {
     return true;
   }
+  if (getLabelOwnedComparisonKey(existing) !== getLabelOwnedComparisonKey(incoming)) {
+    return true;
+  }
   if (existingSecurityHash !== incomingSecurityHash) {
     return true;
   }
   return false;
+}
+
+/**
+ * Spec 7.5: the effective label-owned values and where each came from. Icon, routing and
+ * dependency changes leave every other compared field alone, and the UI still needs its
+ * container-updated event.
+ */
+function getLabelOwnedComparisonKey(containerToCompare: container.Container): string {
+  return JSON.stringify({
+    fields: pickLabelOwnedFlat(containerToCompare),
+    sources: containerToCompare.labelOwned?.sources ?? null,
+  });
 }
 
 function getUpdatePolicyComparisonKey(containerToCompare: container.Container): string {
@@ -757,6 +809,7 @@ function getUpdatePolicyComparisonKey(containerToCompare: container.Container): 
     skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
     skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
   });
+  const groupPolicy = containerToCompare.groupPolicy;
   return JSON.stringify({
     effective: normalizePolicy(containerToCompare.updatePolicy),
     hasDeclarative: containerToCompare.updatePolicyDeclarative !== undefined,
@@ -767,6 +820,11 @@ function getUpdatePolicyComparisonKey(containerToCompare: container.Container): 
     hasOverrides: containerToCompare.updatePolicyOverrides !== undefined,
     overrides: normalizePolicy(containerToCompare.updatePolicyOverrides),
     sources: containerToCompare.updatePolicySources ?? {},
+    // Spec 7.3: an actions-only policy change leaves every field above alone, and the
+    // UI still needs its container-updated event.
+    groupPolicy: groupPolicy
+      ? { id: groupPolicy.id, revision: groupPolicy.revision, actions: groupPolicy.actions }
+      : null,
   });
 }
 
@@ -935,14 +993,391 @@ function getMaturityGatePendingSince(containerCurrent, containerNext) {
 }
 
 /**
- * Create container collections.
- * @param db
+ * The `containers` table's columns, in the fixed order every INSERT/UPDATE
+ * binds its parameters in (roadmap 7-STORE, slice 8). `id` is first because
+ * it is also the row-identity WHERE-clause parameter; callers that build an
+ * UPDATE slice it off before appending it back at the end.
  */
-export function createCollections(db) {
-  containers = initCollection(db, 'containers', {
-    indices: CONTAINER_COLLECTION_INDICES,
-  });
+const CONTAINER_COLUMNS = [
+  'id',
+  'identity_key',
+  'name',
+  'display_name',
+  'display_icon',
+  'status',
+  'health',
+  'watcher',
+  'agent',
+  'update_available',
+  'update_kind',
+  'update_detected_at',
+  'first_seen_at',
+  'maturity_gate_pending_since',
+  'image_name',
+  'image_tag_value',
+  'image_digest_value',
+  'error_message',
+  'security_state_hash',
+  'image',
+  'result',
+  'update_kind_detail',
+  'security',
+  'update_policy',
+  'update_policy_declarative',
+  'update_policy_overrides',
+  'update_policy_sources',
+  'update_rollback',
+  'details',
+  'labels',
+  'link_config',
+  'tag_config',
+  'trigger_config',
+  'source_repo',
+  'current_release_notes',
+  'dependency_config',
+  'group_policy',
+  'label_owned',
+] as const;
+
+type ContainerColumn = (typeof CONTAINER_COLUMNS)[number];
+type ContainerRow = Record<ContainerColumn, string | number | null>;
+
+const CONTAINER_UPDATE_COLUMNS = CONTAINER_COLUMNS.filter(
+  (column): column is Exclude<ContainerColumn, 'id'> => column !== 'id',
+);
+
+const CONTAINER_INSERT_SQL = `INSERT INTO containers (${CONTAINER_COLUMNS.join(', ')}) VALUES (${CONTAINER_COLUMNS.map(() => '?').join(', ')})`;
+const CONTAINER_UPDATE_SQL = `UPDATE containers SET ${CONTAINER_UPDATE_COLUMNS.map((column) => `${column} = ?`).join(', ')} WHERE id = ?`;
+const CONTAINER_SELECT_ALL_SQL = 'SELECT * FROM containers';
+const CONTAINER_SELECT_BY_ID_SQL = 'SELECT * FROM containers WHERE id = ?';
+const CONTAINER_DELETE_BY_ID_SQL = 'DELETE FROM containers WHERE id = ?';
+// #1280: the columns an identity-sibling lookup needs and no others. Scoped to one
+// watcher on one agent in SQL (both are part of every identity key), read in insertion
+// order, and never touching the large JSON columns (security, details, result).
+const CONTAINER_SELECT_IDENTITY_SIBLING_CANDIDATES_SQL =
+  "SELECT id, name, watcher, agent, labels, update_policy, update_policy_declarative, update_policy_overrides FROM containers WHERE watcher = ? AND COALESCE(agent, '') = ? ORDER BY rowid";
+// Spec 7.3: what group-policy re-resolution and startup reconciliation need to decide
+// whether a record is theirs to rewrite, without validating every row in full.
+const CONTAINER_SELECT_GROUP_POLICY_STATE_SQL =
+  'SELECT id, labels, group_policy, update_policy_sources FROM containers ORDER BY rowid';
+
+function toStoredJson(value: unknown): string | null {
+  return value === undefined ? null : JSON.stringify(value);
+}
+
+function fromStoredJson<T>(value: string | number | null): T | undefined {
+  return value === null || value === undefined ? undefined : (JSON.parse(String(value)) as T);
+}
+
+function toOptionalStoredString(value: string | number | null): string | undefined {
+  return value === null || value === undefined ? undefined : String(value);
+}
+
+/**
+ * Build the parameter values for one INSERT/UPDATE, in `CONTAINER_COLUMNS`
+ * order. Called with an already-`validateContainer()`-d container, so every
+ * getter-backed derived field (`updateAvailable`, `updateKind`, `link`,
+ * `tagPinned`/`tagPinGated`, `updateAge`, `updateMaturityLevel`) has already
+ * been recomputed from the canonical fields this function reads. Those
+ * derived fields are never read back out of the row: `rowToContainer` below
+ * reconstructs only the canonical inputs and lets `validateContainer`
+ * recompute them again on the way out, so their storage here exists purely
+ * to satisfy the promoted `update_available`/`update_kind` columns' role as
+ * SQL filter targets (see `getCachedOrComputedContainersByQuery`).
+ *
+ * `securityHash` is threaded in rather than recomputed here because the
+ * caller already knows whether the incoming write carries a security update
+ * or must keep reusing the cached hash of the previously stored value (see
+ * `getStoredContainerSecurityStateHash`/`storeContainerSecurityStateHash`).
+ */
+function containerToRow(c: container.Container, securityHash: string): ContainerRow {
+  const linkConfig = {
+    link: c.link,
+    linkTemplate: c.linkTemplate,
+    portLabel: c.portLabel,
+  };
+  const tagConfig = {
+    includeTags: c.includeTags,
+    excludeTags: c.excludeTags,
+    transformTags: c.transformTags,
+    tagFamily: c.tagFamily,
+    tagPinInfo: c.tagPinInfo,
+  };
+  const triggerConfig = {
+    actionTriggerInclude: c.actionTriggerInclude,
+    actionTriggerExclude: c.actionTriggerExclude,
+    notificationTriggerInclude: c.notificationTriggerInclude,
+    notificationTriggerExclude: c.notificationTriggerExclude,
+    actionTriggerAuto: c.actionTriggerAuto,
+    triggerInclude: c.triggerInclude,
+    triggerExclude: c.triggerExclude,
+  };
+  const dependencyConfig = {
+    dependsOn: c.dependsOn,
+    // The column keeps the declared source, as builds before overrides read it: an
+    // `override` here would fail their schema on every read. The read derives it.
+    dependsOnSource:
+      c.dependsOnSource === 'override'
+        ? toDeclaredDependencySource(c.labelOwned?.declaredSources.dependsOn)
+        : c.dependsOnSource,
+    dependsOnAction: c.dependsOnAction,
+  };
+
+  return {
+    id: c.id,
+    identity_key: c.identityKey as string,
+    name: c.name,
+    display_name: c.displayName,
+    display_icon: c.displayIcon,
+    status: c.status,
+    health: c.health ?? null,
+    watcher: c.watcher,
+    agent: c.agent ?? null,
+    update_available: c.updateAvailable ? 1 : 0,
+    update_kind: c.updateKind.kind,
+    update_detected_at: c.updateDetectedAt ?? null,
+    first_seen_at: c.firstSeenAt ?? null,
+    maturity_gate_pending_since: c.maturityGatePendingSince ?? null,
+    image_name: c.image.name,
+    image_tag_value: c.image.tag.value,
+    image_digest_value: c.image.digest?.value ?? null,
+    error_message: c.error?.message ?? null,
+    security_state_hash: securityHash,
+    image: JSON.stringify(c.image),
+    result: toStoredJson(c.result),
+    update_kind_detail: JSON.stringify(c.updateKind),
+    security: toStoredJson(c.security),
+    update_policy: toStoredJson(c.updatePolicy),
+    update_policy_declarative: toStoredJson(c.updatePolicyDeclarative),
+    update_policy_overrides: toStoredJson(c.updatePolicyOverrides),
+    update_policy_sources: toStoredJson(c.updatePolicySources),
+    update_rollback: toStoredJson(c.updateRollback),
+    details: toStoredJson(c.details),
+    labels: toStoredJson(c.labels),
+    link_config: toStoredJson(linkConfig),
+    tag_config: toStoredJson(tagConfig),
+    trigger_config: toStoredJson(triggerConfig),
+    source_repo: c.sourceRepo ?? null,
+    current_release_notes: toStoredJson(c.currentReleaseNotes),
+    dependency_config: toStoredJson(dependencyConfig),
+    group_policy: toStoredJson(c.groupPolicy),
+    label_owned: toStoredJson(c.labelOwned),
+  };
+}
+
+function insertContainerRow(c: container.Container, securityHash: string): void {
+  const row = containerToRow(c, securityHash);
+  db.prepare(CONTAINER_INSERT_SQL).run(...CONTAINER_COLUMNS.map((column) => row[column]));
+}
+
+function updateContainerRow(c: container.Container, securityHash: string): void {
+  const row = containerToRow(c, securityHash);
+  db.prepare(CONTAINER_UPDATE_SQL).run(
+    ...CONTAINER_UPDATE_COLUMNS.map((column) => row[column]),
+    row.id,
+  );
+}
+
+/**
+ * Read a stored state document without ever throwing. A NULL column is a row no override
+ * has reached and has no state. Anything else is a row an override applied to, so what
+ * cannot be read is rebuilt rather than dropped: a field with no override reads its value
+ * from the row (that is the declared value), and a field an override is hiding stays unset
+ * until the next declared write, because the row's value there is the override, not the label.
+ */
+function readStoredLabelOwned(
+  stored: string | number | null,
+  flat: Record<string, unknown>,
+  overrides: ReturnType<typeof getLabelOverrideFieldsFor>,
+): LabelOwnedState | undefined {
+  if (stored === null || stored === undefined) {
+    return undefined;
+  }
+  let document: unknown;
+  try {
+    document = fromStoredJson(stored);
+  } catch {
+    document = undefined;
+  }
+  const { state, unknown } = parseLabelOwnedState(document);
+  if (unknown.length === 0) {
+    return state;
+  }
+  if (overrides === undefined) {
+    // Nothing hides the row's values, so it is as pristine as a row that never had state.
+    return undefined;
+  }
+  const declared = { ...state.declared } as Record<string, unknown>;
+  for (const field of unknown) {
+    if (overrides?.[field] === undefined && flat[field] !== undefined) {
+      declared[field] = structuredClone(flat[field]);
+    }
+  }
+  const inferred = inferDeclaredSources(
+    declared as LabelOwnedDeclared,
+    flat as Pick<container.Container, 'name' | 'labels'>,
+    toDeclaredDependencySource(flat.dependsOnSource),
+  );
+  const declaredSources = { ...state.declaredSources };
+  for (const field of unknown) {
+    declaredSources[field] = inferred[field];
+  }
+  return buildLabelOwnedState(declared as LabelOwnedDeclared, declaredSources, overrides);
+}
+
+/**
+ * Reconstruct the pre-`validate()` shape of a container from a stored row:
+ * every canonical (non-derived) field the row carries, with the four
+ * grouped JSON columns unpacked back onto their individual fields. Passed
+ * straight to `validateContainer`, which recomputes every derived field
+ * (`identityKey`, `updateAvailable`, `updateKind`, `link`, `tagPinned`,
+ * `tagPinGated`, `updateAge`, `updateMaturityLevel`, `resultChanged`) from
+ * these inputs exactly as it does on every write, so a value merely reflects
+ * what was last computed rather than being read back literally.
+ */
+function rowToContainer(row: Row): container.Container {
+  const typedRow = row as unknown as ContainerRow;
+  const linkConfig =
+    fromStoredJson<{ link?: string; linkTemplate?: string; portLabel?: string }>(
+      typedRow.link_config,
+    ) ?? {};
+  const tagConfig =
+    fromStoredJson<{
+      includeTags?: string;
+      excludeTags?: string;
+      transformTags?: string;
+      tagFamily?: string;
+      tagPinInfo?: boolean;
+    }>(typedRow.tag_config) ?? {};
+  const triggerConfig =
+    fromStoredJson<{
+      actionTriggerInclude?: string;
+      actionTriggerExclude?: string;
+      notificationTriggerInclude?: string;
+      notificationTriggerExclude?: string;
+      actionTriggerAuto?: string;
+      triggerInclude?: string;
+      triggerExclude?: string;
+    }>(typedRow.trigger_config) ?? {};
+  // NULL on a row written before migration 7 added the column.
+  const dependencyConfig =
+    fromStoredJson<{
+      dependsOn?: string[];
+      dependsOnSource?: 'label' | 'compose' | 'override';
+      dependsOnAction?: 'update' | 'restart';
+    }>(typedRow.dependency_config) ?? {};
+  const errorMessage = toOptionalStoredString(typedRow.error_message);
+  const groupPolicy = fromStoredJson<container.ContainerGroupPolicySnapshot>(typedRow.group_policy);
+  const flat = {
+    name: String(typedRow.name),
+    labels: fromStoredJson<Record<string, string>>(typedRow.labels),
+    displayName: String(typedRow.display_name),
+    displayIcon: toOptionalStoredString(typedRow.display_icon),
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource: dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
+    actionTriggerInclude: triggerConfig.actionTriggerInclude,
+    actionTriggerExclude: triggerConfig.actionTriggerExclude,
+    actionTriggerAuto: triggerConfig.actionTriggerAuto,
+    notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
+    notificationTriggerExclude: triggerConfig.notificationTriggerExclude,
+  };
+  // NULL until an override has ever applied to the row.
+  const labelOwned = readStoredLabelOwned(
+    typedRow.label_owned,
+    flat,
+    getLabelOverrideFieldsFor({
+      ...flat,
+      watcher: String(typedRow.watcher),
+      agent: toOptionalStoredString(typedRow.agent),
+    }),
+  );
+
+  const raw: Record<string, unknown> = {
+    id: String(typedRow.id),
+    name: String(typedRow.name),
+    displayName: String(typedRow.display_name),
+    displayIcon: toOptionalStoredString(typedRow.display_icon),
+    status: String(typedRow.status),
+    health: toOptionalStoredString(typedRow.health),
+    watcher: String(typedRow.watcher),
+    agent: toOptionalStoredString(typedRow.agent),
+    identityKey: String(typedRow.identity_key),
+    updateDetectedAt: toOptionalStoredString(typedRow.update_detected_at),
+    firstSeenAt: toOptionalStoredString(typedRow.first_seen_at),
+    maturityGatePendingSince: toOptionalStoredString(typedRow.maturity_gate_pending_since),
+    image: fromStoredJson(typedRow.image),
+    result: fromStoredJson(typedRow.result),
+    security: fromStoredJson(typedRow.security),
+    updatePolicy: fromStoredJson(typedRow.update_policy),
+    updatePolicyDeclarative: fromStoredJson(typedRow.update_policy_declarative),
+    updatePolicyOverrides: fromStoredJson(typedRow.update_policy_overrides),
+    updatePolicySources: fromStoredJson(typedRow.update_policy_sources),
+    updateRollback: fromStoredJson(typedRow.update_rollback),
+    details: fromStoredJson(typedRow.details),
+    labels: fromStoredJson(typedRow.labels),
+    sourceRepo: toOptionalStoredString(typedRow.source_repo),
+    currentReleaseNotes: fromStoredJson(typedRow.current_release_notes),
+    error: errorMessage === undefined ? undefined : { message: errorMessage },
+    link: linkConfig.link,
+    linkTemplate: linkConfig.linkTemplate,
+    portLabel: linkConfig.portLabel,
+    includeTags: tagConfig.includeTags,
+    excludeTags: tagConfig.excludeTags,
+    transformTags: tagConfig.transformTags,
+    tagFamily: tagConfig.tagFamily,
+    tagPinInfo: tagConfig.tagPinInfo,
+    actionTriggerInclude: triggerConfig.actionTriggerInclude,
+    actionTriggerExclude: triggerConfig.actionTriggerExclude,
+    notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
+    notificationTriggerExclude: triggerConfig.notificationTriggerExclude,
+    actionTriggerAuto: triggerConfig.actionTriggerAuto,
+    triggerInclude: triggerConfig.triggerInclude,
+    triggerExclude: triggerConfig.triggerExclude,
+    dependsOn: dependencyConfig.dependsOn,
+    dependsOnSource:
+      labelOwned?.sources.dependsOn === 'override' ? 'override' : dependencyConfig.dependsOnSource,
+    dependsOnAction: dependencyConfig.dependsOnAction,
+    // Only present when a policy applied, so a record no policy reaches reads back with
+    // exactly the keys it had before group policies existed.
+    ...(groupPolicy === undefined ? {} : { groupPolicy }),
+    ...(labelOwned === undefined ? {} : { labelOwned }),
+  };
+
+  return validateContainer(raw);
+}
+
+/**
+ * Create container collections.
+ * @param database
+ */
+export function createCollections(database: Database) {
+  db = database;
   invalidateContainersCache();
+}
+
+/**
+ * Build the full parameter row for an imported legacy container document
+ * (roadmap 7-STORE slice 8's importer, `store/db/importers/containers.ts`).
+ * Runs the same `validateContainer()` every write already runs, so an import
+ * produces exactly the row a fresh `insertContainer()` of the same document
+ * would, including every derived field. Returns undefined for a document
+ * that fails validation (missing a field the current schema requires) rather
+ * than guessing at a default, matching every other importer's
+ * skip-rather-than-guess convention.
+ */
+export function buildImportedContainerRow(rawContainer: unknown): ContainerRow | undefined {
+  try {
+    const validated = validateContainer(rawContainer);
+    return containerToRow(validated, getSecurityStateHash(validated.security));
+  } catch {
+    return undefined;
+  }
+}
+
+/** Insert one row built by `buildImportedContainerRow` into `database`. */
+export function insertImportedContainerRow(database: Database, row: ContainerRow): void {
+  database.prepare(CONTAINER_INSERT_SQL).run(...CONTAINER_COLUMNS.map((column) => row[column]));
 }
 
 /**
@@ -1017,6 +1452,8 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
   const entry: UpdatePolicyRetentionCacheEntry = {
     updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+    // Already canonical: a rollback-renamed record returned above.
+    containerName: containerRaw.name,
   };
   updatePolicyRetentionCache.set(cacheKey, entry);
   // #565: write-through to the durable store so this stash survives the
@@ -1092,6 +1529,27 @@ function takeRetainedUpdatePolicyEntry(cacheKey: string | undefined) {
 }
 
 /**
+ * The update-policy layers of a stored record: as much of it as
+ * `getUpdatePolicyOverrides` reads, and all a sibling lookup hands back.
+ */
+type IdentitySibling = Pick<
+  container.Container,
+  'updatePolicy' | 'updatePolicyDeclarative' | 'updatePolicyOverrides'
+>;
+
+type IdentitySiblingCandidateRow = Pick<
+  ContainerRow,
+  | 'id'
+  | 'name'
+  | 'watcher'
+  | 'agent'
+  | 'labels'
+  | 'update_policy'
+  | 'update_policy_declarative'
+  | 'update_policy_overrides'
+>;
+
+/**
  * #1280: find the stored records that are the same container as `candidate` under a
  * different Docker id: same agent, watcher and name, and the same identity key the
  * retention stash uses. Names are compared in canonical form, so a predecessor whose
@@ -1106,24 +1564,44 @@ function takeRetainedUpdatePolicyEntry(cacheKey: string | undefined) {
  *
  * `matchAnyName` drops the name comparison and keeps only the identity-key one, which
  * finds every record that shares the identity, replicas of a compose service included.
+ *
+ * The stored `identity_key` column is not the thing compared: it is derived from the
+ * stored name, so a rollback-renamed predecessor carries a key that no longer matches.
+ * Each candidate row's key is re-derived here from its canonical name instead.
  */
-function findIdentitySiblings(candidate, matchAnyName = false): container.Container[] {
+function findIdentitySiblings(candidate, matchAnyName = false): IdentitySibling[] {
   const canonicalName = getCanonicalContainerName(candidate.name);
   const identityKey = deriveContainerIdentityKey({ ...candidate, name: canonicalName });
-  if (identityKey === undefined || typeof containers?.find !== 'function') {
+  if (identityKey === undefined) {
     return [];
   }
-  return containers
-    .find({ 'data.watcher': candidate.watcher })
-    .map((item) => item.data as container.Container)
-    .filter((stored) => {
-      const storedName = getCanonicalContainerName(stored.name);
-      return (
-        stored.id !== candidate.id &&
-        (matchAnyName || storedName === canonicalName) &&
-        deriveContainerIdentityKey({ ...stored, name: storedName }) === identityKey
-      );
-    });
+  const siblings: IdentitySibling[] = [];
+  const rows = db
+    .prepare(CONTAINER_SELECT_IDENTITY_SIBLING_CANDIDATES_SQL)
+    .all(
+      candidate.watcher,
+      typeof candidate.agent === 'string' ? candidate.agent : '',
+    ) as unknown as IdentitySiblingCandidateRow[];
+  for (const row of rows) {
+    const storedName = getCanonicalContainerName(String(row.name));
+    if (String(row.id) === candidate.id || !(matchAnyName || storedName === canonicalName)) {
+      continue;
+    }
+    const storedIdentityKey = deriveContainerIdentityKey({
+      name: storedName,
+      watcher: String(row.watcher),
+      agent: toOptionalStoredString(row.agent),
+      labels: fromStoredJson(row.labels),
+    } as container.Container);
+    if (storedIdentityKey === identityKey) {
+      siblings.push({
+        updatePolicy: fromStoredJson(row.update_policy),
+        updatePolicyDeclarative: fromStoredJson(row.update_policy_declarative),
+        updatePolicyOverrides: fromStoredJson(row.update_policy_overrides),
+      });
+    }
+  }
+  return siblings;
 }
 
 function isAgentOwnedContainer(candidate): boolean {
@@ -1147,7 +1625,7 @@ function getLivePredecessorUpdatePolicyOverrides(
     return undefined;
   }
   for (const sibling of findIdentitySiblings(incoming)) {
-    const overrides = getUpdatePolicyOverrides(sibling);
+    const overrides = getUpdatePolicyOverrides(sibling as container.Container);
     if (Object.keys(overrides).length > 0) {
       return overrides;
     }
@@ -1155,29 +1633,84 @@ function getLivePredecessorUpdatePolicyOverrides(
   return undefined;
 }
 
+/**
+ * #1280: take the entry retained under `incoming`'s identity key, if it is this
+ * container's to take.
+ *
+ * Replicas of one compose service share the identity key (`compose:project/service`),
+ * so after a compose down/up the entry one replica stashed is equally reachable from
+ * every other. An agent-owned insert therefore takes only an entry recorded under its
+ * own name and leaves another replica's entry where it is, for that replica to take.
+ *
+ * An entry stashed before names were recorded cannot be attributed. Under a compose key
+ * it is consumed and discarded: applying it could hand one replica's policy to another,
+ * while dropping it only loses a policy that was in flight across the upgrade. Under a
+ * plain identity key the key itself names the container, so it is taken as before.
+ *
+ * Controller-local inserts keep the name-agnostic match, which is what carries a policy
+ * across a compose service redeployed under a new container name.
+ */
+function takeIdentityRetainedUpdatePolicyEntry(incoming) {
+  const cacheKey = deriveContainerIdentityKey(incoming);
+  const entry = cacheKey === undefined ? undefined : updatePolicyRetentionCache.get(cacheKey);
+  if (!entry) {
+    return undefined;
+  }
+  if (isAgentOwnedContainer(incoming)) {
+    if (entry.containerName !== undefined && entry.containerName !== incoming.name) {
+      return undefined;
+    }
+    if (entry.containerName === undefined && getComposeProjectService(incoming) !== undefined) {
+      takeRetainedUpdatePolicyEntry(cacheKey);
+      return undefined;
+    }
+  }
+  return takeRetainedUpdatePolicyEntry(cacheKey);
+}
+
+/**
+ * Take every entry retained for `incoming` and return the overrides of the one stashed
+ * last, ignoring expired ones.
+ *
+ * Both keys are taken: an agent prune stashes under both, and a hit on one must not leave
+ * the other behind to resurrect a since-cleared policy later. The only entry left in
+ * place is one another compose replica stashed (see takeIdentityRetainedUpdatePolicyEntry).
+ *
+ * Neither key is the better match in general. After an agent -> controller -> agent move
+ * the identity entry is the one the first move left behind, and the id entry carries the
+ * policy as the controller last held it. So the later stash wins, and an expired entry
+ * never shadows a live one. Stash order is the Map's insertion order: a stash deletes
+ * then sets its key, and rehydrate inserts in `refresh_order`, so the later position is
+ * the later stash. `expiresAt` is no proxy for it, because the TTL is configurable
+ * (DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS) and may differ between two stashes across a
+ * restart.
+ */
 function takeUnexpiredRetainedUpdatePolicyOverrides(
   incoming,
 ): container.ContainerUpdatePolicy | undefined {
-  // Take both keys unconditionally: an agent prune stashes under both, and a hit on one
-  // must not leave the other behind to resurrect a since-cleared policy later.
-  const identityEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdentityKey(incoming));
-  const idEntry = takeRetainedUpdatePolicyEntry(deriveContainerIdRetentionKey(incoming));
-  const entry = identityEntry ?? idEntry;
-  if (!entry || entry.expiresAt <= Date.now()) {
-    return undefined;
-  }
-  return entry.updatePolicyOverrides;
+  const nowMs = Date.now();
+  const identityKey = deriveContainerIdentityKey(incoming);
+  const idKey = deriveContainerIdRetentionKey(incoming);
+  const keys = [...updatePolicyRetentionCache.keys()];
+  const positionOf = (key: string | undefined) => (key === undefined ? -1 : keys.indexOf(key));
+  const [candidate] = [
+    { entry: takeIdentityRetainedUpdatePolicyEntry(incoming), position: positionOf(identityKey) },
+    { entry: takeRetainedUpdatePolicyEntry(idKey), position: positionOf(idKey) },
+  ]
+    .filter(({ entry }) => entry !== undefined && entry.expiresAt > nowMs)
+    .sort((first, second) => second.position - first.position);
+  return candidate?.entry?.updatePolicyOverrides;
 }
 
 /**
  * #496: restore a retained updatePolicy onto the record replacing a deleted one.
  *
- * The identity key comes first because it is the narrower match: it names one
- * container under one watcher on one agent, and a recreate is the common case. The
- * Docker id is the DR-112 fallback for the hand-off the identity key cannot see, where
- * the id survives and the identity does not. An agent-reported removal that cannot tell
- * which of the two is happening stashes under both, and the order decides which one a
- * given insert reads.
+ * The identity key carries a recreate: it names one container under one watcher on one
+ * agent, and survives the new Docker id. The Docker id carries the DR-112 hand-off the
+ * identity key cannot see, where the id survives and the identity does not. An
+ * agent-reported removal that cannot tell which of the two is happening stashes under
+ * both, and an insert that finds both takes the later stash (see
+ * takeUnexpiredRetainedUpdatePolicyOverrides).
  *
  * #1280: when neither is stashed, the predecessor may simply not have been deleted yet
  * (see getLivePredecessorUpdatePolicyOverrides).
@@ -1201,11 +1734,152 @@ function restoreRetainedUpdatePolicy(container) {
   }
 }
 
+/** Whether a record carries any trace of a group layer: a snapshot or a `group` source. */
+function hasGroupPolicyLayer(
+  record: Partial<Pick<container.Container, 'groupPolicy' | 'updatePolicySources'>> | undefined,
+): boolean {
+  return (
+    record?.groupPolicy !== undefined ||
+    Object.values(record?.updatePolicySources ?? {}).includes('group')
+  );
+}
+
+/**
+ * Spec 7.3: the one place the group update-policy layer is applied. Every write path runs
+ * this immediately before `validateContainer`, so `updateAvailable`, the stored
+ * `update_available` and `maturityGatePendingSince` all see the final policy.
+ *
+ * The group comes from the record's own current labels and the policy from the group
+ * policy store, never from an incoming `groupPolicy` or a provisionally resolved
+ * `updatePolicy`, so a stale or forged snapshot cannot survive a write and a recreated
+ * container never inherits its predecessor's group. Overrides stay container-owned
+ * (`getUpdatePolicyOverrides`) and the group layer is never written into them.
+ *
+ * When no policy applies and neither the record nor its stored predecessor carries a group
+ * layer, this returns `containerToFinalize` itself, untouched: with zero policies every
+ * write is exactly what it was before group policies existed. Otherwise it returns a copy
+ * re-resolved with the current layer, or with none, which is how a container leaves a
+ * group or outlives a deleted policy.
+ * @param containerToFinalize the merged record about to be validated and written
+ * @param containerStored the stored record it replaces, if any
+ */
+function finalizeGroupPolicyLayer(containerToFinalize, containerStored?: container.Container) {
+  const group = getContainerGroup(containerToFinalize);
+  const policy = group === null ? undefined : groupPolicyStore.getGroupPolicyForGroup(group);
+  if (
+    policy === undefined &&
+    !hasGroupPolicyLayer(containerToFinalize) &&
+    !hasGroupPolicyLayer(containerStored)
+  ) {
+    return containerToFinalize;
+  }
+  return applyGroupUpdatePolicyLayer(
+    { ...containerToFinalize },
+    policy === undefined ? undefined : toContainerGroupPolicySnapshot(policy),
+  );
+}
+
+/**
+ * How a write treats the label-owned fields it carries (spec 7.5).
+ *
+ * An unmarked write never changes the declared layer: its in-scope flat values are a copy
+ * of whatever effective value its caller last read, which may be an override, so taking
+ * them as declared could turn an old override into the container's label. Only a write
+ * marked `declared` reports what the owning watcher saw.
+ */
+interface LabelOwnedWrite {
+  /** The write reports declared values: labels, Compose and watcher config. */
+  declared?: boolean;
+  /** A patch write: the keys the caller named. Absent for an insert or a whole-record write. */
+  patchKeys?: readonly string[];
+}
+
+export interface LabelOwnedWriteOptions {
+  labelOwned?: 'declared';
+}
+
+function getLabelOverrideFieldsFor(
+  record: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
+) {
+  const scope = labelOverrideStore.deriveLabelOverrideScope(record);
+  /* istanbul ignore next -- unreachable: every record here has passed validateContainer,
+     which requires a non-empty watcher and name, so a scope always derives. */
+  return scope === undefined ? undefined : labelOverrideStore.getLabelOverrideFields(scope.key);
+}
+
+function toDeclaredDependencySource(source: unknown): 'label' | 'compose' | undefined {
+  return source === 'label' || source === 'compose' ? source : undefined;
+}
+
+/**
+ * Spec 7.5: the one place the label-owned layer is applied. Every write path runs this on
+ * the validated, trigger-normalized record, so the flat fields every consumer reads hold
+ * the effective values and `labelOwned` holds the declared layer behind them.
+ *
+ * A record whose scope has no override and that never had one is left exactly as it is, so
+ * with zero overrides every write is what it was before this layer existed. `stored` is the
+ * row being replaced; it is absent for an insert, where an incoming `labelOwned` is an
+ * internal round trip and is honored.
+ */
+function applyLabelOwnedLayer(
+  next: container.Container,
+  stored: container.Container | undefined,
+  write: LabelOwnedWrite = {},
+): void {
+  const overrides = getLabelOverrideFieldsFor(next);
+  const priorState: LabelOwnedState | undefined =
+    stored === undefined ? next.labelOwned : stored.labelOwned;
+  if (priorState === undefined && overrides === undefined) {
+    delete next.labelOwned;
+    return;
+  }
+
+  const storedDependencySource = toDeclaredDependencySource(priorState?.declaredSources.dependsOn);
+  const flatDependencySource = toDeclaredDependencySource(next.dependsOnSource);
+  let declared: LabelOwnedDeclared;
+  let dependencySource: 'label' | 'compose' | undefined;
+  if (priorState === undefined) {
+    // First write of a row with no state: its flat values are still pristine.
+    declared = captureDeclaredFromFlat(next);
+    dependencySource = flatDependencySource;
+  } else if (stored === undefined || write.declared !== true) {
+    declared = priorState.declared;
+    dependencySource = storedDependencySource;
+  } else if (write.patchKeys === undefined) {
+    declared = captureDeclaredFromFlat(next);
+    dependencySource = flatDependencySource;
+  } else {
+    const patched = new Set(write.patchKeys);
+    const patchedDeclared = { ...priorState.declared } as Record<string, unknown>;
+    for (const { field } of LABEL_OWNED_FIELDS) {
+      if (patched.has(field)) {
+        const value = next[field];
+        if (value === undefined) {
+          delete patchedDeclared[field];
+        } else {
+          patchedDeclared[field] = structuredClone(value);
+        }
+      }
+    }
+    declared = patchedDeclared as LabelOwnedDeclared;
+    dependencySource = patched.has('dependsOnSource')
+      ? flatDependencySource
+      : storedDependencySource;
+  }
+
+  const state = buildLabelOwnedState(
+    declared,
+    inferDeclaredSources(declared, next, dependencySource),
+    overrides,
+  );
+  applyLabelOwnedState(next, state, overrides);
+}
+
 /**
  * Insert new Container.
  * @param container
  */
-export function insertContainer(container) {
+export function insertContainer(container, context?: ContainerLifecycleEventContext) {
   restoreRetainedUpdatePolicy(container);
   // #386: skip the security-state cache entirely for remote-agent containers;
   // the cache is only written by the controller's local Docker trigger and is
@@ -1217,8 +1891,10 @@ export function insertContainer(container) {
       container.security = cachedSecurity;
       clearCachedSecurityState(container.watcher, container.name);
     }
-    const lifecycleCacheKey = toCacheKey(container.watcher, container.name);
-    const lifecycleEntry = updateLifecycleCache.get(lifecycleCacheKey);
+    const lifecycleCacheKey = deriveContainerIdentityKey(container);
+    const lifecycleEntry = lifecycleCacheKey
+      ? updateLifecycleCache.get(lifecycleCacheKey)
+      : undefined;
     if (lifecycleEntry) {
       if (lifecycleEntry.expiresAt <= Date.now()) {
         updateLifecycleCache.delete(lifecycleCacheKey);
@@ -1257,24 +1933,23 @@ export function insertContainer(container) {
       }
     }
   }
-  const containerToSave = validateContainer(container);
+  const containerToSave = validateContainer(finalizeGroupPolicyLayer(container));
   normalizeContainerTriggerLabelFields(containerToSave);
+  applyLabelOwnedLayer(containerToSave, undefined);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   containerToSave.maturityGatePendingSince = getMaturityGatePendingSince(
     undefined,
     containerToSave,
   );
-  storeContainerSecurityStateHash(containerToSave);
-  containers.insert({
-    data: containerToSave,
-  });
+  const securityHash = storeContainerSecurityStateHash(containerToSave);
+  insertContainerRow(containerToSave, securityHash);
   invalidateContainersCacheForMutation(undefined, containerToSave);
   if (!isRollbackContainerName(containerToSave.name)) {
     const containerAddedEventPayload: ContainerLifecycleEventPayload = redactContainerRuntimeEnv({
       ...containerToSave,
     });
-    emitContainerAdded(containerAddedEventPayload);
+    emitContainerAdded(containerAddedEventPayload, ...(context ? [context] : []));
   }
   return containerToSave;
 }
@@ -1285,7 +1960,7 @@ export function insertContainer(container) {
  */
 export function updateContainer(
   container,
-  options: { authoritativeEmptyOverrides?: boolean } = {},
+  options: { authoritativeEmptyOverrides?: boolean } & LabelOwnedWriteOptions = {},
 ) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
   const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
@@ -1301,13 +1976,8 @@ export function updateContainer(
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
-  const containerCurrentDoc =
-    typeof containers?.findOne === 'function'
-      ? containers.findOne({ 'data.id': container.id })
-      : undefined;
-  const containerCurrent = containerCurrentDoc
-    ? validateContainer(containerCurrentDoc.data)
-    : undefined;
+  const containerCurrentRow = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(container.id);
+  const containerCurrent = containerCurrentRow ? rowToContainer(containerCurrentRow) : undefined;
   const shouldRestoreCurrentDetails =
     hasDetails && hasClassifiedRuntimeEnvValues(container.details) && containerCurrent?.details;
   const containerMerged = {
@@ -1344,8 +2014,14 @@ export function updateContainer(
     containerMerged.updatePolicyOverrides = undefined;
     containerMerged.updatePolicySources = undefined;
   }
-  const containerToReturn = validateContainer(containerMerged);
+  // After the declarative re-apply above, and also when only labels changed.
+  const containerToReturn = validateContainer(
+    finalizeGroupPolicyLayer(containerMerged, containerCurrent),
+  );
   normalizeContainerTriggerLabelFields(containerToReturn);
+  applyLabelOwnedLayer(containerToReturn, containerCurrent, {
+    declared: options.labelOwned === 'declared',
+  });
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
   containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
@@ -1358,22 +2034,10 @@ export function updateContainer(
       ? containerCurrentSecurityHash
       : storeContainerSecurityStateHash(containerToReturn);
 
-  if (containerCurrentDoc && typeof containers?.update === 'function') {
-    containerCurrentDoc.data = containerToReturn;
-    containers.update(containerCurrentDoc);
+  if (containerCurrentRow) {
+    updateContainerRow(containerToReturn, containerNextSecurityHash);
   } else {
-    // Remove existing container
-    containers
-      .chain()
-      .find({
-        'data.id': container.id,
-      })
-      .remove();
-
-    // Insert new one
-    containers.insert({
-      data: containerToReturn,
-    });
+    insertContainerRow(containerToReturn, containerNextSecurityHash);
   }
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
   const wasRollback = isRollbackContainerName(containerCurrent?.name);
@@ -1415,8 +2079,118 @@ export function updateContainer(
   return containerToReturn;
 }
 
+/**
+ * Write only the named fields (roadmap 7-STORE, slice 9; see 4.3 in
+ * `spec-7-store-sqlite.md`).
+ *
+ * `updateContainer` above takes a whole record from the caller and merges it
+ * onto the stored row, which is exactly the bug: the caller's copy of every
+ * field it did not intend to touch is whatever it read at some earlier
+ * point, and a second writer's change to one of those fields lands in the
+ * gap between that read and this write, then gets silently reverted. This
+ * function does not have that gap, because the fields it writes are limited
+ * to `patch`'s own keys — every other field is inherited from the row this
+ * same call just read, not from anything the caller was holding onto.
+ *
+ * The whole read-merge-write sequence runs inside one `BEGIN IMMEDIATE`
+ * transaction (the driver's default), so the derived fields below
+ * (`updateDetectedAt`/`firstSeenAt`/`maturityGatePendingSince`, the security
+ * hash, and the changed-detection that decides whether to emit
+ * `containerUpdated`) are always computed from a single consistent snapshot
+ * of current-row-plus-patch.
+ *
+ * Returns `undefined` when `id` does not name a stored container: there is
+ * no record to patch, and (unlike `updateContainer`) this function never
+ * falls back to an insert — every patch caller already knows the row exists.
+ * @param id
+ * @param patch
+ */
+export function updateContainerFields(
+  id: string,
+  patch: Omit<Partial<container.Container>, 'id'>,
+  context?: ContainerLifecycleEventContext,
+  options: LabelOwnedWriteOptions = {},
+): container.Container | undefined {
+  if (!db) {
+    return undefined;
+  }
+  const database = db;
+
+  return database.transaction((): container.Container | undefined => {
+    const containerCurrentRow = database.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+    if (!containerCurrentRow) {
+      return undefined;
+    }
+    const containerCurrent = rowToContainer(containerCurrentRow);
+    // A stray `id` on `patch` at runtime (the type above rules it out at
+    // compile time, but callers can still hand in an untyped object) must
+    // never win the merge below — this row was looked up by `id`, and
+    // `updateContainerRow` writes it into `WHERE id = ?`, so a merged `id`
+    // that drifted from the lookup key would write a different row or emit
+    // an update under an id nothing here actually wrote.
+    const containerMerged = { ...containerCurrent, ...patch, id: containerCurrent.id };
+    const containerToReturn = validateContainer(
+      finalizeGroupPolicyLayer(containerMerged, containerCurrent),
+    );
+    normalizeContainerTriggerLabelFields(containerToReturn);
+    applyLabelOwnedLayer(containerToReturn, containerCurrent, {
+      declared: options.labelOwned === 'declared',
+      patchKeys: Object.keys(patch),
+    });
+    containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
+    containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
+    containerToReturn.maturityGatePendingSince = getMaturityGatePendingSince(
+      containerCurrent,
+      containerToReturn,
+    );
+    const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);
+    const containerNextSecurityHash = Object.hasOwn(patch, 'security')
+      ? storeContainerSecurityStateHash(containerToReturn)
+      : containerCurrentSecurityHash;
+
+    updateContainerRow(containerToReturn, containerNextSecurityHash);
+    invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
+
+    const wasRollback = isRollbackContainerName(containerCurrent.name);
+    const isRollback = isRollbackContainerName(containerToReturn.name);
+    const healthTransition = getHealthTransition(containerCurrent, containerToReturn);
+    if (healthTransition && !isRollback) {
+      // Independent of hasContainerChangedWithSecurityHashes below — a
+      // health-only transition may be the only thing that changed, and must
+      // still notify. Mirrors updateContainer's health-transition handling.
+      void emitContainerHealthTransition({
+        containerName: containerToReturn.name,
+        container: redactContainerRuntimeEnv({ ...containerToReturn }),
+        previousHealth: containerCurrent.health,
+        health: 'unhealthy',
+      });
+    }
+    if (isRollback && !wasRollback) {
+      emitContainerRemoved(
+        redactContainerRuntimeEnv({ ...containerCurrent }),
+        ...(context ? [context] : []),
+      );
+    } else if (
+      !isRollback &&
+      (wasRollback ||
+        hasContainerChangedWithSecurityHashes(
+          containerCurrent,
+          containerToReturn,
+          containerCurrentSecurityHash,
+          containerNextSecurityHash,
+        ))
+    ) {
+      const containerUpdatedEventPayload: ContainerLifecycleEventPayload =
+        redactContainerRuntimeEnv({ ...containerToReturn });
+      emitContainerUpdated(containerUpdatedEventPayload, ...(context ? [context] : []));
+    }
+
+    return containerToReturn;
+  });
+}
+
 function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {}) {
-  if (!containers) {
+  if (!db) {
     return [];
   }
 
@@ -1434,11 +2208,23 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
   const exactMatchEntries = queryEntries.filter(
     ([queryPath]) => !isContainerQueryControlKey(queryPath),
   );
-  const filter = {};
-  exactMatchEntries.forEach(([queryKeyEntry, queryValue]) => {
-    filter[`data.${queryKeyEntry}`] = queryValue;
-  });
-  let containerList = containers.find(filter).map((item) => validateContainer(item.data));
+  // No SQL WHERE translation: exact-match filtering runs in JS via the same
+  // getValueByPath the query cache's reverse index already uses, so a dot
+  // path like the ones LokiJS's `{'data.foo.bar': value}` filters used to
+  // accept keeps matching identically instead of drifting from a
+  // hand-written SQL equivalent.
+  let containerList = db
+    .prepare(CONTAINER_SELECT_ALL_SQL)
+    .all()
+    .map((row) => rowToContainer(row));
+  if (exactMatchEntries.length > 0) {
+    containerList = containerList.filter((containerItem) =>
+      exactMatchEntries.every(
+        ([queryKeyEntry, queryValue]) =>
+          getValueByPath(containerItem, queryKeyEntry) === queryValue,
+      ),
+    );
+  }
   if (excludeRollbackContainers) {
     containerList = containerList.filter(
       (containerItem) => !container.isRollbackContainer(containerItem),
@@ -1570,12 +2356,9 @@ export function getContainers(
  * @returns {null|Image}
  */
 export function getContainer(id: string) {
-  const container = containers.findOne({
-    'data.id': id,
-  });
-
-  if (container !== null) {
-    return redactContainerRuntimeEnv(validateContainer(container.data));
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+  if (row !== undefined) {
+    return redactContainerRuntimeEnv(rowToContainer(row));
   }
   return undefined;
 }
@@ -1592,12 +2375,9 @@ export function getContainer(id: string) {
  * @param id
  */
 export function getContainerRaw(id: string) {
-  const container = containers.findOne({
-    'data.id': id,
-  });
-
-  if (container !== null) {
-    return validateContainer(container.data);
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
+  if (row !== undefined) {
+    return rowToContainer(row);
   }
   return undefined;
 }
@@ -1615,26 +2395,259 @@ export function getContainerRaw(id: string) {
  * cleared.
  */
 export function clearMaturityGatePendingSince(id: string): boolean {
-  const containerDoc = containers.findOne({
-    'data.id': id,
-  });
+  const row = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(id);
   if (
-    !containerDoc ||
+    !row ||
     !(
-      typeof containerDoc.data.maturityGatePendingSince === 'string' &&
-      containerDoc.data.maturityGatePendingSince.length > 0
+      typeof row.maturity_gate_pending_since === 'string' &&
+      row.maturity_gate_pending_since.length > 0
     )
   ) {
     return false;
   }
-  const containerBefore = containerDoc.data;
-  containerDoc.data = { ...containerBefore, maturityGatePendingSince: undefined };
-  containers.update(containerDoc);
-  invalidateContainersCacheForMutation(containerBefore, containerDoc.data);
+  const containerBefore = rowToContainer(row);
+  db.prepare('UPDATE containers SET maturity_gate_pending_since = NULL WHERE id = ?').run(id);
+  const containerAfter = { ...containerBefore, maturityGatePendingSince: undefined };
+  invalidateContainersCacheForMutation(containerBefore, containerAfter);
   return true;
 }
 
+interface GroupPolicyStateRow {
+  id: string;
+  group: string | null;
+  layer: Pick<container.Container, 'groupPolicy' | 'updatePolicySources'>;
+}
+
+function readGroupPolicyStateRows(): GroupPolicyStateRow[] {
+  const rows = db.prepare(CONTAINER_SELECT_GROUP_POLICY_STATE_SQL).all() as unknown as Pick<
+    ContainerRow,
+    'id' | 'labels' | 'group_policy' | 'update_policy_sources'
+  >[];
+  return rows.map((row) => ({
+    id: String(row.id),
+    group: getContainerGroup({ labels: fromStoredJson(row.labels) }),
+    layer: {
+      groupPolicy: fromStoredJson(row.group_policy),
+      updatePolicySources: fromStoredJson(row.update_policy_sources),
+    },
+  }));
+}
+
+export interface GroupPolicyReResolveResult {
+  reResolved: number;
+  /** Members whose write threw. They keep the old rule until their next write or restart. */
+  failed: Array<{ id: string; error: string }>;
+}
+
+/**
+ * Spec 7.3: re-resolve every stored member of `group` after its policy was created,
+ * replaced or deleted, through the same `updateContainer` path an override edit takes, so
+ * derived fields and container-updated events follow it exactly. Members are matched on the
+ * group their current labels derive, plus any record whose stored snapshot still names the
+ * group. Agent-owned records are included, connected or not.
+ *
+ * One synchronous loop with no await: nothing else runs until every member is written, so
+ * no request or dispatch can observe a half-applied group. Only a crash interrupts it, and
+ * `reconcileGroupPolicySnapshots` heals that at the next start. Call it after the policy
+ * write has committed. A member whose write throws is skipped and reported in `failed`, so
+ * the rest of the group is still re-resolved.
+ */
+export function reResolveGroupPolicyMembers(group: string): GroupPolicyReResolveResult {
+  let reResolved = 0;
+  const failed: GroupPolicyReResolveResult['failed'] = [];
+  for (const row of readGroupPolicyStateRows()) {
+    if (row.group !== group && row.layer.groupPolicy?.group !== group) {
+      continue;
+    }
+    // One failing member never leaves the rest of the group on the old rule.
+    try {
+      updateContainer(getContainerRaw(row.id));
+      reResolved += 1;
+    } catch (error: unknown) {
+      failed.push({ id: row.id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { reResolved, failed };
+}
+
+/**
+ * Spec 7.3: at startup, rewrite every record whose snapshot, effective policy or sources
+ * differ from what the current policies resolve to. That heals a crash part-way through
+ * `reResolveGroupPolicyMembers` and the drift a downgrade to a build without group
+ * policies leaves (it rewrites `update_policy` without the group layer and never touches
+ * `group_policy`). A record no policy reaches and that carries no group layer is skipped
+ * without being read in full, so a store with zero policies does no work and no writes.
+ * Returns how many records it rewrote.
+ */
+export function reconcileGroupPolicySnapshots(): number {
+  const resolutionKey = (record: container.Container) =>
+    stableSerialize({
+      groupPolicy: record.groupPolicy ?? null,
+      updatePolicy: record.updatePolicy ?? null,
+      updatePolicySources: record.updatePolicySources ?? {},
+    });
+  let reconciled = 0;
+  for (const row of readGroupPolicyStateRows()) {
+    const hasPolicy =
+      row.group !== null && groupPolicyStore.getGroupPolicyForGroup(row.group) !== undefined;
+    if (!hasPolicy && !hasGroupPolicyLayer(row.layer)) {
+      continue;
+    }
+    const stored = getContainerRaw(row.id);
+    if (resolutionKey(finalizeGroupPolicyLayer(stored, stored)) === resolutionKey(stored)) {
+      continue;
+    }
+    updateContainer(stored);
+    reconciled += 1;
+  }
+  return reconciled;
+}
+
+/**
+ * Rewrite every stored container of one override scope with the scope's current overrides,
+ * the rows a mutation just changed the answer for. A row is every record whose identity key
+ * over its canonical name equals the scope key, rollback-named records included, found the
+ * way `findIdentitySiblings` finds them. Writes rows only; the caller emits `collected`
+ * once the surrounding transaction has committed.
+ */
+function refreshLabelOverrideScope(
+  scope: labelOverrideStore.LabelOverrideScope,
+  collected: container.Container[],
+): number {
+  let refreshed = 0;
+  const rows = db
+    .prepare(
+      "SELECT * FROM containers WHERE watcher = ? AND COALESCE(agent, '') = ? ORDER BY rowid",
+    )
+    .all(scope.watcher, scope.agent);
+  for (const row of rows) {
+    const current = rowToContainer(row);
+    if (labelOverrideStore.deriveLabelOverrideScope(current)?.key !== scope.key) {
+      continue;
+    }
+    const next = validateContainer({ ...current });
+    applyLabelOwnedLayer(next, current);
+    if (
+      stableSerialize(pickLabelOwnedFlat(next)) === stableSerialize(pickLabelOwnedFlat(current)) &&
+      stableSerialize(next.labelOwned ?? null) === stableSerialize(current.labelOwned ?? null)
+    ) {
+      continue;
+    }
+    const securityHash = getStoredContainerSecurityStateHash(current);
+    updateContainerRow(next, securityHash);
+    invalidateContainersCacheForMutation(current, next);
+    refreshed += 1;
+    if (
+      !isRollbackContainerName(next.name) &&
+      hasContainerChangedWithSecurityHashes(current, next, securityHash, securityHash)
+    ) {
+      collected.push(next);
+    }
+  }
+  return refreshed;
+}
+
+export interface LabelOverrideMutationResult {
+  /** The override row after the write, or `undefined` when the scope has none left. */
+  record: labelOverrideStore.LabelOverrideRecord | undefined;
+  /** False when `expectedRevision` did not match: nothing was written. */
+  applied: boolean;
+  /** How many stored containers were rewritten. */
+  refreshed: number;
+}
+
+/**
+ * Spec 7.5: set or remove label-owned overrides for the scope of `target`, and rewrite
+ * every affected container row, in one transaction with no await between the revision
+ * check and the commit. Nothing outside the store runs: no Docker call, no Compose write,
+ * no trigger. `container-updated` is emitted once per rewritten row, after the commit.
+ * @param target any container (or a bare name, watcher, agent and labels) in the scope
+ * @param changes at most one per field
+ * @param principal `user:<name>` or `api-key:<keyId>`
+ * @param expectedRevision when given, the write applies only against this revision
+ * @param inTransaction runs inside the transaction once a write has applied and the scope's
+ * rows are rewritten; a throw rolls the whole mutation back (the caller's audit row goes here)
+ */
+export function mutateLabelOverrides(
+  target: Pick<container.Container, 'name' | 'watcher' | 'agent' | 'labels'>,
+  changes: readonly labelOverrideStore.LabelOverrideChange[],
+  principal: string,
+  expectedRevision?: number,
+  inTransaction?: (write: labelOverrideStore.LabelOverrideWriteResult) => void,
+): LabelOverrideMutationResult {
+  const scope = labelOverrideStore.deriveLabelOverrideScope(target);
+  if (scope === undefined) {
+    throw new labelOverrideStore.LabelOverrideValidationError(
+      '*',
+      'A scope needs a watcher and a name',
+    );
+  }
+  const collected: container.Container[] = [];
+  const result = labelOverrideStore.transaction(() => {
+    const write = labelOverrideStore.writeLabelOverrideChanges(
+      scope,
+      changes,
+      principal,
+      expectedRevision,
+    );
+    const refreshed = write.applied ? refreshLabelOverrideScope(scope, collected) : 0;
+    if (write.applied) {
+      inTransaction?.(write);
+    }
+    return { ...write, refreshed };
+  });
+  for (const payload of collected) {
+    emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
+  }
+  return result;
+}
+
+export interface LabelOverrideDeleteResult {
+  /** The deleted row, or `undefined` when no row with that id was at `expectedRevision`. */
+  record: labelOverrideStore.LabelOverrideRecord | undefined;
+  /** How many stored containers were rewritten. */
+  refreshed: number;
+}
+
+/**
+ * Spec 7.5: delete a whole override row by id and revision, orphans included, and rewrite
+ * every container it applied to, in one transaction. Like `mutateLabelOverrides`,
+ * `container-updated` is emitted per rewritten row, after the commit.
+ * @param id the override row id
+ * @param expectedRevision the delete applies only against this revision
+ * @param inTransaction runs inside the transaction with the deleted row; a throw rolls the
+ * delete back
+ */
+export function deleteLabelOverrideAndRefresh(
+  id: string,
+  expectedRevision: number,
+  inTransaction?: (record: labelOverrideStore.LabelOverrideRecord) => void,
+): LabelOverrideDeleteResult {
+  const collected: container.Container[] = [];
+  const result = labelOverrideStore.transaction(() => {
+    const record = labelOverrideStore.deleteLabelOverrideRow(id, expectedRevision);
+    if (record === undefined) {
+      return { record, refreshed: 0 };
+    }
+    const scope: labelOverrideStore.LabelOverrideScope = {
+      key: record.scopeKey,
+      agent: record.agent,
+      watcher: record.watcher,
+      kind: record.scopeKind,
+      name: record.scopeName,
+    };
+    const refreshed = refreshLabelOverrideScope(scope, collected);
+    inTransaction?.(record);
+    return { record, refreshed };
+  });
+  for (const payload of collected) {
+    emitContainerUpdated(redactContainerRuntimeEnv({ ...payload }));
+  }
+  return result;
+}
+
 interface DeleteContainerOptions {
+  context?: ContainerLifecycleEventContext;
   /** A recreate: same identity, new Docker id. */
   replacementExpected?: boolean;
   /**
@@ -1648,11 +2661,11 @@ interface DeleteContainerOptions {
   /**
    * #1280: a removal that may or may not be a recreate, reported by a source that
    * cannot say which (an agent's `dd:container-removed` carries only the id, and a
-   * snapshot can drop a container before its replacement is listed). Stashes the
-   * update policy under the identity key exactly as `replacementExpected` does, so a
-   * same-identity container arriving later inherits it, but claims nothing else: the
-   * removal event is not flagged as a replacement, so subscribers still clean up
-   * after a container that is genuinely gone. Skipped when the replacement is already
+   * snapshot or inventory pass can drop a container before its replacement is listed).
+   * Stashes the update policy under the identity key exactly as `replacementExpected`
+   * does, so a same-identity container arriving later inherits it, but claims nothing
+   * else: the removal event is not flagged as a replacement, so subscribers still clean
+   * up after a container that is genuinely gone. Skipped when the replacement is already
    * stored, since it inherited the policy when it was inserted and a stash nobody
    * consumes would attach to the next container of that name. Also skipped when any
    * other stored record shares the identity key (replicas of one compose service share
@@ -1660,6 +2673,37 @@ interface DeleteContainerOptions {
    * misapplying it.
    */
   retainUpdatePolicy?: boolean;
+}
+
+/**
+ * Whether a delete stashes the record's update policy under its identity key for a
+ * same-identity replacement to inherit.
+ *
+ * #1280: an agent-owned replacement can already be stored when its predecessor is
+ * deleted, because a real-time dd:container-added landed first and the replacement
+ * inherited the policy from the still-stored predecessor on insert. A later inventory
+ * pass or snapshot that lists that replacement still flags the removal as
+ * `replacementExpected`, and HA/MQTT need the flag to keep the replacement's discovery,
+ * but the stash would never be consumed by it. It would sit under the identity key and
+ * hand the policy to the next recreate, even after the user cleared it. Controller-local
+ * records keep the unconditional stash, because their inserts never adopt from a live
+ * predecessor (see getLivePredecessorUpdatePolicyOverrides).
+ */
+function shouldStashUpdatePolicyForReplacement(
+  containerRaw,
+  options: DeleteContainerOptions,
+): boolean {
+  // Nothing to retain means nothing to stash; skip the sibling lookups below, which read
+  // every row of the record's watcher on its agent.
+  if (Object.keys(getUpdatePolicyOverrides(containerRaw)).length === 0) {
+    return false;
+  }
+  if (options.replacementExpected === true) {
+    return !(isAgentOwnedContainer(containerRaw) && findIdentitySiblings(containerRaw).length > 0);
+  }
+  return (
+    options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0
+  );
 }
 
 /**
@@ -1671,18 +2715,10 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
   const containerRaw = getContainerRaw(id);
   if (container) {
     clearPendingFreshStateAfterManualUpdate(containerRaw);
-    containers
-      .chain()
-      .find({
-        'data.id': id,
-      })
-      .remove();
+    db.prepare(CONTAINER_DELETE_BY_ID_SQL).run(id);
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
-    if (
-      options.replacementExpected === true ||
-      (options.retainUpdatePolicy === true && findIdentitySiblings(containerRaw, true).length === 0)
-    ) {
+    if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
       stashUpdatePolicyForReplacement(containerRaw);
     }
     if (options.identityChangeExpected === true) {
@@ -1695,52 +2731,57 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       typeof containerRaw?.updateDetectedAt === 'string' &&
       containerRaw.updateDetectedAt.length > 0
     ) {
-      const lifecycleCacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
-      updateLifecycleCache.delete(lifecycleCacheKey);
-      const lifecycleEntry: UpdateLifecycleCacheEntry = {
-        updateDetectedAt: containerRaw.updateDetectedAt,
-        firstSeenAt:
-          typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
-            ? containerRaw.firstSeenAt
-            : undefined,
-        maturityGatePendingSince:
-          typeof containerRaw.maturityGatePendingSince === 'string' &&
-          containerRaw.maturityGatePendingSince.length > 0
-            ? containerRaw.maturityGatePendingSince
-            : undefined,
-        resultSignature: getResultSignature(containerRaw),
-        expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
-      };
-      updateLifecycleCache.set(lifecycleCacheKey, lifecycleEntry);
-      // #556: write-through to the durable store so this stash survives the
-      // cross-process recreation that IS drydock's own self-update (recreate
-      // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
-      // rehydrateUpdateLifecycleCacheFromStore()).
-      updateLifecycleCacheStore.upsertRecord({ cacheKey: lifecycleCacheKey, ...lifecycleEntry });
-      if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
-        const nowMs = Date.now();
-        for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
-          if (expiredEntry.expiresAt <= nowMs) {
-            updateLifecycleCache.delete(expiredKey);
-            updateLifecycleCacheStore.deleteRecord(expiredKey);
+      const lifecycleCacheKey = deriveContainerIdentityKey(containerRaw);
+      /* istanbul ignore else -- unreachable: containerRaw is the just-deleted stored
+         document, so watcher and name are already schema-validated non-empty strings
+         and a key always derives. */
+      if (lifecycleCacheKey !== undefined) {
+        updateLifecycleCache.delete(lifecycleCacheKey);
+        const lifecycleEntry: UpdateLifecycleCacheEntry = {
+          updateDetectedAt: containerRaw.updateDetectedAt,
+          firstSeenAt:
+            typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
+              ? containerRaw.firstSeenAt
+              : undefined,
+          maturityGatePendingSince:
+            typeof containerRaw.maturityGatePendingSince === 'string' &&
+            containerRaw.maturityGatePendingSince.length > 0
+              ? containerRaw.maturityGatePendingSince
+              : undefined,
+          resultSignature: getResultSignature(containerRaw),
+          expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
+        };
+        updateLifecycleCache.set(lifecycleCacheKey, lifecycleEntry);
+        // #556: write-through to the durable store so this stash survives the
+        // cross-process recreation that IS drydock's own self-update (recreate
+        // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
+        // rehydrateUpdateLifecycleCacheFromStore()).
+        updateLifecycleCacheStore.upsertRecord({ cacheKey: lifecycleCacheKey, ...lifecycleEntry });
+        if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+          const nowMs = Date.now();
+          for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
+            if (expiredEntry.expiresAt <= nowMs) {
+              updateLifecycleCache.delete(expiredKey);
+              updateLifecycleCacheStore.deleteRecord(expiredKey);
+            }
           }
         }
-      }
-      while (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
-        const oldestLifecycleKey = updateLifecycleCache.keys().next().value;
-        /* istanbul ignore next */
-        if (oldestLifecycleKey === undefined) {
-          break;
+        while (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+          const oldestLifecycleKey = updateLifecycleCache.keys().next().value;
+          /* istanbul ignore next */
+          if (oldestLifecycleKey === undefined) {
+            break;
+          }
+          updateLifecycleCache.delete(oldestLifecycleKey);
+          updateLifecycleCacheStore.deleteRecord(oldestLifecycleKey);
         }
-        updateLifecycleCache.delete(oldestLifecycleKey);
-        updateLifecycleCacheStore.deleteRecord(oldestLifecycleKey);
       }
     }
     if (!isRollbackContainerName(container.name)) {
-      emitContainerRemoved({
-        ...container,
-        replacementExpected: options.replacementExpected,
-      });
+      emitContainerRemoved(
+        { ...container, replacementExpected: options.replacementExpected },
+        ...(options.context ? [options.context] : []),
+      );
     }
   }
 }
@@ -1751,6 +2792,13 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
  * after both the containers collection and the update-lifecycle-cache collection
  * have been created. Drops any record whose TTL already lapsed while the process
  * was down rather than resurrecting a stale stash (#556).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * so inserting straight from it in order reproduces the Map insertion order
+ * the stash path's size-cap eviction reads as an LRU. Before finding 2
+ * (roadmap 7-STORE slice 7 review) this iterated the SELECT's undefined
+ * order instead, so a just-refreshed entry could resurface ahead of the row
+ * it should have outlived.
  */
 export function rehydrateUpdateLifecycleCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1778,6 +2826,15 @@ export function rehydrateUpdateLifecycleCacheFromStore(): void {
  * after both the containers collection and the update-policy-retention-cache
  * collection have been created. Drops any record whose TTL already lapsed while
  * the process was down rather than resurrecting a stale stash (#565).
+ *
+ * listRecords() returns rows oldest-refreshed first (ORDER BY refresh_order),
+ * which is the order the stash path's Map-insertion-order eviction reads as
+ * an LRU. This used to be reconstructed here by re-sorting on expiresAt —
+ * every stash uses the same TTL, so ascending expiresAt approximated
+ * ascending stash time — but that ties on equal timestamps and stops
+ * approximating anything the moment the TTL changes between two stashes
+ * (finding 2, roadmap 7-STORE slice 7 review). refresh_order is exact, so
+ * the extra sort is gone and `surviving` is used in listRecords() order.
  */
 export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
   const nowMs = Date.now();
@@ -1792,12 +2849,6 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     }
     surviving.push(record);
   }
-  // Oldest first. Every stash uses the same TTL, so ascending expiresAt is
-  // ascending stash time, which is the order the stash path's Map-insertion-order
-  // eviction assumes. listRecords() returns LokiJS document order, so inserting
-  // straight from it would leave the next eviction dropping an arbitrary entry
-  // instead of the oldest one.
-  surviving.sort((a, b) => a.expiresAt - b.expiresAt);
   // Re-apply the cap here rather than leaving it to the next stash: lowering
   // DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES between processes leaves the
   // store holding more rows than the new limit allows, and the stash path only
@@ -1810,6 +2861,7 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
     updatePolicyRetentionCache.set(record.cacheKey, {
       updatePolicyOverrides: record.updatePolicyOverrides as container.ContainerUpdatePolicy,
       expiresAt: record.expiresAt,
+      containerName: record.containerName,
     });
   }
 }

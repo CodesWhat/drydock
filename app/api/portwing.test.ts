@@ -225,6 +225,128 @@ describe('POST /keys', () => {
   });
 });
 
+describe('POST /keys from a session that signed in with a recovery code', () => {
+  const localIdentity = (assurance: 'password' | 'totp' | 'recovery') => ({
+    type: 'local',
+    subjectId: 's'.repeat(64),
+    providerId: 'basic.default',
+    assurance,
+    factorVersion: 1,
+    issuedAt: 1,
+  });
+  const record = {
+    keyId: 'aabbccddeeff0011',
+    pubkey: 'unused',
+    label: 'agent',
+    createdAt: '2026-01-01T00:00:00Z',
+    revokedAt: null,
+  };
+  const validBody = () => ({
+    pubkeyBase64: generateEd25519RawPubkey().toString('base64'),
+    label: 'agent',
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAgentKeys.addKey.mockReturnValue(record);
+  });
+
+  test('is refused with 403 and the reason, and no key is registered', () => {
+    const res = createMockResponse();
+
+    capturedHandlers.postKeys!(
+      createMockRequest({
+        body: validBody(),
+        principal: { kind: 'session', username: 'scott', identity: localIdentity('recovery') },
+      }),
+      res,
+    );
+
+    expect(mockSendErrorResponse).toHaveBeenCalledTimes(1);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 403, {
+      message:
+        'A session that signed in with a recovery code cannot register agent keys. Sign in with a code from your authenticator app and try again.',
+      details: { reason: 'recovery-assurance' },
+    });
+    expect(mockAgentKeys.addKey).not.toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('is refused before the body is looked at, so a malformed one is the same 403', () => {
+    const res = createMockResponse();
+
+    capturedHandlers.postKeys!(
+      createMockRequest({
+        body: { label: 7 },
+        principal: { kind: 'session', username: 'scott', identity: localIdentity('recovery') },
+      }),
+      res,
+    );
+
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      res,
+      403,
+      expect.objectContaining({ details: { reason: 'recovery-assurance' } }),
+    );
+  });
+
+  test('can still list keys and revoke one', () => {
+    const principal = { kind: 'session', username: 'scott', identity: localIdentity('recovery') };
+    mockAgentKeys.listKeys.mockReturnValue([record]);
+    mockAgentKeys.revokeKey.mockReturnValue(true);
+
+    const listRes = createMockResponse();
+    capturedHandlers.getKeys!(createMockRequest({ principal }), listRes);
+    expect(listRes.json).toHaveBeenCalledWith([record]);
+
+    const revokeRes = createMockResponse();
+    capturedHandlers.deleteKey!(
+      createMockRequest({ params: { keyId: record.keyId }, principal }),
+      revokeRes,
+    );
+    expect(revokeRes.status).toHaveBeenCalledWith(204);
+    expect(mockSendErrorResponse).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['a code from the authenticator app', { identity: localIdentity('totp') }],
+    ['a password and no factor', { identity: localIdentity('password') }],
+    ['an OIDC provider', { identity: { type: 'oidc' } }],
+    ['a release before two-factor support', {}],
+  ])('a session that signed in with %s still registers a key', (_name, identity) => {
+    const res = createMockResponse();
+
+    capturedHandlers.postKeys!(
+      createMockRequest({
+        body: validBody(),
+        principal: { kind: 'session', username: 'scott', ...identity },
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    expect(mockSendErrorResponse).not.toHaveBeenCalled();
+  });
+
+  test('an API key caller gets the session-only refusal it always got, not this one', () => {
+    const res = createMockResponse();
+
+    capturedHandlers.postKeys!(
+      createMockRequest({
+        body: validBody(),
+        principal: { kind: 'api-key', username: 'ci', keyId: 'k1', scopes: ['admin'] },
+      }),
+      res,
+    );
+
+    expect(mockSendErrorResponse).toHaveBeenCalledTimes(1);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 403, {
+      message: 'This route is not reachable with an API key',
+    });
+    expect(mockAgentKeys.addKey).not.toHaveBeenCalled();
+  });
+});
+
 describe('DELETE /keys/:keyId', () => {
   beforeEach(() => {
     vi.clearAllMocks();

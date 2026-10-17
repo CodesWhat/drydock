@@ -1,70 +1,77 @@
-import ConnectLoki from 'connect-loki';
+import { STATUS_CODES } from 'node:http';
 import express, { type Application, type NextFunction, type Request, type Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
-import passport from 'passport';
 import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
-import * as store from '../store/index.js';
 import { getErrorMessage } from '../util/error.js';
+import { destroyOtherSubjectSessions } from '../util/session-limit.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
   authenticateLogin,
   initializeLoginLockoutState,
   resetLoginLockoutStateForTests,
 } from './auth-lockout.js';
-import { applyRememberMe, setRememberMe } from './auth-remember-me.js';
+import { applyRememberMe, getRememberMePreference, setRememberMe } from './auth-remember-me.js';
 import {
   configureSessionLimits,
   DEFAULT_SESSION_DAYS,
-  deserializeSessionUser,
   enforceSessionLimitBeforeLogin,
   getCookieMaxAge,
   getSessionSecretKey,
   REMEMBER_ME_DAYS,
 } from './auth-session.js';
 import {
-  getAllIds,
   getAuthStatus,
   getLogoutRedirectUrl,
-  getStrategies,
-  registerStrategies,
-  resetStrategyIdsForTests,
+  isAuthenticationReady,
+  registerAuthenticators,
+  resetAuthenticatorsForTests,
 } from './auth-strategies.js';
-import type { AuthRequest, SessionUser, UserWithUsername } from './auth-types.js';
+import type { AuthRequest } from './auth-types.js';
+import {
+  type AuthenticationOutcome,
+  authenticateRequest,
+  getAuthenticationFailureStatus,
+  isAuthenticationRejection,
+} from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
+import {
+  ANONYMOUS_USERNAME,
+  type AuthenticatedPrincipal,
+  getIdentityUsername,
+  getPrincipal,
+  isAuthenticated,
+  isLoginSessionEligible,
+} from './principal.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
 import { SESSION_COOKIE_NAME } from './session-cookie.js';
+import {
+  clearSessionPrincipal,
+  restoreSessionPrincipal,
+  writeSessionPrincipal,
+} from './session-principal.js';
+import { SessionStore } from './session-store.js';
+import { cancelLoginChallenge, createLoginChallengeCompletion } from './totp-challenge-routes.js';
 
-const LokiStore = ConnectLoki(session);
 const router = express.Router();
 
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
 const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
-const DEPRECATED_AUTH_STRATEGIES_WARNING =
-  'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.';
-// '@1783123200' = 2026-07-04T00:00:00Z, the date the /auth/strategies alias
-// started sending the deprecation signal (v1.6.0) — the RFC 9745
-// Deprecation value must be the instant the resource became deprecated, a
-// past/current date, never the same instant as the future Sunset removal
-// date below. This same instant used to double as the Deprecation value for
-// the now-removed GET /api/auth/methods alias (both were deprecated in the
-// same v1.6.0 release); it stays here for /auth/strategies alone.
-const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1783123200';
-const DEPRECATED_AUTH_STRATEGIES_SUNSET = 'Sat, 01 Jul 2028 00:00:00 GMT';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
-type LoginFinish = () => void;
+/** Settles a login attempt: true when a session was minted, false when it was refused with an error. */
+type LoginFinish = (established: boolean) => void;
 type LoginErrorHandler = (errorMessage: string, options?: { logWarning?: boolean }) => void;
 
-export { getAllIds };
+export { isAuthenticationReady };
 
 export function getSessionMiddleware() {
   return sessionMiddleware;
@@ -74,23 +81,81 @@ export function _resetLoginLockoutStateForTests(): void {
   resetLoginLockoutStateForTests();
 }
 
-export function _resetStrategyIdsForTests(): void {
-  resetStrategyIdsForTests();
+export function _resetAuthenticatorsForTests(): void {
+  resetAuthenticatorsForTests();
 }
 
-export function requireAuthentication(req: AuthRequest, res: Response, next: NextFunction): void {
-  if (req.isAuthenticated()) {
+/**
+ * Reject a request nothing in the chain accepted.
+ *
+ * Reproduces passport's allFailed(): the status an authenticator named or 401,
+ * and the bare status text as the body, with no JSON envelope and no
+ * Content-Type. Drydock suppressed Basic's WWW-Authenticate challenge so
+ * browsers never raised the native credential prompt, and no authenticator
+ * names one, so no challenge header is sent either.
+ */
+function rejectUnauthenticated(req: AuthRequest, res: Response, status?: number): void {
+  const resolved = status ?? getAuthenticationFailureStatus(req);
+  res.statusCode = resolved;
+  res.end(STATUS_CODES[resolved]);
+}
+
+export async function requireAuthentication(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (isAuthenticated(req)) {
     next();
     return;
   }
 
-  // Header-authenticated requests (Basic/Bearer) are stateless callers like
-  // wud-card/Homepage pollers; skip req.logIn's session regenerate/save so
-  // they never persist a session row. Cookie-based logins keep session:true
-  // via /auth/login's own route-level middleware.
-  const headerAuth =
-    typeof req.headers?.authorization === 'string' && req.headers.authorization.length > 0;
-  passport.authenticate(getAllIds(), { session: !headerAuth })(req, res, next);
+  let outcome: AuthenticationOutcome;
+  try {
+    outcome = await authenticateRequest(req);
+  } catch (error: unknown) {
+    next(error);
+    return;
+  }
+
+  // A terminal rejection answers with the status the authenticator named and
+  // never consults the rest of the chain, so a bad API key cannot be rescued
+  // by a session cookie riding along on the same request.
+  if (isAuthenticationRejection(outcome)) {
+    rejectUnauthenticated(req, res, outcome.status);
+    return;
+  }
+
+  if (outcome === undefined) {
+    rejectUnauthenticated(req, res);
+    return;
+  }
+
+  next();
+}
+
+const AUTH_STRATEGIES_TOMBSTONE_MESSAGE =
+  'GET /auth/strategies was removed in v1.8.0. Use GET /api/v1/auth/status instead.';
+
+/**
+ * GET /auth/strategies was a legacy response-shape alias for GET
+ * /api/v1/auth/status ({ strategies, warnings } instead of { providers,
+ * errors }). Deprecated in v1.6.0, removed in v1.8.0 -- see DEPRECATIONS.md.
+ * Registered ahead of requireAuthentication below so it answers 410 whether
+ * or not the caller is authenticated, the same tombstone shape and helper
+ * the unversioned /api/* aliases use in app/api/index.ts, instead of falling
+ * through to the SPA shell or a bare 401.
+ * @param _req
+ * @param res
+ */
+function getAuthStrategiesTombstone(_req: Request, res: Response): void {
+  sendErrorResponse(res, 410, {
+    message: AUTH_STRATEGIES_TOMBSTONE_MESSAGE,
+    details: {
+      migration: '/api/v1/auth/status',
+      docs: 'https://getdrydock.com/docs/deprecations#legacy-auth-strategies-shape',
+    },
+  });
 }
 
 /**
@@ -99,38 +164,32 @@ export function requireAuthentication(req: AuthRequest, res: Response, next: Nex
  * @param res
  */
 function getUser(req: AuthRequest, res: Response): void {
-  const user = req.user || { username: 'anonymous' };
+  const user = { username: getPrincipal(req)?.username ?? ANONYMOUS_USERNAME };
   res.set('Cache-Control', AUTH_USER_CACHE_CONTROL);
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
   res.status(200).json(user);
 }
 
-function getRememberMePreference(req: AuthRequest): boolean {
-  return req.body?.remember !== undefined
-    ? req.body.remember === true
-    : req.session?.rememberMe === true;
-}
-
 function getAuthenticatedUsername(req: AuthRequest): string {
-  return typeof req.user?.username === 'string' ? req.user.username.trim() : '';
+  return getIdentityUsername(req)?.trim() ?? '';
 }
 
-function createLoginFinish(resolve: () => void): LoginFinish {
+function createLoginFinish(resolve: (established: boolean) => void): LoginFinish {
   let completed = false;
-  return () => {
+  return (established) => {
     if (completed) {
       return;
     }
     completed = true;
-    resolve();
+    resolve(established);
   };
 }
 
 function handleLoginSuccess(req: AuthRequest, res: Response, finish: LoginFinish): void {
   recordLoginAuditEvent(req, 'success', LOGIN_SUCCESS_AUDIT_MESSAGE);
   getUser(req, res);
-  finish();
+  finish(true);
 }
 
 function handleLoginError(
@@ -144,38 +203,32 @@ function handleLoginError(
     log.warn(errorMessage);
   }
   recordLoginAuditEvent(req, 'error', errorMessage);
+  // A fault can arrive after the principal was written into the session, and
+  // the response below still saves that session and sends its cookie. Take
+  // the principal back out first, so a login that settles false never leaves
+  // a session that authenticates.
+  if (req.session) {
+    clearSessionPrincipal(req);
+  }
   sendErrorResponse(res, 500, LOGIN_SESSION_ERROR_RESPONSE);
-  finish();
+  finish(false);
 }
 
 function proceedWithLogin(
   req: AuthRequest,
+  principal: AuthenticatedPrincipal,
   res: Response,
   finish: LoginFinish,
   failLogin: LoginErrorHandler,
 ): Promise<void> {
   return new Promise((resolveProceed) => {
-    if (typeof req.login !== 'function') {
-      handleLoginSuccess(req, res, finish);
-      resolveProceed();
-      return;
-    }
-
     try {
-      req.login(req.user as UserWithUsername, (loginError: unknown) => {
-        if (loginError) {
-          failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
-          resolveProceed();
-          return;
-        }
-
-        handleLoginSuccess(req, res, finish);
-        resolveProceed();
-      });
+      writeSessionPrincipal(req, principal);
+      handleLoginSuccess(req, res, finish);
     } catch (loginError: unknown) {
       failLogin(`Unable to persist login session (${getErrorMessage(loginError)})`);
-      resolveProceed();
     }
+    resolveProceed();
   });
 }
 
@@ -241,17 +294,23 @@ function regenerateSessionForLogin(
 }
 
 /**
- * Login user (and return it).
- * @param req
- * @param res
+ * Mint the session for an authenticated principal: regenerate the session id,
+ * apply the remember-me choice, enforce the concurrent-session limit, persist
+ * the principal and answer with the current user. `revokeOtherSessions` also
+ * destroys every other session of the same local subject, which a recovery-code
+ * login asks for.
  */
-function login(req: AuthRequest, res: Response): Promise<void> {
-  const rememberMe = getRememberMePreference(req);
-
+function establishLoginSession(
+  req: AuthRequest,
+  res: Response,
+  principal: AuthenticatedPrincipal,
+  rememberMe: boolean,
+  options: { revokeOtherSessions: boolean } = { revokeOtherSessions: false },
+): Promise<boolean> {
   return new Promise((resolve) => {
     const finish = createLoginFinish(resolve);
-    const failLogin: LoginErrorHandler = (errorMessage, options) =>
-      handleLoginError(req, res, finish, errorMessage, options);
+    const failLogin: LoginErrorHandler = (errorMessage, errorOptions) =>
+      handleLoginError(req, res, finish, errorMessage, errorOptions);
 
     regenerateSessionForLogin(
       req,
@@ -264,7 +323,17 @@ function login(req: AuthRequest, res: Response): Promise<void> {
         req.session.rememberMe = rememberMe;
         applyRememberMe(req);
 
-        const proceed = (): Promise<void> => proceedWithLogin(req, res, finish, failLogin);
+        const proceed = async (): Promise<void> => {
+          if (options.revokeOtherSessions && principal.kind === 'basic' && req.sessionStore) {
+            await destroyOtherSubjectSessions({
+              subjectId: principal.identity.subjectId,
+              username: principal.username,
+              sessionStore: req.sessionStore,
+              currentSessionId: req.sessionID,
+            });
+          }
+          return proceedWithLogin(req, principal, res, finish, failLogin);
+        };
         enforceLoginSessionLimit(req, res, finish, proceed, failLogin);
       },
       failLogin,
@@ -273,47 +342,56 @@ function login(req: AuthRequest, res: Response): Promise<void> {
 }
 
 /**
+ * Login user (and return it).
+ * @param req
+ * @param res
+ */
+async function login(req: AuthRequest, res: Response): Promise<void> {
+  const principal = getPrincipal(req);
+  if (!isLoginSessionEligible(principal)) {
+    rejectUnauthenticated(req, res);
+    return;
+  }
+  await establishLoginSession(req, res, principal, getRememberMePreference(req));
+}
+
+/**
  * Logout current user.
  * @param req
  * @param res
  */
 function logout(req: AuthRequest, res: Response): void {
-  req.logout((logoutError: unknown) => {
-    if (logoutError) {
-      log.warn(
-        `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+  const failLogout = (errorMessage: string): void => {
+    log.warn(errorMessage);
+    sendErrorResponse(res, 500, 'Unable to clear session');
+  };
+
+  try {
+    clearSessionPrincipal(req);
+  } catch (logoutError: unknown) {
+    failLogout(
+      `Unable to clear authentication state during logout (${getErrorMessage(logoutError)})`,
+    );
+    return;
+  }
+
+  if (typeof req.session?.regenerate !== 'function') {
+    failLogout('Unable to regenerate session during logout (session unavailable)');
+    return;
+  }
+
+  req.session.regenerate((regenerateError: unknown) => {
+    if (regenerateError) {
+      failLogout(
+        `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`,
       );
-      sendErrorResponse(res, 500, 'Unable to clear session');
       return;
     }
 
-    if (!req.session || typeof req.session.regenerate !== 'function') {
-      const errorMessage = 'Unable to regenerate session during logout (session unavailable)';
-      log.warn(errorMessage);
-      sendErrorResponse(res, 500, 'Unable to clear session');
-      return;
-    }
-
-    req.session.regenerate((regenerateError: unknown) => {
-      if (regenerateError) {
-        const errorMessage = `Unable to regenerate session during logout (${getErrorMessage(regenerateError)})`;
-        log.warn(errorMessage);
-        sendErrorResponse(res, 500, 'Unable to clear session');
-        return;
-      }
-
-      res.status(200).json({
-        logoutUrl: getLogoutRedirectUrl(),
-      });
+    res.status(200).json({
+      logoutUrl: getLogoutRedirectUrl(),
     });
   });
-}
-
-function getStrategiesDeprecatedResponse(req: Request, res: Response): void {
-  log.warn(DEPRECATED_AUTH_STRATEGIES_WARNING);
-  res.setHeader('Deprecation', DEPRECATED_AUTH_METHODS_DEPRECATION);
-  res.setHeader('Sunset', DEPRECATED_AUTH_STRATEGIES_SUNSET);
-  getStrategies(req, res);
 }
 
 function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
@@ -331,7 +409,71 @@ function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
 }
 
 /**
- * Init auth (passport.js).
+ * The pre-auth login routes, mounted ahead of the authentication guard: the
+ * password step with its own lockout-aware authentication middleware, and the
+ * second-factor challenge an enrolled subject completes (or cancels) next. The
+ * challenge id is that second step's credential. Exported so an integration
+ * test can mount the real routes on a router of its own.
+ */
+export function registerLoginRoutes(authRouter: express.Router): void {
+  authRouter.post('/login', authenticateLogin, login);
+  authRouter.put(
+    '/login-challenges/:id',
+    requireSameOriginForMutations,
+    createLoginChallengeCompletion(establishLoginSession),
+  );
+  authRouter.delete('/login-challenges/:id', requireSameOriginForMutations, cancelLoginChallenge);
+
+  // OIDC login flows set this preference before the provider redirects away.
+  // Keep same-origin protection on the unauthenticated pre-auth session.
+  authRouter.post('/remember', requireSameOriginForMutations, setRememberMe);
+}
+
+/**
+ * The /auth rate limiter. Authenticated UI navigations re-read the current
+ * user; keep that safe probe from exhausting the public discovery and login
+ * budget for clients behind the same address, while every other auth route
+ * stays capped. Authentication is checked before request-controlled route data
+ * so the request cannot decide whether the security check runs.
+ */
+export function createAuthRateLimiter(
+  keyGenerator?: ReturnType<typeof createAuthenticatedRouteRateLimitKeyGenerator>,
+) {
+  return rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    skip: (req: Request) =>
+      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+    ...(keyGenerator ? { keyGenerator } : {}),
+  });
+}
+
+/**
+ * What every /auth request passes through before any route: the rate limiter,
+ * the JSON content-type gate and the 64kb JSON body parser for mutations.
+ * Exported so an integration test can mount the real thing.
+ */
+export function registerAuthRequestHandling(
+  authRouter: express.Router,
+  authLimiter: ReturnType<typeof createAuthRateLimiter>,
+): void {
+  authRouter.use(authLimiter);
+
+  const mutationJsonBodyParser = express.json({ limit: '64kb' });
+  authRouter.use(requireJsonContentTypeForMutations);
+  authRouter.use((req: Request, res: Response, next: NextFunction) => {
+    if (shouldParseJsonBody(req.method)) {
+      return mutationJsonBodyParser(req, res, next);
+    }
+    return next();
+  });
+}
+
+/**
+ * Init auth: session middleware, the authenticator chain, and the /auth routes.
  * @returns {*}
  */
 export function init(app: Application): void {
@@ -360,13 +502,13 @@ export function init(app: Application): void {
   // Init express session
   sessionMiddleware = session({
     name: SESSION_COOKIE_NAME,
-    store: new LokiStore({
-      // DR-121: this must be a sibling file, never the main store's own file —
-      // two independent LokiJS instances autosaving the same file clobber
-      // each other's writes.
-      path: store.getSessionStorePath(),
+    // roadmap 7-STORE slice 11: sessions live in the same SQLite database as
+    // everything else now, so there is exactly one writer and the DR-121
+    // mutual-clobber hazard (two independent LokiJS instances autosaving the
+    // same file) cannot recur.
+    store: new SessionStore({
       // Keep store retention >= longest auth cookie lifespan (remember-me).
-      ttl: getCookieMaxAge(REMEMBER_ME_DAYS) / 1000,
+      ttlMs: getCookieMaxAge(REMEMBER_ME_DAYS),
     }),
     secret: getSessionSecretKey(),
     resave: false,
@@ -380,60 +522,22 @@ export function init(app: Application): void {
   });
   app.use(sessionMiddleware);
 
-  // Init passport middleware
-  app.use(passport.initialize());
-  app.use(passport.session());
+  // Publish the session identity as req.principal before anything downstream
+  // reads it — the outer API rate limiter keys on it and runs ahead of the
+  // authentication guard, exactly as it did behind passport.session().
+  app.use(restoreSessionPrincipal);
 
   // Register all authentications
-  registerStrategies(app);
+  registerAuthenticators(app);
 
-  passport.serializeUser(
-    (user: UserWithUsername, done: (error: unknown, payload?: string) => void) => {
-      done(null, JSON.stringify(user));
-    },
-  );
+  const authLimiter = createAuthRateLimiter(identityAwareRateLimitKeyGenerator);
+  registerAuthRequestHandling(router, authLimiter);
 
-  passport.deserializeUser(
-    (user: unknown, done: (error: unknown, payload?: SessionUser | false) => void) => {
-      try {
-        done(null, deserializeSessionUser(user));
-      } catch (error: unknown) {
-        log.warn(`Unable to deserialize session user (${getErrorMessage(error)})`);
-        done(null, false);
-      }
-    },
-  );
+  // GET /auth/strategies is a 410 tombstone (see getAuthStrategiesTombstone
+  // above) registered ahead of requireAuthentication below, so it answers
+  // the same regardless of whether the caller is authenticated.
+  router.get('/strategies', getAuthStrategiesTombstone);
 
-  const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    // Authenticated UI navigations re-read the current user. Keep that safe
-    // probe from exhausting the public discovery and login budget for clients
-    // behind the same address; every other auth route remains capped. Check
-    // authentication before request-controlled route data so the request
-    // cannot decide whether the security check runs.
-    skip: (req: Request) =>
-      isRequestAuthenticated(req) && req.method === 'GET' && req.path === '/user',
-    standardHeaders: true,
-    legacyHeaders: false,
-    validate: { xForwardedForHeader: false },
-    ...(identityAwareRateLimitKeyGenerator
-      ? { keyGenerator: identityAwareRateLimitKeyGenerator }
-      : {}),
-  });
-  router.use(authLimiter);
-
-  const mutationJsonBodyParser = express.json({ limit: '64kb' });
-  router.use(requireJsonContentTypeForMutations);
-  router.use((req: Request, res: Response, next: NextFunction) => {
-    if (shouldParseJsonBody(req.method)) {
-      return mutationJsonBodyParser(req, res, next);
-    }
-    return next();
-  });
-
-  // Return strategies
-  router.get('/strategies', getStrategiesDeprecatedResponse);
   router.get('/status', getAuthStatus);
 
   // GET /api/auth/methods was a compatibility alias for clients that still
@@ -443,15 +547,11 @@ export function init(app: Application): void {
   app.get('/api/v1/auth/status', authLimiter, getAuthStatus);
   app.get('/api/auth/status', authLimiter, getAuthStatus);
 
-  // Login route with its own authentication middleware (before global auth guard)
-  router.post('/login', authenticateLogin, login);
+  registerLoginRoutes(router);
 
   // Routes to protect after this line
   router.use(requireAuthentication);
   router.use(requireSameOriginForMutations);
-
-  // Store remember-me preference for authenticated sessions
-  router.post('/remember', setRememberMe);
 
   router.get('/user', getUser);
 

@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Läuft seit {duration}",
+    "apiResponse": {
+      "html": "{context} hat HTML statt JSON zurückgegeben. Prüfe, ob der API-Server oder die Demo-Simulationen laufen.",
+      "contentType": "{context} hat {contentType} statt JSON zurückgegeben.",
+      "invalidJson": "{context} hat ungültiges JSON zurückgegeben."
+    },
     "loading": "Wird geladen…",
     "back": "Zurück",
     "cancel": "Abbrechen",
@@ -9,8 +15,8 @@
     "close": "Schließen",
     "retry": "Erneut versuchen",
     "unknown": "unbekannt",
-    "yes": "yes",
-    "no": "no",
+    "yes": "ja",
+    "no": "nein",
     "errorSummary": {
       "rateLimitHit": "Registry-Rate-Limit erreicht",
       "accessDenied": "Registry-Zugriff verweigert",
@@ -22,13 +28,13 @@
       "signatureFailed": "Signaturprüfung fehlgeschlagen"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Benutzerdefiniert"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Gerade eben"
     },
     "imageAge": {
-      "now": "now"
+      "now": "jetzt"
     }
   }
 }

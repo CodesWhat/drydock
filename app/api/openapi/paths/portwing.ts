@@ -63,7 +63,7 @@ export const portwingPaths = {
       tags: ['Portwing'],
       summary: 'Register a new authorized edge-agent key',
       operationId: 'createPortwingKey',
-      description: `Registers a new Ed25519 public key for edge agent authentication. ${availabilityNote}`,
+      description: `Registers a new Ed25519 public key for edge agent authentication. ${availabilityNote} A browser session that signed in with a two-factor recovery code is refused with 403 and \`details.reason\` of \`recovery-assurance\`: an agent key outlives a factor reset, so registering one needs a sign-in with a code from the authenticator app. Such a session can still list and revoke keys.`,
       requestBody: {
         required: true,
         content: {
@@ -104,6 +104,9 @@ export const portwingPaths = {
         }),
         400: errorResponse('Malformed request — invalid pubkeyBase64 or missing fields'),
         401: errorResponse('Authentication required'),
+        403: errorResponse(
+          'The caller is an API key, or the calling session signed in with a recovery code',
+        ),
         409: errorResponse('An active key with this keyId already exists'),
       },
     },

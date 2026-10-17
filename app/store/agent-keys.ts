@@ -1,12 +1,13 @@
 /**
  * Agent key registry store.
  * Tracks Ed25519 public keys that are authorized to connect via the portwing/1.0
- * WebSocket protocol. One document per key; active keys have revokedAt === null.
+ * WebSocket protocol. One row per key in the `agent_keys` table (roadmap
+ * 7-STORE, slice 4); active keys have revokedAt === null.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import logger from '../log/index.js';
-import { initCollection } from './util.js';
+import type { Database, Row } from './db/driver.js';
 
 const log = logger.child({ component: 'store.agent-keys' });
 
@@ -16,18 +17,8 @@ export interface AgentKeyRecord {
   label: string; // human-readable name supplied by operator
   createdAt: string; // ISO-8601 UTC
   revokedAt: string | null; // ISO-8601 UTC or null when active
-}
-
-interface AgentKeyCollection {
-  findOne(query: Record<string, unknown>): AgentKeyRecord | null;
-  find(query?: Record<string, unknown>): AgentKeyRecord[];
-  insert(document: AgentKeyRecord): void;
-  update(document: AgentKeyRecord): void;
-}
-
-interface AgentKeyStoreDb {
-  getCollection(name: string): AgentKeyCollection | null;
-  addCollection(name: string, options?: Record<string, unknown>): AgentKeyCollection;
+  rotationParentId?: string;
+  rotationAgentName?: string;
 }
 
 /**
@@ -43,7 +34,7 @@ export class AgentKeyConflictError extends Error {
   }
 }
 
-let agentKeyCollection: AgentKeyCollection | undefined;
+let db: Database | undefined;
 
 /**
  * Derive the 16-char hex key ID from a raw 32-byte Ed25519 public key buffer.
@@ -53,14 +44,29 @@ function deriveKeyId(pubkeyBuffer: Buffer): string {
   return createHash('sha256').update(pubkeyBuffer).digest().subarray(0, 8).toString('hex');
 }
 
+function rowToRecord(row: Row): AgentKeyRecord {
+  return {
+    keyId: String(row.key_id),
+    pubkey: String(row.pubkey),
+    label: String(row.label),
+    createdAt: String(row.created_at),
+    revokedAt: row.revoked_at === null ? null : String(row.revoked_at),
+    ...(typeof row.rotation_parent_id === 'string'
+      ? {
+          rotationParentId: row.rotation_parent_id,
+          rotationAgentName: String(row.rotation_agent_name),
+        }
+      : {}),
+  };
+}
+
 /**
- * Create agent-keys collection.
- * @param db
+ * Wire the agent-keys store to the shared SQLite database. Schema creation is
+ * the migration runner's job; this only captures the handle.
+ * @param database
  */
-export function createCollections(db: AgentKeyStoreDb): void {
-  agentKeyCollection = initCollection(db, 'agent-keys', {
-    indices: ['keyId'],
-  }) as AgentKeyCollection;
+export function createCollections(database: Database): void {
+  db = database;
 }
 
 /**
@@ -71,7 +77,7 @@ export function createCollections(db: AgentKeyStoreDb): void {
  * @returns the inserted record
  */
 export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
-  if (!agentKeyCollection) {
+  if (!db) {
     throw new Error('agent-keys collection not initialized');
   }
 
@@ -84,7 +90,9 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
   }
 
   const keyId = deriveKeyId(pubkeyBuffer);
-  const existing = agentKeyCollection.findOne({ keyId, revokedAt: null });
+  const existing = db
+    .prepare('SELECT 1 FROM agent_keys WHERE key_id = ? AND revoked_at IS NULL')
+    .get(keyId);
   if (existing) {
     throw new AgentKeyConflictError(`Key ${keyId} is already active`);
   }
@@ -97,7 +105,9 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
     revokedAt: null,
   };
 
-  agentKeyCollection.insert(record);
+  db.prepare(
+    'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
+  ).run(record.keyId, record.pubkey, record.label, record.createdAt, record.revokedAt);
   log.info({ keyId, label }, 'Added agent key');
   return record;
 }
@@ -108,14 +118,18 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
  * @param keyId - 16-char hex key ID
  */
 export function getKey(keyId: string): AgentKeyRecord | null {
-  if (!agentKeyCollection) {
+  if (!db) {
     return null;
   }
-  const record = agentKeyCollection.findOne({ keyId });
-  if (!record || record.revokedAt !== null) {
+  const row = db
+    .prepare(
+      'SELECT key_id, pubkey, label, created_at, revoked_at, rotation_parent_id, rotation_agent_name FROM agent_keys WHERE key_id = ?',
+    )
+    .get(keyId);
+  if (!row || row.revoked_at !== null) {
     return null;
   }
-  return record;
+  return rowToRecord(row);
 }
 
 /**
@@ -124,16 +138,18 @@ export function getKey(keyId: string): AgentKeyRecord | null {
  * @param keyId - 16-char hex key ID
  */
 export function revokeKey(keyId: string): boolean {
-  if (!agentKeyCollection) {
+  if (!db) {
     return false;
   }
-  const record = agentKeyCollection.findOne({ keyId, revokedAt: null });
-  if (!record) {
+  const result = db
+    .prepare(
+      'UPDATE agent_keys SET revoked_at = ? WHERE (key_id = ? OR rotation_parent_id = ?) AND revoked_at IS NULL',
+    )
+    .run(new Date().toISOString(), keyId, keyId);
+  if (result.changes === 0) {
     return false;
   }
-  record.revokedAt = new Date().toISOString();
-  agentKeyCollection.update(record);
-  log.info({ keyId: record.keyId }, 'Revoked agent key');
+  log.info({ keyId }, 'Revoked agent key');
   return true;
 }
 
@@ -141,10 +157,116 @@ export function revokeKey(keyId: string): boolean {
  * List all keys (active and revoked).
  */
 export function listKeys(): AgentKeyRecord[] {
-  if (!agentKeyCollection) {
+  if (!db) {
     return [];
   }
-  return agentKeyCollection.find();
+  return db
+    .prepare('SELECT key_id, pubkey, label, created_at, revoked_at FROM agent_keys')
+    .all()
+    .map(rowToRecord);
+}
+
+export function assertExclusiveRotationOwner(parentId: string, agentName: string): void {
+  const parent = getKey(parentId);
+  const names = db?.prepare('SELECT agent_name FROM name_bindings WHERE key_id = ?').all(parentId);
+  if (
+    !parent ||
+    parent.rotationParentId ||
+    names?.length !== 1 ||
+    names[0].agent_name !== agentName
+  ) {
+    throw new AgentKeyConflictError(
+      'Key rotation requires an exclusive active key for this agent name',
+    );
+  }
+}
+
+export function getPendingRotation(parentId: string, agentName: string): AgentKeyRecord | null {
+  const row = db
+    ?.prepare(
+      'SELECT * FROM agent_keys WHERE rotation_parent_id = ? AND rotation_agent_name = ? AND revoked_at IS NULL',
+    )
+    .get(parentId, agentName);
+  return row ? rowToRecord(row) : null;
+}
+
+function durableRotationWrite<T>(database: Database, operation: () => T): T {
+  const ordinarySync = database.pragma('synchronous');
+  if (typeof ordinarySync !== 'number')
+    throw new Error('Cannot determine credential durability setting');
+  // Credential changes must survive power loss before either peer retires a key.
+  database.pragma('synchronous', 3);
+  try {
+    return database.transaction(operation);
+  } finally {
+    database.pragma('synchronous', ordinarySync);
+  }
+}
+
+export function addRotationKey(
+  parentId: string,
+  agentName: string,
+  publicKey: Buffer,
+): AgentKeyRecord {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    assertExclusiveRotationOwner(parentId, agentName);
+    const existing = getPendingRotation(parentId, agentName);
+    if (existing) {
+      if (existing.pubkey !== publicKey.toString('base64')) {
+        throw new AgentKeyConflictError('A different replacement key is already pending');
+      }
+      return existing;
+    }
+    const record = addKey(publicKey, `rotation:${agentName}`);
+    database
+      .prepare(
+        'UPDATE agent_keys SET rotation_parent_id = ?, rotation_agent_name = ? WHERE key_id = ?',
+      )
+      .run(parentId, agentName, record.keyId);
+    return { ...record, rotationParentId: parentId, rotationAgentName: agentName };
+  });
+}
+
+export function confirmRotationKey(keyId: string, agentName: string): string | undefined {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    const key = getKey(keyId);
+    if (!key) throw new AgentKeyConflictError('Replacement key is not active');
+    if (!key.rotationParentId) return undefined;
+    if (key.rotationAgentName !== agentName)
+      throw new AgentKeyConflictError('Replacement belongs to a different agent');
+    const parentId = key.rotationParentId;
+    assertExclusiveRotationOwner(parentId, agentName);
+    const revoked = database
+      .prepare('UPDATE agent_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL')
+      .run(new Date().toISOString(), parentId);
+    const rebound = database
+      .prepare(
+        'UPDATE name_bindings SET key_id = ?, last_seen_at = ? WHERE agent_name = ? AND key_id = ?',
+      )
+      .run(keyId, Date.now(), agentName, parentId);
+    if (revoked.changes !== 1 || rebound.changes !== 1)
+      throw new AgentKeyConflictError('Rotation ownership changed');
+    database
+      .prepare(
+        'UPDATE agent_keys SET rotation_parent_id = NULL, rotation_agent_name = NULL WHERE key_id = ?',
+      )
+      .run(keyId);
+    log.info({ parentId, keyId, agentName }, 'Confirmed agent key rotation');
+    return parentId;
+  });
+}
+
+export function cancelRotationKey(parentId: string, agentName: string): boolean {
+  const database = db;
+  if (!database) throw new Error('agent-keys collection not initialized');
+  return durableRotationWrite(database, () => {
+    const pending = getPendingRotation(parentId, agentName);
+    return pending ? revokeKey(pending.keyId) : false;
+  });
 }
 
 /**
@@ -208,9 +330,13 @@ export function loadAuthorizedKeysFile(filePath: string): void {
     }
 
     const keyId = deriveKeyId(pubkeyBuffer);
-    const existingAny = agentKeyCollection.findOne({ keyId });
+    const existingAny = db
+      ?.prepare(
+        'SELECT key_id, pubkey, label, created_at, revoked_at FROM agent_keys WHERE key_id = ?',
+      )
+      .get(keyId);
     if (existingAny) {
-      if (existingAny.revokedAt !== null) {
+      if (existingAny.revoked_at !== null) {
         log.warn(
           { keyId },
           'Revoked key found in authorized_keys file — ignoring. Remove the entry from the file to prevent re-authorization.',

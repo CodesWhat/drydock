@@ -9,9 +9,10 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
-import { isTriggerCompatibleWithContainer } from '../docker-trigger.js';
+import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
+import { enforceApiKeyScope } from '../route-scopes.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
@@ -39,7 +40,7 @@ interface TriggerRuntimeComponent extends TriggerComponent {
   trigger: (container: Container) => Promise<unknown>;
 }
 
-const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 interface TriggerStaticApi {
   parseIncludeOrIncludeTriggerString: (value: string) => ParsedTriggerReference;
@@ -107,7 +108,42 @@ function isDefined<T>(value: T | undefined): value is T {
 }
 
 /**
- * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose
+ * Why a trigger does not apply to the requested container (DR-78), each backed by one of
+ * the same predicates `getContainerTriggers` already uses to decide association:
+ * - `agentOwnership` — `getTriggerAssociationFailureReason` reports this first: the trigger
+ *   belongs to a different agent than the container (or the container is remote and the
+ *   trigger has none).
+ * - `structuralIncompatibility` — only reported once agent ownership checks out; a
+ *   dockercompose/portainer trigger whose compose project/service or file doesn't match.
+ * - `labelScope` — the container's `dd.action.include`/`dd.action.exclude` (or the
+ *   `dd.notification.*` equivalents) labels exclude this trigger, or omit it from a
+ *   configured include list.
+ */
+type TriggerAssociationReason = 'agentOwnership' | 'structuralIncompatibility' | 'labelScope';
+
+interface UnassociatedContainerTrigger {
+  id: string;
+  type: string;
+  name: string;
+  agent?: string;
+  reason: TriggerAssociationReason;
+}
+
+function toUnassociatedTrigger(
+  trigger: TriggerComponent,
+  reason: TriggerAssociationReason,
+): UnassociatedContainerTrigger {
+  return {
+    id: trigger.id || `${trigger.type}.${trigger.name}`,
+    type: trigger.type,
+    name: trigger.name,
+    agent: trigger.agent,
+    reason,
+  };
+}
+
+/**
+ * Attach the action-policy resolver's `resolvedState` to a docker/dockercompose/portainer
  * (update-action) trigger entry in the `GET /containers/:id/triggers` response
  * (spec-6.0.1-action-policy.md API surface). Notification and command triggers
  * are left untouched — `resolvedState` has no meaning outside the update-action
@@ -168,14 +204,21 @@ function createGetContainerTriggersHandler({
       Trigger,
     );
 
+    // Triggers dropped for DR-78's reason reporting (agent/structural mismatch, or label-scope
+    // exclusion) — additive alongside the existing `data`/`total` envelope, never in place of it.
+    const unassociatedTriggers: UnassociatedContainerTrigger[] = [];
+
     const associatedTriggers = allTriggers
       .filter((trigger) => {
         const triggerId = trigger.id || `${trigger.type}.${trigger.name}`;
         const runtimeTrigger = triggerMap[triggerId];
-        return isTriggerCompatibleWithContainer(
-          (runtimeTrigger || trigger) as unknown as TriggerComponent,
-          container,
-        );
+        const candidate = (runtimeTrigger || trigger) as unknown as TriggerComponent;
+        const reason = getTriggerAssociationFailureReason(candidate, container);
+        if (!reason) {
+          return true;
+        }
+        unassociatedTriggers.push(toUnassociatedTrigger(trigger, reason));
+        return false;
       })
       .map((trigger) => {
         const [includedTriggers, excludedTriggers] =
@@ -188,13 +231,18 @@ function createGetContainerTriggersHandler({
           excludedTriggers,
           Trigger,
         );
-        return associated ? attachResolvedState(associated, triggerMap, container) : undefined;
+        if (!associated) {
+          unassociatedTriggers.push(toUnassociatedTrigger(trigger, 'labelScope'));
+          return undefined;
+        }
+        return attachResolvedState(associated, triggerMap, container);
       })
       .filter(isDefined);
 
     res.status(200).json({
       data: associatedTriggers,
       total: associatedTriggers.length,
+      unassociatedTriggers,
     });
   };
 }
@@ -213,7 +261,7 @@ function getRemoteContainerTriggerError(
   if (!containerToTrigger.agent || triggerAgent) {
     return undefined;
   }
-  if (triggerType !== 'docker' && triggerType !== 'dockercompose') {
+  if (triggerType !== 'docker' && triggerType !== 'dockercompose' && triggerType !== 'portainer') {
     return undefined;
   }
   return `Cannot execute local ${triggerType} trigger on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`;
@@ -239,6 +287,22 @@ function createRunTriggerHandler({
     const triggerAgent = getPathParamValue(req.params.triggerAgent);
     const triggerType = getPathParamValue(req.params.triggerType);
     const triggerName = getPathParamValue(req.params.triggerName);
+
+    // The one route whose required scope depends on a path parameter, so the
+    // check runs here rather than as static route middleware: running a
+    // docker/dockercompose trigger against a container updates it, while
+    // running a notification trigger only sends a message. Resolved with the
+    // same getTriggerCategoryForType the label taxonomy uses, so the two
+    // cannot drift.
+    //
+    // It runs before the container lookup on purpose. Checking afterwards
+    // would answer 404 for an unknown id and 403 for a known one, handing a
+    // key that holds neither scope a container-existence oracle.
+    const requiredScope =
+      getTriggerCategoryForType(triggerType) === 'action' ? 'containers:update' : 'triggers:test';
+    if (!enforceApiKeyScope(req, res, requiredScope)) {
+      return;
+    }
 
     const containerToTrigger = storeContainer.getContainer(id);
     if (!containerToTrigger) {

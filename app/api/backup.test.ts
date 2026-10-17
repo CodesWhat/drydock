@@ -27,10 +27,8 @@ const {
     mockGetBackup: vi.fn(),
     mockIsBackupInScope: vi.fn(
       (entry, scope) =>
-        entry.containerName === scope.containerName &&
-        (entry.containerIdentityKey === undefined
-          ? scope.includeLegacy
-          : entry.containerIdentityKey === scope.containerIdentityKey),
+        Boolean(scope.containerIdentityKey) &&
+        entry.containerIdentityKey === scope.containerIdentityKey,
     ),
     mockGetState: vi.fn(),
     mockGetAgent: vi.fn(),
@@ -167,7 +165,6 @@ describe('Backup Router', () => {
     test('should isolate same-named container backups by canonical identity', () => {
       const handler = getHandler('get', '/:id/backups');
       const target = { id: 'a1', name: 'web', watcher: 'watcher-a' };
-      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
       const targetBackups = [
         {
           id: 'backup-a',
@@ -177,7 +174,6 @@ describe('Backup Router', () => {
         },
       ];
       mockGetContainer.mockReturnValue(target);
-      mockGetContainers.mockReturnValueOnce([target, sibling]);
       mockGetBackupsForContainer.mockReturnValueOnce(targetBackups);
 
       const req = createMockRequest({ params: { id: 'a1' } });
@@ -187,7 +183,6 @@ describe('Backup Router', () => {
       expect(mockGetBackupsForContainer).toHaveBeenCalledWith({
         containerName: 'web',
         containerIdentityKey: '::watcher-a::web',
-        includeLegacy: false,
       });
       expect(res.json).toHaveBeenCalledWith({ data: targetBackups, total: 1 });
     });
@@ -305,7 +300,6 @@ describe('Backup Router', () => {
         watcher: 'watcher-a',
         image: { registry: { name: 'hub' } },
       };
-      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
       const siblingBackup = {
         id: 'backup-b',
         containerName: 'web',
@@ -314,7 +308,6 @@ describe('Backup Router', () => {
         imageTag: '9.0.0',
       };
       mockGetContainer.mockReturnValue(target);
-      mockGetContainers.mockReturnValueOnce([target, sibling]);
       mockGetBackup.mockReturnValue(siblingBackup);
       mockIsBackupInScope.mockReturnValueOnce(false);
 
@@ -325,14 +318,13 @@ describe('Backup Router', () => {
       expect(mockIsBackupInScope).toHaveBeenCalledWith(siblingBackup, {
         containerName: 'web',
         containerIdentityKey: '::watcher-a::web',
-        includeLegacy: false,
       });
       expect(mockGetState).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Backup not found for this container' });
     });
 
-    test('should reject a legacy backup when active same-named identities are ambiguous', async () => {
+    test('should reject a legacy backup that carries no identity key', async () => {
       const handler = getHandler('post', '/:id/rollback');
       const target = {
         id: 'a1',
@@ -340,7 +332,6 @@ describe('Backup Router', () => {
         watcher: 'watcher-a',
         image: { registry: { name: 'hub' } },
       };
-      const sibling = { id: 'b1', name: 'web', watcher: 'watcher-b' };
       const legacyBackup = {
         id: 'legacy-backup',
         containerName: 'web',
@@ -348,7 +339,6 @@ describe('Backup Router', () => {
         imageTag: '1.0.0',
       };
       mockGetContainer.mockReturnValue(target);
-      mockGetContainers.mockReturnValueOnce([target, sibling]);
       mockGetBackup.mockReturnValue(legacyBackup);
 
       const req = createMockRequest({
@@ -361,7 +351,6 @@ describe('Backup Router', () => {
       expect(mockIsBackupInScope).toHaveBeenCalledWith(legacyBackup, {
         containerName: 'web',
         containerIdentityKey: '::watcher-a::web',
-        includeLegacy: false,
       });
       expect(mockGetState).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(404);
@@ -387,6 +376,141 @@ describe('Backup Router', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: expect.stringContaining('No docker trigger found'),
+      });
+    });
+
+    test('should reject manual rollback when only a Portainer action is available', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+      });
+    });
+
+    test('should use the Docker action for rollback when Portainer and Docker are both configured', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      const currentContainer = {};
+      const containerSpec = { State: { Running: true } };
+      const dockerTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(currentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(containerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger, 'docker.update': dockerTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(dockerTrigger.recreateContainer).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should reject a Portainer-originated backup even when Docker rollback is configured', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      };
+      const portainerBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        imageName: 'library/web',
+        imageTag: '1.24',
+        triggerName: 'portainer.update',
+      };
+      const portainerTrigger = {
+        type: 'portainer',
+        getWatcher: vi.fn(),
+      };
+      const dockerTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(),
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([portainerBackup]);
+      mockGetState.mockReturnValue({
+        trigger: { 'portainer.update': portainerTrigger, 'docker.update': dockerTrigger },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(portainerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(dockerTrigger.getWatcher).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
       });
     });
 
@@ -562,7 +686,7 @@ describe('Backup Router', () => {
       expect(mockTrigger.pullImage).toHaveBeenCalledWith(
         {},
         {},
-        'library/nginx@sha256:kept',
+        'library/nginx:1.24@sha256:kept',
         expect.anything(),
       );
       expect(mockTrigger.pullRollbackImage).not.toHaveBeenCalled();
@@ -639,7 +763,6 @@ describe('Backup Router', () => {
       };
 
       mockGetContainer.mockReturnValue(container);
-      mockGetContainers.mockReturnValueOnce([container]);
       mockGetBackupsByName.mockReturnValue([latestBackup]);
 
       const mockCurrentContainer = {};
@@ -665,19 +788,18 @@ describe('Backup Router', () => {
       expect(mockGetBackupsForContainer).toHaveBeenCalledWith({
         containerName: 'nginx',
         containerIdentityKey: '::local::nginx',
-        includeLegacy: true,
       });
       expect(mockTrigger.pullImage).toHaveBeenCalledWith(
         {},
         {},
-        'library/nginx@sha256:old',
+        'library/nginx:1.24@sha256:old',
         expect.anything(),
       );
       expect(mockTrigger.stopAndRemoveContainer).toHaveBeenCalled();
       expect(mockTrigger.recreateContainer).toHaveBeenCalledWith(
         {},
         mockContainerSpec,
-        'library/nginx@sha256:old',
+        'library/nginx:1.24@sha256:old',
         container,
         expect.anything(),
       );
@@ -686,6 +808,458 @@ describe('Backup Router', () => {
         message: 'Container rolled back successfully',
         backup: latestBackup,
       });
+    });
+
+    test('pins the rollback to the backup digest through a registry retag between backup and rollback', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+        imageDigest: 'sha256:beforeretag',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        // The tag was retagged to a different image between backup and
+        // rollback: pulling the bare mutable tag would deploy the wrong
+        // thing, so only the digest-pinned reference is accepted here.
+        pullImage: vi.fn((_dockerApi, _auth, image) => {
+          if (image !== 'library/nginx:1.24@sha256:beforeretag') {
+            return Promise.reject(new Error(`unexpected pull of mutable reference ${image}`));
+          }
+          return Promise.resolve();
+        }),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.recreateContainer).toHaveBeenCalledWith(
+        {},
+        mockContainerSpec,
+        'library/nginx:1.24@sha256:beforeretag',
+        container,
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('resolves a digest from the retained local image when an older backup record has none', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'library/nginx:1.24@sha256:resolved' }),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        {},
+        'library/nginx:1.24',
+        container,
+        expect.anything(),
+        { preferredDigest: null },
+      );
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx:1.24@sha256:resolved',
+        expect.anything(),
+      );
+      expect(mockTrigger.recreateContainer).toHaveBeenCalledWith(
+        {},
+        mockContainerSpec,
+        'library/nginx:1.24@sha256:resolved',
+        container,
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('falls back to the mutable tag with a warning when the trigger cannot resolve an older backup digest', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockBackupLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No digest recorded for the backup of library/nginx:1.24'),
+      );
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx:1.24',
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('falls back to the mutable tag with a warning when the identity binder finds no digest', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi.fn().mockResolvedValue({}),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockBackupLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'No digest could be established for the rollback of library/nginx:1.24',
+        ),
+      );
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        {},
+        {},
+        'library/nginx:1.24',
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('refuses the rollback when the security policy requires a digest and none can be resolved', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockRejectedValue(
+            new Error(
+              'Unable to bind security gate to the pulled image for nginx: policy required',
+            ),
+          ),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.pullImage).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining(
+          'Cannot roll back library/nginx:1.24 to an immutable reference',
+        ),
+      });
+    });
+
+    test('refuses the rollback under a required policy when a same-tag update left the local tag pointing at the running image', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { id: 'sha256:running', registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: 'latest',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }),
+        })),
+      };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi.fn(),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+      expect(mockTrigger.pullImage).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: expect.stringContaining(
+          'Cannot roll back library/nginx:latest to an immutable reference',
+        ),
+      });
+    });
+
+    test('falls back to the mutable tag with a warning under an optional policy when a same-tag update left the local tag pointing at the running image', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { id: 'sha256:running', registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: 'latest',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Id: 'sha256:running' }),
+        })),
+      };
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi.fn(),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('optional'),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.bindPulledImageIdentity).not.toHaveBeenCalled();
+      expect(mockBackupLog.warn).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'The local library/nginx:latest tag now points at the running image',
+        ),
+      );
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        dockerApi,
+        {},
+        'library/nginx:latest',
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('still pins the rollback when the local tag points at a retained image after a tag-to-tag update', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        image: { id: 'sha256:running', registry: { name: 'hub' } },
+      };
+      const latestBackup = {
+        id: 'b1',
+        containerId: 'c1',
+        containerName: 'nginx',
+        imageName: 'library/nginx',
+        imageTag: '1.24',
+      };
+
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([latestBackup]);
+
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Id: 'sha256:retained-old' }),
+        })),
+      };
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockResolvedValue(undefined),
+        bindPulledImageIdentity: vi
+          .fn()
+          .mockResolvedValue({ imageIdentity: 'library/nginx:1.24@sha256:resolved' }),
+        getRollbackIdentityBindingPolicy: vi.fn().mockReturnValue('required'),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockTrigger.bindPulledImageIdentity).toHaveBeenCalledWith(
+        dockerApi,
+        'library/nginx:1.24',
+        container,
+        expect.anything(),
+        { preferredDigest: null },
+      );
+      expect(mockTrigger.pullImage).toHaveBeenCalledWith(
+        dockerApi,
+        {},
+        'library/nginx:1.24@sha256:resolved',
+        expect.anything(),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
     });
 
     test('should rollback successfully with a dockercompose trigger', async () => {
@@ -838,7 +1412,7 @@ describe('Backup Router', () => {
       // file was rewritten to the backup and the response still said success.
       expect(createContainerSpy).toHaveBeenCalledWith(
         dockerApi,
-        expect.objectContaining({ Image: 'library/nginx@sha256:kept' }),
+        expect.objectContaining({ Image: 'library/nginx:1.24@sha256:kept' }),
         'nginx',
         expect.anything(),
       );
@@ -856,12 +1430,12 @@ describe('Backup Router', () => {
       const selectedBackup = {
         id: 'b2',
         containerName: 'nginx',
+        containerIdentityKey: '::local::nginx',
         imageName: 'library/nginx',
         imageTag: '1.25',
       };
 
       mockGetContainer.mockReturnValue(container);
-      mockGetContainers.mockReturnValueOnce([container]);
       mockGetBackup.mockReturnValue(selectedBackup);
 
       const mockCurrentContainer = {};
@@ -888,7 +1462,6 @@ describe('Backup Router', () => {
       expect(mockIsBackupInScope).toHaveBeenCalledWith(selectedBackup, {
         containerName: 'nginx',
         containerIdentityKey: '::local::nginx',
-        includeLegacy: true,
       });
       expect(mockGetBackupsByName).not.toHaveBeenCalled();
       expect(mockTrigger.pullImage).toHaveBeenCalled();

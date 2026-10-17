@@ -21,6 +21,7 @@ import { getUser, logout } from '@/services/auth';
 import { getAllAuthentications } from '@/services/authentication';
 import { getAllContainers } from '@/services/container';
 import { getEffectiveDisplayIcon } from '@/services/image-icon';
+import { getApprovalSummary } from '@/services/approval';
 import { getAllNotificationRules } from '@/services/notification';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
@@ -31,7 +32,7 @@ import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
 import { distinctBuild } from '@/utils/build-identity';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -50,6 +51,7 @@ const isCollapsed = computed(() => sidebarCollapsed.value && !isMobile.value);
 // Dynamic badge data
 const containerCount = ref('');
 const securityIssueCount = ref('');
+const approvalCount = ref('');
 const currentUser = ref<{ username?: string; displayName?: string } | null>(null);
 const userInitials = computed(() => {
   const name = currentUser.value?.displayName || currentUser.value?.username || 'U';
@@ -91,6 +93,14 @@ interface SearchContainerIndexItem {
   // SSE patch without re-walking the raw API response's nested security.scan.summary.
   hasSecurityIssues: boolean;
 }
+interface SearchResources {
+  agents?: unknown;
+  triggers?: unknown;
+  watchers?: unknown;
+  registries?: unknown;
+  authentications?: unknown;
+  notificationRules?: unknown;
+}
 interface SearchResultItem {
   id: string;
   title: string;
@@ -131,6 +141,13 @@ const navGroups = computed<NavGroup[]>(() => [
         badge: securityIssueCount.value || undefined,
         badgeColor: 'red',
       },
+      {
+        label: t('appShell.layout.nav.approvals'),
+        icon: 'updates',
+        route: ROUTES.APPROVALS,
+        badge: approvalCount.value || undefined,
+        badgeColor: 'red',
+      },
       { label: t('appShell.layout.nav.audit'), icon: 'audit', route: ROUTES.AUDIT },
       { label: t('appShell.layout.nav.systemLogs'), icon: 'logs', route: ROUTES.LOGS },
     ],
@@ -141,6 +158,7 @@ const navGroups = computed<NavGroup[]>(() => [
       { label: t('appShell.layout.nav.hosts'), icon: 'servers', route: ROUTES.SERVERS },
       { label: t('appShell.layout.nav.registries'), icon: 'registries', route: ROUTES.REGISTRIES },
       { label: t('appShell.layout.nav.watchers'), icon: 'watchers', route: ROUTES.WATCHERS },
+      { label: t('appShell.layout.nav.images'), icon: 'images', route: ROUTES.IMAGES },
     ],
   },
   {
@@ -223,6 +241,16 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
       kind: 'setting',
       searchable: 'profile settings config account user',
     },
+    {
+      id: 'settings:api-keys',
+      title: t('appShell.layout.search.settings.apiKeysTitle'),
+      subtitle: t('appShell.layout.search.settings.apiKeysSubtitle'),
+      icon: 'key',
+      route: ROUTES.CONFIG,
+      query: { tab: 'apiKeys' },
+      kind: 'setting',
+      searchable: 'api keys credentials scopes automation integration',
+    },
   ];
 
   return [...pageResults, ...settingsResults];
@@ -269,7 +297,8 @@ const searchQuery = ref('');
 const searchInput = ref<HTMLInputElement | null>(null);
 const searchActiveIndex = ref(0);
 const searchContainers = ref<SearchContainerIndexItem[]>([]);
-const searchResourceResults = ref<SearchResultItem[]>([]);
+const searchResources = ref<SearchResources>({});
+const searchResourceResults = computed(() => buildSearchIndexResults(searchResources.value));
 const searchResourcesLoading = ref(false);
 interface LegacyInputSourceSummary {
   total: number;
@@ -435,14 +464,20 @@ function recordRecentSearchResult(result: SearchResultItem) {
   saveRecentSearchResults(nextResults);
 }
 
+function localizeContainerStatus(status: string): string {
+  if (!status || status === 'unknown') return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
+
 const containerSearchResults = computed<SearchResultItem[]>(() =>
   searchContainers.value.map((container) => ({
     id: `container:${container.id}`,
     title: container.displayName,
     subtitle: t('appShell.layout.search.containerSubtitle', {
-      image: container.image,
-      status: container.status,
-      host: container.host,
+      image: container.image || t('appShell.layout.search.unknownImage'),
+      status: localizeContainerStatus(container.status),
+      host: container.host || t('appShell.layout.search.localHost'),
     }),
     icon: 'containers',
     containerIcon: container.icon,
@@ -487,14 +522,7 @@ function searchScopeChipStyles(scope: SearchScope, active: boolean) {
   };
 }
 
-function buildSearchIndexResults(resources: {
-  agents?: unknown;
-  triggers?: unknown;
-  watchers?: unknown;
-  registries?: unknown;
-  authentications?: unknown;
-  notificationRules?: unknown;
-}): SearchResultItem[] {
+function buildSearchIndexResults(resources: SearchResources): SearchResultItem[] {
   const results: SearchResultItem[] = [];
 
   const agents = Array.isArray(resources.agents) ? resources.agents : [];
@@ -509,7 +537,10 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `agent:${name}`,
       title: name,
-      subtitle: t('appShell.layout.search.agentSubtitle', { status, host: hostLabel }),
+      subtitle: t('appShell.layout.search.agentSubtitle', {
+        status: t(`agentsView.list.status.${status}`),
+        host: hostLabel,
+      }),
       icon: 'agents',
       route: ROUTES.AGENTS,
       query: { q: name },
@@ -526,7 +557,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `trigger:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.triggerSubtitle', { type }),
+      subtitle: t('appShell.layout.search.triggerSubtitle', {
+        type: normalizeSearchValue(trigger.type) ? type : t('common.unknown'),
+      }),
       icon: 'triggers',
       route: ROUTES.TRIGGERS,
       query: { q: name },
@@ -543,7 +576,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `watcher:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.watcherSubtitle', { type }),
+      subtitle: t('appShell.layout.search.watcherSubtitle', {
+        type: normalizeSearchValue(watcher.type) ? type : t('common.unknown'),
+      }),
       icon: 'watchers',
       route: ROUTES.WATCHERS,
       query: { q: name },
@@ -560,7 +595,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `registry:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.registrySubtitle', { type }),
+      subtitle: t('appShell.layout.search.registrySubtitle', {
+        type: normalizeSearchValue(registry.type) ? type : t('common.unknown'),
+      }),
       icon: 'registries',
       route: ROUTES.REGISTRIES,
       query: { q: name },
@@ -577,7 +614,9 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `auth:${id}`,
       title: name,
-      subtitle: t('appShell.layout.search.authSubtitle', { type }),
+      subtitle: t('appShell.layout.search.authSubtitle', {
+        type: normalizeSearchValue(authentication.type) ? type : t('common.unknown'),
+      }),
       icon: 'auth',
       route: ROUTES.AUTH,
       query: { q: name },
@@ -743,14 +782,14 @@ async function refreshSearchResources() {
         getAllAuthentications().catch(() => []),
         getAllNotificationRules().catch(() => []),
       ]);
-    searchResourceResults.value = buildSearchIndexResults({
+    searchResources.value = {
       agents,
       triggers,
       watchers,
       registries,
       authentications,
       notificationRules,
-    });
+    };
   } finally {
     searchResourcesLoading.value = false;
   }
@@ -768,9 +807,12 @@ const effectiveSearchScope = computed<SearchScope>(
 );
 
 const scopePrefixLabel = computed(() => {
-  if (parsedSearchQuery.value.scopeOverride === 'pages') return '/ pages';
-  if (parsedSearchQuery.value.scopeOverride === 'runtime') return '@ runtime';
-  if (parsedSearchQuery.value.scopeOverride === 'config') return '# config';
+  if (parsedSearchQuery.value.scopeOverride === 'pages')
+    return `/ ${t('appShell.layout.search.scope.pages')}`;
+  if (parsedSearchQuery.value.scopeOverride === 'runtime')
+    return `@ ${t('appShell.layout.search.scope.runtime')}`;
+  if (parsedSearchQuery.value.scopeOverride === 'config')
+    return `# ${t('appShell.layout.search.scope.config')}`;
   return '';
 });
 
@@ -1138,8 +1180,17 @@ const connectionOverlayStatus = computed(() =>
     : t('appShell.layout.connection.reconnecting'),
 );
 
+function asSidebarRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
 function rawContainerHasSecurityIssues(container: Record<string, unknown>): boolean {
-  const summary = container.security?.scan?.summary;
+  const security = asSidebarRecord(container.security);
+  const scan = asSidebarRecord(security?.scan);
+  const summary = asSidebarRecord(scan?.summary);
   return Number(summary?.critical || 0) > 0 || Number(summary?.high || 0) > 0;
 }
 
@@ -1148,9 +1199,10 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
     container.displayName || container.name || container.id || 'container',
   );
   const displayIcon = String(container.displayIcon || '');
-  const imageName = String(container.image?.name || '');
-  const imageTag = String(container.image?.tag?.value || '');
-  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+  const imageDetails = asSidebarRecord(container.image);
+  const imageName = String(imageDetails?.name || '');
+  const imageTag = String(asSidebarRecord(imageDetails?.tag)?.value || '');
+  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : '';
   return {
     id: String(container.id || displayName),
     name: String(container.name || displayName),
@@ -1158,7 +1210,7 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
     icon: getEffectiveDisplayIcon(displayIcon, imageName),
     image,
     status: String(container.status || 'unknown'),
-    host: String(container.agent || container.watcher || 'local'),
+    host: String(container.agent || container.watcher || ''),
     hasSecurityIssues: rawContainerHasSecurityIssues(container),
   };
 }
@@ -1335,6 +1387,43 @@ function handleSseEvent(event: string, payload?: unknown) {
     connectionLost.value = true;
     startConnectivityPolling();
   }
+  if (event === 'approval-created') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-created', payload);
+    return;
+  }
+  if (event === 'approval-decided') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-decided', payload);
+    return;
+  }
+  if (event === 'approval-resolved') {
+    applyApprovalEventPayload(payload);
+    emitUiSseEvent('dd:sse-approval-resolved', payload);
+  }
+}
+
+// The approval SSE payload already carries the post-write pending count (see
+// app/approvals/events.ts), so the sidebar badge is a direct set rather than an
+// increment/decrement that could drift from the store.
+function applyApprovalEventPayload(payload: unknown): void {
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+  const pendingCount = (payload as Record<string, unknown>).pendingCount;
+  if (typeof pendingCount !== 'number') {
+    return;
+  }
+  approvalCount.value = pendingCount > 0 ? String(pendingCount) : '';
+}
+
+async function refreshApprovalCount() {
+  try {
+    const summary = await getApprovalSummary();
+    approvalCount.value = summary.pending > 0 ? String(summary.pending) : '';
+  } catch {
+    // Sidebar works without badge data
+  }
 }
 
 onMounted(async () => {
@@ -1344,10 +1433,11 @@ onMounted(async () => {
   });
   // Fetch sidebar badge data and user info
   try {
-    const [, , , user, appInfos] = await Promise.all([
+    const [, , , , user, appInfos] = await Promise.all([
       refreshSidebarData(),
       refreshSearchResources(),
       refreshLegacyInputSummary(),
+      refreshApprovalCount(),
       getUser().catch(() => null),
       getAppInfos().catch(() => null),
     ]);

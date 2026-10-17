@@ -42,6 +42,30 @@
       "info": "Info"
     },
     "actions": {
+      "webhook-watch": "Controllo tramite webhook",
+      "webhook-watch-container": "Controllo del container tramite webhook",
+      "webhook-update": "Aggiornamento tramite webhook",
+      "mqtt-command-update": "Comando di aggiornamento MQTT",
+      "security-scan-skipped": "Scansione di sicurezza saltata",
+      "scanner-asset-pull-started": "Download dell’immagine dello scanner avviato",
+      "scanner-asset-pull-succeeded": "Immagine dello scanner scaricata",
+      "scanner-asset-pull-failed": "Download dell’immagine dello scanner fallito",
+      "scanner-asset-warm-started": "Preparazione dello scanner avviata",
+      "scanner-asset-warm-succeeded": "Preparazione dello scanner riuscita",
+      "scanner-asset-warm-failed": "Preparazione dello scanner fallita",
+      "container-unhealthy": "Container non integro",
+      "env-reveal": "Variabili d’ambiente mostrate",
+      "debug-dump": "Dati di debug scaricati",
+      "config-read": "Configurazione letta",
+      "config-validated": "Configurazione convalidata",
+      "config-reloaded": "Configurazione ricaricata",
+      "config-written": "Configurazione scritta",
+      "update-approved": "Aggiornamento approvato",
+      "update-rejected": "Aggiornamento rifiutato",
+      "update-deferred": "Aggiornamento rinviato",
+      "api-key-created": "Chiave API creata",
+      "api-key-revoked": "Chiave API revocata",
+      "api-key-auth-failed": "Autenticazione con chiave API fallita",
       "container-update": "Aggiornamento container",
       "container-added": "Container aggiunto",
       "container-removed": "Container rimosso",
@@ -49,6 +73,13 @@
       "container-stop": "Arresto container",
       "container-restart": "Riavvio container",
       "auth-login": "Accesso autenticazione",
+      "totp-recovery-used": "Codice di recupero usato",
+      "totp-enrollment-started": "Registrazione della verifica in due passaggi avviata",
+      "totp-enabled": "Verifica in due passaggi attivata",
+      "totp-replaced": "Verifica in due passaggi sostituita",
+      "totp-disabled": "Verifica in due passaggi disattivata",
+      "totp-recovery-codes-replaced": "Codici di recupero sostituiti",
+      "totp-break-glass": "Ripristino offline della verifica in due passaggi",
       "authenticated": "Autenticato",
       "authfail": "Autenticazione fallita",
       "hook-configured": "Hook configurato",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Aggiornamento automatico bloccato",
       "update-policy-override-set": "Override della policy di aggiornamento impostato",
       "update-policy-override-cleared": "Override della policy di aggiornamento rimosso",
+      "group-policy-set": "Policy di gruppo impostata",
+      "group-policy-cleared": "Policy di gruppo rimossa",
+      "label-override-set": "Override dell'etichetta impostato",
+      "label-override-cleared": "Override dell'etichetta rimosso",
       "auto-rollback": "Rollback automatico",
       "rollback": "Rollback",
       "preview": "Anteprima",
       "agent-disconnect": "Disconnessione agente",
       "notification-delivery-failed": "Invio notifica non riuscito",
       "security-alert": "Avviso di sicurezza",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Periodo di maturazione completato",
+      "image-prune": "Pulizia immagine"
     },
     "target": {
       "container": "Container",
-      "agent": "Agente"
+      "agent": "Agente",
+      "group": "Gruppo"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Maturità sbloccata",
         "description": "Quando un aggiornamento trattenuto dalla policy di maturità diventa applicabile"
+      },
+      "update-pending-approval": {
+        "name": "Aggiornamento in attesa di approvazione",
+        "description": "Quando un aggiornamento in modalità manuale entra nella coda di approvazione"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Pulito"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "immagini",
+      "scanned": "analizzati"
     },
     "fixableBadge": "{count} risolvibili",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun trigger corrisponde ai filtri",
-    "testContainerName": "Test Container",
+    "testContainerName": "Container di prova",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Caricamento watcher...",
     "loadError": "Impossibile caricare i watcher",
-    "soon": "soon",
+    "soon": "a breve",
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun watcher corrisponde ai filtri",

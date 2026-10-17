@@ -58,12 +58,14 @@
         "dashboardFallback": "Панель управления",
         "containers": "Контейнеры",
         "security": "Безопасность",
+        "approvals": "Одобрения",
         "audit": "Аудит",
         "systemLogs": "Системные журналы",
         "manageGroup": "Управление",
         "hosts": "Хосты",
         "registries": "Реестры",
         "watchers": "Наблюдатели",
+        "images": "Образы",
         "settingsGroup": "Настройки",
         "general": "Общие",
         "notifications": "Уведомления",
@@ -115,6 +117,8 @@
         "openHint": "открыть",
         "recentGroup": "Недавние",
         "unknownHost": "неизвестный узел",
+        "unknownImage": "неизвестный образ",
+        "localHost": "локально",
         "containerSubtitle": "Контейнер · {image} · {status} · {host}",
         "agentSubtitle": "Агент · {status} · {host}",
         "triggerSubtitle": "Триггер · {type}",
@@ -139,7 +143,9 @@
           "appearanceTitle": "Внешний вид",
           "appearanceSubtitle": "Настройка · Внешний вид",
           "profileTitle": "Настройки профиля",
-          "profileSubtitle": "Настройка · Профиль"
+          "profileSubtitle": "Настройка · Профиль",
+          "apiKeysTitle": "Ключи API",
+          "apiKeysSubtitle": "Создание и отзыв ключей с ограниченной областью действия"
         }
       },
       "connection": {

@@ -33,6 +33,57 @@ interface StableSemverCandidate {
   patch: number;
 }
 
+export interface ReleaseMaturityEvidence {
+  version: string;
+  family: string;
+  earlierReleases: number;
+}
+
+const CONCRETE_RELEASE_PATTERN = /^v?\d+\.\d+\.\d+(?:\+[0-9a-z.-]+)?$/i;
+
+export function getReleaseMaturityEvidence(
+  candidateVersion: string,
+  sources: VersionTagSource[],
+): ReleaseMaturityEvidence | undefined {
+  const candidateTag = candidateVersion.trim();
+  if (!CONCRETE_RELEASE_PATTERN.test(candidateTag)) {
+    return undefined;
+  }
+  const candidate = semver.parse(candidateTag.replace(/^v/i, ''), { loose: true });
+  if (!candidate) {
+    return undefined;
+  }
+
+  const isCalVer = candidate.major >= 1000;
+  const earlierReleases = new Set<string>();
+  for (const source of sources) {
+    const versionTag = source.versionTag.trim();
+    if (!CONCRETE_RELEASE_PATTERN.test(versionTag)) {
+      continue;
+    }
+    const release = semver.parse(versionTag.replace(/^v/i, ''), { loose: true });
+    if (
+      !release ||
+      release.major !== candidate.major ||
+      (isCalVer && release.minor !== candidate.minor)
+    ) {
+      continue;
+    }
+    if (
+      release.minor < candidate.minor ||
+      (release.minor === candidate.minor && release.patch < candidate.patch)
+    ) {
+      earlierReleases.add(`${release.major}.${release.minor}.${release.patch}`);
+    }
+  }
+
+  return {
+    version: `${candidate.major}.${candidate.minor}.${candidate.patch}`,
+    family: isCalVer ? `${candidate.major}.${candidate.minor}` : String(candidate.major),
+    earlierReleases: earlierReleases.size,
+  };
+}
+
 // NOTE: parse() in app/tag/index.ts also has a normalizeNumericMultiSegmentTag
 // branch in its fallback chain, checked before the semver.clean/semver.parse
 // steps mirrored here. That branch only matches tags with 4+ dot-separated

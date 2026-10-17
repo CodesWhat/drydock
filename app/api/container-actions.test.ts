@@ -1,5 +1,6 @@
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import * as requestUpdate from '../updates/request-update.js';
+import { toApiContainer } from './container/shared.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const {
@@ -71,12 +72,14 @@ vi.mock('../store/update-operation', () => ({
   updateOperation: vi.fn(),
   markOperationTerminal: mockMarkOperationTerminal,
   getOperationById: vi.fn(),
-  getOperationsByContainerName: vi.fn(() => []),
+  getOperationsByContainerIdentity: vi.fn(() => []),
   getOperationsByContainerId: vi.fn(() => []),
-  getInProgressOperationByContainerName: vi.fn(),
+  getInProgressOperationByContainerIdentity: vi.fn(),
   getInProgressOperationByContainerId: vi.fn(),
-  getActiveOperationByContainerName: vi.fn(),
+  getActiveOperationByContainerIdentity: vi.fn(),
   getActiveOperationByContainerId: vi.fn(),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
 }));
 
 vi.mock('../log', () => ({
@@ -447,40 +450,6 @@ describe('Container Actions Router', () => {
     });
   });
 
-  describe('runtime env redaction', () => {
-    test.each(['start', 'stop', 'restart'])(
-      'redacts sensitive details.env values in the %s response',
-      async (action) => {
-        const container = {
-          id: 'c1',
-          name: 'nginx',
-          image: { name: 'nginx' },
-          details: {
-            env: [
-              { key: 'DB_PASSWORD', value: 'hunter2' },
-              { key: 'LOG_LEVEL', value: 'debug' },
-            ],
-          },
-        };
-        mockGetContainer.mockReturnValue(container);
-        const { trigger } = createDockerTrigger();
-        mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
-
-        const handler = getHandler('post', `/:id/${action}`);
-        const res = createMockResponse();
-        await handler(createMockRequest({ params: { id: 'c1' } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(200);
-        const payload = res.json.mock.calls[0][0];
-        expect(payload.result.details.env).toStrictEqual([
-          { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
-          { key: 'LOG_LEVEL', value: 'debug', sensitive: false },
-        ]);
-        expect(JSON.stringify(payload)).not.toContain('hunter2');
-      },
-    );
-  });
-
   describe('stopContainer', () => {
     test('should stop container successfully', async () => {
       const container = { id: 'c1', name: 'nginx', image: { name: 'nginx' } };
@@ -644,6 +613,49 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ action: auditAction, status: 'error' }),
       );
       expect(actionCounter).toHaveBeenCalledOnce();
+    });
+
+    test('serves the same redacted, projected container as the detail route', async () => {
+      const stored = {
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        details: { env: [{ key: 'DB_PASSWORD', value: 'hunter2' }] },
+      };
+      mockGetContainer.mockReturnValue(stored);
+      const { trigger } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      const res = createMockResponse();
+
+      await getHandler('post', route)(createMockRequest({ params: { id: 'c1' } }), res);
+
+      const { result } = res.json.mock.calls[0][0];
+      expect(result).toEqual(toApiContainer(stored));
+      expect(JSON.stringify(result)).not.toContain('hunter2');
+    });
+
+    test('serves the projected label-owned sources, never the declared layer', async () => {
+      const labelOwned = {
+        v: 1,
+        declared: { displayName: 'Declared' },
+        declaredSources: { displayName: 'label' },
+        sources: { displayName: 'override' },
+      };
+      const stored = { id: 'c1', name: 'nginx', image: { name: 'nginx' }, labelOwned };
+      mockGetContainer.mockReturnValue(stored);
+      const { trigger, dockerContainer } = createDockerTrigger();
+      mockGetState.mockReturnValue({ trigger: { 'docker.default': trigger } });
+      for (const inspect of ['resolves', 'rejects'] as const) {
+        if (inspect === 'rejects') {
+          dockerContainer.inspect.mockRejectedValue(new Error('inspect unavailable'));
+        }
+        const res = createMockResponse();
+        await getHandler('post', route)(createMockRequest({ params: { id: 'c1' } }), res);
+
+        const { result } = res.json.mock.calls[0][0];
+        expect(result.labelOwned).toBeUndefined();
+        expect(result.labelOwnedSources).toEqual({ displayName: 'override' });
+      }
     });
 
     test('keeps authoritative action success when refreshed state cannot be stored', async () => {
@@ -1060,7 +1072,7 @@ describe('Container Actions Router', () => {
       mockGetContainer.mockReturnValue(container);
       const updateOperationStore = await import('../store/update-operation');
       (
-        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+        updateOperationStore.getActiveOperationByContainerIdentity as ReturnType<typeof vi.fn>
       ).mockReturnValue({
         id: 'op-queued',
         containerName: 'nginx',
@@ -1075,10 +1087,11 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
-        agent: undefined,
-        watcher: undefined,
-      });
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined — the guard inside it then never matches.
+      expect(updateOperationStore.getActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        undefined,
+      );
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',
@@ -1100,7 +1113,7 @@ describe('Container Actions Router', () => {
       mockGetContainer.mockReturnValue(container);
       const updateOperationStore = await import('../store/update-operation');
       (
-        updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
+        updateOperationStore.getActiveOperationByContainerIdentity as ReturnType<typeof vi.fn>
       ).mockReturnValue({
         id: 'op-stale-id',
         containerId: 'c0-pre-recreate',
@@ -1116,10 +1129,11 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
-        agent: undefined,
-        watcher: undefined,
-      });
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined — the guard inside it then never matches.
+      expect(updateOperationStore.getActiveOperationByContainerIdentity).toHaveBeenCalledWith(
+        undefined,
+      );
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',

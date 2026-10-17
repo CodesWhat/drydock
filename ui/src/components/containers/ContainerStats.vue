@@ -23,6 +23,7 @@ const props = withDefaults(
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 const streamPaused = ref(false);
+const streamState = ref<'disconnected' | 'connecting' | 'live'>('disconnected');
 const snapshots = ref<ContainerStatsSnapshot[]>([]);
 const lastHeartbeatAt = ref<string | null>(null);
 
@@ -30,6 +31,19 @@ const { t } = useI18n();
 
 let streamController: ContainerStatsStreamController | undefined;
 let loadRequestId = 0;
+let streamGeneration = 0;
+
+const streamStatus = computed(() => {
+  if (streamPaused.value) return t('containerComponents.stats.paused');
+  if (loading.value || streamState.value === 'connecting') return t('common.loading');
+  if (streamState.value === 'live') return t('containerComponents.stats.live');
+  return t('dashboardView.hostStatus.disconnected');
+});
+
+const streamColor = computed(() => {
+  if (streamPaused.value) return 'var(--dd-warning)';
+  return streamState.value === 'live' ? 'var(--dd-success)' : 'var(--dd-text-muted)';
+});
 
 function parseTimestamp(timestamp: string): number {
   const parsed = Date.parse(timestamp);
@@ -66,20 +80,35 @@ function replaceSnapshotHistory(
 }
 
 function stopStream() {
+  streamGeneration++;
   streamController?.disconnect();
   streamController = undefined;
+  streamState.value = 'disconnected';
+  streamPaused.value = false;
+  lastHeartbeatAt.value = null;
 }
 
 function connectStream() {
   stopStream();
+  const generation = streamGeneration;
+  const isCurrent = () => generation === streamGeneration && !streamPaused.value;
+  streamState.value = 'connecting';
   streamController = connectContainerStatsStream(
     props.containerId,
     {
+      onOpen: () => {
+        if (isCurrent()) streamState.value = 'live';
+      },
+      onError: () => {
+        if (!isCurrent()) return;
+        streamState.value = 'connecting';
+        lastHeartbeatAt.value = null;
+      },
       onSnapshot: (snapshot) => {
-        appendSnapshot(snapshot);
+        if (isCurrent()) appendSnapshot(snapshot);
       },
       onHeartbeat: () => {
-        lastHeartbeatAt.value = new Date().toISOString();
+        if (isCurrent()) lastHeartbeatAt.value = new Date().toISOString();
       },
     },
     {
@@ -91,6 +120,7 @@ function connectStream() {
 
 async function loadStats() {
   const requestId = ++loadRequestId;
+  stopStream();
   loading.value = true;
   loadError.value = null;
   lastHeartbeatAt.value = null;
@@ -119,12 +149,14 @@ function toggleStream() {
     return;
   }
   if (streamPaused.value) {
-    streamController.resume();
     streamPaused.value = false;
+    streamState.value = 'connecting';
+    streamController.resume();
     return;
   }
-  streamController.pause();
   streamPaused.value = true;
+  lastHeartbeatAt.value = null;
+  streamController.pause();
 }
 
 function buildRateHistory(
@@ -264,6 +296,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  loadRequestId++;
   stopStream();
 });
 </script>
@@ -274,9 +307,9 @@ onUnmounted(() => {
       <div class="flex items-center gap-2">
         <div
           class="h-2.5 w-2.5 rounded-full"
-          :style="{ backgroundColor: streamPaused ? 'var(--dd-warning)' : 'var(--dd-success)' }" />
+          :style="{ backgroundColor: streamColor }" />
         <span class="text-2xs-plus font-semibold dd-text-secondary">
-          {{ streamPaused ? t('containerComponents.stats.paused') : t('containerComponents.stats.live') }}
+          {{ streamStatus }}
         </span>
         <span v-if="lastHeartbeatAt" class="text-2xs dd-text-muted">
           {{ t('containerComponents.stats.heartbeatActive') }}
@@ -286,6 +319,7 @@ onUnmounted(() => {
       <AppButton
         size="xs"
         :variant="streamPaused ? 'success' : 'warning'"
+        :disabled="loading || streamState === 'disconnected'"
         type="button"
         data-test="stats-toggle-stream"
         @click="toggleStream">
@@ -302,9 +336,13 @@ onUnmounted(() => {
 
     <div
       v-else-if="loadError"
-      class="p-3 text-2xs-plus dd-rounded"
+      role="alert"
+      class="flex flex-col items-start gap-2 p-3 text-2xs-plus dd-rounded"
       :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-      {{ loadError }}
+      <span class="break-words">{{ loadError }}</span>
+      <AppButton size="xs" variant="outlined" type="button" data-test="stats-retry" @click="loadStats">
+        {{ t('common.retry') }}
+      </AppButton>
     </div>
 
     <div v-else-if="!latestSnapshot" class="p-3 text-2xs-plus dd-rounded dd-text-muted" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">

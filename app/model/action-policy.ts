@@ -8,6 +8,7 @@ import {
 import logger from '../log/index.js';
 import { matchesTriggerReferenceList } from '../triggers/providers/trigger-reference-matching.js';
 import type { Container } from './container.js';
+import { getGroupExcludeEntries } from './group-policy.js';
 
 /**
  * Per-action access and automatic-execution policy resolver
@@ -31,6 +32,11 @@ export type ActionPolicyBlockedReason = 'excluded' | 'not-included';
 export interface ActionPolicyResult {
   state: ActionPolicyState;
   reason?: ActionPolicyBlockedReason;
+  /**
+   * Set with `reason: 'excluded'`: whose exclusion blocked the trigger. The container's own
+   * `dd.action.exclude` (label or Drydock override) wins the attribution when both match.
+   */
+  excludedBy?: 'label' | 'group';
 }
 
 /**
@@ -43,6 +49,7 @@ export interface ActionPolicyResult {
 export interface ActionPolicyTrigger extends DockerTriggerCandidate {
   configuration?: DockerTriggerCandidate['configuration'] & {
     auto?: boolean | ActionPolicyAutoMode;
+    manual?: 'all' | 'oninclude';
   };
   getId: () => string;
 }
@@ -72,7 +79,7 @@ export interface SelectActionTriggerResult extends ActionPolicyResult {
   triggerId: string;
 }
 
-const CANDIDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const CANDIDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
 const SPECIFICITY_RANK: Record<DockerTriggerSpecificity, number> = {
   'compose-file-matched': 0,
@@ -113,6 +120,17 @@ function normalizeAutoMode(auto: boolean | ActionPolicyAutoMode | undefined): Ac
 }
 
 /**
+ * The entries of the container's group `actions.exclude` that match `triggerId` for this
+ * container's update, in their stored order. Entries are matched one at a time so a stored
+ * entry can never be read as a list.
+ */
+export function findMatchingGroupExcludeEntries(triggerId: string, container: Container): string[] {
+  return getGroupExcludeEntries(container).filter((entry) =>
+    matchesTriggerReferenceList(triggerId, entry, container),
+  );
+}
+
+/**
  * Resolve a single trigger's per-container action policy.
  *
  * spec-6.0.1-action-policy.md resolver pseudocode:
@@ -121,12 +139,17 @@ function normalizeAutoMode(auto: boolean | ActionPolicyAutoMode | undefined): Ac
  *   autoMode = trigger auto mode           # all|oninclude|onauto|none
  *   if autoMode in {all, none}: included = true          # access open (legacy)
  *   else: included = include matches OR (autoMode==onauto AND auto matches)
+ *                    OR (manual==all AND include is absent)
  *   if !included                           -> blocked (reason: not-included)
  *   switch autoMode:
  *     none      -> manual                  # structurally cannot auto
  *     all       -> auto                    # legacy meaning frozen
- *     oninclude -> auto                    # legacy conflation frozen
+ *     oninclude -> auto if include matches else manual
  *     onauto    -> auto if auto-label matches else manual
+ *
+ * A group policy's `actions.exclude` (spec 7.3) is checked straight after the container's own
+ * exclude and is the same hard stop. Group rules only restrict: a member's include or auto
+ * label cannot lift one.
  *
  * Pure: no I/O, no logging, no global state. The global `updateMode` ceiling
  * ('manual' clamps a resolved 'auto' down to 'manual'; 'notify' is a
@@ -142,7 +165,13 @@ export function resolveForTrigger(
   const autoMode = normalizeAutoMode(trigger.configuration?.auto);
 
   if (matchesTriggerReferenceList(triggerId, container.actionTriggerExclude, container)) {
-    return { state: 'blocked', reason: 'excluded' };
+    return { state: 'blocked', reason: 'excluded', excludedBy: 'label' };
+  }
+  // A group's exclusion list is the same grammar and the same hard stop. It is only ever
+  // checked here, so it can block an outcome the labels would have produced but can never
+  // grant one: nothing below reads group state.
+  if (findMatchingGroupExcludeEntries(triggerId, container).length > 0) {
+    return { state: 'blocked', reason: 'excluded', excludedBy: 'group' };
   }
 
   const accessOpen = autoMode === 'all' || autoMode === 'none';
@@ -154,7 +183,10 @@ export function resolveForTrigger(
     container.actionTriggerAuto,
     container,
   );
-  const included = accessOpen || includeMatches || (autoMode === 'onauto' && autoMatches);
+  const manualFallback =
+    trigger.configuration?.manual === 'all' && container.actionTriggerInclude === undefined;
+  const included =
+    accessOpen || includeMatches || (autoMode === 'onauto' && autoMatches) || manualFallback;
 
   if (!included) {
     return { state: 'blocked', reason: 'not-included' };
@@ -165,8 +197,10 @@ export function resolveForTrigger(
       return { state: 'manual' };
     case 'onauto':
       return { state: autoMatches ? 'auto' : 'manual' };
+    case 'oninclude':
+      return { state: includeMatches ? 'auto' : 'manual' };
     default:
-      // 'all' and 'oninclude' both freeze the legacy "access implies auto" meaning.
+      // 'all' keeps its legacy "access implies auto" meaning.
       return { state: 'auto' };
   }
 }
@@ -296,7 +330,7 @@ function rankCandidates(candidates: RankedCandidate[]): RankedCandidate[] {
 
 /**
  * Select the winning action trigger for a container across every compatible
- * docker/dockercompose trigger (agent + compose-file affinity via
+ * docker/dockercompose/portainer trigger (agent + compose-file affinity via
  * `isTriggerCompatibleWithContainer`; command triggers are never candidates
  * — they aren't in `CANDIDATE_TRIGGER_TYPES`, matching
  * `findDockerTriggerForContainer`'s default type scope).

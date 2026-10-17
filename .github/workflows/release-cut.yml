@@ -37,7 +37,7 @@ on:
         type: string
         default: ""
       source_ref:
-        description: "Maintenance cuts only: dev branch to build from (e.g. dev/v1.6) when cutting a patch for a line main has moved past. Leave empty for normal cuts."
+        description: "Retained branches only: maintenance patches (e.g. dev/v1.6) or promotion of an already-published older-line minor RC to GA. Leave empty for normal cuts."
         required: false
         type: string
         default: ""
@@ -108,12 +108,17 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
           SOURCE_REF: ${{ inputs.source_ref }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_DIGEST: ${{ inputs.candidate_digest }}
+          SOAK_OVERRIDE_REASON: ${{ inputs.soak_override_reason }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
           if [ -z "${SOURCE_REF}" ]; then
             {
               echo "is_maintenance_cut=false"
+              echo "is_retained_ga=false"
               echo "source_branch="
             } >> "$GITHUB_OUTPUT"
             echo "No source_ref supplied; normal cut from main."
@@ -170,24 +175,61 @@ jobs:
             exit 1
           fi
 
-          # Patch component must be nonzero: maintenance cuts are for patch
-          # releases (vX.Y.Z, Z>0, GA or prerelease alike) — v1.6.0 or
-          # v1.6.0-rc.N is a new minor line and belongs on main, never on a
-          # retired dev branch.
+          # New minor candidates still build only from main. An older line's
+          # already-published RC may be promoted after main advances: GA uses
+          # the candidate's exact signed image/archive and original provenance,
+          # never a rebuild from the retained branch. The source step below
+          # still verifies publication, tag/base, digest and seven-day soak.
           patch="$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^v?[0-9]+\.[0-9]+\.([0-9]+).*/\1/')"
           if [ "${patch}" -eq 0 ]; then
-            echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. Maintenance cuts (source_ref) are for patch releases (vX.Y.Z with Z>0); cut vX.Y.0 from main normally."
-            exit 1
+            if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.0$ ]] \
+              || ! [[ "${CANDIDATE_TAG}" =~ ^v[0-9]+\.[0-9]+\.0-rc\.[0-9]+$ ]] \
+              || [ "${CANDIDATE_TAG%-rc.*}" != "${RELEASE_TAG}" ] \
+              || ! [[ "${CANDIDATE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::release_tag '${RELEASE_TAG}' has patch version 0. A retained minor line only permits GA promotion with its exact published RC tag and digest; new minor prereleases must be cut from main."
+              exit 1
+            fi
+            first_line="$(printf '%s\n' "${source_line}" "${main_line}" | sort -V | head -1)"
+            if [ "${first_line}" != "${source_line}" ]; then
+              echo "::error::Retained minor GA line ${source_line} must be older than main's ${main_line}."
+              exit 1
+            fi
+            if [ -n "${SOAK_OVERRIDE_REASON}" ]; then
+              echo "::error::Retained minor GA requires the full seven-day soak; soak_override_reason is not supported on this path."
+              exit 1
+            fi
+            # This path is for a pending initial GA while the new line is an
+            # RC. Refuse publication once any newer GA exists rather than move
+            # stable minor/major/latest tags back to this older candidate.
+            newer_ga="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+              | jq -sr --arg release "${RELEASE_TAG}" '
+                  add
+                  | map(select(.draft == false and .prerelease == false and .published_at != null)
+                      | select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")))
+                  | any(.[]; (.tag_name | ltrimstr("v") | split(".") | map(tonumber))
+                      > ($release | ltrimstr("v") | split(".") | map(tonumber)))')"
+            if [ "${newer_ga}" = "true" ]; then
+              echo "::error::A newer GA is already published; refusing a retained promotion that would roll stable tags back."
+              exit 1
+            fi
+            {
+              echo "is_maintenance_cut=false"
+              echo "is_retained_ga=true"
+              echo "source_branch=${SOURCE_REF}"
+            } >> "$GITHUB_OUTPUT"
+            echo "Retained minor GA validated: ${RELEASE_TAG} promotes ${CANDIDATE_TAG}; candidate provenance remains required."
+            exit 0
           fi
 
           {
             echo "is_maintenance_cut=true"
+            echo "is_retained_ga=false"
             echo "source_branch=${SOURCE_REF}"
           } >> "$GITHUB_OUTPUT"
           echo "Maintenance cut validated: ${RELEASE_TAG} from ${SOURCE_REF} (main's active line is ${main_line})."
 
       - name: Assert main is in sync with the active dev branch
-        if: steps.source_ref.outputs.is_maintenance_cut != 'true'
+        if: steps.source_ref.outputs.source_branch == ''
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
@@ -237,13 +279,13 @@ jobs:
       - name: Resolve target SHA and lowercase repository
         id: target
         env:
-          IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           set -euo pipefail
-          if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
-            # Maintenance cut: build from the named dev branch's tip, not main
-            # HEAD. The job still runs at refs/heads/main (asserted above and
+          if [ -n "${SOURCE_BRANCH}" ]; then
+            # Retained source: resolve release metadata from its branch tip, not main
+            # HEAD. For GA the actual artifacts come from its candidate.
+            # The job still runs at refs/heads/main (asserted above and
             # checked out here) — this only changes which tree gets built and
             # released, not the workflow run's own ref, which is what the
             # cosign OIDC identity is pinned to.
@@ -489,9 +531,6 @@ jobs:
       # and main are the same tree there), so this ordering is universally
       # safe, not just maintenance-safe.
       - name: Wait for successful branch CI on release source SHA
-        # zizmor 1.30 wants the `$/` self-repository form here; left as-is
-        # on purpose so the release workflow keeps the syntax every runner
-        # version understands.
         uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
@@ -499,12 +538,9 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
-          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          allow-dispatch-events: ${{ steps.source_ref.outputs.source_branch != '' }}
 
       - name: Wait for successful E2E Playwright on release source SHA
-        # zizmor 1.30 wants the `$/` self-repository form here; left as-is
-        # on purpose so the release workflow keeps the syntax every runner
-        # version understands.
         uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
         with:
           github-token: ${{ github.token }}
@@ -512,7 +548,29 @@ jobs:
           target-sha: ${{ steps.source.outputs.source_sha }}
           max-attempts: '18'
           sleep-seconds: '300'
-          allow-dispatch-events: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          allow-dispatch-events: ${{ steps.source_ref.outputs.source_branch != '' }}
+
+      - name: Wait for successful retained metadata CI
+        if: steps.source_ref.outputs.is_retained_ga == 'true'
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
+          allow-dispatch-events: 'true'
+
+      - name: Wait for successful retained metadata E2E Playwright
+        if: steps.source_ref.outputs.is_retained_ga == 'true'
+        uses: ./.github/actions/wait-for-successful-branch-ci  # zizmor: ignore[self-repository]
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          max-attempts: '18'
+          sleep-seconds: '300'
+          allow-dispatch-events: 'true'
 
       - name: Checkout exact release source
         env:
@@ -608,10 +666,15 @@ jobs:
             exit 1
           fi
 
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" --format release >/dev/null; then
+            echo "::error::Release notes summary is invalid or exceeds its publication budget. Keep the leading upgrade warnings and add a compact summary in CHANGELOG."
+            exit 1
+          fi
+
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@1f40c72289eff860ee54a304f1438e3cff362e0a  # v4.3.0
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
@@ -1416,6 +1479,7 @@ jobs:
           SOAK_OVERRIDE_AGE_DAYS: ${{ steps.source.outputs.soak_override_age_days }}
           SOAK_OVERRIDE_REASON_PATH: ${{ steps.source.outputs.soak_override_reason_path }}
           IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          IS_RETAINED_GA: ${{ steps.source_ref.outputs.is_retained_ga }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
@@ -1427,7 +1491,7 @@ jobs:
           # Same TARGET_SHA snapshots as the validation step above — the GA
           # heading (and the parser that reads it) live on main, never in the
           # detached SOURCE_SHA checkout.
-          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" > "${entry_path}"; then
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" --format release > "${entry_path}"; then
             rm -f "${entry_path}" "${notes_path}"
             echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
             {
@@ -1441,14 +1505,14 @@ jobs:
           # Resolve the previous release for a Full Changelog compare link. The
           # predecessor is the newest published release on this major.minor
           # line; exclude the current tag to support partial-release re-runs.
-          prev_tag="$(gh release list --repo "${REPO}" --limit 100 \
-            --json tagName,publishedAt,isDraft \
-            --jq 'sort_by(.publishedAt) | reverse
-                  | map(select(.isDraft == false) | .tagName)
+          # Combine every page before filtering, including older release lines.
+          prev_tag="$(gh api --paginate "repos/${REPO}/releases?per_page=100" 2>/dev/null \
+            | jq -sr 'add | sort_by(.published_at) | reverse
+                  | map(select(.draft == false) | .tag_name)
                   | map(select(. != env.RELEASE_TAG
                       and startswith(env.RELEASE_TAG | split(".")[0:2] | join(".") + ".")))
                   | .[0] // empty' \
-            2>/dev/null || true)"
+            2>/dev/null)" || prev_tag=""
 
           {
             echo "# ${RELEASE_TAG}"
@@ -1487,6 +1551,13 @@ jobs:
             } >> "${notes_path}"
           fi
 
+          if [ "${IS_RETAINED_GA}" = "true" ]; then
+            {
+              echo ""
+              echo "**Retained-line GA:** release metadata comes from \`${SOURCE_BRANCH}\`; the signed candidate artifacts and their original build-provenance attestation are verified and reused without rebuilding."
+            } >> "${notes_path}"
+          fi
+
           # Maintenance cut: record the TRUE build source plainly, since no
           # machine-verifiable SLSA provenance attestation exists for it (see
           # "Defect 3" above the container-image attestation steps) — the
@@ -1503,6 +1574,15 @@ jobs:
               echo "- The container image and release artifact are cosign-signed (identity \`release-cut.yml@refs/heads/main\`, since the workflow run itself always executes at that ref), but carry **no SLSA build-provenance attestation** — this workflow's own OIDC token always claims \`main\` HEAD as the build source, which would be false for this artifact, so attestation is skipped rather than publish a false claim."
             } >> "${notes_path}"
           fi
+
+          RELEASE_NOTES_PATH="${notes_path}" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const length = readFileSync(process.env.RELEASE_NOTES_PATH, "utf8").length;
+            if (length > 125000) {
+              console.error("Release body exceeds GitHub publication capacity after appended disclosures (125000 characters)");
+              process.exit(1);
+            }
+          '
 
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 
@@ -1658,6 +1738,7 @@ jobs:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           DIGEST: ${{ steps.digest.outputs.value }}
           IS_MAINTENANCE_CUT: ${{ steps.source_ref.outputs.is_maintenance_cut }}
+          IS_RETAINED_GA: ${{ steps.source_ref.outputs.is_retained_ga }}
           SOURCE_BRANCH: ${{ steps.source_ref.outputs.source_branch }}
         run: |
           {
@@ -1667,6 +1748,9 @@ jobs:
             echo "- Version: \`${NEXT_VERSION}\`"
             echo "- Tag: \`${RELEASE_TAG}\`"
             echo "- Image digest: \`${DIGEST}\`"
+            if [ "${IS_RETAINED_GA}" = "true" ]; then
+              echo "- Retained-line GA: metadata from \`${SOURCE_BRANCH}\`; original signed candidate artifacts and provenance reused without rebuilding."
+            fi
             if [ "${IS_MAINTENANCE_CUT}" = "true" ]; then
               echo "- Maintenance cut: built from \`${SOURCE_BRANCH}\`, not \`main\` — no SLSA build-provenance attestation (see \"Defect 3\" comment in this workflow); cosign signature only."
             fi

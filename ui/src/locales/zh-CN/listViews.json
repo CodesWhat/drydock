@@ -42,6 +42,30 @@
       "info": "提示"
     },
     "actions": {
+      "webhook-watch": "Webhook 检查",
+      "webhook-watch-container": "Webhook 容器检查",
+      "webhook-update": "Webhook 更新",
+      "mqtt-command-update": "MQTT 更新命令",
+      "security-scan-skipped": "已跳过安全扫描",
+      "scanner-asset-pull-started": "已开始拉取扫描器镜像",
+      "scanner-asset-pull-succeeded": "扫描器镜像拉取成功",
+      "scanner-asset-pull-failed": "扫描器镜像拉取失败",
+      "scanner-asset-warm-started": "已开始预热扫描器",
+      "scanner-asset-warm-succeeded": "扫描器预热成功",
+      "scanner-asset-warm-failed": "扫描器预热失败",
+      "container-unhealthy": "容器不健康",
+      "env-reveal": "已显示环境变量",
+      "debug-dump": "已下载调试数据",
+      "config-read": "已读取配置",
+      "config-validated": "已验证配置",
+      "config-reloaded": "已重新加载配置",
+      "config-written": "已写入配置",
+      "update-approved": "已批准更新",
+      "update-rejected": "已拒绝更新",
+      "update-deferred": "已推迟更新",
+      "api-key-created": "已创建 API 密钥",
+      "api-key-revoked": "已撤销 API 密钥",
+      "api-key-auth-failed": "API 密钥认证失败",
       "container-update": "容器更新",
       "container-added": "容器已添加",
       "container-removed": "容器已移除",
@@ -49,6 +73,13 @@
       "container-stop": "容器停止",
       "container-restart": "容器重启",
       "auth-login": "认证登录",
+      "totp-recovery-used": "已使用恢复码",
+      "totp-enrollment-started": "已开始注册两步验证",
+      "totp-enabled": "已启用两步验证",
+      "totp-replaced": "已更换两步验证",
+      "totp-disabled": "已停用两步验证",
+      "totp-recovery-codes-replaced": "已更换恢复码",
+      "totp-break-glass": "两步验证离线恢复",
       "authenticated": "已认证",
       "authfail": "认证失败",
       "hook-configured": "钩子已配置",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "自动更新被阻止",
       "update-policy-override-set": "更新策略覆盖已设置",
       "update-policy-override-cleared": "更新策略覆盖已清除",
+      "group-policy-set": "组策略已设置",
+      "group-policy-cleared": "组策略已清除",
+      "label-override-set": "标签覆盖已设置",
+      "label-override-cleared": "标签覆盖已清除",
       "auto-rollback": "自动回滚",
       "rollback": "回滚",
       "preview": "预览",
       "agent-disconnect": "代理已断开",
       "notification-delivery-failed": "通知发送失败",
       "security-alert": "安全警报",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "等待期已结束",
+      "image-prune": "镜像清理"
     },
     "target": {
       "container": "容器",
-      "agent": "代理"
+      "agent": "代理",
+      "group": "分组"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "成熟度已清除",
         "description": "当被成熟度策略搁置的更新变为可用时"
+      },
+      "update-pending-approval": {
+        "name": "更新待审批",
+        "description": "当手动模式的更新进入审批队列时"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "干净"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "镜像",
+      "scanned": "已扫描"
     },
     "fixableBadge": "{count} 个可修复",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "按名称筛选...",
     "clear": "清除",
     "emptyFiltered": "没有触发器匹配您的筛选条件",
-    "testContainerName": "Test Container",
+    "testContainerName": "测试容器",
     "columns": {
       "trigger": "触发器",
       "type": "类型",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "正在加载监视器...",
     "loadError": "无法加载监视器",
-    "soon": "soon",
+    "soon": "即将运行",
     "filterPlaceholder": "按名称筛选...",
     "clear": "清除",
     "emptyFiltered": "没有监视器匹配您的筛选条件",

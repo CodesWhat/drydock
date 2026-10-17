@@ -1,9 +1,11 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
 import AuditView from '@/views/AuditView.vue';
+import { BACKEND_AUDIT_ACTIONS } from '../helpers/audit-actions';
 import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -215,6 +217,170 @@ describe('AuditView', () => {
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
   });
 
+  it.each(['group-policy-set', 'group-policy-cleared'])(
+    'labels the target of %s as a group in the detail panel',
+    async (action) => {
+      setI18nLocale('en');
+      const entry = makeEntry({
+        action,
+        containerName: 'payments',
+        details: '{"group":"payments"}',
+      });
+      mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 1, page: 1, limit: 50 });
+      const wrapper = await mountAuditView();
+      try {
+        await wrapper.get('.row-click-first').trigger('click');
+        const content = wrapper.get('.detail-content').text();
+        expect(content).toContain('Group');
+        expect(content).not.toContain('Container');
+        expect(content).toContain('payments');
+      } finally {
+        wrapper.unmount();
+      }
+    },
+  );
+
+  it.each([
+    ['ar', 'انتهت فترة الانتظار'],
+    ['de', 'Reifezeit abgelaufen'],
+    ['es', 'Periodo de maduración completado'],
+    ['fr', 'Période de maturation écoulée'],
+    ['it', 'Periodo di maturazione completato'],
+    ['ja', '待機期間が終了'],
+    ['ko', '대기 기간 종료'],
+    ['nl', 'Wachttijd verstreken'],
+    ['pl', 'Okres oczekiwania zakończony'],
+    ['pt-BR', 'Período de maturação concluído'],
+    ['ru', 'Период ожидания завершён'],
+    ['tr', 'Bekleme süresi doldu'],
+    ['uk', 'Період очікування завершено'],
+    ['vi', 'Đã hết thời gian chờ'],
+    ['zh-CN', '等待期已结束'],
+    ['zh-TW', '等待期已結束'],
+  ] as const)(
+    'updates maturity captions in %s while preserving selected audit data',
+    async (locale, expected) => {
+      setI18nLocale('en');
+      const entry = makeEntry({
+        action: 'maturity-cleared',
+        containerName: 'Maturity Cleared',
+        details: 'Maturity Cleared: custom diagnostic',
+      });
+      mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 1, page: 1, limit: 50 });
+      const wrapper = await mountAuditView();
+      try {
+        await wrapper.get('.row-click-first').trigger('click');
+        expect(wrapper.get('.detail-header .truncate').text()).toBe('Maturity Cleared');
+        setI18nLocale(locale);
+        await nextTick();
+        expect(wrapper.get('.detail-header .truncate').text()).toBe(expected);
+        expect(wrapper.get('.data-table-row').text()).toContain(expected);
+        expect(wrapper.get('.detail-content').text()).toContain(entry.details);
+        expect(wrapper.text()).toContain(entry.containerName);
+        expect(wrapper.get('.data-table').attributes('data-selected-key')).toBe(entry.id);
+        expect(entry.action).toBe('maturity-cleared');
+        expect(mockGetAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
+
+  describe('loading skeleton', () => {
+    it('shows noninteractive placeholders and a localized status until the service settles', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+      vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+      const previousLocale = i18n.global.locale.value;
+      i18n.global.locale.value = 'fr';
+      const wrapper = await mountAuditView();
+      try {
+        const loading = wrapper.get('[data-test="audit-loading"]');
+        expect(loading.attributes('aria-busy')).toBe('true');
+        expect(wrapper.get('[role="status"]').text()).toBe("Chargement du log d'audit...");
+        expect(loading.get('[aria-hidden="true"]').attributes('aria-hidden')).toBe('true');
+        expect(loading.get('[data-layout]').attributes('data-layout')).toBe('table');
+        expect(loading.findAll('[data-test="audit-loading-entry"]')).toHaveLength(6);
+        expect(loading.findAll('.dd-bg-elevated')).toHaveLength(30);
+        expect(
+          loading.findAll('button, a, input, select, [tabindex], [role="button"]'),
+        ).toHaveLength(0);
+        expect(loading.findAll('[class*="animate-"], [class*="transition-"]')).toHaveLength(0);
+        expect(wrapper.find('.empty-state').exists()).toBe(false);
+        expect(wrapper.find('.data-table').exists()).toBe(false);
+        expect(getAuditLog).toHaveBeenCalledExactlyOnceWith({ page: 1, limit: 50 });
+        pending.resolve({ entries: [makeEntry()], total: 1, page: 1, limit: 50 });
+        await flushPromises();
+        expect(wrapper.find('[data-test="audit-loading"]').exists()).toBe(false);
+        expect(wrapper.find('[role="status"]').exists()).toBe(false);
+        expect(wrapper.get('.data-table').text()).toContain('nginx');
+        expect(getAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+        wrapper.unmount();
+        i18n.global.locale.value = previousLocale;
+      }
+    });
+
+    it.each(['empty', 'error'] as const)(
+      'removes the busy placeholders on %s settlement',
+      async (outcome) => {
+        const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+        vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+        const wrapper = await mountAuditView();
+        try {
+          expect(wrapper.get('[data-test="audit-loading"]').attributes('aria-busy')).toBe('true');
+          if (outcome === 'error') pending.reject(new Error('Service unavailable'));
+          else pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+          await flushPromises();
+          expect(wrapper.find('[data-test="audit-loading"]').exists()).toBe(false);
+          expect(wrapper.find('[aria-busy="true"]').exists()).toBe(false);
+          expect(wrapper.find('[role="status"]').exists()).toBe(false);
+          expect(wrapper.find('.empty-state').exists()).toBe(true);
+          expect(wrapper.text().includes(i18n.global.t('auditView.loadError'))).toBe(
+            outcome === 'error',
+          );
+          expect(getAuditLog).toHaveBeenCalledOnce();
+        } finally {
+          pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+          wrapper.unmount();
+        }
+      },
+    );
+
+    it('follows the saved mode and available content width without fetching again', async () => {
+      const pending = Promise.withResolvers<Awaited<ReturnType<typeof getAuditLog>>>();
+      vi.mocked(getAuditLog).mockReturnValueOnce(pending.promise);
+      preferences.views.audit.mode = 'cards';
+      const wrapper = await mountAuditCardView();
+      try {
+        const placeholders = () => wrapper.get('[data-test="audit-loading"] > div');
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        expect(placeholders().classes()).toContain(
+          'grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))]',
+        );
+        expect(preferences.views.audit.mode).toBe('cards');
+        await wrapper.get('.mode-table').trigger('click');
+        expect(placeholders().attributes('data-layout')).toBe('table');
+        const layout = wrapper.findComponent(dataViewStubs.DataViewLayout);
+        layout.vm.$emit('content-width', 360);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        layout.vm.$emit('content-width', 639);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('cards');
+        layout.vm.$emit('content-width', 640);
+        await nextTick();
+        expect(placeholders().attributes('data-layout')).toBe('table');
+        expect(preferences.views.audit.mode).toBe('table');
+        expect(getAuditLog).toHaveBeenCalledOnce();
+      } finally {
+        pending.resolve({ entries: [], total: 0, page: 1, limit: 50 });
+        wrapper.unmount();
+      }
+    });
+  });
+
   describe('tableColumns (card-mode annotations)', () => {
     it('flags containerName as the card title and action as the card subtitle priority', async () => {
       const wrapper = await mountAuditView();
@@ -268,6 +434,36 @@ describe('AuditView', () => {
   });
 
   describe('routing', () => {
+    it.each(BACKEND_AUDIT_ACTIONS)(
+      'retains the backend action %s from a shared URL',
+      async (action) => {
+        mockRoute.query = { action, page: '2' };
+        const wrapper = await mountAuditView();
+        try {
+          expect(mockGetAuditLog).toHaveBeenCalledExactlyOnceWith({ page: 2, limit: 50, action });
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+
+    it('retains supported mixed actions, deduplicates them and rejects unknown URL actions', async () => {
+      mockRoute.query = {
+        actions: 'maturity-cleared,container-unhealthy,maturity-cleared,unknown-action',
+        page: '3',
+      };
+      const wrapper = await mountAuditView();
+      try {
+        expect(mockGetAuditLog).toHaveBeenCalledExactlyOnceWith({
+          page: 3,
+          limit: 50,
+          actions: ['maturity-cleared', 'container-unhealthy'],
+        });
+      } finally {
+        wrapper.unmount();
+      }
+    });
+
     it('loads using route query values for view, page, action, and search', async () => {
       mockRoute.query = {
         page: '2',
@@ -458,6 +654,76 @@ describe('AuditView', () => {
   });
 
   describe('filtering', () => {
+    it.each([
+      ['fr', 'Conteneur défaillant', 'Échec d’authentification par clé API'],
+      ['ar', 'حاوية غير سليمة', 'فشلت المصادقة بمفتاح API'],
+    ] as const)(
+      'changes filter captions in %s without changing the request identities',
+      async (locale, unhealthy, authFailed) => {
+        setI18nLocale('en');
+        mockRoute.query = { action: 'container-unhealthy', page: '2' };
+        const entry = makeEntry({
+          action: 'container-unhealthy',
+          containerName: 'Container Unhealthy',
+          details: 'upstream diagnostic stays verbatim',
+        });
+        mockGetAuditLog.mockResolvedValue({ entries: [entry], total: 120, page: 2, limit: 50 });
+        const wrapper = await mountAuditView();
+        try {
+          expect
+            .soft(mockGetAuditLog)
+            .toHaveBeenCalledExactlyOnceWith({ page: 2, limit: 50, action: 'container-unhealthy' });
+          await wrapper.get('.row-click-first').trigger('click');
+          setI18nLocale(locale);
+          await nextTick();
+          expect.soft(wrapper.get('[aria-haspopup="listbox"]').text()).toContain(unhealthy);
+          expect.soft(wrapper.get('.detail-header .truncate').text()).toBe(unhealthy);
+          expect(wrapper.get('.detail-content').text()).toContain(entry.details);
+          expect(wrapper.text()).toContain(entry.containerName);
+          expect(mockGetAuditLog).toHaveBeenCalledOnce();
+          await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+          const option = wrapper
+            .findAll('[role="option"]')
+            .find((item) => item.text() === authFailed);
+          expect(option).toBeDefined();
+          await option!.trigger('click');
+          await flushPromises();
+          expect(mockGetAuditLog).toHaveBeenLastCalledWith({
+            page: 1,
+            limit: 50,
+            actions: ['container-unhealthy', 'api-key-auth-failed'],
+          });
+        } finally {
+          wrapper.unmount();
+          setI18nLocale('en');
+        }
+      },
+    );
+
+    it.each(BACKEND_AUDIT_ACTIONS)(
+      'offers the backend action %s and sends its untranslated identity',
+      async (action) => {
+        const wrapper = await mountAuditView();
+        try {
+          await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+          const label = i18n.global.te(`auditView.actions.${action}`)
+            ? i18n.global.t(`auditView.actions.${action}`)
+            : action
+                .split('-')
+                .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' ');
+          const option = wrapper.findAll('[role="option"]').find((item) => item.text() === label);
+          expect(option, action).toBeDefined();
+          await option!.trigger('click');
+          await flushPromises();
+          expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50, action });
+          expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
+        } finally {
+          wrapper.unmount();
+        }
+      },
+    );
+
     it('filters table rows by search query', async () => {
       mockGetAuditLog.mockResolvedValue({
         entries: [

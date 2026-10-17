@@ -8,8 +8,10 @@ import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import AppTabBar from '../components/AppTabBar.vue';
+import ConfigApiKeysTab from '../components/config/ConfigApiKeysTab.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
+import ConfigGroupPoliciesTab from '../components/config/ConfigGroupPoliciesTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { LOCALE_OPTIONS, type SupportedLocale } from '../i18n/locales';
@@ -77,9 +79,15 @@ function setFontSize(scale: number) {
   applyFontSize(scale);
 }
 
-type SettingsTab = 'general' | 'appearance' | 'profile';
+type SettingsTab = 'general' | 'appearance' | 'profile' | 'apiKeys' | 'groupPolicies';
 
-const VALID_TABS = new Set<SettingsTab>(['general', 'appearance', 'profile']);
+const VALID_TABS = new Set<SettingsTab>([
+  'general',
+  'appearance',
+  'profile',
+  'apiKeys',
+  'groupPolicies',
+]);
 
 function tabFromQuery(): SettingsTab {
   const raw = route.query.tab;
@@ -102,6 +110,8 @@ const settingsTabs = computed(() => [
   { id: 'general' as const, label: t('configView.tabs.general'), icon: 'settings' },
   { id: 'appearance' as const, label: t('configView.tabs.appearance'), icon: 'config' },
   { id: 'profile' as const, label: t('configView.tabs.profile'), icon: 'user' },
+  { id: 'apiKeys' as const, label: t('configView.tabs.apiKeys'), icon: 'key' },
+  { id: 'groupPolicies' as const, label: t('groupPolicyEditor.tab'), icon: 'containers' },
 ]);
 
 const radiusPresets = computed(() =>
@@ -156,7 +166,7 @@ const webhookBaseUrl = computed(() => {
 });
 const webhookExample = computed(
   () =>
-    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`, // gitleaks:allow placeholder in the webhook example, not a credential
+    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`, // gitleaks:allow
 );
 
 // Settings state
@@ -218,25 +228,6 @@ const showSyncToggle = computed(
     profileData.value.username !== 'anonymous',
 );
 
-function formatProfileLastLogin(rawValue: unknown): string {
-  if (rawValue === undefined || rawValue === null || rawValue === '') {
-    return '';
-  }
-  const date = new Date(rawValue as string | number | Date);
-  if (Number.isNaN(date.getTime())) {
-    return String(rawValue);
-  }
-  return date.toLocaleString();
-}
-
-function normalizeSessionCount(rawValue: unknown): number {
-  const parsed = Number(rawValue);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    return 0;
-  }
-  return Math.floor(parsed);
-}
-
 async function loadGeneralSettingsData() {
   loading.value = true;
   serverError.value = '';
@@ -291,7 +282,7 @@ async function loadGeneralSettingsData() {
       },
       {
         label: t('configView.general.fields.storeFile'),
-        value: String(storeConfig.file ?? t('common.unknown')),
+        value: String(storeConfig.dbFile ?? storeConfig.file ?? t('common.unknown')),
       },
     ];
     serverFields.value = fields;
@@ -318,13 +309,8 @@ async function loadProfileData() {
     const user = await getUser();
     if (user) {
       profileData.value = {
+        ...emptyProfileData(),
         username: user.username ?? '',
-        displayName: user.displayName ?? '',
-        email: user.email ?? '',
-        role: user.role ?? '',
-        provider: user.provider ?? user.authentication ?? '',
-        lastLogin: formatProfileLastLogin(user.lastLogin),
-        sessions: normalizeSessionCount(user.sessions),
       };
     }
   } catch (e: unknown) {
@@ -400,7 +386,7 @@ async function handleClearIconCache() {
 function triggerBlobDownload(blob: Blob, filename: string): void {
   const createObjectUrl = globalThis.URL?.createObjectURL;
   if (typeof createObjectUrl !== 'function') {
-    throw new Error('Browser does not support file downloads');
+    throw new Error(t('configView.general.errors.downloadDebugDump'));
   }
 
   const objectUrl = createObjectUrl(blob);
@@ -433,7 +419,10 @@ async function handleDownloadDebugDump() {
 }
 
 function handleSelectThemeFamily(familyId: string, event: Event) {
-  transitionTheme(() => setThemeFamily(familyId as ThemeFamily), event);
+  transitionTheme(
+    () => setThemeFamily(familyId as ThemeFamily),
+    event instanceof MouseEvent ? event : undefined,
+  );
 }
 
 function handleSelectFont(fontId: string) {
@@ -518,5 +507,9 @@ function handleSelectIconLibrary(library: string) {
       :profile-loading="profileLoading"
       :profile-error="profileError"
     />
+
+    <ConfigApiKeysTab v-if="activeSettingsTab === 'apiKeys'" />
+
+    <ConfigGroupPoliciesTab v-if="activeSettingsTab === 'groupPolicies'" />
   </DataViewLayout>
 </template>

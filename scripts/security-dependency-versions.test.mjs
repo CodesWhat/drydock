@@ -83,8 +83,31 @@ test('Nodemailer includes the address parser and legacy content-access fixes', (
   assert.ok(resolutions > 0, 'expected Nodemailer resolutions in workspace locks');
 });
 
+function isJsYamlPatched(version) {
+  const major = Number(version.split('.')[0]);
+  return (
+    (major === 3 && compareSemver(version, '3.15.2') >= 0) ||
+    (major === 4 && compareSemver(version, '4.3.2') >= 0)
+  );
+}
+
+test('isJsYamlPatched accepts only patched releases on vetted major lines', () => {
+  for (const [version, expected] of [
+    ['3.15.1', false],
+    ['3.15.2', true],
+    ['3.16.0', true],
+    ['4.0.0', false],
+    ['4.3.1', false],
+    ['4.3.2', true],
+    ['4.4.0', true],
+    ['5.0.0', false],
+  ]) {
+    assert.equal(isJsYamlPatched(version), expected, version);
+  }
+});
+
 test('every js-yaml resolution counts empty merge sources against its budget', () => {
-  assert.ok(compareSemver(readJson('e2e/package.json').overrides['js-yaml'], '3.15.2') >= 0);
+  assert.ok(isJsYamlPatched(readJson('e2e/package.json').overrides['js-yaml']));
   let resolutions = 0;
   for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
     for (const [path, entry] of Object.entries(
@@ -92,10 +115,7 @@ test('every js-yaml resolution counts empty merge sources against its budget', (
     )) {
       if (!path.endsWith('node_modules/js-yaml')) continue;
       resolutions += 1;
-      const major = Number(entry.version.split('.')[0]);
-      assert.ok(major === 3 || major === 4, `${workspace}/${path} must use a vetted major`);
-      const floor = major === 3 ? '3.15.2' : '4.3.2';
-      assert.ok(compareSemver(entry.version, floor) >= 0, `${workspace}/${path}`);
+      assert.ok(isJsYamlPatched(entry.version), `${workspace}/${path}`);
     }
   }
   assert.ok(resolutions > 0, 'expected js-yaml resolutions in workspace locks');
@@ -104,11 +124,11 @@ test('every js-yaml resolution counts empty merge sources against its budget', (
 test('Artillery uses csv-parse with the duplicate-column prototype fix', () => {
   const manifest = readJson('e2e/package.json');
   const lockfile = readJson('e2e/package-lock.json');
-  assert.ok(compareSemver(manifest.overrides?.['csv-parse'], '7.0.2') >= 0);
+  assert.equal(manifest.overrides?.['csv-parse'], '7.0.2');
   const artilleryCsv =
     resolvedVersion(lockfile, 'artillery/node_modules/csv-parse') ??
     resolvedVersion(lockfile, 'csv-parse');
-  assert.ok(compareSemver(artilleryCsv, '7.0.2') >= 0);
+  assert.equal(artilleryCsv, '7.0.2');
   assert.equal(manifest.scripts.postinstall, 'node ../scripts/patch-artillery-csv.mjs');
 });
 
@@ -185,8 +205,8 @@ test('sharp is pinned to a patched release in the website', () => {
   const manifest = readJson('apps/web/package.json');
   const lockfile = readJson('apps/web/package-lock.json');
 
-  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.4') >= 0);
-  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.4') >= 0);
+  assert.ok(compareSemver(manifest.overrides?.sharp, '0.35.5') >= 0);
+  assert.ok(compareSemver(resolvedVersion(lockfile, 'sharp'), '0.35.5') >= 0);
 });
 
 test('Next.js is pinned past the Windows server execution advisory', () => {
@@ -255,22 +275,54 @@ const septemberSecurityFloors = {
   'ip-address': { 10: '10.7.1' },
 };
 
+function assertSeptemberSecurityFloors(workspace, lockfile, found) {
+  for (const [path, entry] of Object.entries(lockfile.packages)) {
+    // A link entry (`link: true`) points at a local package rather than a registry
+    // resolution and carries no version of its own, so there is no floor to check.
+    if (typeof entry.version !== 'string') continue;
+    for (const [name, floors] of Object.entries(septemberSecurityFloors)) {
+      if (!path.endsWith(`node_modules/${name}`)) continue;
+      found.add(name);
+      const floor = floors[Number(entry.version.split('.')[0])];
+      assert.ok(floor, `${workspace}/${path} uses an unvetted major: ${entry.version}`);
+      assert.ok(
+        compareSemver(entry.version, floor) >= 0,
+        `${workspace}/${path}: ${entry.version} < ${floor}`,
+      );
+    }
+  }
+}
+
 test('workspace resolutions include the September runtime security fixes', () => {
   const found = new Set();
   for (const workspace of ['.', 'app', 'ui', 'e2e', 'apps/demo', 'apps/web']) {
-    const lockfile = readJson(`${workspace}/package-lock.json`);
-    for (const [path, entry] of Object.entries(lockfile.packages)) {
-      for (const [name, floors] of Object.entries(septemberSecurityFloors)) {
-        if (!path.endsWith(`node_modules/${name}`)) continue;
-        found.add(name);
-        const floor = floors[Number(entry.version.split('.')[0])];
-        assert.ok(floor, `${workspace}/${path} uses an unvetted major: ${entry.version}`);
-        assert.ok(
-          compareSemver(entry.version, floor) >= 0,
-          `${workspace}/${path}: ${entry.version} < ${floor}`,
-        );
-      }
-    }
+    assertSeptemberSecurityFloors(workspace, readJson(`${workspace}/package-lock.json`), found);
   }
   assert.deepEqual([...found].sort(), Object.keys(septemberSecurityFloors).sort());
+});
+
+test('September floor check skips lockfile entries without a version', () => {
+  const found = new Set();
+  assert.doesNotThrow(() =>
+    assertSeptemberSecurityFloors(
+      'fixture',
+      {
+        packages: {
+          'node_modules/axios': { resolved: 'packages/axios', link: true },
+          'node_modules/next': { version: '16.3.8' },
+        },
+      },
+      found,
+    ),
+  );
+  assert.deepEqual([...found], ['next']);
+  assert.throws(
+    () =>
+      assertSeptemberSecurityFloors(
+        'fixture',
+        { packages: { 'node_modules/next': { version: '17.0.0' } } },
+        new Set(),
+      ),
+    /fixture\/node_modules\/next uses an unvetted major: 17\.0\.0/,
+  );
 });

@@ -18,7 +18,13 @@ const { t } = useI18n();
 
 const emit = defineEmits<{
   navigate: [route: RouteLocationRaw];
+  'update:statOrder': [order: WidgetOrderItem[]];
 }>();
+
+const draggableOrder = computed({
+  get: () => props.statOrder,
+  set: (order: WidgetOrderItem[]) => emit('update:statOrder', order),
+});
 
 const statById = computed(() => {
   const map = new Map<string, DashboardStatCard>();
@@ -38,13 +44,17 @@ function handleNavigate(route?: RouteLocationRaw) {
 
 const gridRef = ref<HTMLElement | null>(null);
 
-useDraggable(gridRef, () => props.statOrder, {
-  animation: 150,
-  handle: '.drag-handle',
-  ghostClass: 'dd-drag-ghost',
-  dragClass: 'dd-drag-active',
-  disabled: computed(() => !props.editMode),
-});
+useDraggable(
+  gridRef,
+  draggableOrder,
+  computed(() => ({
+    animation: 150,
+    handle: '.drag-handle',
+    ghostClass: 'dd-drag-ghost',
+    dragClass: 'dd-drag-active',
+    disabled: !props.editMode,
+  })),
+);
 </script>
 
 <template>

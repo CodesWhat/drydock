@@ -3,12 +3,16 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
-import type { ContainerImage } from '../../../model/container.js';
+import type { Container, ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
-import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
+import {
+  buildComposeFileLockKeys,
+  buildComposeProjectLockKey,
+  withContainerUpdateLocks,
+} from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import {
   attachCreatedContainerCandidate,
@@ -50,9 +54,27 @@ const COMPOSE_DIRECTORY_FILE_CANDIDATES = [
   'docker-compose.yaml',
   'docker-compose.yml',
 ];
+/**
+ * Per-resolution state threaded through the label readers (DR-127).
+ * `rejectedLabelPaths` records paths containment dropped, which suppresses the
+ * trigger's default file. `runtimeDefaultComposeFilePath` is the compose file
+ * the trigger actually resolves to, which for a directory-form `file` is not
+ * the configured value itself; the issue #365 tail comparison needs the
+ * resolved name, and only an async caller can produce it.
+ */
+type ComposeLabelResolutionContext = {
+  rejectedLabelPaths: string[];
+  runtimeDefaultComposeFilePath: string | null;
+  /**
+   * Whether a containment rejection or a mount-prefix substitution is logged.
+   * Off for trigger affinity checks, which run per container on every trigger
+   * lookup and would otherwise repeat the warn the read path already emits.
+   */
+  logRejections: boolean;
+};
+
 const ROOT_MODE_BREAK_GLASS_HINT =
   'use socket proxy or adjust file permissions/group_add; break-glass root mode requires DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true';
-
 interface DockercomposeTriggerConfiguration extends DockerTriggerConfiguration {
   file?: string;
   backup: boolean;
@@ -156,11 +178,94 @@ type ComposeRuntimeContext = {
   auth?: RegistryPullAuth;
   newImage?: string;
   imageIdentity?: string;
+  /**
+   * The local image ID the compose-file-once preflight's pull resolved to,
+   * recorded only when the daemon could not bind that pull to a manifest
+   * digest. Every replica of the service is then created from this exact
+   * image instead of from the mutable tag (DR-54).
+   */
+  pulledImageId?: string;
+  /**
+   * Write-back for an image ID a runtime refresh resolved after the
+   * compose-file-once preflight could not. Later replicas of the service read
+   * the preflight's context, so a recovery that stays local to one replica
+   * leaves the next one resolving the mutable tag again, and a tag that moves
+   * mid-batch then splits the service with each replica passing its own
+   * check against its own image (DR-54).
+   */
+  onPulledImageIdResolved?: (pulledImageId: string) => void;
   securityGateUnboundWarn?: boolean;
   securityGateUnboundReason?: string;
+  securityGateUnboundWarnRecorded?: boolean;
   operationId?: string;
   registry?: unknown;
+  /**
+   * Which digest breaks a tie when the daemon records several `RepoDigests`
+   * for the pulled repository, set only by a caller that names the image this
+   * refresh deploys. `null` means "no preference, and do not fall back to the
+   * update candidate's digest": a rollback pulls the image its backup
+   * retained, which the candidate describes nothing about, so an unresolvable
+   * tie is left unbound rather than picked (DR-64). Left undefined by the
+   * update paths, which keep the candidate tie-break.
+   */
+  preferredDigest?: string | null;
 };
+
+/**
+ * The post-pull gate fields `capturePulledImageIdentity()` computes inside
+ * the compose-file-once preflight (`buildComposeFileOnceRuntimeContextByService()`)
+ * or the ordinary runtime refresh (`refreshComposeServiceWithDockerApi()`):
+ * which digest to gate against, and whether the gate had to be skipped with a
+ * warning instead. `trigger()` and `triggerBatch()` accept an `unknown`
+ * runtime-context argument from their callers — the agent trigger API
+ * whitelists its own context to `{ operationIds }`, and every other caller is
+ * internal, so this was flagged as CWE-693 and refuted only on that
+ * unreachability basis. A value shaped like this arriving through that
+ * argument must still never decide the gate: it picks which image gets
+ * verified and scanned, and whether that happens at all.
+ * `sanitizeComposeCallerRuntimeContext()` strips these exact keys from the
+ * caller's argument at the `trigger()`/`triggerBatch()` boundary, before it is
+ * merged into any service's runtime context, so nothing downstream of that
+ * boundary can receive them from a caller (DR-52).
+ */
+type ComposeInternalGateOutcome = Pick<
+  ComposeRuntimeContext,
+  | 'imageIdentity'
+  | 'securityGateUnboundWarn'
+  | 'securityGateUnboundReason'
+  | 'securityGateUnboundWarnRecorded'
+>;
+
+const COMPOSE_INTERNAL_GATE_OUTCOME_KEYS: (keyof ComposeInternalGateOutcome)[] = [
+  'imageIdentity',
+  'securityGateUnboundWarn',
+  'securityGateUnboundReason',
+  'securityGateUnboundWarnRecorded',
+];
+
+/**
+ * Strip the internal-only gate outcome keys (see `ComposeInternalGateOutcome`)
+ * from a caller-supplied runtime context. Called once, at the
+ * `trigger()`/`triggerBatch()` boundary, on the raw `unknown` argument those
+ * public entries accept, so every merge downstream of it is safe by
+ * construction rather than by each call site remembering to filter.
+ */
+function sanitizeComposeCallerRuntimeContext(runtimeContext: unknown): unknown {
+  if (!runtimeContext || typeof runtimeContext !== 'object') {
+    return runtimeContext;
+  }
+  const candidate = runtimeContext as Record<string, unknown>;
+  if (!COMPOSE_INTERNAL_GATE_OUTCOME_KEYS.some((key) => key in candidate)) {
+    return runtimeContext;
+  }
+  const sanitized: Record<string, unknown> = { ...candidate };
+  for (const key of COMPOSE_INTERNAL_GATE_OUTCOME_KEYS) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
+type ComposeHookConfig = Awaited<ReturnType<Docker['buildHookConfig']>>;
 
 type ComposeUpdateLifecycleContext = {
   composeFile: string;
@@ -172,6 +277,16 @@ type ComposeUpdateLifecycleContext = {
   skipPull?: boolean;
   runtimeContext?: ComposeRuntimeContext;
   postPullGateCompleted?: boolean;
+  /**
+   * The hook configuration the batch preflight resolved for this container,
+   * provenance check included. The lifecycle runs its hooks from this rather
+   * than resolving it again, so the check has one answer per container and it
+   * is the one given before the batch touched anything (SEC-27). It sits on
+   * the lifecycle context itself and never under `runtimeContext`, which is
+   * where a caller's argument is merged in: a hook configuration names the
+   * commands that run, so it must not be something a caller can supply.
+   */
+  hookConfig?: ComposeHookConfig;
 };
 
 type ComposeRuntimeUpdateMapping = {
@@ -194,12 +309,31 @@ type ComposeRuntimeRefreshOptions = {
   ) => Promise<void>;
 };
 
+/**
+ * What `assertReplacementContainerImage` hands back when a moved tag was kept
+ * under `DD_SECURITY_AVAILABILITY_POLICY=warn` instead of thrown over. The
+ * caller records the audit row itself, once the recreate the container came
+ * from has actually succeeded.
+ */
+type KeptMovedTagAudit = {
+  details: string;
+};
+
+/**
+ * The rollback reason every compose runtime-refresh rollback records. Also the
+ * identity marker the restore-failure correction path matches on, so it can
+ * only rewrite a row this provider's own rollback produced.
+ */
+const COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON = 'compose_runtime_refresh_failed';
+
 type ComposeRollbackOutcome = {
   status: 'rolled-back' | 'rollback-failed';
   phase: 'rolled-back' | 'rollback-failed';
-  rollbackReason: 'compose_runtime_refresh_failed';
+  rollbackReason: typeof COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON;
   lastError: string;
 };
+
+type StoredUpdateOperation = NonNullable<ReturnType<typeof updateOperationStore.getOperationById>>;
 
 type ComposeRollbackError = Error & {
   composeRollbackOutcome?: ComposeRollbackOutcome;
@@ -207,6 +341,114 @@ type ComposeRollbackError = Error & {
 
 function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
   return Object.values(runtimeContext).some((value) => value !== undefined);
+}
+
+/**
+ * Layer a compose-file-once service's preflight context (pulled image, auth,
+ * bound identity) over the runtime context the caller requested, leaving the
+ * context undefined when there is neither.
+ */
+function mergeComposeFileOnceRuntimeContext(
+  requestedRuntimeContext: Record<string, unknown> | undefined,
+  composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+): ComposeRuntimeContext | undefined {
+  if (!composeFileOnceRuntimeContext && !requestedRuntimeContext) {
+    return undefined;
+  }
+  return {
+    ...(requestedRuntimeContext || {}),
+    ...(composeFileOnceRuntimeContext || {}),
+  };
+}
+
+/**
+ * A compose file left holding the candidate image because its restore failed
+ * needs manual repair, so the restore failure travels with the error the
+ * caller records rather than only reaching the log (DR-47). The original error
+ * object is kept whenever there is one, so rollback details already attached
+ * to it survive.
+ */
+function withComposeRestoreFailure(runtimeError: unknown, restoreError: unknown): unknown {
+  const restoreDetail = `compose file restore failed: ${getErrorMessage(restoreError)}`;
+  if (runtimeError instanceof Error) {
+    runtimeError.message = `${runtimeError.message} (${restoreDetail})`;
+    return runtimeError;
+  }
+  // A non-Error rejection has to be replaced rather than amended, so carry the
+  // original across: the compose rollback outcome is what tells a caller the
+  // container was restored, and losing it would downgrade the report.
+  const replacement: Error & { composeRollbackOutcome?: unknown } = new Error(
+    `${getErrorMessage(runtimeError)} (${restoreDetail})`,
+    { cause: runtimeError },
+  );
+  const composeRollbackOutcome = isPlainObject(runtimeError)
+    ? runtimeError.composeRollbackOutcome
+    : undefined;
+  if (composeRollbackOutcome !== undefined) {
+    replacement.composeRollbackOutcome = composeRollbackOutcome;
+  }
+  return replacement;
+}
+
+/**
+ * Collect the distinct update-operation ids requested for a set of compose
+ * runtime mappings. Several replicas of one service can share a mapping list,
+ * so the set is what callers want rather than one entry per container.
+ */
+/**
+ * Whether a stored operation is the record this provider's rollback just wrote
+ * for `container`. An update request for a single container carries a bare
+ * `operationId` that every mapping in the batch resolves to, so the id alone
+ * does not say which container the row belongs to; the container id, the kind
+ * and the compose rollback reason together do.
+ */
+function isComposeRollbackRecordFor(
+  operation: StoredUpdateOperation | undefined,
+  container: ComposeRuntimeUpdateMapping['container'],
+): operation is StoredUpdateOperation {
+  return (
+    operation !== undefined &&
+    operation.status === 'rolled-back' &&
+    operation.kind !== 'self-update' &&
+    typeof container.id === 'string' &&
+    operation.containerId === container.id &&
+    operation.rollbackReason === COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON
+  );
+}
+
+type ComposeFileOncePreflightBlockingContext = {
+  service: string;
+  containerId?: string;
+};
+
+// Carries which service/container was actually being processed when a
+// compose-file-once preflight step threw, so `terminalizeComposeFileOncePreflightOperations`
+// can tell the service that failed from the services it never attempted
+// (DR-37). A Symbol key keeps this off the error's own enumerable shape.
+const COMPOSE_FILE_ONCE_BLOCKING_CONTEXT = Symbol('composeFileOnceBlockingContext');
+
+function tagComposeFileOncePreflightError<TError>(
+  error: TError,
+  context: ComposeFileOncePreflightBlockingContext,
+): TError {
+  if (error && typeof error === 'object' && !(COMPOSE_FILE_ONCE_BLOCKING_CONTEXT in error)) {
+    (error as Record<PropertyKey, unknown>)[COMPOSE_FILE_ONCE_BLOCKING_CONTEXT] = context;
+  }
+  return error;
+}
+
+function getComposeFileOncePreflightBlockingContext(
+  error: unknown,
+): ComposeFileOncePreflightBlockingContext | undefined {
+  if (!error || typeof error !== 'object' || !(COMPOSE_FILE_ONCE_BLOCKING_CONTEXT in error)) {
+    return undefined;
+  }
+  // Safe to trust the shape without a runtime check: `tagComposeFileOncePreflightError`
+  // is the only writer of this symbol key, and it always assigns a well-formed
+  // `ComposeFileOncePreflightBlockingContext` literal, never a partial one.
+  return (error as Record<PropertyKey, unknown>)[
+    COMPOSE_FILE_ONCE_BLOCKING_CONTEXT
+  ] as ComposeFileOncePreflightBlockingContext;
 }
 
 /**
@@ -313,6 +555,193 @@ function getDockerApiFromWatcher(watcher: unknown): DockerApiLike | undefined {
   return maybeDockerApi as DockerApiLike;
 }
 
+function resolveComposeInterpolation(
+  value: unknown,
+  environment: Record<string, string> = {},
+): unknown {
+  if (typeof value !== 'string' || !value.includes('${')) {
+    return value;
+  }
+
+  return value.replace(
+    /\$\{([_a-zA-Z][_a-zA-Z0-9]*)(?:(:-|-)([^}]*))?\}/g,
+    (
+      expression,
+      variableName: string,
+      operator: string | undefined,
+      fallback: string | undefined,
+    ) => {
+      const configuredValue = environment[variableName];
+      if (configuredValue !== undefined && (operator !== ':-' || configuredValue !== '')) {
+        return configuredValue;
+      }
+      if (operator === ':-' || operator === '-') {
+        return fallback as string;
+      }
+      return configuredValue ?? expression;
+    },
+  );
+}
+
+const COMPOSE_ESCAPED_DOLLAR = '\u0000';
+
+function resolveComposeImageForContinuity(
+  value: unknown,
+  authoritativeResolvedImage?: unknown,
+): unknown {
+  if (typeof value !== 'string' || !value.includes('${')) {
+    return value;
+  }
+  return authoritativeResolvedImage ?? value;
+}
+
+function getComposeRepositoryPart(imageReference: string): string {
+  const withoutDigest = imageReference.split('@')[0];
+  const lastSlashIndex = withoutDigest.lastIndexOf('/');
+  const lastColonIndex = withoutDigest.lastIndexOf(':');
+  return lastColonIndex > lastSlashIndex ? withoutDigest.slice(0, lastColonIndex) : withoutDigest;
+}
+
+function composeImageRepositoryMatchesRuntime(
+  composeImage: unknown,
+  runtimeImage: unknown,
+): boolean {
+  if (typeof composeImage !== 'string' || !composeImage.includes('${')) {
+    return getImageRepositoryKey(runtimeImage) === getImageRepositoryKey(composeImage);
+  }
+  const repositoryPart = getComposeRepositoryPart(composeImage);
+  const resolvedRepository = resolveComposeInterpolation(repositoryPart, {});
+  if (typeof resolvedRepository !== 'string' || resolvedRepository.includes('${')) {
+    return false;
+  }
+  return getImageRepositoryKey(runtimeImage) === getImageRepositoryKey(resolvedRepository);
+}
+
+function parseDoubleQuotedComposeEnvironmentValue(value: string): string | undefined {
+  let decoded = '';
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== '\\') {
+      decoded += value[index];
+      continue;
+    }
+    const escaped = value[++index];
+    const replacements: Record<string, string> = {
+      n: '\n',
+      r: '\r',
+      t: '\t',
+      '\\': '\\',
+      '"': '"',
+    };
+    if (escaped === '$') {
+      decoded += COMPOSE_ESCAPED_DOLLAR;
+      continue;
+    }
+    if (!(escaped in replacements)) {
+      return undefined;
+    }
+    decoded += replacements[escaped];
+  }
+  return decoded;
+}
+
+function findComposeQuotedValueEnd(value: string, quote: string): number {
+  for (let index = 0; index < value.length; index++) {
+    if (value[index] !== quote) {
+      continue;
+    }
+    let backslashCount = 0;
+    for (let preceding = index - 1; preceding >= 0 && value[preceding] === '\\'; preceding--) {
+      backslashCount++;
+    }
+    if (backslashCount % 2 === 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function parseComposeEnvironmentFile(contents: string): Record<string, string> {
+  const resolvedEnvironment: Record<string, string> = {};
+  const invalidEnvironmentKeys = new Set<string>();
+  const lines = contents.split(/\r?\n/);
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const assignment = lines[lineIndex].match(
+      /^\s*(?:export\s+)?([_a-zA-Z][_a-zA-Z0-9]*)\s*(?:=|:)\s*(.*)$/,
+    );
+    if (!assignment) {
+      continue;
+    }
+    const variableName = assignment[1];
+    const keyAlreadyInvalid = invalidEnvironmentKeys.has(variableName);
+    const value = assignment[2].trimStart();
+    if (value.startsWith("'")) {
+      let quotedValue = value.slice(1);
+      let closingIndex = findComposeQuotedValueEnd(quotedValue, "'");
+      while (closingIndex < 0 && lineIndex + 1 < lines.length) {
+        lineIndex++;
+        quotedValue += `\n${lines[lineIndex]}`;
+        closingIndex = findComposeQuotedValueEnd(quotedValue, "'");
+      }
+      const remainder = quotedValue.slice(closingIndex + 1).trim();
+      if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
+        continue;
+      }
+      if (!keyAlreadyInvalid) {
+        resolvedEnvironment[variableName] = quotedValue.slice(0, closingIndex).replace(/\\'/g, "'");
+      }
+      continue;
+    }
+    if (value.startsWith('"')) {
+      let quotedValue = value.slice(1);
+      let closingIndex = findComposeQuotedValueEnd(quotedValue, '"');
+      while (closingIndex < 0 && lineIndex + 1 < lines.length) {
+        lineIndex++;
+        quotedValue += `\n${lines[lineIndex]}`;
+        closingIndex = findComposeQuotedValueEnd(quotedValue, '"');
+      }
+      const remainder = quotedValue.slice(closingIndex + 1).trim();
+      if (closingIndex < 0 || (remainder !== '' && !remainder.startsWith('#'))) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
+        continue;
+      }
+      const decoded = parseDoubleQuotedComposeEnvironmentValue(quotedValue.slice(0, closingIndex));
+      if (decoded === undefined || /(?<!\\)\$(?!\{)/.test(decoded)) {
+        invalidEnvironmentKeys.add(variableName);
+        delete resolvedEnvironment[variableName];
+        continue;
+      }
+      if (!keyAlreadyInvalid) {
+        resolvedEnvironment[variableName] = String(
+          resolveComposeInterpolation(decoded, resolvedEnvironment),
+        ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+      }
+      continue;
+    }
+    if (/["'`]|\$\(/.test(value)) {
+      invalidEnvironmentKeys.add(variableName);
+      delete resolvedEnvironment[variableName];
+      continue;
+    }
+    const commentIndex = value.search(/\s#/);
+    const unquotedValue = (commentIndex < 0 ? value : value.slice(0, commentIndex))
+      .trimEnd()
+      .replace(/\\\$/g, COMPOSE_ESCAPED_DOLLAR);
+    if (/\$(?!\{)/.test(unquotedValue)) {
+      invalidEnvironmentKeys.add(variableName);
+      delete resolvedEnvironment[variableName];
+      continue;
+    }
+    if (!keyAlreadyInvalid) {
+      resolvedEnvironment[variableName] = String(
+        resolveComposeInterpolation(unquotedValue, resolvedEnvironment),
+      ).replaceAll(COMPOSE_ESCAPED_DOLLAR, '$');
+    }
+  }
+  return resolvedEnvironment;
+}
 function getServiceKey(compose, container, currentImage) {
   const composeServiceName = container.labels?.['com.docker.compose.service'];
   if (composeServiceName) {
@@ -332,11 +761,15 @@ function getServiceKey(compose, container, currentImage) {
     if (!serviceImage || !imageToMatch) {
       return false;
     }
-    const normalizedServiceImage = normalizeImplicitLatest(serviceImage);
+    const resolvedServiceImage = resolveComposeInterpolation(serviceImage);
+    const normalizedServiceImage = normalizeImplicitLatest(resolvedServiceImage);
 
     // Match priority (most strict to most lenient):
     // 1) Exact `service.image` match.
     if (serviceImage === imageToMatch) {
+      return true;
+    }
+    if (resolvedServiceImage === imageToMatch) {
       return true;
     }
     // 2) Exact match after normalizing implicit `:latest`.
@@ -384,7 +817,15 @@ function hasExplicitRegistryHost(imageReference: string): boolean {
   return firstSegment.includes('.') || firstSegment.includes(':') || firstSegment === 'localhost';
 }
 
-function preserveExplicitDockerIoPrefix(
+/**
+ * Keep an explicit `docker.io/` prefix a compose service's `image:` wrote
+ * literally, which the identity binder's normalised repository otherwise
+ * drops. Exported so the Portainer trigger's stack-file digest pin
+ * (`applyPortainerDigestPin`) can reuse the same rule instead of rewriting
+ * the operator's `docker.io/library/nginx:1.27` down to `library/nginx:1.27`
+ * (DR-65).
+ */
+export function preserveExplicitDockerIoPrefix(
   currentComposeImage: string | null | undefined,
   targetImageReference: string,
 ): string {
@@ -442,6 +883,33 @@ function getErrorCode(error: unknown): string | undefined {
   }
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * Whether `candidate` (an already `path.resolve`d absolute path) sits inside
+ * `root`, including `root` itself. Symlink-free: uses `path.relative` rather
+ * than `fs.realpath` so it never requires the path to exist (DR-127).
+ */
+function isPathWithinAllowedRoot(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  if (relative === '') {
+    return true;
+  }
+  // Compare whole segments: a leading `..` only escapes the root when it is the
+  // entire first segment, so a directory legitimately named `..cache` stays in.
+  if (relative === '..' || relative.startsWith(`..${path.sep}`)) {
+    return false;
+  }
+  return !path.isAbsolute(relative);
+}
+
+/**
+ * The last two segments of a compose path (`<project directory>/<file name>`),
+ * which is what the issue #365 mount-prefix fallback compares when the host and
+ * the container see the same stack under different prefixes.
+ */
+function getComposeFilePathTail(composeFilePath: string): string {
+  return path.join(path.basename(path.dirname(composeFilePath)), path.basename(composeFilePath));
 }
 
 /**
@@ -506,6 +974,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   set _composeCacheMaxEntries(maxEntries: number) {
     this._composeFileParser.setComposeCacheMaxEntries(maxEntries);
+  }
+
+  override async runContainerUpdateLifecycle(
+    container,
+    runtimeContext?: unknown,
+    options?: {
+      lifecycleAlreadyAcquired?: boolean;
+      selfUpdateClassification?: 'current' | 'peer' | 'indeterminate';
+      onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
+    },
+  ) {
+    return super.runContainerUpdateLifecycle(container, runtimeContext, options);
   }
 
   get _composeObjectCache() {
@@ -685,12 +1165,26 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @param container
    * @returns {string|null}
    */
+  createComposeLabelResolutionContext(
+    runtimeDefaultComposeFilePath: string | null = null,
+    options: { logRejections?: boolean } = {},
+  ): ComposeLabelResolutionContext {
+    const { logRejections = true } = options;
+    return { rejectedLabelPaths: [], runtimeDefaultComposeFilePath, logRejections };
+  }
+
   getConfiguredComposeFilesForContainer(
     container: ComposeContainerReference,
-    options: { includeDefaultComposeFile?: boolean } = {},
+    options: {
+      includeDefaultComposeFile?: boolean;
+      context?: ComposeLabelResolutionContext;
+    } = {},
   ): string[] {
-    const { includeDefaultComposeFile = true } = options;
-    const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(container);
+    const {
+      includeDefaultComposeFile = true,
+      context = this.createComposeLabelResolutionContext(),
+    } = options;
+    const composeFileFromLegacyLabel = this.getComposeFileFromLegacyLabel(container, context);
     if (composeFileFromLegacyLabel) {
       return [composeFileFromLegacyLabel];
     }
@@ -698,12 +1192,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const composeFilesFromComposeLabels = this.getComposeFilesFromProjectLabels(
       container.labels,
       container.name,
+      context,
     );
     if (composeFilesFromComposeLabels.length > 0) {
       return composeFilesFromComposeLabels;
     }
 
-    if (!includeDefaultComposeFile) {
+    // A label naming a compose file outside every allowed root (DR-127) leaves
+    // the container with no compose file. Falling through to the trigger's
+    // default would sweep it into a stack it never asked for, which is what
+    // the configured-file mismatch check already refuses to do.
+    if (!includeDefaultComposeFile || context.rejectedLabelPaths.length > 0) {
       return [];
     }
     const composeFileFromDefault = this.getDefaultComposeFilePath();
@@ -729,12 +1228,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return null;
   }
 
-  getComposeFileFromLegacyLabel(container: ComposeContainerReference): string | null {
+  getComposeFileFromLegacyLabel(
+    container: ComposeContainerReference,
+    context: ComposeLabelResolutionContext = this.createComposeLabelResolutionContext(),
+  ): string | null {
     const composeFileLabel = this.configuration.composeFileLabel;
     const labelValue = container.labels?.[composeFileLabel];
     if (labelValue) {
+      let resolvedComposeFilePath: string;
       try {
-        return this.resolveComposeFilePath(labelValue, {
+        resolvedComposeFilePath = this.resolveComposeFilePath(labelValue, {
           label: `Compose file label ${composeFileLabel}`,
         });
       } catch (e: unknown) {
@@ -743,6 +1246,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         );
         return null;
       }
+      // The legacy label is used verbatim, without bind-mount mapping, so it is
+      // checked against the host side of the mount table as well (DR-127).
+      const containedComposeFilePath = this.resolveContainedComposeLabelPath(
+        resolvedComposeFilePath,
+        context,
+        labelValue,
+        composeFileLabel,
+        container.name,
+      );
+      if (!containedComposeFilePath) {
+        context.rejectedLabelPaths.push(resolvedComposeFilePath);
+        return null;
+      }
+      return containedComposeFilePath;
     }
     return null;
   }
@@ -761,9 +1278,117 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Roots a label-sourced compose path (`dd.compose.file` or
+   * `com.docker.compose.project.config_files`, see DR-127) is allowed to
+   * resolve into: the directory holding the trigger's configured `file`, plus
+   * both sides of every bind mount Drydock itself has — the same mount table
+   * `mapComposePathToContainerBindMount` maps label paths through. Both sides
+   * of the pair count because the legacy label is used verbatim (a host-side
+   * path) while `config_files` paths are checked after mapping (a
+   * container-side path).
+   *
+   * An empty list turns containment off rather than rejecting everything:
+   * Drydock is then running on the host with no configured `file` and no bind
+   * mounts of its own, so there is no known root to contain anything to and
+   * label paths keep their pre-DR-127 behaviour. Trigger-configured paths never
+   * go through this check; only container-supplied labels do.
+   */
+  getAllowedComposeLabelPathRoots(): string[] {
+    const allowedRoots = new Set<string>();
+    const configuredComposeFile = this.getDefaultComposeFilePath();
+    if (configuredComposeFile) {
+      // `file` may name the compose file or the directory holding it. The path
+      // itself covers the directory form; its parent covers the file form,
+      // except when that parent is the filesystem root, which would allow every
+      // path on the machine and make containment a no-op.
+      allowedRoots.add(configuredComposeFile);
+      const configuredComposeDirectory = path.dirname(configuredComposeFile);
+      if (configuredComposeDirectory !== path.parse(configuredComposeFile).root) {
+        allowedRoots.add(configuredComposeDirectory);
+      }
+    }
+    for (const bindMount of this._hostToContainerBindMounts) {
+      allowedRoots.add(bindMount.source);
+      allowedRoots.add(bindMount.destination);
+    }
+    return [...allowedRoots];
+  }
+
+  /**
+   * The configured compose file to use in place of `composeFilePath` under the
+   * issue #365 mount-prefix fallback, or null when the fallback does not apply.
+   * The two paths name the same stack seen under different mount prefixes, so
+   * only the trailing `<project directory>/<file name>` can match.
+   */
+  getMountPrefixFallbackComposeFilePath(
+    composeFilePath: string,
+    context: ComposeLabelResolutionContext,
+  ): string | null {
+    if (!this.configuration.mountPrefixFallback) {
+      return null;
+    }
+    // Prefer the runtime-resolved path: a directory-form `file` names the stack
+    // directory, and only its resolved compose file has a tail to compare.
+    const configuredComposeFile =
+      context.runtimeDefaultComposeFilePath ?? this.getDefaultComposeFilePath();
+    if (!configuredComposeFile) {
+      return null;
+    }
+    if (getComposeFilePathTail(composeFilePath) !== getComposeFilePathTail(configuredComposeFile)) {
+      return null;
+    }
+    return configuredComposeFile;
+  }
+
+  /**
+   * The compose path to actually use for a label-sourced value, or null when
+   * the label has to be dropped. Dropping is never fatal: the caller falls back
+   * to the resolution it would have used had the label not been present.
+   *
+   * A path outside every allowed root is never returned as-is. Under the issue
+   * #365 mount-prefix fallback it is *replaced* by the configured path, so
+   * every consumer downstream reads the file Drydock was pointed at rather than
+   * the one the container named.
+   */
+  resolveContainedComposeLabelPath(
+    composeFilePath: string,
+    context: ComposeLabelResolutionContext,
+    labelValue: string,
+    label: string,
+    containerName: string | undefined,
+  ): string | null {
+    const allowedRoots = this.getAllowedComposeLabelPathRoots();
+    if (allowedRoots.length === 0) {
+      return composeFilePath;
+    }
+    if (allowedRoots.some((allowedRoot) => isPathWithinAllowedRoot(composeFilePath, allowedRoot))) {
+      return composeFilePath;
+    }
+    const mountPrefixFallbackComposeFilePath = this.getMountPrefixFallbackComposeFilePath(
+      composeFilePath,
+      context,
+    );
+    if (mountPrefixFallbackComposeFilePath) {
+      if (context.logRejections) {
+        this.log.warn(
+          `Container ${containerName} compose file path differs by mount prefix; using configured path ${mountPrefixFallbackComposeFilePath} instead of label path ${composeFilePath} (issue #365 fallback)`,
+        );
+      }
+      return mountPrefixFallbackComposeFilePath;
+    }
+    if (context.logRejections) {
+      this.log.warn(
+        `Compose file label ${label} on container ${containerName} value ${labelValue} resolved to ${composeFilePath}, which is outside the allowed roots (${allowedRoots.join(', ')}); ignoring the label`,
+      );
+    }
+    return null;
+  }
+
   getComposeFilesFromProjectLabels(
     labels: Record<string, string> | undefined,
     containerName: string | undefined,
+    context: ComposeLabelResolutionContext = this.createComposeLabelResolutionContext(),
   ): string[] {
     const composeProjectFilesLabel = labels?.[COMPOSE_PROJECT_CONFIG_FILES_LABEL];
     if (!composeProjectFilesLabel) {
@@ -796,7 +1421,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           const resolvedComposeFilePath = this.resolveComposeFilePath(composeFilePath, {
             label: `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL}`,
           });
-          composeFiles.add(this.mapComposePathToContainerBindMount(resolvedComposeFilePath));
+          // Containment runs AFTER bind-mount mapping (DR-127): a foreign host
+          // path that maps onto one of Drydock's own mount destinations lands
+          // inside an allowed root by construction, so mapping it first keeps
+          // foreign-host-layout deployments working.
+          const mappedComposeFilePath =
+            this.mapComposePathToContainerBindMount(resolvedComposeFilePath);
+          const containedComposeFilePath = this.resolveContainedComposeLabelPath(
+            mappedComposeFilePath,
+            context,
+            composeFilePathRaw,
+            COMPOSE_PROJECT_CONFIG_FILES_LABEL,
+            containerName,
+          );
+          if (!containedComposeFilePath) {
+            context.rejectedLabelPaths.push(mappedComposeFilePath);
+            return;
+          }
+          composeFiles.add(containedComposeFilePath);
         } catch (e: unknown) {
           this.log.warn(
             `Compose file label ${COMPOSE_PROJECT_CONFIG_FILES_LABEL} on container ${containerName} is invalid (${getErrorMessage(e)})`,
@@ -826,11 +1468,28 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return [...uniqueComposeFiles];
   }
 
+  /**
+   * Compose files for trigger affinity (`api/docker-trigger.ts`), which only
+   * compares paths and never reads them. A label path containment rejected
+   * (DR-127) is still the file the container named, so it is returned here:
+   * an empty list tells the affinity walk this trigger is a catch-all for the
+   * container, which would hand a container that named some other stack to
+   * this trigger and then fail the update. Nothing is logged on this path; the
+   * read path logs the rejection once when it actually matters.
+   */
   getComposeFilesForContainer(container: ComposeContainerReference): string[] {
-    return this.getConfiguredComposeFilesForContainer(container);
+    const context = this.createComposeLabelResolutionContext(null, { logRejections: false });
+    const composeFiles = this.getConfiguredComposeFilesForContainer(container, { context });
+    if (composeFiles.length === 0 && context.rejectedLabelPaths.length > 0) {
+      return [...context.rejectedLabelPaths];
+    }
+    return composeFiles;
   }
 
-  async getComposeFilesFromInspect(container: ComposeContainerReference): Promise<string[]> {
+  async getComposeFilesFromInspect(
+    container: ComposeContainerReference,
+    context: ComposeLabelResolutionContext = this.createComposeLabelResolutionContext(),
+  ): Promise<string[]> {
     const watcher = this.getWatcher(container);
     const dockerApi = getDockerApiFromWatcher(watcher);
     if (!dockerApi) {
@@ -842,6 +1501,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return this.getComposeFilesFromProjectLabels(
         inspectedContainer?.Config?.Labels,
         container.name,
+        context,
       );
     } catch (e: unknown) {
       this.log.warn(
@@ -851,22 +1511,50 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
-  async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
+  /**
+   * @param container the container
+   * @param runtimeDefaultComposeFilePath the already-resolved default compose
+   * file when the caller has one (triggerBatch resolves it once per batch);
+   * undefined resolves it here, which probes the filesystem.
+   */
+  async resolveComposeFilesForContainer(
+    container: ComposeContainerReference,
+    runtimeDefaultComposeFilePath?: string | null,
+  ): Promise<string[]> {
     await this.ensureHostToContainerBindMountsLoaded(container);
 
+    const resolveRuntimeDefaultComposeFilePath = async (): Promise<string | null> =>
+      runtimeDefaultComposeFilePath !== undefined
+        ? runtimeDefaultComposeFilePath
+        : this.resolveDefaultComposeFilePathForRuntime();
+
+    // Only the mount-prefix fallback needs the resolved default up front, and
+    // resolving it touches the filesystem, so leave the default path alone
+    // unless that opt-in flag is on.
+    const context = this.createComposeLabelResolutionContext(
+      this.configuration.mountPrefixFallback ? await resolveRuntimeDefaultComposeFilePath() : null,
+    );
     const composeFilesFromConfiguration = this.getConfiguredComposeFilesForContainer(container, {
       includeDefaultComposeFile: false,
+      context,
     });
     if (composeFilesFromConfiguration.length > 0) {
       return composeFilesFromConfiguration;
     }
 
-    const composeFilesFromInspect = await this.getComposeFilesFromInspect(container);
+    const composeFilesFromInspect = await this.getComposeFilesFromInspect(container, context);
     if (composeFilesFromInspect.length > 0) {
       return composeFilesFromInspect;
     }
 
-    const composeFileFromDefault = await this.resolveDefaultComposeFilePathForRuntime();
+    // See getConfiguredComposeFilesForContainer(): a contained-out label leaves
+    // the container with no compose file rather than the trigger's default.
+    if (context.rejectedLabelPaths.length > 0) {
+      return [];
+    }
+
+    const composeFileFromDefault =
+      context.runtimeDefaultComposeFilePath ?? (await resolveRuntimeDefaultComposeFilePath());
     if (!composeFileFromDefault) {
       return [];
     }
@@ -979,7 +1667,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    */
   assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
     for (const mapping of versionMappings) {
-      if (getImageRepositoryKey(mapping.runtimeImage) === getImageRepositoryKey(mapping.current)) {
+      const currentImage =
+        mapping.currentResolved ?? resolveComposeImageForContinuity(mapping.current);
+      if (composeImageRepositoryMatchesRuntime(currentImage, mapping.runtimeImage)) {
         continue;
       }
       throw new Error(
@@ -1014,6 +1704,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
     }
     const compose = await this.getComposeFileChainAsObject(composeFileChain, composeByFile);
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFileChain, compose);
     this.assertComposeRepositoryContinuity(
       composeFileChain.join(', '),
       mappings.map((mapping) => ({
@@ -1021,6 +1712,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         current: isPlainObject(compose?.services?.[mapping.service])
           ? (compose.services[mapping.service] as { image?: unknown }).image
           : undefined,
+        currentResolved: resolveComposeImageForContinuity(
+          isPlainObject(compose?.services?.[mapping.service])
+            ? (compose.services[mapping.service] as { image?: unknown }).image
+            : undefined,
+          resolvedComposeImages.get(mapping.service),
+        ),
       })),
     );
   }
@@ -1032,7 +1729,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return;
     }
     for (const mapping of versionMappings) {
-      if (mapping.runtimeNormalized === mapping.currentNormalized) {
+      const currentImage =
+        mapping.currentResolved ?? resolveComposeImageForContinuity(mapping.current);
+      if (typeof currentImage === 'string' && currentImage.includes('${')) {
+        continue;
+      }
+      const currentResolvedNormalized = normalizeImplicitLatest(currentImage);
+      if (mapping.runtimeNormalized === currentResolvedNormalized) {
         continue;
       }
       const reconciliationMessage =
@@ -1348,11 +2051,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const runtimeContext = composeContext?.runtimeContext;
     // Behind the gate go the pre-update hook and the prune/backup step, so a
     // candidate the gate rejects never fires an operator hook, deletes a cached
-    // image or writes a rollback row. The compose-file-once preflight has
-    // already gated every service before its lifecycle runs and passes no
-    // post-pull hook, so that path keeps the original ordering rather than
-    // deferring steps nothing would run.
-    const deferPreRuntimeUpdateLifecycle = composeContext?.postPullGateCompleted !== true;
+    // image or writes a rollback row. Compose-file-once gates in its preflight
+    // instead, but it defers the same steps for the same reason: the deferred
+    // point is inside the refresh, past the two guards that can still abort it
+    // there, one for a container that has vanished and one for an inspect that
+    // came back without usable runtime state. Running the steps ahead of those
+    // guards left the side effects behind on a refresh that then aborted
+    // (DR-75). performContainerUpdate hands that path a post-pull hook with the
+    // gate suppressed, so the deferred steps still have something to run them.
     if (
       runtimeContext?.dockerApi &&
       runtimeContext?.registry &&
@@ -1365,7 +2071,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         auth: runtimeContext.auth,
         newImage: runtimeContext.newImage,
         deferSignatureVerification: true,
-        deferPreRuntimeUpdateLifecycle,
+        deferPreRuntimeUpdateLifecycle: true,
         currentContainer: null,
         currentContainerSpec: null,
       };
@@ -1382,10 +2088,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       auth,
       newImage,
       deferSignatureVerification: true,
-      deferPreRuntimeUpdateLifecycle,
+      deferPreRuntimeUpdateLifecycle: true,
       currentContainer: null,
       currentContainerSpec: null,
     };
+  }
+
+  /**
+   * Override: a batch resolves every container's hook configuration in its
+   * preflight, before anything is pulled or written, and each lifecycle runs
+   * from the one resolved for it there. A lifecycle that arrives without one
+   * resolves it here, the ordinary way.
+   */
+  override async buildHookConfig(
+    container,
+    context?,
+    composeContext?: ComposeUpdateLifecycleContext,
+  ) {
+    return composeContext?.hookConfig ?? super.buildHookConfig(container, context);
   }
 
   /**
@@ -1434,6 +2154,13 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     return runtimeContext;
   }
 
+  /**
+   * Compose-file-once binds one pull/gate per service, not per container
+   * (DR-54): a later replica of an already-handled service must still be
+   * recreated, reusing the identity the preflight already bound and gated
+   * for the service, rather than being left running its old image while the
+   * lifecycle reports success.
+   */
   async maybeRunPerServiceComposeRefresh(
     composeCtx: ComposeUpdateLifecycleContext,
     container,
@@ -1441,15 +2168,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       ComposeRuntimeRefreshOptions,
       'composeFiles' | 'skipPull' | 'runtimeContext' | 'postPullHook'
     >,
-  ): Promise<boolean> {
+  ): Promise<void> {
     if (composeCtx.composeFileOnceApplied === true) {
       const logContainer = this.log.child({
         container: container.name,
       });
       logContainer.info(
-        `Skip per-service compose refresh for ${composeCtx.service} because compose-file-once mode already refreshed ${composeCtx.composeFile}`,
+        `Recreate ${container.name} for compose-file-once service ${composeCtx.service} reusing the identity already bound and gated for ${composeCtx.composeFile}`,
       );
-      return false;
     }
 
     await this.updateContainerWithCompose(
@@ -1458,7 +2184,6 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
-    return true;
   }
 
   /**
@@ -1496,22 +2221,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
       requiredComposeCtx,
       runtimeContext,
-      requiredComposeCtx.postPullGateCompleted ? undefined : postPullHook,
+      postPullHook,
     );
 
-    const composeRefreshRan = await this.maybeRunPerServiceComposeRefresh(
+    await this.maybeRunPerServiceComposeRefresh(
       requiredComposeCtx,
       container,
       composeUpdateOptions,
     );
-    if (!composeRefreshRan && !requiredComposeCtx.postPullGateCompleted && postPullHook) {
-      const operationId = getRequestedOperationId(container, runtimeContext) ?? '';
-      if (runtimeContext.imageIdentity) {
-        await postPullHook(operationId, runtimeContext.imageIdentity);
-      } else {
-        await postPullHook(operationId);
-      }
-    }
     if (!this.configuration.dryrun) {
       requiredComposeCtx.onRuntimeUpdateApplied?.();
     }
@@ -1552,7 +2269,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeUpdateOptions.runtimeContext = runtimeContext;
     }
     if (postPullHook) {
-      composeUpdateOptions.postPullHook = postPullHook;
+      // A compose-file-once service was already gated by the preflight, so the
+      // hook must not gate it a second time. It is still forwarded, because the
+      // deferred pre-update hook and prune/backup step ride on it and belong
+      // after the refresh's own guards have cleared the container (DR-75).
+      composeUpdateOptions.postPullHook =
+        composeCtx.postPullGateCompleted === true
+          ? async (operationId, imageIdentity, options) =>
+              postPullHook(operationId, imageIdentity, { ...options, skipSecurityGate: true })
+          : postPullHook;
     }
 
     return composeUpdateOptions;
@@ -1643,7 +2368,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container: ComposeContainerReference,
     configuredComposeFilePath: string | null,
   ): Promise<string[] | null> {
-    const composeFiles = await this.resolveComposeFilesForContainer(container);
+    const composeFiles = await this.resolveComposeFilesForContainer(
+      container,
+      configuredComposeFilePath,
+    );
     if (composeFiles.length === 0) {
       this.log.warn(
         `No compose file found for container ${container.name} (no label '${this.configuration.composeFileLabel}' or '${COMPOSE_PROJECT_CONFIG_FILES_LABEL}' and no default file configured)`,
@@ -1651,22 +2379,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return null;
     }
 
+    // The issue #365 mount-prefix fallback is applied where the label path is
+    // read (resolveContainedComposeLabelPath), so a rescued path has already
+    // become the configured path by the time it gets here and can never reach a
+    // consumer verbatim.
     if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
-      if (this.configuration.mountPrefixFallback) {
-        const configuredTail = path.join(
-          path.basename(path.dirname(configuredComposeFilePath)),
-          path.basename(configuredComposeFilePath),
-        );
-        const tailMatch = composeFiles.some(
-          (f) => path.join(path.basename(path.dirname(f)), path.basename(f)) === configuredTail,
-        );
-        if (tailMatch) {
-          this.log.warn(
-            `Container ${container.name} compose file path differs by mount prefix; using configured path ${configuredComposeFilePath} instead of label path(s) ${composeFiles.join(', ')} (issue #365 fallback)`,
-          );
-          return [configuredComposeFilePath];
-        }
-      }
       this.log.warn(
         `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
       );
@@ -1780,6 +2497,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @returns {Promise<boolean[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<boolean[]> {
+    // Strip the internal-only gate outcome keys here, at the public entry,
+    // before the caller's argument is threaded anywhere it could be merged
+    // into a service's runtime context (DR-52). trigger() delegates to this
+    // method, so this is the one place both public entries have to guard.
+    const sanitizedRuntimeContext = sanitizeComposeCallerRuntimeContext(runtimeContext);
     const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,
@@ -1790,93 +2512,216 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       this.log.warn('No containers matched any compose file for this trigger');
     }
 
-    // Process each compose file group
-    const batchResults: boolean[] = [];
-    for (const {
-      composeFile,
-      composeFiles,
-      containers: containersInFile,
-    } of containersByComposeFile.values()) {
-      if (composeFiles.length > 1) {
-        batchResults.push(
-          runtimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                composeFiles,
-                runtimeContext,
-              ),
-        );
-      } else {
-        batchResults.push(
-          runtimeContext === undefined
-            ? await this.processComposeFile(composeFile, containersInFile)
-            : await this.processComposeFile(
-                composeFile,
-                containersInFile,
-                undefined,
-                runtimeContext,
-              ),
+    // Process each compose file group, up to DD_UPDATE_CONCURRENCY (or this
+    // action's own DD_ACTION_DOCKERCOMPOSE_<NAME>_CONCURRENCY override)
+    // groups at once. This only unlocks concurrency ACROSS independent
+    // compose files/projects: each group still runs processComposeFile()
+    // to completion as one unit — a single withContainerUpdateLocks()
+    // critical section, one docker-compose invocation, one write to the
+    // group's compose file(s) — so a compose-file-once batch keeps its
+    // existing serial ordering guarantees inside that unit. Concurrent
+    // groups never collide because their lock keys and compose object/
+    // document caches are both keyed by file path (see
+    // buildComposeFileLockKeys() and _composeObjectCache).
+    //
+    // getUpdateSemaphore() (inherited from Docker) is a persistent
+    // per-instance permit pool, not a limiter scoped to this call: trigger()
+    // delegates to triggerBatch([container]) for a single container, so a
+    // fresh per-call limiter would never see sibling calls made by
+    // runAcceptedContainerUpdates()'s per-container dispatch (manual bulk
+    // updates, dependency chains, startup recovery) and would bound
+    // nothing. The shared semaphore does, because every group here, and
+    // every single-container call routed through it, draws from the same
+    // pool of permits.
+    const semaphore = this.getUpdateSemaphore();
+    return Promise.all(
+      Array.from(containersByComposeFile.values()).map(
+        async ({ composeFile, composeFiles, containers: containersInFile }) => {
+          const release = await semaphore.acquire();
+          try {
+            return composeFiles.length > 1
+              ? sanitizedRuntimeContext === undefined
+                ? await this.processComposeFile(composeFile, containersInFile, composeFiles)
+                : await this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    composeFiles,
+                    sanitizedRuntimeContext,
+                  )
+              : sanitizedRuntimeContext === undefined
+                ? await this.processComposeFile(composeFile, containersInFile)
+                : await this.processComposeFile(
+                    composeFile,
+                    containersInFile,
+                    undefined,
+                    sanitizedRuntimeContext,
+                  );
+          } finally {
+            release();
+          }
+        },
+      ),
+    );
+  }
+
+  /**
+   * Resolve the one image a compose-file-once service will be pulled and gated
+   * on, and refuse the batch when its containers disagree. Only the first
+   * container of a service used to be consulted, so per-container tag filters
+   * that resolved two replicas of one service to different candidates got the
+   * first replica's image pulled, bound and gated while the compose file was
+   * written with the last replica's (DR-49).
+   */
+  private resolveComposeFileOnceServiceTarget(
+    service: string,
+    serviceMappings: ComposeRuntimeUpdateMapping[],
+  ): string {
+    let serviceTarget: string | undefined;
+    let serviceTargetContainerName: string | undefined;
+    for (const { container } of serviceMappings) {
+      const logContainer = this.log.child({
+        container: container.name,
+      });
+      const registry = this.resolveRegistryManager(container, logContainer, {
+        allowAnonymousFallback: true,
+      });
+      const containerTarget = this.getNewImageFullName(registry, container);
+      if (serviceTarget === undefined) {
+        serviceTarget = containerTarget;
+        serviceTargetContainerName = container.name;
+        continue;
+      }
+      if (containerTarget !== serviceTarget) {
+        throw tagComposeFileOncePreflightError(
+          new Error(
+            `Compose service ${service} resolves to different update targets for its containers ` +
+              `(${serviceTargetContainerName} wants ${serviceTarget}, ${container.name} wants ${containerTarget}); ` +
+              'align their tag filters or disable compose-file-once mode',
+          ),
+          { service, containerId: typeof container.id === 'string' ? container.id : undefined },
         );
       }
     }
-    return batchResults;
+    return serviceTarget as string;
   }
 
   private async buildComposeFileOnceRuntimeContextByService(
     mappingsNeedingRuntimeUpdate: ComposeRuntimeUpdateMapping[],
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
   ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
     const composeFileOnceRuntimeContextByService = new Map<
       string,
       NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
     >();
-    const firstContainerByService = new Map<string, ComposeRuntimeUpdateMapping>();
+    const mappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
     for (const mapping of mappingsNeedingRuntimeUpdate) {
-      if (!firstContainerByService.has(mapping.service)) {
-        firstContainerByService.set(mapping.service, mapping);
+      const serviceMappings = mappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        mappingsByService.set(mapping.service, [mapping]);
       }
     }
-    for (const [service, mapping] of firstContainerByService.entries()) {
-      const runtimeContainer = mapping.container;
+    // Divergence has to be judged against every replica of the service, not
+    // just the ones needing a runtime update: an already-current replica
+    // still shares the compose file's single image, so a filter that
+    // resolves it to a different target than a divergent replica must still
+    // refuse the batch, or preflight only sees the divergent target, pulls
+    // and gates it, and writes it over the up-to-date replica's target too.
+    const allMappingsByService = new Map<string, ComposeRuntimeUpdateMapping[]>();
+    for (const mapping of versionMappings) {
+      const serviceMappings = allMappingsByService.get(mapping.service);
+      if (serviceMappings) {
+        serviceMappings.push(mapping);
+      } else {
+        allMappingsByService.set(mapping.service, [mapping]);
+      }
+    }
+    // Agree every service's target before pulling anything, so a divergent
+    // service refuses the batch instead of leaving one service's image pulled.
+    // Every service here came from mappingsNeedingRuntimeUpdate, and
+    // versionMappings is always a superset of it, so the lookup below is
+    // never empty.
+    const serviceTargets = [...mappingsByService.entries()].map(([service, serviceMappings]) => ({
+      service,
+      container: serviceMappings[0].container,
+      newImage: this.resolveComposeFileOnceServiceTarget(
+        service,
+        allMappingsByService.get(service) as ComposeRuntimeUpdateMapping[],
+      ),
+    }));
+    for (const { service, container: runtimeContainer, newImage } of serviceTargets) {
       const logContainer = this.log.child({
         container: runtimeContainer.name,
       });
-      const watcher = this.getWatcher(runtimeContainer);
-      const { dockerApi } = watcher;
-      const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
-        allowAnonymousFallback: true,
-      });
-      const auth = await registry.getAuthPull();
-      const newImage = this.getNewImageFullName(registry, runtimeContainer);
-      await this.pullImage(dockerApi, auth, newImage, logContainer);
-      const identityOutcome = await this.capturePulledImageIdentity(
-        dockerApi as DockerApiLike,
-        newImage,
-        runtimeContainer,
-        logContainer,
-      );
-      composeFileOnceRuntimeContextByService.set(service, {
-        dockerApi,
-        registry,
-        auth,
-        newImage,
-        ...(identityOutcome.imageIdentity ? { imageIdentity: identityOutcome.imageIdentity } : {}),
-        ...(identityOutcome.unboundWarn
-          ? {
-              securityGateUnboundWarn: true,
-              securityGateUnboundReason: identityOutcome.reason,
-            }
-          : {}),
-      });
+      try {
+        const watcher = this.getWatcher(runtimeContainer);
+        const { dockerApi } = watcher;
+        const registry = this.resolveRegistryManager(runtimeContainer, logContainer, {
+          allowAnonymousFallback: true,
+        });
+        const auth = await registry.getAuthPull();
+        await this.pullImage(dockerApi, auth, newImage, logContainer);
+        // Resolved once for the service, from whichever replica happened to be
+        // first, so this must not apply that replica's own binding policy: a
+        // `required` container would abort every other replica's pull over its
+        // own label, and a `disabled` one would silently drop the failure
+        // before any gated replica ever saw it (DR-42). `optional` gets the
+        // raw `{ imageIdentity | reason }` back either way; each container
+        // applies its own policy to it in runComposeFileOncePostPullGate.
+        const identityOutcome = await this.capturePulledImageIdentity(
+          dockerApi as DockerApiLike,
+          newImage,
+          runtimeContainer,
+          logContainer,
+          undefined,
+          'optional',
+        );
+        // Pre-flight guard (DR-41): confirm the bound image runs on this host
+        // before any service in the batch is touched. A single-arch image
+        // that pulls cleanly but targets the wrong platform must fail here,
+        // before the compose file is rewritten or any container recreated,
+        // not partway through the batch's per-container recreate loop.
+        await this.verifyPulledImageCompatibility(
+          dockerApi as DockerApiLike,
+          identityOutcome.imageIdentity || newImage,
+          logContainer,
+        );
+        composeFileOnceRuntimeContextByService.set(service, {
+          dockerApi,
+          registry,
+          auth,
+          newImage,
+          // A bound digest is the reference every replica is created from. When
+          // there is none, the local image ID the pull resolved to takes its
+          // place, so the replicas still share one image rather than each
+          // re-resolving a tag that can move under them (DR-54).
+          ...(identityOutcome.imageIdentity
+            ? { imageIdentity: identityOutcome.imageIdentity }
+            : {
+                pulledImageId: identityOutcome.localImageId,
+                securityGateUnboundReason: identityOutcome.reason,
+              }),
+        });
+      } catch (error: unknown) {
+        throw tagComposeFileOncePreflightError(error, {
+          service,
+          containerId: typeof runtimeContainer.id === 'string' ? runtimeContainer.id : undefined,
+        });
+      }
     }
     return composeFileOnceRuntimeContextByService;
   }
 
+  /**
+   * @returns whether the unbound-image security warning was recorded here, so
+   *   the service's runtime refresh does not record a second row for the same
+   *   skipped scan (DR-50).
+   */
   private async runComposeFileOncePostPullGate(
     container,
     composeContext: ComposeUpdateLifecycleContext,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const logContainer = this.log.child({
       container: container.name,
     });
@@ -1888,14 +2733,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     const operationId = getRequestedOperationId(container, composeContext.runtimeContext) ?? '';
-    if (composeContext.runtimeContext?.securityGateUnboundWarn) {
-      this.recordUnboundSecurityWarning(
-        container,
-        composeContext.runtimeContext.securityGateUnboundReason,
-      );
-      return;
-    }
     const imageIdentity = composeContext.runtimeContext?.imageIdentity;
+    const rawUnboundReason = composeContext.runtimeContext?.securityGateUnboundReason;
+    if (!imageIdentity && rawUnboundReason !== undefined) {
+      // The service-level capture never applied a binding policy (DR-42), so a
+      // bind failure is judged here against this container's own policy, not
+      // whichever replica the service happened to resolve identity from: a
+      // service mixing `dd.security.gate=off` replicas with gated ones must
+      // not let one replica's label decide the others' outcome.
+      const bindingPolicy = this.getPostPullIdentityBindingPolicy(container);
+      const policyOutcome = this.handleMissingPulledImageIdentity(
+        container,
+        bindingPolicy,
+        rawUnboundReason,
+      );
+      if (policyOutcome.unboundWarn) {
+        this.recordUnboundSecurityWarning(container, policyOutcome.reason);
+        return true;
+      }
+    }
     const gateContext = imageIdentity ? { ...context, newImage: imageIdentity } : context;
     try {
       await this.verifySignaturePreUpdate(gateContext, container, logContainer);
@@ -1916,29 +2772,134 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       }
       throw error;
     }
+    return false;
   }
 
+  /**
+   * Terminalize every operation caught up in a compose-file-once preflight
+   * failure. An API-requested update already has an operation row —
+   * request-update.ts pre-creates it, with an id this can look up via
+   * `getRequestedOperationId` — but a scheduled (cron-driven) auto-update
+   * never went through that path, so it has neither a row nor an id to find
+   * one with. Without inserting a row for it here, `markOperationTerminal`
+   * has nothing to terminalize and the failed lifecycle event never fires
+   * for it, leaving only the audit record the preflight itself wrote (DR-36).
+   *
+   * Only the service whose preflight step actually threw (tagged via
+   * `tagComposeFileOncePreflightError`) is genuinely at fault, so it alone
+   * terminalizes `failed` with the real error; every other mapping was never
+   * attempted and terminalizes `skipped-dependency` naming the blocker
+   * instead, reusing the shape the dependency-wave dispatch already writes
+   * for the same "never attempted" story (DR-37). When the error carries no
+   * attribution (nothing above tagged it), every mapping falls back to
+   * `failed`, as before.
+   *
+   * The hook provenance preflight, which runs in every mode and not only
+   * compose-file-once, records its failures through this too (SEC-27).
+   */
   private terminalizeComposeFileOncePreflightOperations(
     mappings: ComposeRuntimeUpdateMapping[],
     runtimeContext: Record<string, unknown> | undefined,
     error: unknown,
   ): void {
-    const operationIds = new Set<string>();
-    for (const { container } of mappings) {
-      const operationId = getRequestedOperationId(container, runtimeContext);
-      if (operationId) {
-        operationIds.add(operationId);
+    const lastError = getErrorMessage(error);
+    const blockingContext = getComposeFileOncePreflightBlockingContext(error);
+    const blockingMapping = blockingContext
+      ? mappings.find(
+          (mapping) =>
+            mapping.service === blockingContext.service &&
+            (blockingContext.containerId === undefined ||
+              mapping.container.id === blockingContext.containerId),
+        )
+      : undefined;
+    const blockingOperationId = blockingMapping
+      ? getRequestedOperationId(blockingMapping.container, runtimeContext)
+      : undefined;
+
+    for (const { container, service } of mappings) {
+      const isBlocking = !blockingContext || service === blockingContext.service;
+      const requestedOperationId = getRequestedOperationId(container, runtimeContext);
+
+      if (requestedOperationId) {
+        const operation = updateOperationStore.getOperationById(requestedOperationId);
+        if (operation?.status !== 'queued' && operation?.status !== 'in-progress') {
+          continue;
+        }
       }
-    }
-    for (const operationId of operationIds) {
-      const operation = updateOperationStore.getOperationById(operationId);
-      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
+
+      const operationId =
+        requestedOperationId ??
+        updateOperationStore.insertOperation({
+          containerName: container.name ?? service,
+          containerId: typeof container.id === 'string' ? container.id : undefined,
+          // The failed event is built from this row alone. Without the
+          // snapshot it names a container no notification can be matched to,
+          // where the lifecycle's own failure event carries the container.
+          container: container as Container,
+        }).id;
+
+      if (isBlocking) {
         updateOperationStore.markOperationTerminal(operationId, {
           status: 'failed',
           phase: 'failed',
-          lastError: getErrorMessage(error),
+          lastError,
+        });
+      } else {
+        updateOperationStore.markOperationTerminal(operationId, {
+          status: 'skipped-dependency',
+          phase: 'skipped-dependency',
+          skippedDependencyReason: 'upstream-failed',
+          blockingContainerId: blockingContext?.containerId,
+          blockingOperationId,
         });
       }
+    }
+  }
+
+  /**
+   * Bring update operations back in line with the compose file after a restore
+   * failure. The runtime rollback has already terminalized them as
+   * `rolled-back`, and `markOperationTerminal` refuses to rewrite a terminal
+   * row, so without this the record would keep claiming a clean rollback while
+   * the compose file is still mutated. Reopen those rows and terminalize them
+   * again as a failed rollback carrying the combined error, which also emits a
+   * superseding lifecycle event. Rows that already record a failed rollback are
+   * left alone: they are not lying, and re-terminalizing them would only send a
+   * duplicate notification.
+   */
+  private correctRolledBackOperationsAfterComposeRestoreFailure(
+    mappings: ComposeRuntimeUpdateMapping[],
+    runtimeContext: Record<string, unknown> | undefined,
+    error: unknown,
+  ): void {
+    const lastError = getErrorMessage(error);
+    const correctedOperationIds = new Set<string>();
+    for (const { container } of mappings) {
+      const operationId = getRequestedOperationId(container, runtimeContext);
+      if (!operationId || correctedOperationIds.has(operationId)) {
+        continue;
+      }
+      const operation = updateOperationStore.getOperationById(operationId);
+      if (!isComposeRollbackRecordFor(operation, container)) {
+        continue;
+      }
+      correctedOperationIds.add(operationId);
+      // Reopening clears the batch fields, so carry them across: without them
+      // the corrected row detaches from its batch and the superseding
+      // update-failed event loses its batch id.
+      updateOperationStore.reopenTerminalOperation(operationId, {
+        status: 'in-progress',
+        phase: 'rollback-started',
+        batchId: operation.batchId,
+        queuePosition: operation.queuePosition,
+        queueTotal: operation.queueTotal,
+      });
+      updateOperationStore.markOperationTerminal(operationId, {
+        status: 'failed',
+        phase: 'rollback-failed',
+        rollbackReason: operation.rollbackReason,
+        lastError,
+      });
     }
   }
 
@@ -1971,7 +2932,52 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     });
   }
 
-  buildVersionMappingsForCompose(containersFiltered, compose) {
+  async getComposeResolvedImages(composeFiles: string[], compose): Promise<Map<string, string>> {
+    const composeServices = compose?.services ?? {};
+    const hasInterpolatedImage = Object.values(composeServices).some(
+      (service) =>
+        isPlainObject(service) && typeof service.image === 'string' && service.image.includes('${'),
+    );
+    if (!hasInterpolatedImage || composeFiles.length === 0) {
+      return new Map();
+    }
+
+    const environment: Record<string, string> = {};
+    try {
+      const projectEnvironmentFile = path.join(path.dirname(composeFiles[0]), '.env');
+      const contents = await fs.readFile(projectEnvironmentFile, 'utf8');
+      const environmentText =
+        typeof contents === 'string'
+          ? contents
+          : new TextDecoder().decode(contents as unknown as Uint8Array);
+      Object.assign(environment, parseComposeEnvironmentFile(environmentText));
+    } catch {
+      // An unavailable environment source cannot safely establish continuity.
+    }
+
+    const resolvedImages = new Map<string, string>();
+    for (const [serviceName, service] of Object.entries(composeServices)) {
+      if (!isPlainObject(service) || typeof service.image !== 'string') {
+        continue;
+      }
+      const resolvedImage = resolveComposeInterpolation(service.image, environment);
+      if (typeof resolvedImage === 'string' && !resolvedImage.includes('${')) {
+        resolvedImages.set(serviceName, resolvedImage);
+        continue;
+      }
+      const repositoryPart = getComposeRepositoryPart(service.image);
+      const resolvedRepository = resolveComposeInterpolation(repositoryPart, environment);
+      if (typeof resolvedRepository === 'string' && !resolvedRepository.includes('${')) {
+        resolvedImages.set(
+          serviceName,
+          resolvedRepository + service.image.slice(repositoryPart.length),
+        );
+      }
+    }
+    return resolvedImages;
+  }
+
+  buildVersionMappingsForCompose(containersFiltered, compose, resolvedComposeImages = new Map()) {
     return containersFiltered
       .map((container) => {
         const map = this.mapCurrentVersionToUpdateVersion(compose, container);
@@ -1990,6 +2996,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           runtimeNormalized: normalizeImplicitLatest(runtimeImage),
           composeUpdate,
           composeUpdateNormalized: normalizeImplicitLatest(composeUpdate),
+          currentResolved: resolveComposeImageForContinuity(
+            map.current,
+            resolvedComposeImages.get(map.service),
+          ),
           ...map,
         };
       })
@@ -2151,6 +3161,143 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Resolve every container's lifecycle hook configuration, provenance check
+   * included, before the batch pulls an image or writes the compose file. The
+   * check used to run only at the start of each container's own lifecycle,
+   * which in a batch is after the compose file was rewritten, after every
+   * compose-file-once candidate was pulled, and after the services ahead of it
+   * were recreated, so a `hook-provenance-unverified` failure arrived with all
+   * of that already done (SEC-27). The check reads the running container and
+   * the image it was created from, neither of which the batch has changed yet,
+   * so each lifecycle is handed its answer instead of asking a second time.
+   *
+   * A failure is recorded the way the compose-file-once preflight records its
+   * own: the container that failed terminalizes `failed` and the rest of the
+   * batch `skipped-dependency`, since none of them was attempted.
+   */
+  private async runComposeHookProvenancePreflight(
+    orderedMappings: ComposeRuntimeUpdateMapping[],
+    requestedRuntimeContext: Record<string, unknown> | undefined,
+  ): Promise<Map<object, ComposeHookConfig>> {
+    const hookConfigByContainer = new Map<object, ComposeHookConfig>();
+    for (const { container, service } of orderedMappings) {
+      try {
+        hookConfigByContainer.set(
+          container,
+          await this.buildHookConfig(container, {
+            dockerApi: this.getWatcher(container).dockerApi,
+          }),
+        );
+      } catch (error: unknown) {
+        const failure = tagComposeFileOncePreflightError(error, {
+          service,
+          containerId: typeof container.id === 'string' ? container.id : undefined,
+        });
+        this.terminalizeComposeFileOncePreflightOperations(
+          orderedMappings,
+          requestedRuntimeContext,
+          failure,
+        );
+        throw failure;
+      }
+    }
+    return hookConfigByContainer;
+  }
+
+  /**
+   * Pull, bind and gate every compose-file-once service in the batch. Runs
+   * before `maybeApplyComposeFileMutations` so a candidate the gate rejects
+   * leaves neither a rewritten compose file nor a stray `.back` behind
+   * (DR-47); the contexts it returns are what the container updates then
+   * refresh from, so nothing is pulled or bound twice.
+   */
+  private async runComposeFileOncePreflight(
+    composeFile,
+    composeFileChain,
+    compose,
+    orderedMappings: ComposeRuntimeUpdateMapping[],
+    requestedRuntimeContext: Record<string, unknown> | undefined,
+    versionMappings: ComposeRuntimeUpdateMapping[] = orderedMappings,
+  ): Promise<Map<string, NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>>> {
+    try {
+      const composeFileOnceRuntimeContextByService =
+        await this.buildComposeFileOnceRuntimeContextByService(orderedMappings, versionMappings);
+      for (const { container, service } of orderedMappings) {
+        const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+        const composeContext: ComposeUpdateLifecycleContext = {
+          composeFile,
+          composeFiles: composeFileChain,
+          service,
+          serviceDefinition: compose.services[service],
+          runtimeContext: mergeComposeFileOnceRuntimeContext(
+            requestedRuntimeContext,
+            composeFileOnceRuntimeContext,
+          ),
+        };
+        let recordedUnboundWarning: boolean;
+        try {
+          recordedUnboundWarning = await this.runComposeFileOncePostPullGate(
+            container,
+            composeContext,
+          );
+        } catch (gateError: unknown) {
+          throw tagComposeFileOncePreflightError(gateError, {
+            service,
+            containerId: typeof container.id === 'string' ? container.id : undefined,
+          });
+        }
+        if (recordedUnboundWarning) {
+          composeFileOnceRuntimeContextByService.set(service, {
+            ...composeFileOnceRuntimeContext,
+            securityGateUnboundWarnRecorded: true,
+          });
+        }
+      }
+      return composeFileOnceRuntimeContextByService;
+    } catch (error: unknown) {
+      this.terminalizeComposeFileOncePreflightOperations(
+        orderedMappings,
+        requestedRuntimeContext,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Hand a compose-file-once service context a way to record the image ID a
+   * runtime refresh resolved when the preflight's own inspect failed. The
+   * merged context each replica gets is a copy, so without this the first
+   * replica's recovery dies with it and the second replica resolves the tag
+   * again (DR-54).
+   */
+  private attachRecoveredPulledImageIdSink(
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    >,
+    service: string,
+    composeFileOnceRuntimeContext: ComposeRuntimeContext | undefined,
+  ): ComposeRuntimeContext | undefined {
+    if (!composeFileOnceRuntimeContext) {
+      return undefined;
+    }
+    return {
+      ...composeFileOnceRuntimeContext,
+      onPulledImageIdResolved: (pulledImageId: string) => {
+        composeFileOnceRuntimeContextByService.set(service, {
+          ...composeFileOnceRuntimeContext,
+          pulledImageId,
+        });
+      },
+    };
+  }
+
+  private isComposeFileOnceEnabled(): boolean {
+    return this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+  }
+
   async runRuntimeUpdatesForComposeMappings(
     composeFile,
     composeFileChain,
@@ -2158,49 +3305,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     mappingsNeedingRuntimeUpdate,
     runtimeContext?: unknown,
     completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [],
+    lifecycleAlreadyAcquired = false,
+    onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
+    lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    composeFileOnceRuntimeContextByService: Map<
+      string,
+      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
+    > = new Map(),
+    hookConfigByContainer: Map<object, ComposeHookConfig> = new Map(),
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
         ? (runtimeContext as Record<string, unknown>)
         : undefined;
     const composeFileOnceHandledServices = new Set<string>();
-    const composeFileOnceEnabled =
-      this.configuration.composeFileOnce === true && this.configuration.dryrun !== true;
+    const composeFileOnceEnabled = this.isComposeFileOnceEnabled();
     const orderedMappings = sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate);
-    let composeFileOnceRuntimeContextByService = new Map<
-      string,
-      NonNullable<ComposeRuntimeRefreshOptions['runtimeContext']>
-    >();
-    if (composeFileOnceEnabled) {
-      try {
-        composeFileOnceRuntimeContextByService =
-          await this.buildComposeFileOnceRuntimeContextByService(mappingsNeedingRuntimeUpdate);
-        for (const { container, service } of orderedMappings) {
-          const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
-          const composeContext: ComposeUpdateLifecycleContext = {
-            composeFile,
-            composeFiles: composeFileChain,
-            service,
-            serviceDefinition: compose.services[service],
-            runtimeContext:
-              composeFileOnceRuntimeContext || requestedRuntimeContext
-                ? {
-                    ...(requestedRuntimeContext || {}),
-                    ...(composeFileOnceRuntimeContext || {}),
-                  }
-                : undefined,
-          };
-          await this.runComposeFileOncePostPullGate(container, composeContext);
-        }
-      } catch (error: unknown) {
-        this.terminalizeComposeFileOncePreflightOperations(
-          orderedMappings,
-          requestedRuntimeContext,
-          error,
-        );
-        throw error;
-      }
-    }
 
     // Refresh all containers requiring a runtime update via the shared
     // lifecycle orchestrator (security gate, hooks, prune/backup, events), in
@@ -2209,24 +3329,41 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
+      // Only a service the preflight actually pulled, bound and gated may skip
+      // the per-container gate. Without that context the batch has to fail
+      // closed and run the ordinary gated path, or a caller that reaches this
+      // method with no preflight would suppress the gate entirely.
+      const composeFileOncePreflighted =
+        composeFileOnceEnabled && composeFileOnceRuntimeContext !== undefined;
+      // A container the hook preflight did not cover carries no configuration,
+      // and its lifecycle then resolves one itself, provenance check included.
+      const preflightedHookConfig = hookConfigByContainer.get(container);
       const composeContext: ComposeUpdateLifecycleContext = {
         composeFile,
         composeFiles: composeFileChain,
         service,
         serviceDefinition: compose.services[service],
         composeFileOnceApplied,
-        skipPull:
-          composeFileOnceEnabled &&
-          composeFileOnceApplied !== true &&
-          composeFileOnceRuntimeContext !== undefined,
-        runtimeContext:
-          composeFileOnceRuntimeContext || requestedRuntimeContext
-            ? {
-                ...(requestedRuntimeContext || {}),
-                ...(composeFileOnceRuntimeContext || {}),
-              }
-            : undefined,
-        postPullGateCompleted: composeFileOnceEnabled,
+        // Preflight pulls each service's image exactly once, before any
+        // replica's runtime update runs, so every preflighted replica skips
+        // the pull, not just the first one to reach this loop. Re-pulling a
+        // mutable tag for a later replica could resolve a different digest
+        // than the one already bound and gated (DR-54). That holds whether or
+        // not the preflight managed to bind a digest: an unbound service
+        // carries the local image ID of the pull instead, and pulling again
+        // per replica would reintroduce exactly the divergence the recorded
+        // ID exists to prevent.
+        skipPull: composeFileOncePreflighted,
+        runtimeContext: mergeComposeFileOnceRuntimeContext(
+          requestedRuntimeContext,
+          this.attachRecoveredPulledImageIdSink(
+            composeFileOnceRuntimeContextByService,
+            service,
+            composeFileOnceRuntimeContext,
+          ),
+        ),
+        postPullGateCompleted: composeFileOncePreflighted,
+        ...(preflightedHookConfig ? { hookConfig: preflightedHookConfig } : {}),
       };
       let runtimeUpdateRecorded = false;
       const recordRuntimeUpdate = () => {
@@ -2241,12 +3378,136 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         });
       };
       composeContext.onRuntimeUpdateApplied = recordRuntimeUpdate;
-      await this.runContainerUpdateLifecycle(container, composeContext);
+      const selfUpdateOperationIdHandler =
+        lifecycleClassifications?.get(container) === 'current'
+          ? onSelfUpdateOperationId
+          : undefined;
+      await this.runContainerUpdateLifecycle(container, composeContext, {
+        lifecycleAlreadyAcquired,
+        selfUpdateClassification: lifecycleClassifications?.get(container),
+        onSelfUpdateOperationId: selfUpdateOperationIdHandler,
+      });
       recordRuntimeUpdate();
-      if (composeFileOnceEnabled && !composeFileOnceApplied) {
+      // Only a preflighted service may be marked handled. On the fail-closed
+      // fallback each container runs the ordinary gated refresh, and marking
+      // the service handled would make a later replica skip that refresh, and
+      // with it the post-pull gate that runs inside it.
+      if (composeFileOncePreflighted) {
         composeFileOnceHandledServices.add(service);
       }
     }
+  }
+
+  async applyComposeMutationsAndRuntimeUpdates(
+    composeFile,
+    composeFileChain,
+    composeByFile,
+    composeFileChainSummary,
+    compose,
+    mappingsNeedingComposeUpdate,
+    mappingsNeedingRuntimeUpdate,
+    runtimeContext,
+    lifecycleAlreadyAcquired = false,
+    onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void,
+    lifecycleClassifications?: Map<object, 'current' | 'peer' | 'indeterminate'>,
+    versionMappings: ComposeRuntimeUpdateMapping[] = mappingsNeedingRuntimeUpdate,
+  ): Promise<boolean> {
+    const requestedRuntimeContext =
+      runtimeContext && typeof runtimeContext === 'object'
+        ? (runtimeContext as Record<string, unknown>)
+        : undefined;
+    const orderedMappings = sortMappingsByDependencyOrder(mappingsNeedingRuntimeUpdate);
+    // Hook provenance is settled for the whole batch first, in every mode: it
+    // needs nothing pulled, so a failure here costs no pull and no file write
+    // (SEC-27).
+    const hookConfigByContainer = await this.runComposeHookProvenancePreflight(
+      orderedMappings,
+      requestedRuntimeContext,
+    );
+    // Compose-file-once gates the whole batch before the compose file is
+    // touched, so a rejected candidate leaves no rewritten file and no `.back`
+    // to clean up (DR-47).
+    const composeFileOnceRuntimeContextByService = this.isComposeFileOnceEnabled()
+      ? await this.runComposeFileOncePreflight(
+          composeFile,
+          composeFileChain,
+          compose,
+          orderedMappings,
+          requestedRuntimeContext,
+          versionMappings,
+        )
+      : undefined;
+    const mutationSnapshots = await this.maybeApplyComposeFileMutations(
+      composeFileChain,
+      composeByFile,
+      composeFileChainSummary,
+      mappingsNeedingComposeUpdate,
+    );
+    const completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [];
+    try {
+      await this.runRuntimeUpdatesForComposeMappings(
+        composeFile,
+        composeFileChain,
+        compose,
+        mappingsNeedingRuntimeUpdate,
+        runtimeContext,
+        completedRuntimeUpdates,
+        lifecycleAlreadyAcquired,
+        onSelfUpdateOperationId,
+        lifecycleClassifications,
+        composeFileOnceRuntimeContextByService,
+        hookConfigByContainer,
+      );
+    } catch (runtimeError: unknown) {
+      if (completedRuntimeUpdates.length === 0) {
+        try {
+          await this.restoreComposeFileMutations(mutationSnapshots);
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error so the caller records that the file needs repair.
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
+        }
+      } else {
+        /* v8 ignore next 4 -- service is a fallback for malformed runtime update payloads. */
+        const completedServices = completedRuntimeUpdates
+          .map((update) => update.containerName || update.service)
+          .join(', ');
+        const completedServiceNames = new Set(
+          completedRuntimeUpdates.map((update) => update.service),
+        );
+        try {
+          await this.restoreComposeFileMutations(mutationSnapshots, {
+            composeFileChain,
+            composeByFile,
+            mappingsToPreserve: mappingsNeedingComposeUpdate.filter(({ service }) =>
+              completedServiceNames.has(service),
+            ),
+          });
+        } catch (restoreError: unknown) {
+          // restoreComposeFileMutations already logged the restore failure; carry it
+          // on the runtime error rather than claiming a restore that did not happen.
+          const failure = withComposeRestoreFailure(runtimeError, restoreError);
+          this.correctRolledBackOperationsAfterComposeRestoreFailure(
+            mappingsNeedingRuntimeUpdate,
+            requestedRuntimeContext,
+            failure,
+          );
+          throw failure;
+        }
+        this.log.warn(
+          `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +
+            `preserving completed services (${completedServices}). Manual intervention may be required.`,
+        );
+      }
+      throw runtimeError;
+    }
+    return true;
   }
 
   /**
@@ -2274,7 +3535,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return false;
     }
 
-    const versionMappings = this.buildVersionMappingsForCompose(containersFiltered, compose);
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFileChain, compose);
+    const versionMappings = this.buildVersionMappingsForCompose(
+      containersFiltered,
+      compose,
+      resolvedComposeImages,
+    );
     this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
     const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
       this.splitComposeAndRuntimeMappings(versionMappings);
@@ -2284,58 +3550,70 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return false;
     }
 
-    const mutationSnapshots = await this.maybeApplyComposeFileMutations(
-      composeFileChain,
-      composeByFile,
-      composeFileChainSummary,
-      mappingsNeedingComposeUpdate,
+    const lifecycleClassifications = new Map<object, 'current' | 'peer' | 'indeterminate'>();
+    const lifecycleAccessOptions = await Promise.all(
+      mappingsNeedingRuntimeUpdate.map(async ({ container }) => {
+        const classification = await this.classifySelfUpdate(container);
+        lifecycleClassifications.set(container, classification);
+        if (classification === 'indeterminate') {
+          throw new Error('Drydock container identity is indeterminate; refusing unsafe update');
+        }
+        const infrastructureUpdate = this.isInfrastructureUpdate(container);
+        return {
+          selfUpdate: classification === 'current',
+          bypassGlobalCap: classification === 'current' || infrastructureUpdate,
+          exclusive: classification === 'current' || infrastructureUpdate,
+        };
+      }),
     );
-    const completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [];
-    try {
-      await this.runRuntimeUpdatesForComposeMappings(
-        composeFile,
-        composeFileChain,
-        compose,
-        mappingsNeedingRuntimeUpdate,
-        runtimeContext,
-        completedRuntimeUpdates,
-      );
-    } catch (runtimeError: unknown) {
-      if (completedRuntimeUpdates.length === 0) {
-        try {
-          await this.restoreComposeFileMutations(mutationSnapshots);
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
-        }
-      } else {
-        /* v8 ignore next 4 -- service is a fallback for malformed runtime update payloads. */
-        const completedServices = completedRuntimeUpdates
-          .map((update) => update.containerName || update.service)
-          .join(', ');
-        const completedServiceNames = new Set(
-          completedRuntimeUpdates.map((update) => update.service),
+    const exclusiveLifecycleRequired = lifecycleAccessOptions.some(({ exclusive }) => exclusive);
+    const bypassGlobalCap = lifecycleAccessOptions.some(
+      ({ bypassGlobalCap: shouldBypassGlobalCap }) => shouldBypassGlobalCap,
+    );
+    const composeFileLockKeys = buildComposeFileLockKeys(containersFiltered[0], composeFileChain);
+    const updateLockKeys: string[] = [
+      ...composeFileLockKeys,
+      ...new Set(
+        mappingsNeedingRuntimeUpdate.flatMap(({ container }) => this.getUpdateLockKeys(container)),
+      ),
+    ] as string[];
+    let selfUpdateOperationId: string | undefined;
+    return withContainerUpdateLocks(
+      updateLockKeys,
+      async () => {
+        const onSelfUpdateOperationId = (operationId: string, updated: boolean) => {
+          if (updated) {
+            selfUpdateOperationId = operationId;
+          }
+        };
+        return this.applyComposeMutationsAndRuntimeUpdates(
+          composeFile,
+          composeFileChain,
+          composeByFile,
+          composeFileChainSummary,
+          compose,
+          mappingsNeedingComposeUpdate,
+          mappingsNeedingRuntimeUpdate,
+          runtimeContext,
+          true,
+          onSelfUpdateOperationId,
+          lifecycleClassifications,
+          versionMappings,
         );
-        try {
-          await this.restoreComposeFileMutations(mutationSnapshots, {
-            composeFileChain,
-            composeByFile,
-            mappingsToPreserve: mappingsNeedingComposeUpdate.filter(({ service }) =>
-              completedServiceNames.has(service),
-            ),
-          });
-        } catch {
-          // restoreComposeFileMutations already logged the restore failure. Keep the
-          // original runtime error as the operation error surfaced to callers.
-        }
-        this.log.warn(
-          `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +
-            `preserving completed services (${completedServices}). Manual intervention may be required.`,
-        );
-      }
-      throw runtimeError;
-    }
-    return true;
+      },
+      {
+        bypassGlobalCap,
+        exclusive: exclusiveLifecycleRequired,
+        retainExclusiveOnResult: (result) =>
+          exclusiveLifecycleRequired && result === true && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
+        retainExclusiveOnError: () =>
+          exclusiveLifecycleRequired && selfUpdateOperationId
+            ? { operationId: selfUpdateOperationId }
+            : undefined,
+      },
+    );
   }
 
   async resolveComposeServiceContext(container, currentImage) {
@@ -2349,6 +3627,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeByFile.set(composeFilePath, await this.getComposeFileAsObject(composeFilePath));
     }
     const compose = await this.getComposeFileChainAsObject(composeFiles, composeByFile);
+    const resolvedComposeImages = await this.getComposeResolvedImages(composeFiles, compose);
     const service = getServiceKey(compose, container, currentImage);
     if (!service || !compose?.services?.[service]) {
       const composeFileSummary = composeFiles.join(', ');
@@ -2363,6 +3642,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         service,
         runtimeImage: currentImage,
         current: (compose as ComposeFileWithServices).services?.[service]?.image,
+        currentResolved: resolveComposeImageForContinuity(
+          (compose as ComposeFileWithServices).services?.[service]?.image,
+          resolvedComposeImages.get(service),
+        ),
       },
     ]);
     const composeFile = await this.getWritableComposeFileForService(
@@ -2645,7 +3928,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rolled-back',
         phase: 'rolled-back',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     } catch (rollbackError: unknown) {
@@ -2666,7 +3949,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return {
         status: 'rollback-failed',
         phase: 'rollback-failed',
-        rollbackReason: 'compose_runtime_refresh_failed',
+        rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
     }
@@ -2688,6 +3971,112 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Whether `DD_SECURITY_AVAILABILITY_POLICY` is set to `warn`, read off the
+   * security gate the same way the Docker trigger reads it when a pulled image
+   * cannot be bound to a digest. `warn` is the operator saying they would
+   * rather an update land than have it refused for want of a certain answer;
+   * `block`, the default, is the opposite.
+   *
+   * Deliberately read without gating on `security.enabled`. The policy states
+   * a preference for availability over strictness, and an install with no
+   * scanner configured has exactly the same preference to state: the moved-tag
+   * check runs there too, because it is the create-from-mutable-tag fallback
+   * that reaches it, not the scanner.
+   *
+   * Guarded the way {@link Docker.getPostPullIdentityBindingPolicy} guards the
+   * same read. Without it, a gate carrying no `securityConfig` throws a
+   * TypeError from inside the recreate's own try, which the rollback net then
+   * reports as a failed replacement, so a wiring bug would be indistinguishable
+   * from a tag that actually moved.
+   */
+  private isSecurityAvailabilityPolicyPermissive(): boolean {
+    const securityGate = this.getSecurityGate() as {
+      securityConfig?: {
+        getSecurityConfiguration?: () => { availabilityPolicy?: string } | undefined;
+      };
+    };
+    const availabilityPolicy =
+      securityGate.securityConfig?.getSecurityConfiguration?.()?.availabilityPolicy;
+    return availabilityPolicy === 'warn';
+  }
+
+  /**
+   * Confirm the container that was just created runs the image the pull
+   * resolved to. The create reference stays the operator's `repo:tag` so the
+   * watcher can still read the tag back off `Config.Image`, which means a
+   * local retag between the pull and this create would silently hand the
+   * container a different image, and under compose-file-once it would hand
+   * one replica of a service a different image than another (DR-54). Throwing
+   * here runs inside the recreate's own try, so the candidate is removed and
+   * the previous container is restored by the rollback net.
+   *
+   * What a mismatch costs depends on where `expectedImageId` came from, which
+   * is what `preflightedServiceIdentity` carries (DR-67). A preflighted
+   * identity is one the whole service shares: every container of that service
+   * is created against it and runs on the one gate decision the preflight
+   * made, so keeping a mismatched one leaves it on an image the gate never
+   * cleared while its siblings run the image it did clear: a split service
+   * rather than a slower one. That is refused whatever the policy says, and it
+   * covers the first replica of a batch whose preflight inspect failed, which
+   * resolves the ID the rest of the batch is then held to. Without a preflight
+   * there is no shared decision to split, because each container pulls and
+   * resolves for itself,
+   * and a moved tag is one container getting an image nobody asked for. That
+   * is the availability-versus-certainty trade
+   * `DD_SECURITY_AVAILABILITY_POLICY` already settles for the security gate,
+   * so it is settled the same way here: `warn` names both image IDs and lets
+   * the container stand, `block`, the default, keeps the refusal. Whether the
+   * service has one container or ten does not enter into it; a scaled service
+   * on the unpreflighted path keeps going container by container under `warn`,
+   * each one on its own resolved image and each one logged.
+   *
+   * A kept mismatch does not record its own audit row here: the container has
+   * not started yet, and a start failure after this point tears the candidate
+   * down and restores the previous container, which would leave a
+   * `security-scan-skipped` row on the books for a container that never ran.
+   * The descriptor this returns is recorded by the caller once the recreate
+   * has actually succeeded.
+   */
+  private async assertReplacementContainerImage(
+    newContainer: unknown,
+    expectedImageId: string | undefined,
+    newImage: string,
+    container: { name: string; watcher?: string; image?: { name?: string } },
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    preflightedServiceIdentity: boolean,
+  ): Promise<KeptMovedTagAudit | undefined> {
+    if (!expectedImageId) {
+      // Either the create reference is already digest-pinned, which cannot
+      // resolve to a second image, or nothing was resolvable at pull time and
+      // the caller has already warned about it.
+      return undefined;
+    }
+    const inspect = (newContainer as { inspect?: () => Promise<{ Image?: string }> })?.inspect;
+    if (typeof inspect !== 'function') {
+      return undefined;
+    }
+    const createdImageId = (await inspect.call(newContainer))?.Image;
+    if (!createdImageId || createdImageId === expectedImageId) {
+      return undefined;
+    }
+    const movedTagDetail =
+      `Recreated container ${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
+      'the local tag moved between the pull and the recreate';
+    if (preflightedServiceIdentity || !this.isSecurityAvailabilityPolicyPermissive()) {
+      throw new Error(movedTagDetail);
+    }
+    logContainer.warn(
+      `${movedTagDetail}. Keeping the container because DD_SECURITY_AVAILABILITY_POLICY=warn`,
+    );
+    return {
+      details:
+        `Security scan skipped because the local tag moved between the pull and the recreate: ` +
+        `${container.name} runs image ${createdImageId} but ${newImage} was pulled as ${expectedImageId}; ` +
+        'container kept by DD_SECURITY_AVAILABILITY_POLICY=warn',
+    };
+  }
+
   private async recreateReplacementContainerWithCleanup(
     dockerApi,
     currentContainerSpec,
@@ -2695,7 +4084,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     cloneRuntimeConfigOptions,
-  ): Promise<void> {
+    expectedImageId: string | undefined,
+    preflightedServiceIdentity: boolean,
+  ): Promise<KeptMovedTagAudit | undefined> {
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
       newImage,
@@ -2710,10 +4101,19 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container.name,
         logContainer,
       );
+      const keptMovedTagAudit = await this.assertReplacementContainerImage(
+        newContainer,
+        expectedImageId,
+        newImage,
+        container,
+        logContainer,
+        preflightedServiceIdentity,
+      );
 
       if (currentContainerSpec.State.Running) {
         await this.startContainer(newContainer, container.name, logContainer);
       }
+      return keptMovedTagAudit;
     } catch (recreateError: unknown) {
       await this.cleanupFailedReplacementCandidate(
         newContainer || getCreatedContainerCandidate(recreateError),
@@ -2796,20 +4196,84 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     let imageIdentity = runtimeContext.imageIdentity;
     let securityGateUnboundWarn = runtimeContext.securityGateUnboundWarn === true;
     let securityGateUnboundReason = runtimeContext.securityGateUnboundReason;
-    if (!imageIdentity && !securityGateUnboundWarn) {
+    // What the compose-file-once preflight resolved for this service, before
+    // any replica was touched. A bound digest goes into the create reference
+    // below; a bare local image ID cannot, because the daemon would record it
+    // as Config.Image and the watcher could then never recover the compose
+    // repo:tag from it. It becomes the expectation the recreated container is
+    // checked against instead (DR-54).
+    let expectedImageId = runtimeContext.pulledImageId;
+    // Whether this refresh belongs to a compose-file-once batch, whose
+    // containers all run on the one identity and the one gate decision the
+    // preflight settled ahead of every container in it, rather than resolving
+    // its own. Read here, at entry, from the runtime context the caller
+    // handed in, so it reflects what the caller actually passed for this
+    // container: a preflight's `pulledImageId` or `imageIdentity`, or the
+    // `onPulledImageIdResolved` sink a compose-file-once batch attaches
+    // (DR-54).
+    //
+    // The write-back sink is part of the test, not a belt-and-braces third
+    // clause. A preflight whose own inspect threw stores no image ID, so its
+    // first replica arrives with `pulledImageId` undefined and recovers one
+    // here, which is then published to every replica after it. Reading only the
+    // two identity fields would leave that first replica looking unpreflighted
+    // and keep it under `warn`, while its siblings compared against the ID it
+    // published and were refused: the split service this check exists to
+    // prevent. The sink only exists on a compose-file-once batch
+    // (attachRecoveredPulledImageIdSink), so it is the batch marker that
+    // survives a failed preflight inspect. A caller with no preflight at all,
+    // such as recreateContainer() or a direct updateContainerWithCompose(),
+    // carries none of the three and reaches the post-create check with nothing
+    // shared to protect (DR-67).
+    const preflightedServiceIdentity =
+      runtimeContext.pulledImageId !== undefined ||
+      runtimeContext.imageIdentity !== undefined ||
+      typeof runtimeContext.onPulledImageIdResolved === 'function';
+    // Nothing to re-resolve once the preflight has an answer for the service.
+    // Asking again per replica could bind a digest the preflight never saw,
+    // which is the divergence this check exists to refuse, not to adopt.
+    if (!imageIdentity && !securityGateUnboundWarn && !expectedImageId) {
       const identityOutcome = await this.capturePulledImageIdentity(
         dockerApi as DockerApiLike,
         newImage,
         container,
         logContainer,
+        // Only a caller that named the image this refresh deploys gets to
+        // replace the candidate tie-break, and saying so is what makes an
+        // unresolved tie fail closed instead of picking one. The update paths
+        // pass nothing and keep reading `container.result.digest` (DR-64).
+        runtimeContext.preferredDigest !== undefined
+          ? { preferredDigest: runtimeContext.preferredDigest }
+          : undefined,
       );
       imageIdentity = identityOutcome.imageIdentity;
       securityGateUnboundWarn = identityOutcome.unboundWarn;
       securityGateUnboundReason = identityOutcome.reason;
+      // A preflight whose inspect failed stores no image ID, so the recovery
+      // here is the only one this replica gets. Discarding it would leave the
+      // recreate unverified against anything at all, and keeping it local to
+      // this replica would leave the next one resolving the tag again.
+      expectedImageId = identityOutcome.localImageId;
+      if (expectedImageId) {
+        runtimeContext.onPulledImageIdResolved?.(expectedImageId);
+      }
     }
     const pinnedImage = imageIdentity || newImage;
+    if (!imageIdentity && !expectedImageId) {
+      // Neither a digest to create from nor an image ID to check the recreate
+      // against: the container gets whatever the tag resolves to at create
+      // time, exactly as it did before the check existed.
+      logContainer.warn(
+        `Cannot verify which image ${container.name} is recreated from because ${newImage} was not resolved to a local image ID`,
+      );
+    }
     if (securityGateUnboundWarn) {
-      this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      // Compose-file-once already recorded this service's skipped scan in its
+      // preflight, so recording it again here would add one audit row per
+      // batch on top of the one per container (DR-50).
+      if (runtimeContext.securityGateUnboundWarnRecorded !== true) {
+        this.recordUnboundSecurityWarning(container, securityGateUnboundReason);
+      }
       if (postPullHook) {
         // The gate must not run against the mutable tag, but the hook also
         // carries the deferred pre-update hook and prune/backup step, which
@@ -2881,14 +4345,35 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer,
     );
     try {
-      await this.recreateReplacementContainerWithCleanup(
+      const keptMovedTagAudit = await this.recreateReplacementContainerWithCleanup(
         dockerApi,
         recreationContainerSpec,
         pinnedImage,
         container,
         logContainer,
         cloneRuntimeConfigOptions,
+        expectedImageId,
+        preflightedServiceIdentity,
       );
+      if (keptMovedTagAudit) {
+        // Recorded only now that the recreate above has actually succeeded:
+        // recording it earlier, inside the assert, would leave a
+        // `security-scan-skipped` row on the books even when `startContainer`
+        // throws right after and the rollback net removes the candidate and
+        // restores the previous container. On the path this is reached from
+        // there may be no other row saying the scan was skipped: an install
+        // with no scanner and no signature verification has an identity
+        // binding policy of `disabled`, which never records the unbound-image
+        // skip. Where one does exist, such as a configured scanner with an
+        // optional binding policy, this row still names both the image that
+        // was pulled and the one that ran, so it stands on its own either way.
+        this.recordSecurityAudit(
+          'security-scan-skipped',
+          container,
+          'error',
+          keptMovedTagAudit.details,
+        );
+      }
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
         dockerApi as DockerApiLike,
@@ -2972,10 +4457,21 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       // update candidate, so a rollback wrote the backup image into the
       // compose file and then created the container from the very update it
       // was undoing, while the operation reported success (DR-101).
-      runtimeContext: { newImage },
-      // Deliberately no `imageIdentity`: this path has no compose-file-once
-      // preflight behind it, so the refresh has to bind the pulled image for
-      // itself rather than reuse an identity nothing resolved.
+      runtimeContext: {
+        newImage,
+        // No digest to hand over: a digest-pinned newImage is already
+        // matched by the pulled reference itself in selectPulledRepoDigest,
+        // so re-parsing it here would only be read back never used. Passing
+        // this key at all is still required, though, so the options bag
+        // marks the pull caller-pinned and `container.result.digest` (the
+        // candidate this recreate is moving away from) never breaks the tie
+        // by default (DR-64).
+        preferredDigest: null,
+      },
+      // Deliberately no `pulledImageId`, `imageIdentity` or
+      // `onPulledImageIdResolved`: this path has no compose-file-once
+      // preflight behind it, so it must not read as a preflighted service
+      // identity in the post-create image check (DR-67).
     } as ComposeRuntimeRefreshOptions;
     if (composeFiles.length > 1) {
       composeUpdateOptions.composeFiles = composeFiles;
@@ -2995,7 +4491,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         Dockercompose.attachComposeRollbackOutcome(runtimeError, {
           status: 'rollback-failed',
           phase: 'rollback-failed',
-          rollbackReason: 'compose_runtime_refresh_failed',
+          rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
           lastError: getErrorMessage(runtimeError),
         });
       }
@@ -3149,5 +4645,6 @@ export {
   normalizeImplicitLatest as testable_normalizeImplicitLatest,
   normalizePostStartEnvironmentValue as testable_normalizePostStartEnvironmentValue,
   normalizePostStartHooks as testable_normalizePostStartHooks,
+  resolveComposeInterpolation as testable_resolveComposeInterpolation,
   updateComposeServiceImageInText as testable_updateComposeServiceImageInText,
 };

@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "Spaziatura della tabella degli agenti",
+        "normal": "Spaziatura normale",
+        "compact": "Spaziatura compatta"
+      },
       "loading": "Caricamento agent...",
       "filterPlaceholder": "Filtra per nome...",
       "clearFilter": "Cancella",

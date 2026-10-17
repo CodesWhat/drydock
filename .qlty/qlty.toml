@@ -113,6 +113,25 @@ name = "trufflehog"
 [[plugin]]
 name = "yamllint"
 
+# checkov CKV_SECRET_6 fires on any JSON key containing "apiKey" whose value has
+# base64-like entropy; the Dutch UI catalog's "API-sleutels" label trips it while
+# the other sixteen translations of the same key do not. These are translated UI
+# strings, not credentials, and every locale carries the key by design. checkov's
+# other checks target IaC, so excluding the plugin from the catalogs loses nothing;
+# gitleaks and trufflehog still scan them for real secrets.
+[[exclude]]
+file_patterns = ["ui/src/locales/**"]
+plugins = ["checkov"]
+
+# checkov CKV_SECRET_6 also fires on the "sessionSecret" key in the v1.7 store
+# snapshot under app/store/fixtures/, which the first-start import tests read.
+# The value is a plain placeholder string, not a credential; the fixture exists
+# so the importer is exercised against a real dd.json shape. Same reasoning as
+# the locale exclusion above; gitleaks and trufflehog still scan the fixtures.
+[[exclude]]
+file_patterns = ["app/store/fixtures/**"]
+plugins = ["checkov"]
+
 # markdownlint table style is low-signal for this repository's docs format
 [[triage]]
 match.rules = ["markdownlint:MD060"]
@@ -176,12 +195,4 @@ set.ignored = true
 # validate it in the workflow.
 [[triage]]
 match.rules = ["checkov:CKV_GHA_7"]
-set.ignored = true
-
-# node-forge@1.4.0 (CVE-2026-33894, GHSA-86w9-cpqp-85rv) arrives through
-# @dotenvx/dotenvx in e2e/, a dev-only test helper that never ships in the image.
-# The advisory lists no patched version and 1.4.0 is the latest release as of
-# 2026-10-03. Recheck on 2026-11-02 or as soon as node-forge publishes a fix.
-[[triage]]
-match.rules = ["osv-scanner:CVE-2026-33894"]
 set.ignored = true

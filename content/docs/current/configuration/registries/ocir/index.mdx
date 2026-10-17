@@ -57,14 +57,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4
+      - DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=dGVuYW5jeS9vcmFjbGVpZGVudGl0eWNsb3Vkc2VydmljZS91c2VyQGV4YW1wbGUuY29tOnh4eHh4" \
+  -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
   codeswhat/drydock
 ```

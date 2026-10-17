@@ -1,6 +1,7 @@
 import express from 'express';
 import nocache from 'nocache';
 import * as store from '../store/index.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -21,6 +22,6 @@ function getStore(req, res) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', getStore);
+  router.get('/', scoped('read', getStore));
   return router;
 }

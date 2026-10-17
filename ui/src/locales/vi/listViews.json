@@ -42,6 +42,30 @@
       "info": "Thông tin"
     },
     "actions": {
+      "webhook-watch": "Kiểm tra qua webhook",
+      "webhook-watch-container": "Kiểm tra container qua webhook",
+      "webhook-update": "Cập nhật qua webhook",
+      "mqtt-command-update": "Lệnh cập nhật MQTT",
+      "security-scan-skipped": "Đã bỏ qua quét bảo mật",
+      "scanner-asset-pull-started": "Đã bắt đầu tải ảnh máy quét",
+      "scanner-asset-pull-succeeded": "Đã tải ảnh máy quét",
+      "scanner-asset-pull-failed": "Tải ảnh máy quét thất bại",
+      "scanner-asset-warm-started": "Đã bắt đầu chuẩn bị máy quét",
+      "scanner-asset-warm-succeeded": "Đã chuẩn bị máy quét",
+      "scanner-asset-warm-failed": "Chuẩn bị máy quét thất bại",
+      "container-unhealthy": "Container không khỏe mạnh",
+      "env-reveal": "Đã hiển thị biến môi trường",
+      "debug-dump": "Đã tải dữ liệu gỡ lỗi",
+      "config-read": "Đã đọc cấu hình",
+      "config-validated": "Đã xác thực cấu hình",
+      "config-reloaded": "Đã tải lại cấu hình",
+      "config-written": "Đã ghi cấu hình",
+      "update-approved": "Đã phê duyệt cập nhật",
+      "update-rejected": "Đã từ chối cập nhật",
+      "update-deferred": "Đã hoãn cập nhật",
+      "api-key-created": "Đã tạo khóa API",
+      "api-key-revoked": "Đã thu hồi khóa API",
+      "api-key-auth-failed": "Xác thực bằng khóa API thất bại",
       "container-update": "Cập nhật Container",
       "container-added": "Container đã được thêm",
       "container-removed": "Container đã bị xóa",
@@ -49,6 +73,13 @@
       "container-stop": "Dừng Container",
       "container-restart": "Khởi động lại Container",
       "auth-login": "Đăng nhập xác thực",
+      "totp-recovery-used": "Đã dùng mã khôi phục",
+      "totp-enrollment-started": "Đã bắt đầu đăng ký xác thực hai yếu tố",
+      "totp-enabled": "Đã bật xác thực hai yếu tố",
+      "totp-replaced": "Đã thay thế xác thực hai yếu tố",
+      "totp-disabled": "Đã tắt xác thực hai yếu tố",
+      "totp-recovery-codes-replaced": "Đã thay thế mã khôi phục",
+      "totp-break-glass": "Khôi phục ngoại tuyến xác thực hai yếu tố",
       "authenticated": "Đã xác thực",
       "authfail": "Xác thực thất bại",
       "hook-configured": "Hook đã được cấu hình",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Tự động cập nhật bị chặn",
       "update-policy-override-set": "Đã đặt ghi đè chính sách cập nhật",
       "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
+      "group-policy-set": "Đã đặt chính sách nhóm",
+      "group-policy-cleared": "Đã xóa chính sách nhóm",
+      "label-override-set": "Đã đặt ghi đè nhãn",
+      "label-override-cleared": "Đã xóa ghi đè nhãn",
       "auto-rollback": "Tự động khôi phục",
       "rollback": "Khôi phục",
       "preview": "Xem trước",
       "agent-disconnect": "Agent ngắt kết nối",
       "notification-delivery-failed": "Gửi thông báo thất bại",
       "security-alert": "Cảnh báo bảo mật",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Đã hết thời gian chờ",
+      "image-prune": "Dọn dẹp Image"
     },
     "target": {
       "container": "Container",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Nhóm"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Đã đạt độ chín",
         "description": "Khi cập nhật bị chính sách độ chín giữ lại trở nên khả dụng"
+      },
+      "update-pending-approval": {
+        "name": "Cập nhật đang chờ phê duyệt",
+        "description": "Khi một bản cập nhật ở chế độ thủ công vào hàng đợi phê duyệt"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Sạch"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "image",
+      "scanned": "đã quét"
     },
     "fixableBadge": "{count} có thể vá",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có trigger nào khớp với bộ lọc của bạn",
-    "testContainerName": "Test Container",
+    "testContainerName": "Container thử nghiệm",
     "columns": {
       "trigger": "Trigger",
       "type": "Loại",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Đang tải watcher...",
     "loadError": "Không thể tải watcher",
-    "soon": "soon",
+    "soon": "sắp tới",
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có watcher nào khớp với bộ lọc của bạn",

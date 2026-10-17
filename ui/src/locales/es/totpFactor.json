@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Autenticación en dos pasos",
+    "description": "Pide un código de tu aplicación de autenticación, además de tu contraseña, cada vez que inicies sesión.",
+    "loading": "Cargando el estado de la autenticación en dos pasos",
+    "retry": "Reintentar",
+    "status": {
+      "off": "Desactivada",
+      "on": "Activada",
+      "onSince": "Activada desde el {date}",
+      "recoveryRemaining": "{count} código de recuperación restante | {count} códigos de recuperación restantes",
+      "recoveryNone": "No quedan códigos de recuperación. Genera un conjunto nuevo antes de perder el acceso a tu aplicación de autenticación.",
+      "recoveryLow": "Te quedan pocos códigos de recuperación. Genera un conjunto nuevo.",
+      "pending": "Configuración iniciada, esperando un código. Caduca a las {time}."
+    },
+    "unavailable": {
+      "notLocal": "La autenticación en dos pasos solo está disponible para cuentas locales con sesión iniciada mediante contraseña. Si es tu caso, cierra sesión y vuelve a iniciarla.",
+      "httpsRequired": "La configuración en dos pasos requiere HTTPS. Abre Drydock mediante HTTPS o pide a un administrador que establezca DD_AUTH_TOTP_ALLOWHTTP=true si la red es de confianza.",
+      "noKeyRing": "La configuración en dos pasos no está disponible en este servidor. Un administrador debe configurar primero un llavero de cifrado.",
+      "recoverySession": "Iniciaste sesión con un código de recuperación, así que esta acción no está permitida. Inicia sesión con un código de tu aplicación de autenticación."
+    },
+    "actions": {
+      "enable": "Activar",
+      "replace": "Reemplazar autenticador",
+      "regenerate": "Nuevos códigos de recuperación",
+      "remove": "Desactivar",
+      "cancelSetup": "Cancelar configuración",
+      "cancel": "Cancelar"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Confirma que eres tú",
+        "replace": "Confirma que eres tú para reemplazar tu autenticador",
+        "regenerate": "Confirma que eres tú para obtener nuevos códigos de recuperación",
+        "remove": "Confirma que eres tú para desactivar la autenticación en dos pasos"
+      },
+      "hint": "Introduce tu contraseña. No se guarda nada después de este paso.",
+      "hintWithCode": "Introduce tu contraseña y un código vigente. No se guarda nada después de este paso.",
+      "passwordLabel": "Contraseña",
+      "passwordPlaceholder": "Introduce tu contraseña",
+      "codeLabel": "Código de autenticación",
+      "codePlaceholder": "Código de 6 dígitos",
+      "recoveryLabel": "Código de recuperación",
+      "recoveryPlaceholder": "Introduce un código de recuperación",
+      "useRecovery": "Usar un código de recuperación",
+      "useCode": "Usar un código de autenticación",
+      "submit": {
+        "enable": "Continuar",
+        "replace": "Continuar",
+        "regenerate": "Generar nuevos códigos",
+        "remove": "Desactivar autenticación en dos pasos",
+        "busy": "Comprobando..."
+      }
+    },
+    "scan": {
+      "heading": "Escanea con tu aplicación de autenticación",
+      "instructions": "Abre tu aplicación de autenticación, añade una cuenta y escanea este código. Después introduce el código de 6 dígitos que muestra.",
+      "replaceNote": "Tu autenticador actual sigue funcionando hasta que confirmes el nuevo.",
+      "qrLabel": "Código QR para configurar la verificación en dos pasos",
+      "qrFailed": "No se pudo dibujar el código QR. Introduce la clave de configuración en su lugar.",
+      "secretLabel": "¿No puedes escanear? Introduce esta clave de configuración",
+      "copySecret": "Copiar clave",
+      "copied": "Copiado",
+      "expiresAt": "Esta configuración caduca a las {time}.",
+      "codeLabel": "Código de autenticación",
+      "codeHint": "Introduce el código de 6 dígitos de tu aplicación de autenticación.",
+      "codePlaceholder": "Código de 6 dígitos",
+      "confirm": "Confirmar y activar",
+      "confirming": "Confirmando..."
+    },
+    "codes": {
+      "heading": "Guarda tus códigos de recuperación",
+      "description": "Cada código funciona una sola vez si pierdes tu aplicación de autenticación. Esta es la única vez que se muestran.",
+      "copy": "Copiar códigos",
+      "copied": "Copiado",
+      "download": "Descargar",
+      "fileHeading": "Códigos de recuperación de Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "He guardado estos códigos",
+      "done": "Hecho",
+      "downloadFailed": "Tu navegador no descargó el archivo. Cópialos en su lugar."
+    },
+    "remove": {
+      "header": "¿Desactivar la autenticación en dos pasos?",
+      "message": "Para iniciar sesión volverá a bastar la contraseña, y tus otras sesiones se cerrarán.",
+      "accept": "Desactivar"
+    },
+    "notice": {
+      "enabled": "La autenticación en dos pasos está activada.",
+      "replaced": "Tu nuevo autenticador está activo.",
+      "regenerated": "Tus nuevos códigos de recuperación están activos. Los anteriores ya no funcionan.",
+      "removed": "La autenticación en dos pasos está desactivada."
+    },
+    "errors": {
+      "load": "No se pudo cargar el estado de la autenticación en dos pasos.",
+      "network": "No se pudo conectar con el servidor. Inténtalo de nuevo.",
+      "generic": "Algo salió mal. Inténtalo de nuevo.",
+      "sessionEnded": "Tu sesión terminó. Vuelve a iniciar sesión.",
+      "reauthFailed": "La contraseña o el código no coinciden. Compruébalos e inténtalo de nuevo.",
+      "locked": "Demasiados intentos. Inténtalo de nuevo en {time}.",
+      "lockedLater": "Demasiados intentos. Inténtalo de nuevo más tarde.",
+      "busy": "Todavía hay otra comprobación en curso. Inténtalo de nuevo en un momento.",
+      "invalidRequest": "Introduce tu contraseña y un código válido.",
+      "codeFormat": "Introduce los 6 dígitos de tu aplicación de autenticación.",
+      "codeWrong": "Ese código no funcionó. Compruébalo e inténtalo de nuevo.",
+      "enrollmentExpired": "Esta configuración caducó. Empieza de nuevo.",
+      "enrollmentGone": "Esta configuración se cerró tras demasiados códigos incorrectos. Empieza de nuevo.",
+      "stateChanged": "Los ajustes de dos pasos cambiaron en otro lugar. Revísalos e inténtalo de nuevo.",
+      "notActive": "La autenticación en dos pasos no está activada."
+    }
+  }
+}

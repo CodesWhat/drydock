@@ -5,6 +5,48 @@ import {
 } from './update-policy.js';
 
 describe('Docker declarative update policy', () => {
+  test('reads release maturity defaults and labels with explicit zero overrides', () => {
+    expect(
+      resolveDockerDeclarativeUpdatePolicy(
+        {
+          'dd.updatePolicy.maturitySkipReleases': '0',
+          'dd.updatePolicy.maturityReleaseFallbackDays': '10',
+        },
+        { maturityskipreleases: '2', maturityreleasefallbackdays: '30' },
+      ),
+    ).toEqual({
+      env: { maturitySkipReleases: 2, maturityReleaseFallbackDays: 30 },
+      label: { maturitySkipReleases: 0, maturityReleaseFallbackDays: 10 },
+    });
+  });
+
+  test.each(['-1', '101', '1.5', 'true', '', ' ', undefined, null, true, {}, []])(
+    'ignores unusable release skip count %j',
+    (value) => {
+      expect(
+        resolveDockerDeclarativeUpdatePolicy(
+          {
+            'dd.updatePolicy.maturitySkipReleases': value,
+          },
+          { maturityskipreleases: value },
+        ),
+      ).toEqual({ env: {}, label: {} });
+    },
+  );
+
+  test.each(['-1', '366', '1.5', 'true', '', ' ', undefined, null, true, {}, []])(
+    'ignores unusable release fallback days %j',
+    (value) => {
+      expect(
+        resolveDockerDeclarativeUpdatePolicy(
+          {
+            'dd.updatePolicy.maturityReleaseFallbackDays': value,
+          },
+          { maturityreleasefallbackdays: value },
+        ),
+      ).toEqual({ env: {}, label: {} });
+    },
+  );
   test('parses watcher maturity defaults and exact dd.updatePolicy labels', () => {
     expect(
       resolveDockerDeclarativeUpdatePolicy(

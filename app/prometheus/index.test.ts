@@ -4,8 +4,8 @@ vi.mock('../configuration', () => ({
   getPrometheusConfiguration: vi.fn(() => ({ enabled: true })),
 }));
 
-// Mock prom-client
-vi.mock('prom-client', () => ({
+// Mock @prometheus-io/client
+vi.mock('@prometheus-io/client', () => ({
   collectDefaultMetrics: vi.fn(),
   Counter: vi.fn(() => ({ inc: vi.fn(), name: 'mock_counter' })),
   register: {
@@ -65,7 +65,7 @@ describe('Prometheus Module', () => {
   });
 
   test('should initialize all prometheus components when enabled', async () => {
-    const { collectDefaultMetrics } = await import('prom-client');
+    const { collectDefaultMetrics } = await import('@prometheus-io/client');
     const container = await import('./container.js');
     const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
@@ -96,7 +96,7 @@ describe('Prometheus Module', () => {
     const configuration = await import('../configuration/index.js');
     configuration.getPrometheusConfiguration.mockReturnValue({ enabled: false });
 
-    const { collectDefaultMetrics } = await import('prom-client');
+    const { collectDefaultMetrics } = await import('@prometheus-io/client');
     const container = await import('./container.js');
     const compatibility = await import('./compatibility.js');
     const trigger = await import('./trigger.js');
@@ -124,7 +124,7 @@ describe('Prometheus Module', () => {
   });
 
   test('should return metrics output', async () => {
-    const { register } = await import('prom-client');
+    const { register } = await import('@prometheus-io/client');
 
     const output = await prometheus.output();
 

@@ -34,13 +34,6 @@ export const authHandlers = [
     return HttpResponse.json(demoUser);
   }),
 
-  http.get('/auth/strategies', () => {
-    if (isOffline()) {
-      return HttpResponse.error();
-    }
-    return HttpResponse.json([{ type: 'basic', name: 'basic' }]);
-  }),
-
   http.post('/auth/login', () => HttpResponse.json(demoUser)),
 
   http.post('/auth/logout', () => {

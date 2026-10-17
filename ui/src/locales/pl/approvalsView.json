@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Nie udało się wczytać podsumowania zatwierdzeń",
+      "detailLoadFailed": "Nie udało się wczytać zatwierdzenia",
+      "approveFailed": "Nie udało się zatwierdzić aktualizacji",
+      "rejectFailed": "Nie udało się odrzucić aktualizacji",
+      "deferFailed": "Nie udało się odroczyć aktualizacji"
+    },
+    "ofCount": "Wyświetlono: {count}",
+    "refresh": "Odśwież",
+    "loading": "Ładowanie zatwierdzeń…",
+    "loadError": "Nie udało się załadować zatwierdzeń",
+    "notifyModeBanner": "Tryb aktualizacji to notify. Zatwierdzanie jest wyłączone, dopóki tryb nie zostanie ustawiony na manual lub auto.",
+    "tabs": {
+      "pending": "Oczekujące",
+      "deferred": "Odroczone",
+      "decided": "Rozstrzygnięte"
+    },
+    "columns": {
+      "container": "Kontener",
+      "image": "Obraz",
+      "version": "Wersja",
+      "scan": "Skanowanie",
+      "age": "Czas oczekiwania"
+    },
+    "semver": {
+      "major": "Wersja główna",
+      "minor": "Wersja podrzędna",
+      "patch": "Poprawka",
+      "prerelease": "Wersja wstępna",
+      "unknown": "Nieznana"
+    },
+    "actions": {
+      "notesAriaLabel": "Pokaż informacje o wydaniu i powody wstrzymania",
+      "approve": "Zatwierdź",
+      "approveAriaLabel": "Zatwierdź aktualizację",
+      "approveDisabledNotify": "Tryb aktualizacji to notify; zatwierdzanie jest wyłączone",
+      "reject": "Odrzuć",
+      "rejectAriaLabel": "Odrzuć aktualizację",
+      "defer": "Odrocz",
+      "deferAriaLabel": "Odrocz aktualizację"
+    },
+    "detail": {
+      "loading": "Ładowanie szczegółów…",
+      "holdReasons": "Powody wstrzymania",
+      "viewFullNotes": "Wyświetl pełne informacje",
+      "empty": "Brak informacji o wydaniu i powodów wstrzymania tej aktualizacji"
+    },
+    "empty": {
+      "pending": "Brak oczekujących zatwierdzeń",
+      "deferred": "Brak odroczonych zatwierdzeń",
+      "decided": "Brak rozstrzygniętych zatwierdzeń",
+      "all": "Brak zatwierdzeń"
+    },
+    "confirm": {
+      "cancel": "Anuluj",
+      "approve": {
+        "header": "Zatwierdź aktualizację",
+        "message": "Zatwierdzić aktualizację {name} do {toRef}?",
+        "softBlockerSuffix": "\n\nTa aktualizacja ma nierozwiązane powody wstrzymania:\n{list}",
+        "acceptLabel": "Zatwierdź"
+      },
+      "reject": {
+        "header": "Odrzuć aktualizację",
+        "message": "Odrzucić aktualizację {name} do {toRef}? Nie zostanie zastosowana automatycznie.",
+        "acceptLabel": "Odrzuć"
+      },
+      "defer": {
+        "header": "Odrocz aktualizację",
+        "message": "Odroczyć aktualizację {name} o {days} dni?",
+        "acceptLabel": "Odrocz"
+      }
+    },
+    "toast": {
+      "approved": "Wysłano żądanie zatwierdzenia dla {name}",
+      "approveFailed": "Nie udało się zatwierdzić {name}",
+      "rejected": "Odrzucono aktualizację {name}",
+      "rejectFailed": "Nie udało się odrzucić {name}",
+      "deferred": "Odroczono aktualizację {name}",
+      "deferFailed": "Nie udało się odroczyć {name}"
+    }
+  }
+}

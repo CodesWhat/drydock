@@ -56,21 +56,8 @@ test('every linked changelog heading has exactly one link definition', () => {
 test('v1.7 RC and prior releases have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.7.0-rc.24...HEAD`],
-    ['1.7.0-rc.24', `${repositoryUrl}/compare/v1.7.0-rc.23...v1.7.0-rc.24`],
-    ['1.7.0-rc.23', `${repositoryUrl}/compare/v1.7.0-rc.22...v1.7.0-rc.23`],
-    ['1.7.0-rc.22', `${repositoryUrl}/compare/v1.7.0-rc.21...v1.7.0-rc.22`],
-    ['1.7.0-rc.21', `${repositoryUrl}/compare/v1.7.0-rc.20...v1.7.0-rc.21`],
-    ['1.7.0-rc.20', `${repositoryUrl}/compare/v1.7.0-rc.19...v1.7.0-rc.20`],
-    ['1.7.0-rc.19', `${repositoryUrl}/compare/v1.7.0-rc.18...v1.7.0-rc.19`],
-    ['1.7.0-rc.18', `${repositoryUrl}/compare/v1.7.0-rc.17...v1.7.0-rc.18`],
-    ['1.7.0-rc.17', `${repositoryUrl}/compare/v1.7.0-rc.16...v1.7.0-rc.17`],
-    ['1.7.0-rc.16', `${repositoryUrl}/compare/v1.7.0-rc.15...v1.7.0-rc.16`],
-    ['1.7.0-rc.15', `${repositoryUrl}/compare/v1.7.0-rc.14...v1.7.0-rc.15`],
-    ['1.7.0-rc.14', `${repositoryUrl}/compare/v1.7.0-rc.13...v1.7.0-rc.14`],
-    ['1.7.0-rc.13', `${repositoryUrl}/compare/v1.7.0-rc.12...v1.7.0-rc.13`],
-    ['1.7.0-rc.12', `${repositoryUrl}/compare/v1.7.0-rc.11...v1.7.0-rc.12`],
-    ['1.7.0-rc.11', `${repositoryUrl}/compare/v1.7.0-rc.10...v1.7.0-rc.11`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.8.0-rc.1...HEAD`],
+    ['1.8.0-rc.1', `${repositoryUrl}/compare/v1.7.0-rc.24...v1.8.0-rc.1`],
     ['1.7.0-rc.10', `${repositoryUrl}/compare/v1.7.0-rc.9...v1.7.0-rc.10`],
     ['1.7.0-rc.9', `${repositoryUrl}/compare/v1.7.0-rc.8...v1.7.0-rc.9`],
     ['1.7.0-rc.8', `${repositoryUrl}/compare/v1.7.0-rc.7...v1.7.0-rc.8`],
@@ -109,6 +96,21 @@ test('v1.7 RC and prior releases have a complete chronological comparison-link c
     ['1.5.1-rc.2', `${repositoryUrl}/compare/v1.5.1-rc.1...v1.5.1-rc.2`],
     ['1.5.1-rc.1', `${repositoryUrl}/compare/v1.5.0...v1.5.1-rc.1`],
   ]);
+
+  for (let candidate = 11; candidate <= 24; candidate += 1) {
+    expected.set(
+      `1.7.0-rc.${candidate}`,
+      `${repositoryUrl}/compare/v1.7.0-rc.${candidate - 1}...v1.7.0-rc.${candidate}`,
+    );
+  }
+  expected.set('1.6.1', `${repositoryUrl}/compare/v1.6.0...v1.6.1`);
+  for (let candidate = 1; candidate <= 15; candidate += 1) {
+    const previous = candidate === 1 ? 'v1.6.0' : `v1.6.1-rc.${candidate - 1}`;
+    expected.set(
+      `1.6.1-rc.${candidate}`,
+      `${repositoryUrl}/compare/${previous}...v1.6.1-rc.${candidate}`,
+    );
+  }
 
   for (const [label, expectedUrl] of expected) {
     assert.equal(definitions.get(label), expectedUrl, `incorrect or missing [${label}] link`);

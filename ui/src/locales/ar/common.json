@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "يعمل منذ {duration}",
+    "apiResponse": {
+      "html": "أعاد {context} محتوى HTML بدلاً من JSON. تحقق من تشغيل خادم API أو خدمات المحاكاة التجريبية.",
+      "contentType": "أعاد {context} محتوى {contentType} بدلاً من JSON.",
+      "invalidJson": "أعاد {context} بيانات JSON غير صالحة."
+    },
     "loading": "جارٍ التحميل…",
     "back": "رجوع",
     "cancel": "إلغاء",
@@ -9,8 +15,8 @@
     "close": "إغلاق",
     "retry": "إعادة المحاولة",
     "unknown": "غير معروف",
-    "yes": "yes",
-    "no": "no",
+    "yes": "نعم",
+    "no": "لا",
     "errorSummary": {
       "rateLimitHit": "تم تجاوز حد الطلبات في السجل",
       "accessDenied": "تم رفض الوصول إلى السجل",
@@ -22,13 +28,13 @@
       "signatureFailed": "فشل التحقق من التوقيع"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "مخصص"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "الآن"
     },
     "imageAge": {
-      "now": "now"
+      "now": "الآن"
     }
   }
 }

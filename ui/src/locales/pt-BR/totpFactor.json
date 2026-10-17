@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Autenticação em dois fatores",
+    "description": "Peça um código do seu app autenticador, além da senha, sempre que entrar.",
+    "loading": "Carregando o status da autenticação em dois fatores",
+    "retry": "Tentar novamente",
+    "status": {
+      "off": "Desativada",
+      "on": "Ativada",
+      "onSince": "Ativada desde {date}",
+      "recoveryRemaining": "{count} código de recuperação restante | {count} códigos de recuperação restantes",
+      "recoveryNone": "Não restam códigos de recuperação. Gere um novo conjunto antes de perder o acesso ao seu app autenticador.",
+      "recoveryLow": "Seus códigos de recuperação estão acabando. Gere um novo conjunto.",
+      "pending": "Configuração iniciada, aguardando um código. Ela expira às {time}."
+    },
+    "unavailable": {
+      "notLocal": "A autenticação em dois fatores só está disponível para contas locais conectadas com senha. Se for o seu caso, saia e entre novamente.",
+      "httpsRequired": "A configuração em dois fatores exige HTTPS. Abra o Drydock por HTTPS ou peça a um administrador que defina DD_AUTH_TOTP_ALLOWHTTP=true se a rede for confiável.",
+      "noKeyRing": "A configuração em dois fatores não está disponível neste servidor. Um administrador precisa configurar primeiro um chaveiro de criptografia.",
+      "recoverySession": "Você entrou com um código de recuperação, então esta ação não é permitida. Entre com um código do seu app autenticador."
+    },
+    "actions": {
+      "enable": "Ativar",
+      "replace": "Substituir autenticador",
+      "regenerate": "Novos códigos de recuperação",
+      "remove": "Desativar",
+      "cancelSetup": "Cancelar configuração",
+      "cancel": "Cancelar"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Confirme que é você",
+        "replace": "Confirme que é você para substituir seu autenticador",
+        "regenerate": "Confirme que é você para obter novos códigos de recuperação",
+        "remove": "Confirme que é você para desativar a autenticação em dois fatores"
+      },
+      "hint": "Digite sua senha. Nada é guardado depois desta etapa.",
+      "hintWithCode": "Digite sua senha e um código atual. Nada é guardado depois desta etapa.",
+      "passwordLabel": "Senha",
+      "passwordPlaceholder": "Digite sua senha",
+      "codeLabel": "Código de autenticação",
+      "codePlaceholder": "Código de 6 dígitos",
+      "recoveryLabel": "Código de recuperação",
+      "recoveryPlaceholder": "Digite um código de recuperação",
+      "useRecovery": "Usar um código de recuperação",
+      "useCode": "Usar um código de autenticação",
+      "submit": {
+        "enable": "Continuar",
+        "replace": "Continuar",
+        "regenerate": "Gerar novos códigos",
+        "remove": "Desativar autenticação em dois fatores",
+        "busy": "Verificando..."
+      }
+    },
+    "scan": {
+      "heading": "Escaneie com seu app autenticador",
+      "instructions": "Abra seu app autenticador, adicione uma conta e escaneie este código. Depois digite o código de 6 dígitos que ele mostra.",
+      "replaceNote": "Seu autenticador atual continua funcionando até você confirmar o novo.",
+      "qrLabel": "QR code para configurar a verificação em duas etapas",
+      "qrFailed": "Não foi possível desenhar o QR code. Digite a chave de configuração.",
+      "secretLabel": "Não consegue escanear? Digite esta chave de configuração",
+      "copySecret": "Copiar chave",
+      "copied": "Copiado",
+      "expiresAt": "Esta configuração expira às {time}.",
+      "codeLabel": "Código de autenticação",
+      "codeHint": "Digite o código de 6 dígitos do seu app autenticador.",
+      "codePlaceholder": "Código de 6 dígitos",
+      "confirm": "Confirmar e ativar",
+      "confirming": "Confirmando..."
+    },
+    "codes": {
+      "heading": "Guarde seus códigos de recuperação",
+      "description": "Cada código funciona uma vez se você perder seu app autenticador. Esta é a única vez que eles são mostrados.",
+      "copy": "Copiar códigos",
+      "copied": "Copiado",
+      "download": "Baixar",
+      "fileHeading": "Códigos de recuperação do Drydock",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Guardei estes códigos",
+      "done": "Concluído",
+      "downloadFailed": "Seu navegador não baixou o arquivo. Copie os códigos."
+    },
+    "remove": {
+      "header": "Desativar a autenticação em dois fatores?",
+      "message": "Para entrar, bastará a senha novamente, e suas outras sessões serão encerradas.",
+      "accept": "Desativar"
+    },
+    "notice": {
+      "enabled": "A autenticação em dois fatores está ativada.",
+      "replaced": "Seu novo autenticador está ativo.",
+      "regenerated": "Seus novos códigos de recuperação estão ativos. Os antigos não funcionam mais.",
+      "removed": "A autenticação em dois fatores está desativada."
+    },
+    "errors": {
+      "load": "Não foi possível carregar o status da autenticação em dois fatores.",
+      "network": "Não foi possível conectar ao servidor. Tente novamente.",
+      "generic": "Algo deu errado. Tente novamente.",
+      "sessionEnded": "Sua sessão terminou. Entre novamente.",
+      "reauthFailed": "A senha ou o código não conferem. Verifique e tente novamente.",
+      "locked": "Muitas tentativas. Tente novamente em {time}.",
+      "lockedLater": "Muitas tentativas. Tente novamente mais tarde.",
+      "busy": "Outra verificação ainda está em andamento. Tente novamente em instantes.",
+      "invalidRequest": "Digite sua senha e um código válido.",
+      "codeFormat": "Digite os 6 dígitos do seu app autenticador.",
+      "codeWrong": "Esse código não funcionou. Verifique e tente novamente.",
+      "enrollmentExpired": "Esta configuração expirou. Comece de novo.",
+      "enrollmentGone": "Esta configuração foi encerrada após muitos códigos errados. Comece de novo.",
+      "stateChanged": "As configurações de dois fatores mudaram em outro lugar. Revise e tente novamente.",
+      "notActive": "A autenticação em dois fatores não está ativada."
+    }
+  }
+}

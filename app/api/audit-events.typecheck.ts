@@ -7,6 +7,19 @@ recordAuditEvent({
 });
 
 recordAuditEvent({
+  action: 'label-override-set',
+  status: 'success',
+  containerName: 'nginx',
+});
+
+recordAuditEvent({
+  action: 'label-override-cleared',
+  status: 'success',
+  containerName: 'media/sonarr',
+  containerIdentityKey: '::local::compose:media/sonarr',
+});
+
+recordAuditEvent({
   action: 'rollback',
   status: 'success',
   container: {

@@ -6,6 +6,7 @@ import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
 import { getErrorMessage } from '../../util/error.js';
 import { sendErrorResponse } from '../error-response.js';
+import { trackBasicHeaderStream, trackSessionStream } from '../session-streams.js';
 import { SSE_STALE_SWEEP_INTERVAL_MS } from '../sse-constants.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -165,6 +166,15 @@ function isStreamResponseClosed(response: StreamableResponse): boolean {
   );
 }
 
+/**
+ * The session a stats stream should end with. Every request carries a session
+ * id, signed in or not, so only a request the session itself authenticated is
+ * tied to one: an API key's stream outlives whatever session id rode along.
+ */
+function getStreamSessionId(req: Request): string | undefined {
+  return req.principal?.kind === 'session' ? req.sessionID : undefined;
+}
+
 function stopSummaryStatsStaleSweepIfIdle(runtime: SummaryStatsStreamRuntime): void {
   if (!runtime.staleSweepInterval || runtime.clients.size > 0) {
     return;
@@ -237,13 +247,14 @@ function createStreamContainerStatsHandler({
     streamResponse.flushHeaders?.();
 
     let cleanup: () => void;
+    const closeStream = () => {
+      cleanup();
+      streamResponse.destroy();
+    };
     const pressureController = createStatsStreamPressureController(
       streamResponse,
       (snapshot: NonNullable<ContainerStatsSnapshot>) => writeStatsEvent(streamResponse, snapshot),
-      () => {
-        cleanup();
-        streamResponse.destroy();
-      },
+      closeStream,
     );
 
     const latestSnapshot = statsCollector.getLatest(container.id);
@@ -260,12 +271,20 @@ function createStreamContainerStatsHandler({
       pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
+    // The request authenticated once; a session revoked afterwards ends the
+    // stream here, and so does a Basic header that stops being let in. Tracked
+    // only now, with the cleanup that forgets it, so a failure above never
+    // leaves a stream tracked that nothing would forget.
+    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
+    const forgetBasicHeaderStream = trackBasicHeaderStream(req.principal, closeStream);
     let disconnected = false;
     cleanup = () => {
       if (disconnected) {
         return;
       }
       disconnected = true;
+      forgetSessionStream();
+      forgetBasicHeaderStream();
       pressureController.cleanup();
       try {
         globalThis.clearInterval(heartbeatInterval);
@@ -320,13 +339,14 @@ function createStreamStatsSummaryHandler(
     streamResponse.flushHeaders?.();
 
     let cleanup: () => void;
+    const closeStream = () => {
+      cleanup();
+      streamResponse.destroy();
+    };
     const pressureController = createStatsStreamPressureController(
       streamResponse,
       (summary: unknown) => writeSummaryStatsEvent(streamResponse, summary),
-      () => {
-        cleanup();
-        streamResponse.destroy();
-      },
+      closeStream,
     );
 
     pressureController.enqueueSnapshot(aggregator.getCurrent());
@@ -339,6 +359,12 @@ function createStreamStatsSummaryHandler(
       pressureController.writeHeartbeat();
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
+    // The request authenticated once; a session revoked afterwards ends the
+    // stream here, and so does a Basic header that stops being let in. Tracked
+    // only now, with the cleanup that forgets it, so a failure above never
+    // leaves a stream tracked that nothing would forget.
+    const forgetSessionStream = trackSessionStream(getStreamSessionId(req), closeStream);
+    const forgetBasicHeaderStream = trackBasicHeaderStream(req.principal, closeStream);
     let disconnected = false;
     let streamClient: SummaryStatsStreamClient;
     cleanup = () => {
@@ -346,6 +372,8 @@ function createStreamStatsSummaryHandler(
         return;
       }
       disconnected = true;
+      forgetSessionStream();
+      forgetBasicHeaderStream();
       runtime.clients.delete(streamClient);
       stopSummaryStatsStaleSweepIfIdle(runtime);
       pressureController.cleanup();

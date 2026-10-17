@@ -7,7 +7,7 @@ For agents that cannot accept inbound connections and dial out to drydock instea
 
 ## Controller endpoints
 
-These endpoints are served by the Controller and provide read-only access to connected remote agents.
+These endpoints are served by the Controller for remote agent status, logs and credential management.
 
 ### List all agents
 
@@ -23,8 +23,8 @@ curl http://drydock:3000/api/v1/agents
       "host": "192.168.1.50",
       "port": 3000,
       "connected": true,
-      "version": "1.7.0",
-      "build": "1.7.0-rc.24",
+      "version": "1.8.0",
+      "build": "1.8.0-rc.1",
       "os": "linux",
       "arch": "amd64",
       "cpus": 4,
@@ -61,6 +61,33 @@ curl http://drydock:3000/api/v1/agents
 | `data[].pollInterval` | string | Agent's watcher cron schedule |
 | `data[].containers` | object | Container count summary (`total`, `running`, `stopped`) |
 | `data[].images` | integer | Number of distinct images across agent containers |
+
+### Rotate a Portwing signing key (Drydock RC, Portwing development) {#rotate-a-portwing-signing-key-development}
+
+Drydock v1.8.0-rc.1 adds opt-in, staged Ed25519 rotation with compatible
+Portwing development builds. Published Portwing v1.0.0-rc.1 does not include
+the companion feature; no compatible published Portwing version is assigned yet.
+See [Agent configuration](/docs/configuration/agents#controller-assisted-key-rotation-development)
+for storage and recovery requirements.
+
+`GET /api/v1/agents/:name/key-rotation` returns public credential status for a
+known agent, or `{ "enabled": false }` when rotation is unavailable. Status is
+the controller's current view, not an independent remote proof.
+
+`POST /api/v1/agents/:name/key-rotation` accepts exactly one property:
+`{ "action": "rotate" }` or `{ "action": "abort" }`. Existing session access
+policy applies; API keys are rejected. Recovery-assurance sessions cannot
+perform these writes. A completed Standard rotation returns `200` with the new
+`current_key_id`. Edge activation returns `202`, `phase: "awaiting-reconnect"`
+and the `pending_key_id`. Read status after reconnection to confirm the new
+current key. A `202` alone does not mean the old key has been retired.
+
+Invalid actions return `400`, missing agents `404`, disabled rotation `409`,
+and an unconfirmed remote operation `502`. After a `502`, preserve managed
+storage and check status before retrying. Retrying reuses the staged replacement.
+Abort cancels an uncommitted replacement, keeping the current key. Responses
+never include private keys. Normal Docker proxy requests cannot access the
+reserved credential-management namespace.
 
 ### Get agent log entries
 
@@ -155,8 +182,8 @@ Sent immediately upon connection to confirm the handshake.
 {
   "type": "dd:ack",
   "data": {
-    "version": "1.7.0",
-    "build": "1.7.0-rc.24",
+    "version": "1.8.0",
+    "build": "1.8.0-rc.1",
     "os": "linux",
     "arch": "amd64",
     "cpus": 4,

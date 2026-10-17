@@ -72,6 +72,8 @@ vi.mock('../store/container', () => ({
   deleteContainer: vi.fn(),
 }));
 
+vi.mock('../store/settings', () => ({ getUpdateMode: vi.fn(() => 'auto') }));
+
 vi.mock('../store/audit', () => ({
   insertAudit: vi.fn(),
   getRecentEntries: vi.fn(() => []),
@@ -79,13 +81,16 @@ vi.mock('../store/audit', () => ({
 
 vi.mock('../store/update-operation', () => ({
   listActiveOperations: vi.fn(() => []),
-  getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getOperationsByContainerIdentity: (...args: unknown[]) =>
+    mockGetOperationsByContainerName(...args),
   getOperationsByContainerId: vi.fn(() => []),
   getOperationById: vi.fn(() => undefined),
-  getInProgressOperationByContainerName: vi.fn(() => undefined),
+  getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
   getInProgressOperationByContainerId: vi.fn(() => undefined),
-  getActiveOperationByContainerName: vi.fn(() => undefined),
+  getActiveOperationByContainerIdentity: vi.fn(() => undefined),
   getActiveOperationByContainerId: vi.fn(() => undefined),
+  getRecentTerminalSucceededOperationByContainerIdentity: vi.fn(() => undefined),
+  hasOtherActiveOperationByContainerIdentity: vi.fn(() => false),
   toApiUpdateOperation: (op: Record<string, unknown>) => {
     const { container: _container, ...rest } = op;
     return rest;
@@ -312,6 +317,7 @@ describe('Container Router', () => {
         expect.any(Function),
       );
       expect(router.get).toHaveBeenCalledWith('/:id/triggers', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/:id/effective-policy', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith(
         '/:id/triggers/:triggerType/:triggerName',
         expect.any(Function),
@@ -1122,7 +1128,10 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ params: { id: 'c1' } }, res);
 
-      expect(mockGetOperationsByContainerName).toHaveBeenCalledWith('nginx');
+      // No identityKey on the container fixture, so the identity-scoped lookup
+      // is called with undefined; the legacy rows still merge in since none
+      // of them carry a containerId field.
+      expect(mockGetOperationsByContainerName).toHaveBeenCalledWith(undefined);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: operations,
@@ -1629,11 +1638,11 @@ describe('Container Router', () => {
             deleteContainer: vi.fn(),
           },
           updateOperationStore: {
-            getOperationsByContainerName: vi.fn(() => []),
+            getOperationsByContainerIdentity: vi.fn(() => []),
             getOperationsByContainerId: vi.fn(() => []),
-            getInProgressOperationByContainerName: vi.fn(() => undefined),
+            getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
-            getActiveOperationByContainerName: vi.fn(() => undefined),
+            getActiveOperationByContainerIdentity: vi.fn(() => undefined),
             getActiveOperationByContainerId: vi.fn(() => undefined),
           },
         },
@@ -2456,7 +2465,11 @@ describe('Container Router', () => {
         { type: 'slack', name: 'default', configuration: {} },
       ]);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
+      expect(res.json).toHaveBeenCalledWith({
+        data: expect.any(Array),
+        total: 1,
+        unassociatedTriggers: [],
+      });
     });
 
     test('should filter triggers with notificationTriggerInclude', async () => {
@@ -3436,5 +3449,39 @@ describe('Container Router', () => {
       );
       expect(getUpdatedPolicy()).toBeUndefined();
     });
+  });
+});
+
+describe('GET /:id/effective-policy', () => {
+  test('serves the container effective policy from the store, the registry and the update mode', () => {
+    storeContainer.getContainer.mockReturnValue({
+      id: 'c1',
+      labels: { 'dd.group': 'payments' },
+      details: { env: [{ key: 'API_SECRET', value: 'shh' }] }, // gitleaks:allow — fixture value
+    });
+    const handler = getHandler('get', '/:id/effective-policy');
+    const res = createResponse();
+
+    handler({ params: { id: 'c1' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const body = res.json.mock.calls[0][0];
+    expect(body.group).toEqual({
+      name: 'payments',
+      label: 'dd.group',
+      policyId: null,
+      revision: null,
+    });
+    expect(body.actions.updateMode).toEqual({ value: 'auto', source: 'global', global: 'auto' });
+    expect(JSON.stringify(body)).not.toContain('shh');
+  });
+
+  test('is 404 for a container the store does not know', () => {
+    storeContainer.getContainer.mockReturnValue(undefined);
+    const res = createResponse();
+
+    getHandler('get', '/:id/effective-policy')({ params: { id: 'missing' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 });

@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Política de acciones",
+    "edit": "Editar política de acciones",
+    "boundary": "Edite solo la política de programación. Guardar no ejecuta acciones, comandos, actualizaciones ni notificaciones. Las credenciales y los ajustes de ejecución siguen siendo de solo lectura. Siguen aplicándose el modo manual global y la elegibilidad de los contenedores.",
+    "actionUnavailable": "Esta acción exacta no está disponible en la instantánea del editor.",
+    "apiUnavailable": "Este servidor no proporciona la API del editor de políticas de acciones.",
+    "reset": "Eliminar valor del archivo / heredar ajustes",
+    "orderHelp": "Se permiten valores negativos y decimales. La herencia de orden existente también puede afectar a otras acciones y notificaciones con el mismo nombre.",
+    "concurrencyHelp": "Un entero positivo. Eliminar el valor del archivo restaura los ajustes heredados. En Compose, limita proyectos independientes, no servicios dentro de un mismo archivo.",
+    "invalidNumber": "Introduzca un número finito. Para heredar ajustes, elimine explícitamente el valor del archivo.",
+    "invalidConcurrency": "Introduzca un entero positivo. Para heredar ajustes, elimine explícitamente el valor del archivo.",
+    "fields": {
+      "auto": "Ejecución automática",
+      "order": "Orden de ejecución",
+      "concurrency": "Actualizaciones simultáneas"
+    },
+    "autoModes": {
+      "all": "Todos los contenedores elegibles",
+      "oninclude": "Contenedores incluidos explícitamente",
+      "onauto": "Contenedores permitidos por la política de acciones automáticas",
+      "none": "Sin ejecución automática"
+    }
+  }
+}

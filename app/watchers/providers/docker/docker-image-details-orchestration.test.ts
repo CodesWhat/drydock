@@ -1,3 +1,4 @@
+import * as configuration from '../../../configuration/index.js';
 import * as registry from '../../../registry/index.js';
 import * as storeContainer from '../../../store/container.js';
 import {
@@ -118,9 +119,29 @@ function createErroredStoredContainer(
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST;
 });
 
 describe('docker image details orchestration module', () => {
+  test('recomputes the digest default for an already persisted container', async () => {
+    configuration.ddEnvVars.DD_DEFAULTS_WATCH_DIGEST = 'false';
+    const stored = createErroredStoredContainer({ repo: 'sha256:new', value: 'sha256:new' });
+    stored.image.digest.watch = true;
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const { watcher } = createWatcher();
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result).toBe(stored);
+    expect(result?.image.digest.watch).toBe(false);
+    expect(result?.image.digest.value).toBe('sha256:new');
+  });
+
   describe('errored-container slow-path rebuild integrity', () => {
     // #542 routing update: an errored-but-known container now takes the fast
     // path (refreshContainerAlreadyInStore) instead of this slow rebuild.
@@ -541,6 +562,223 @@ describe('docker image details orchestration module', () => {
       expect(result?.health).toBe('unhealthy');
     },
   );
+
+  // Playwright v16-health-preferences.spec.ts regression: a scan-observed
+  // health flip (the cron #198 fallback, or the targeted
+  // POST /api/v1/containers/:id/watch refresh) must land in the store the
+  // moment it's observed here, not only if/when the container's `result`
+  // patch happens to write later. `addImageDetailsToContainerOrchestration`
+  // never itself does a registry lookup — that only happens in the caller's
+  // separate `findNewVersion` step, once this promise has already resolved
+  // — so a synchronous-with-this-call `updateContainerFields` write is, by
+  // construction, before the registry work runs.
+  test('persists a scan-observed health flip to the store during discovery, before the registry lookup', async () => {
+    const stored = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      health: 'healthy',
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: { name: 'ghcr', url: 'ghcr.io' },
+        tag: { value: 'latest', semver: false },
+        digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const updateContainerFields = vi
+      .spyOn(storeContainer, 'updateContainerFields')
+      .mockReturnValue(undefined);
+    const { watcher, inspectContainer } = createWatcher();
+    inspectContainer.mockResolvedValue({ State: { Health: { Status: 'unhealthy' } } });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(result?.health).toBe('unhealthy');
+    expect(updateContainerFields).toHaveBeenCalledWith(
+      'container-1',
+      expect.objectContaining({ health: 'unhealthy' }),
+      undefined,
+      { labelOwned: 'declared' },
+    );
+  });
+
+  describe('with a Drydock override on a label-owned field (spec 7.5)', () => {
+    function storedWithOverride(overrides: Record<string, unknown> = {}) {
+      const declaredSources = {
+        displayName: 'default',
+        displayIcon: 'default',
+        dependsOn: 'label',
+        dependsOnAction: 'default',
+        notificationTriggerInclude: 'unset',
+        notificationTriggerExclude: 'unset',
+        actionTriggerInclude: 'unset',
+        actionTriggerExclude: 'unset',
+        actionTriggerAuto: 'unset',
+      };
+      return {
+        id: 'container-1',
+        name: 'service',
+        // The effective value is the override; the declared one is the name.
+        displayName: 'TV',
+        displayIcon: 'mdi:docker',
+        dependsOn: ['override-dep'],
+        dependsOnSource: 'override',
+        dependsOnAction: 'update',
+        status: 'running',
+        health: 'healthy',
+        details: { ports: [], volumes: [], env: [] },
+        labelOwned: {
+          v: 1,
+          declared: {
+            displayName: 'service',
+            displayIcon: 'mdi:docker',
+            dependsOn: ['db'],
+            dependsOnAction: 'update',
+          },
+          declaredSources,
+          sources: { ...declaredSources, displayName: 'override', dependsOn: 'override' },
+        },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'ghcr.io' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+        ...overrides,
+      };
+    }
+
+    test('an unchanged declared layer writes nothing and the record keeps its effective values', async () => {
+      const stored = storedWithOverride();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
+      const { watcher, inspectContainer } = createWatcher();
+      inspectContainer.mockRejectedValue(new Error('gone'));
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: { 'dd.depends_on': 'db' } }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(updateContainerFields).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        displayName: 'TV',
+        dependsOn: ['override-dep'],
+        dependsOnSource: 'override',
+      });
+    });
+
+    test('a rename follows the declared display name and the override stays effective', async () => {
+      const stored = storedWithOverride();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi.spyOn(storeContainer, 'updateContainerFields');
+      updateContainerFields.mockReturnValue({
+        ...stored,
+        name: 'renamed',
+        labelOwned: {
+          ...stored.labelOwned,
+          declared: { ...stored.labelOwned.declared, displayName: 'renamed' },
+        },
+      } as any);
+      const { watcher, inspectContainer } = createWatcher();
+      inspectContainer.mockRejectedValue(new Error('gone'));
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Names: ['/renamed'], Labels: { 'dd.depends_on': 'db' } }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(updateContainerFields).toHaveBeenCalledWith(
+        'container-1',
+        { name: 'renamed', displayName: 'renamed' },
+        undefined,
+        { labelOwned: 'declared' },
+      );
+      expect(result?.displayName).toBe('TV');
+      expect(result?.labelOwned?.declared.displayName).toBe('renamed');
+    });
+
+    test('a changed declared dependency is patched as declared and the override stays effective', async () => {
+      const stored = storedWithOverride();
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
+      const { watcher, inspectContainer } = createWatcher();
+      inspectContainer.mockRejectedValue(new Error('gone'));
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Labels: { 'dd.depends_on': 'db2' } }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(updateContainerFields).toHaveBeenCalledWith(
+        'container-1',
+        expect.objectContaining({ dependsOn: ['db2'], dependsOnSource: 'label' }),
+        undefined,
+        { labelOwned: 'declared' },
+      );
+      expect(result).toMatchObject({ dependsOn: ['override-dep'], dependsOnSource: 'override' });
+    });
+  });
+
+  test('a discovery pass with no successful inspect and nothing else observed does not write to the store', async () => {
+    const stored = {
+      id: 'container-1',
+      name: 'service',
+      displayName: 'service',
+      status: 'running',
+      health: 'healthy',
+      details: { ports: [], volumes: [], env: [] },
+      image: {
+        id: 'image-old',
+        name: 'acme/service',
+        registry: { name: 'ghcr', url: 'ghcr.io' },
+        tag: { value: 'latest', semver: false },
+        digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+        created: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+    const updateContainerFields = vi
+      .spyOn(storeContainer, 'updateContainerFields')
+      .mockReturnValue(undefined);
+    const { watcher, inspectContainer } = createWatcher();
+    // Same name and status as the summary, and a failed inspect (so health
+    // is never observed and details fall back to the cached/summary merge
+    // this stored fixture already matches) — nothing this block owns
+    // actually changed.
+    inspectContainer.mockRejectedValue(new Error('gone'));
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer(),
+      {},
+      createHelpers() as any,
+    );
+
+    expect(updateContainerFields).not.toHaveBeenCalled();
+  });
 
   test('failed stored-container inspect preserves the previous health value', async () => {
     const stored = {
@@ -2721,6 +2959,9 @@ describe('docker image details orchestration module', () => {
         },
       };
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
       const { watcher } = createWatcher();
 
       const result = await addImageDetailsToContainerOrchestration(
@@ -2732,6 +2973,16 @@ describe('docker image details orchestration module', () => {
 
       expect(result?.dependsOn).toEqual(['new-target']);
       expect(result?.dependsOnSource).toBe('label');
+      expect(updateContainerFields).toHaveBeenCalledWith(
+        'container-1',
+        expect.objectContaining({
+          dependsOn: ['new-target'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'update',
+        }),
+        undefined,
+        { labelOwned: 'declared' },
+      );
     });
 
     test('already-stored containers clear a stale label-sourced dependsOn once the label is removed', async () => {
@@ -2754,6 +3005,9 @@ describe('docker image details orchestration module', () => {
         },
       };
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
       const { watcher } = createWatcher();
 
       const result = await addImageDetailsToContainerOrchestration(
@@ -2765,6 +3019,9 @@ describe('docker image details orchestration module', () => {
 
       expect(result?.dependsOn).toBeUndefined();
       expect(result?.dependsOnSource).toBeUndefined();
+      const patch = updateContainerFields.mock.calls[0]?.[1];
+      expect(patch).toHaveProperty('dependsOn', undefined);
+      expect(patch).toHaveProperty('dependsOnSource', undefined);
     });
   });
 });

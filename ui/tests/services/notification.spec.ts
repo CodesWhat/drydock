@@ -68,11 +68,12 @@ describe('Notification Service', () => {
     it('should throw when fetching notification rules fails', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
       });
 
       await expect(getAllNotificationRules()).rejects.toThrow(
-        'Failed to get notifications: Internal Server Error',
+        'Failed to load notification rules (HTTP 500): Internal Server Error',
       );
     });
   });
@@ -132,7 +133,7 @@ describe('Notification Service', () => {
       });
 
       await expect(updateNotificationRule('update-available', { enabled: true })).rejects.toThrow(
-        'Unknown error',
+        'API returned invalid JSON. (HTTP 500)',
       );
     });
 
@@ -198,7 +199,7 @@ describe('Notification Service', () => {
 
       await expect(
         previewNotificationTemplates('update-available', 'slack.ops', {}),
-      ).rejects.toThrow('Unknown error');
+      ).rejects.toThrow('API returned invalid JSON. (HTTP 500)');
     });
 
     it('falls back to the preview HTTP status when no backend error is provided', async () => {

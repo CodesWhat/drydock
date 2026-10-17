@@ -527,6 +527,12 @@ export const containerPaths = {
               items: { $ref: '#/components/schemas/ContainerAssociatedTrigger' },
             },
             total: { type: 'integer', minimum: 0 },
+            unassociatedTriggers: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ContainerUnassociatedTrigger' },
+              description:
+                'Triggers that do not apply to this container, each with a reason (DR-78).',
+            },
           },
           required: ['data', 'total'],
           additionalProperties: true,
@@ -579,6 +585,24 @@ export const containerPaths = {
       },
     },
   },
+  '/api/v1/containers/{id}/effective-policy': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get the effective policy of a container',
+      operationId: 'getContainerEffectivePolicy',
+      description:
+        'Where each update-policy field and action restriction comes from (default, env, group, label or override), and what dispatch will do with them. It is computed with the same resolvers dispatch uses, from the container as it stands now, the live group policy and the live global update mode. It reports only policy: no runtime environment is served.',
+      parameters: [containerIdPathParam],
+      responses: {
+        200: jsonResponse('Effective policy', {
+          $ref: '#/components/schemas/EffectiveContainerPolicy',
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('API key is missing the required scope'),
+        404: errorResponse('Container not found'),
+      },
+    },
+  },
   '/api/v1/containers/{id}/update-policy': {
     patch: {
       tags: ['Containers'],
@@ -613,9 +637,18 @@ export const containerPaths = {
                 snoozeUntil: { type: 'string', format: 'date-time' },
                 mode: { type: 'string', enum: ['all', 'mature'] },
                 minAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+                skipReleases: { type: 'integer', minimum: 0, maximum: 100 },
+                releaseFallbackDays: { type: 'integer', minimum: 0, maximum: 365 },
                 field: {
                   type: 'string',
-                  enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+                  enum: [
+                    'maturityMode',
+                    'maturityMinAgeDays',
+                    'maturitySkipReleases',
+                    'maturityReleaseFallbackDays',
+                    'skipTags',
+                    'skipDigests',
+                  ],
                   description:
                     'Override field to revert; omit to revert all declarative policy overrides.',
                 },
@@ -792,7 +825,7 @@ export const containerPaths = {
       tags: ['Containers', 'Actions'],
       summary: 'Preview container update actions',
       description:
-        'Returns generic docker preview fields and compose mutation metadata when the container is managed by the dockercompose trigger.',
+        'Returns generic Docker preview fields, compose mutation metadata for dockercompose triggers, or Portainer stack mutation metadata for portainer triggers.',
       operationId: 'previewContainerUpdate',
       parameters: [containerIdPathParam],
       responses: {
@@ -881,6 +914,9 @@ export const containerPaths = {
         401: errorResponse('Authentication required'),
         428: errorResponse('Destructive confirmation header is required'),
         404: errorResponse('Container, backup, or trigger not found'),
+        409: errorResponse(
+          'Portainer action triggers do not support manual rollback; configure a Docker action for rollback.',
+        ),
         500: errorResponse('Rollback failed'),
       },
     },

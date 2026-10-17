@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Container image update watcher — 23 registries, 20 notification and action providers.**
+**Container image update watcher — 23 registries, 21 notification and action providers.**
 
 </div>
 
@@ -34,6 +34,11 @@
 </p>
 
 <hr>
+
+> [!WARNING]
+> **v1.8.0-rc.1 is an opt-in test build.** Stop Drydock and back up the complete store directory before trying it. First startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite are not carried back. See [migration and deprecations](DEPRECATIONS.md).
+
+<!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Updating from an older release? Read the upgrade notes first.** Three security-hardening fixes first shipped in **1.4.6** and run through the entire **1.5** line, so anyone updating from a release older than 1.4.6 is affected whatever version they land on (1.4.6, any 1.5.x, or later). They are not deprecations and have no grace period: OIDC now requires `authorization_endpoint` in your provider's discovery metadata, unauthenticated rate-limiting keys on the TCP peer address (shared bucket behind a reverse proxy), and HTTP-trigger proxy URLs must use `http(s)://`. See **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)** before updating.
@@ -255,7 +260,7 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 
 Container images drift out of date silently. A base image patches a CVE, an app cuts a release, a tag moves. Unless you're watching every registry by hand, your running containers fall behind until something breaks or gets exploited.
 
-Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 20 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
+Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 21 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
 
 <hr>
 
@@ -265,12 +270,12 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 |---|---|---|
 | 🔭 | **Monitor-First Detection** | Watches every running container and classifies each available update as major, minor, patch, or digest before anything happens. Nothing changes until you say so. |
 | 📦 | **23 Registry Providers** | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and 12 more. Public and private, cloud and self-hosted, with per-registry TLS and auth. |
-| 🔔 | **20 Triggers** | 17 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
+| 🔔 | **21 Triggers** | 17 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
 | 🥊 | **Update Bouncer** | Trivy/Grype vulnerability scanning blocks unsafe updates before they deploy, with cosign signature verification and SBOM generation (CycloneDX and SPDX). |
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
 | 🗂️ | **Docker Compose Updates** | Pull and recreate Compose services through the Docker Engine API with YAML-preserving image patching. |
-| 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels; maturity gates, skip/snooze/pin, and maintenance windows are stored via UI/API or watcher configuration. |
+| 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels; maturity gates, skip/snooze/pin, and maintenance windows are stored via UI/API or watcher configuration. Persistent group policies set update-policy defaults and restrict-only action rules for every current and future member of a group. |
 | 🛰️ | **Distributed Agents** | Monitor remote Docker hosts over SSE. Portwing 0.9.0+ agents work over inbound Standard HTTP or dial-out Edge WebSocket transport; Drydock 1.6.0-rc.11+ can run native registry checks and single/batch Docker updates controller-side through either authenticated path. Edge also carries continuous live logs with no inbound port required; `DD_EXPERIMENTAL_PORTWING=false` remains an emergency disable. |
 | 🖥️ | **Web Dashboard** | Vue 3 UI with a zero-dependency customizable widget grid, responsive table/card views, live SSE updates, notification-bell controls, and per-container detail, logs, and stats. |
 | 🔗 | **REST API & Webhooks** | Token-authenticated endpoints for CI/CD watch and update triggers, plus signed registry webhook ingestion for push events. |
@@ -287,9 +292,9 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
 
-### Actions (3)
+### Actions (4)
 
-Docker · Docker Compose · Command
+Docker · Docker Compose · Portainer · Command
 
 ### Notifications (17)
 
@@ -333,14 +338,14 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Update threshold filtering (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Dependency-aware update ordering</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Pending-approval queue</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Pending-approval queue</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Lifecycle hooks (pre/post)</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Vulnerability scanning</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">20</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">12</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
@@ -376,13 +381,13 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Digest watching</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Update threshold filtering (major/minor/patch/digest)</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Dependency-aware update ordering</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>Pending-approval queue</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Pending-approval queue</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Image backup & rollback</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Vulnerability scanning</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">20</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
@@ -426,8 +431,16 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | **v1.5.2** ✅ | Policy & Pinned-Tag Reliability | Recreation-safe maturity/skip/snooze policy retention, pinned-tag digest rebuild detection and informational same-family insights, rollback-candidate cleanup, rollback-cascade prevention, explicit-MAC preservation, and local-image registry-skip behavior |
 | **v1.6.0** ✅ | Notifications, Policy & Release Intel | Per-rule/per-trigger notification templates with live preview, notification-bell preferences, cross-device preference sync, zero-dependency custom dashboard grid ([#281](https://github.com/CodesWhat/drydock/issues/281)), declarative update policy ([#320](https://github.com/CodesWhat/drydock/issues/320)), maturity stabilization countdown + immediate candidate visibility + manual override ([#406](https://github.com/CodesWhat/drydock/discussions/406)), actionable Update Status panel and global `notify` / `manual` / `auto` update mode ([#325](https://github.com/CodesWhat/drydock/discussions/325)), watcher/imgset/container tag-policy inheritance plus stacked current → newer pinned-tag visibility ([#498](https://github.com/CodesWhat/drydock/issues/498)), standardized 44px Source / release notes / registry resource actions across table, cards, and details ([#295](https://github.com/CodesWhat/drydock/discussions/295)), health-status event notifications ([#198](https://github.com/CodesWhat/drydock/discussions/198)), bidirectional Home Assistant MQTT, responsive table/card list views, Trivy/Grype/both scanning across command or pinned Docker-worker backends, scanner asset pull/warm controls, off-heap deduplicated SBOM storage, Trivy long-scan correctness ([#490](https://github.com/CodesWhat/drydock/issues/490)), trigger-taxonomy migration warnings, v1.6 compatibility removals, docs/API hygiene, and `/api` → `/api/v1` migration completion with an opt-in wud-card/Homepage compatibility shim (`DD_COMPAT_WUDCARD`). |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware update ordering ([#219](https://github.com/CodesWhat/drydock/discussions/219)), per-action update policy ([#511](https://github.com/CodesWhat/drydock/discussions/511)), unified maturity/update-age clock, clickable port links, keyboard shortcuts, PWA, dark-theme contrast pass (WCAG 2.2) ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865)), `DD_TRIGGER_*` removal (end of the v1.5.0 deprecation window), curl removed from the image |
-| **v1.8.0** | Fleet Management & Live Config | SQLite store migration, per-update approval queue, YAML config, live UI config, parallel updates, selective bulk updates ([#232](https://github.com/CodesWhat/drydock/discussions/232)), dependency-ordering UI, images manager and prune, static image list watcher, maintenance window scoped to installs by default ([#946](https://github.com/CodesWhat/drydock/discussions/946)), scoped rotatable API keys (static bearer tokens for HA/dashboard integrations, [#469](https://github.com/CodesWhat/drydock/discussions/469)), TOTP two-factor login, Home Assistant update progress + per-container devices ([#210](https://github.com/CodesWhat/drydock/discussions/210)) |
+| **v1.8.0** | Fleet Management & Live Config | **Available for testing in v1.8.0-rc.1; GA pending:** SQLite storage, approval queue, YAML config, scoped watcher/notification/action policy editors and security digest templates, concurrent updates, selective bulk updates ([#232](https://github.com/CodesWhat/drydock/discussions/232)), dependency-ordering UI, images inventory/prune, fleet health and inventory refresh, shareable label grouping, notification-only exact group routing ([#1251](https://github.com/CodesWhat/drydock/pull/1251)), persistent group policies with restrict-only action rules, an effective-policy view and a Settings editor, Drydock-side overrides for label-owned container settings, TOTP two-factor sign-in with recovery codes, install-only maintenance windows ([#946](https://github.com/CodesWhat/drydock/discussions/946)), first-party auth, scoped API keys ([#469](https://github.com/CodesWhat/drydock/discussions/469)), and Home Assistant update progress/devices ([#210](https://github.com/CodesWhat/drydock/discussions/210)). **Remaining:** broader live configuration needs ownership decisions; the static image list watcher is held until after GA. |
 | **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps sync, volume browser, locally-built images watched against a declared upstream base ([#897](https://github.com/CodesWhat/drydock/discussions/897)), health gates, canary deploys, web terminal, RBAC, LDAP/AD, basic Podman support over its Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
+
+**Release and upgrade status:** v1.6.1 remains the latest stable release. v1.7.0-rc.24 remains the 1.7 GA candidate. v1.8.0-rc.1 is for opt-in testing, with the published 1.7 docs preserved separately from the active 1.8 docs.
+
+**Compatibility:** v1.7 removes legacy trigger inputs, curl and `/api/auth/methods`. v1.8 changes MQTT entity identity and the old `/auth/strategies` response. `PUT /api/v1/settings` remains available until API v2; its `Sunset` date does not authorize removing a method from the frozen v1 API. `/api/auth/status` remains supported.
+
+**Portwing rotation:** the Drydock controller first supports staged rotation in v1.8.0-rc.1, with compatible Portwing development builds. Published Portwing v1.0.0-rc.1 does not include the companion feature, so no compatible published Portwing version is claimed. Edge `202` means awaiting reconnect, not completed rotation.
+
+**Open community requirements:** Cross-host dependency updates/restarts ([#219](https://github.com/CodesWhat/drydock/discussions/219)) are not implemented. The version-family core of release-count maturity ([#558](https://github.com/CodesWhat/drydock/discussions/558)) is available for testing in v1.8.0-rc.1, including an optional age fallback and bounded digest proof for versioned aliases; historical digest counting for unversioned channels remains future work. Same-host dependency ordering and its new UI do not fulfill the remote-host request. Local-build detection and safe rebuild routing remain future work ([#897](https://github.com/CodesWhat/drydock/discussions/897)); none of these entries is a release-date commitment. A process-wide digest default ([#657](https://github.com/CodesWhat/drydock/discussions/657)) is available for testing in v1.8.0-rc.1 through `DD_DEFAULTS_WATCH_DIGEST`; configure each agent separately.
 
 </details>
 
@@ -436,10 +449,11 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 <h2 align="center" id="star-history">Star History</h2>
 
 <div align="center">
-  <a href="https://github.com/CodesWhat/drydock/stargazers">
+  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/star-history-dark.svg" />
-      <img src="docs/assets/star-history.svg" alt="Star history for CodesWhat/drydock" width="900" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <img alt="Star history for CodesWhat/drydock" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
     </picture>
   </a>
 </div>

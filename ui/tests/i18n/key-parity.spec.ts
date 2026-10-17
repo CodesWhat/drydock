@@ -4,6 +4,7 @@
  *
  *   - ORPHAN keys (present in a locale but absent from en) → FAIL (stale cruft, never legitimate)
  *   - MISSING keys (present in en but absent from a locale) → FAIL
+ *   - MISSING namespace files (present in en but absent from a locale) → FAIL
  *
  * Missing keys used to be tolerated on the grounds that Crowdin would fill them
  * after the push. It does not. Crowdin exports source text for anything it has
@@ -17,8 +18,8 @@
  * it in the same change. That is the intended trade: the alternative is
  * shipping English to non-English users and finding out later.
  *
- * A brand-new namespace file that a locale does not have yet is still tolerated,
- * because that is a file-creation race rather than an untranslated string.
+ * New namespace files must be translated in the same change too. A missing
+ * file must not bypass the missing-key check by hiding an entire namespace.
  *
  * Root-key parity flags locale top-level keys that are absent from en. Note that
  * some namespace files (e.g. listViews.json) have multiple top-level keys by design.
@@ -28,6 +29,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SUPPORTED_LOCALES } from '../../src/i18n/locales';
+import { missingNamespaces } from './namespace-parity';
 
 const localesDir = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/locales');
 const enNamespaces = readdirSync(join(localesDir, 'en')).filter((f) => f.endsWith('.json'));
@@ -61,12 +63,18 @@ interface OrphanViolation {
 const rootKeyViolations: RootKeyViolation[] = [];
 const orphanViolations: OrphanViolation[] = [];
 const missingViolations: OrphanViolation[] = [];
+const missingNamespaceFiles: string[] = [];
 
 for (const locale of nonEnLocales) {
+  const localeDir = join(localesDir, locale);
+  const localeFiles = existsSync(localeDir) ? readdirSync(localeDir) : [];
+  missingNamespaceFiles.push(
+    ...missingNamespaces(enNamespaces, localeFiles).map((namespace) => `${locale}/${namespace}`),
+  );
   for (const nsFile of enNamespaces) {
     const localeFilePath = join(localesDir, locale, nsFile);
     if (!existsSync(localeFilePath)) {
-      // Tolerated: Crowdin may not have created a brand-new namespace yet for this locale
+      // Report missing files together below instead of trying to parse them.
       continue;
     }
 
@@ -88,7 +96,7 @@ for (const locale of nonEnLocales) {
     const localeTopKeys = Object.keys(localeObj as Record<string, unknown>);
 
     // Root-key violation: any top-level key in locale that en doesn't have = structural corruption.
-    // Locale missing some of en's top-level keys is tolerated (Crowdin lag, same as leaf keys).
+    // Missing root keys are covered by the missing-leaf check below.
     for (const k of localeTopKeys) {
       if (!enTopKeySet.has(k)) {
         rootKeyViolations.push({ locale, namespace: nsFile, extraKey: k });
@@ -116,6 +124,13 @@ for (const locale of nonEnLocales) {
 }
 
 describe('key-parity', () => {
+  test('every supported locale contains every English namespace file', () => {
+    expect(
+      missingNamespaceFiles,
+      `Missing locale namespace files. Translate them in this change:\n${missingNamespaceFiles.join('\n')}`,
+    ).toEqual([]);
+  });
+
   test("locale files self-wrap under en's root key", () => {
     const message =
       rootKeyViolations.length === 0

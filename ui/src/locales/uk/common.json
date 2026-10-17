@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "Працює {duration}",
+    "apiResponse": {
+      "html": "{context} повернув HTML замість JSON. Перевірте, чи працює сервер API або демонстраційні імітації.",
+      "contentType": "{context} повернув {contentType} замість JSON.",
+      "invalidJson": "{context} повернув некоректний JSON."
+    },
     "loading": "Завантаження…",
     "back": "Назад",
     "cancel": "Скасувати",
@@ -9,8 +15,8 @@
     "close": "Закрити",
     "retry": "Повторити",
     "unknown": "невідомо",
-    "yes": "yes",
-    "no": "no",
+    "yes": "так",
+    "no": "ні",
     "errorSummary": {
       "rateLimitHit": "Перевищено ліміт запитів реєстру",
       "accessDenied": "Доступ до реєстру заборонено",
@@ -22,13 +28,13 @@
       "signatureFailed": "Помилка перевірки підпису"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "Власний"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "Щойно"
     },
     "imageAge": {
-      "now": "now"
+      "now": "зараз"
     }
   }
 }

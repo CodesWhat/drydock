@@ -10,6 +10,7 @@ import {
 import type { Container } from '../model/container.js';
 import * as storeContainer from '../store/container.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -117,8 +118,8 @@ function previewUpdateChain(req: Request, res: Response) {
  */
 export function init() {
   router.use(nocache());
-  router.get('/dependencies', getContainerDependencies);
-  router.post('/:id/update-chain-preview', previewUpdateChain);
+  router.get('/dependencies', scoped('read', getContainerDependencies));
+  router.post('/:id/update-chain-preview', scoped('containers:watch', previewUpdateChain));
   return router;
 }
 

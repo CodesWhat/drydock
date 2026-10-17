@@ -1,0 +1,25 @@
+{
+  "actionEditor": {
+    "title": "Politique d’action",
+    "edit": "Modifier la politique d’action",
+    "boundary": "Modifiez uniquement la politique de planification. L’enregistrement n’exécute aucune action, commande, mise à jour ou notification. Les identifiants et paramètres d’exécution restent en lecture seule. Le mode manuel global et l’éligibilité des conteneurs s’appliquent toujours.",
+    "actionUnavailable": "Cette action exacte n’est pas disponible dans l’instantané de l’éditeur.",
+    "apiUnavailable": "Ce serveur ne fournit pas l’API d’édition des politiques d’action.",
+    "reset": "Supprimer la surcharge du fichier / hériter des paramètres",
+    "orderHelp": "Les valeurs négatives et décimales sont autorisées. L’héritage existant de l’ordre peut aussi affecter les autres actions et notifications portant le même nom.",
+    "concurrencyHelp": "Un entier positif. Supprimer la surcharge du fichier rétablit les paramètres hérités. Pour Compose, cette limite concerne les projets indépendants, pas les services d’un même fichier.",
+    "invalidNumber": "Saisissez un nombre fini. Pour hériter des paramètres, supprimez explicitement la surcharge du fichier.",
+    "invalidConcurrency": "Saisissez un entier positif. Pour hériter des paramètres, supprimez explicitement la surcharge du fichier.",
+    "fields": {
+      "auto": "Déclenchement automatique",
+      "order": "Ordre de déclenchement",
+      "concurrency": "Mises à jour simultanées"
+    },
+    "autoModes": {
+      "all": "Tous les conteneurs éligibles",
+      "oninclude": "Conteneurs explicitement inclus",
+      "onauto": "Conteneurs autorisés par la politique d’action automatique",
+      "none": "Aucun déclenchement automatique"
+    }
+  }
+}

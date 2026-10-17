@@ -136,6 +136,7 @@ HTTP/1.1 201 Created
 | --- | --- |
 | `201` | Key registered; response body contains `keyId`, `label`, `createdAt` |
 | `400` | Missing or malformed fields (non-string, empty string, invalid base64, wrong key length) |
+| `403` | The caller is an API key, or the session signed in with a two-factor recovery code (`details.reason` is `recovery-assurance`). See [what a recovery login can't do](/docs/api#what-a-recovery-login-cant-do) |
 | `409` | A non-revoked key with this `keyId` is already registered |
 
 ### Revoke a key
@@ -197,7 +198,7 @@ A versioned alias `/api/v1/portwing/ws` is also accepted and is signature-equiva
     "agentId": "edge-host-01",
     "agentName": "edge-host-01",
     "protocol": "portwing/1.0",
-    "version": "1.7.0-rc.24",
+    "version": "1.0.0-rc.1",
     "pubKeyId": "3f8a1c2e9b047d56",
     "timestamp": 1780329600,
     "nonce": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
@@ -220,7 +221,7 @@ A name collision with an already-connected agent under the same key (or the in-f
   "data": {
     "pollInterval": 300,
     "config": {
-      "drydockVersion": "1.7.0-rc.24",
+      "drydockVersion": "1.8.0-rc.1",
       "supportedProtocols": "portwing/1.0",
       "serverCompatLevel": "1.4.0"
     }
@@ -395,3 +396,28 @@ Error codes: `parse-error`, `expected-hello`, `invalid-agent-name`, `protocol-mi
    ```
 
    and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.
+
+## Binary Docker request bodies
+
+When an agent advertises `edge-request-body-stream` in its hello, Drydock sends
+raw Docker request bodies as `request` with `bodyStream: true`, followed by
+base64 `stream` frames and a terminal `stream_end`, all keyed by `requestId`.
+Each chunk contains at most 32 KiB of raw bytes. The sender waits for each write
+to complete, limits bodies and all simultaneous uploads on one connection to
+512 MiB, and abandons uploads after 30 seconds without write progress.
+
+Agents without the capability keep receiving inline JSON bodies. Binary bodies
+are rejected before sending a request to those agents. There is no protocol
+version change.
+
+Interrupted uploads never send `stream_end`. Drydock sends an `error` frame with
+`code: "request-cancelled"` and `requestId` when the connection still exists.
+New agents discard the pending body immediately; older agents ignore that error
+and discard it on their existing idle timeout. This cannot dispatch a partial
+body. Cancellation applies to upload reassembly, not a Docker operation already
+started after the terminal frame. Disconnects clear pending uploads.
+
+To test the actual controller sender against a local Go agent checkout, run
+`bash scripts/edge-body-interop.sh /path/to/portwing` from the Drydock repository.
+The test builds the agent, creates temporary local sockets and an Ed25519 key,
+checks exact binary bytes at the Docker socket, then removes its resources.

@@ -62,12 +62,12 @@ The policy gate suppresses an update until the image has aged past a minimum thr
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `maturityMode` | string | `all` | `all` = no gate (updates fire immediately); `mature` = enable the age gate |
+| `maturityMode` | string | `all` | `all` = no gate (updates fire immediately); `mature` = enable the age and configured release-count gates |
 | `maturityMinAgeDays` | integer | `7` | Minimum age in days an update must reach before the gate passes. Valid range: 1–365. |
 
 The gate clock starts from the **earliest point** at which the update is known to have existed:
 
-- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
+- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt` (or `firstSeenAt` as a fallback — see below). An image that has already been public longer than `maturityMinAgeDays` clears the day minimum immediately, regardless of when this Drydock instance first noticed it. Any configured release-count requirement still applies.
 - Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update — falling back to `firstSeenAt` when `updateDetectedAt` is missing or fails to parse (a legacy/partial-record case; in steady state the two are stamped together).
 - If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`/`firstSeenAt` the same way.
 
@@ -81,6 +81,22 @@ When the gate blocks an update the blocker reason is `maturity-not-reached`. The
 | `details.clockStartAt` | string (ISO 8601) | The start timestamp the countdown is measured from |
 
 The UI's Update Status panel renders these two fields (alongside `details.minAgeDays` and `details.remainingMs`) as a single clock-sourced sentence — e.g. "Candidate published Jul 12 — 3 more days until the 7-day minimum" — instead of re-deriving its own countdown.
+
+#### Release-count maturity (v1.8.0-rc.1) {#release-count-maturity-unreleased-v18}
+
+With `maturityMode: mature`, `maturitySkipReleases` adds a second gate to the day minimum. Its default is `0` (disabled), and it accepts integers from `0` to `100`. Setting it to `2` holds the first two observed stable versions in each family: `2.0.0` has zero earlier releases, `2.0.1` has one, and `2.0.2` has two. The candidate must also satisfy `maturityMinAgeDays`.
+
+A SemVer family is one major version. A numeric major of at least `1000` is treated as CalVer, with a family per year/month, so `2026.8.2` counts earlier releases only in `2026.8`. Counts use distinct stable three-part versions actually present in the filtered registry tag population. Gaps are not filled, later versions do not count, and `v` prefixes or build metadata do not count twice. Existing include/exclude filters, tag transforms, numeric padding and pinned tracks still apply. Prereleases and unversioned digests do not become stable releases.
+
+For floating aliases such as `latest`, `:2` and `:9`, Drydock first uses the remote candidate's OCI version label when available. If release counting is enabled and that evidence is unavailable, it tries at most eight recent stable version tags, including alternate raw spellings within that shared limit, and requires an exact digest match for the selected platform. It keeps the configured deploy tag and lookup-image boundaries. Missing digests, failed lookups or a candidate outside this bounded window leave evidence unavailable. Omitted or disabled release counting adds no proof lookups.
+
+The API exposes evidence as `result.releaseMaturity`: `{version, family, earlierReleases}`. A count that is too small, or unavailable evidence, produces the soft blocker `maturity-releases-not-reached`. Its details include `requiredReleases` and `evidenceAvailable`, plus the candidate version, family and earlier count when known. There is no predicted date for a future release.
+
+`maturityReleaseFallbackDays` is an explicit age escape for this count gate, from `0` to `365` days. The default `0` disables it. A positive value uses the same trusted-publish/detection clock as the day gate and bypasses only the count requirement. The day minimum still applies, and an unknown clock never clears the gate. `liftableAt` is supplied only when an enabled fallback has a known clock. Manual updates retain the existing soft-blocker confirmation.
+
+Both fields follow the usual watcher → group → label → UI/API override precedence. Their Docker labels are `dd.updatePolicy.maturitySkipReleases` and `dd.updatePolicy.maturityReleaseFallbackDays`; watcher defaults are `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` and `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS`. An explicit `0` overrides an inherited value.
+
+Controller overrides remain on the controller. A new traditional agent can receive a collection-only hint during a controller watch request, without policy values. Older agents can ignore that hint; missing evidence holds the count gate unless its explicit age fallback has elapsed. A later report without evidence holds again. Portwing's controller-owned Docker transport uses the controller's native watcher. Historical digest counting for unversioned channels remains future work.
 
 #### `publishedAt` source by registry
 
@@ -434,7 +450,7 @@ Returns 200 with `accepted` and `rejected` arrays, 400 if `expectedContainerIds`
 
 ## Update container update policy
 
-This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, and `updatePolicySources` (`env`, `label`, or `override`).
+This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → [group policy](/docs/configuration/groups) → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, `updatePolicySources` (`env`, `group`, `label`, or `override`), and `groupPolicy`, a snapshot of the group policy the container was last resolved against (`id`, `group`, `revision`, `updatePolicy`, `actions`), which is absent when no group policy applies.
 
 - `skip-current`: skip the currently detected remote tag or digest
 - `remove-skip`: remove a single previously skipped tag or digest (requires `kind` and `value`)
@@ -442,11 +458,11 @@ This operation controls the UI/API override tier of per-container update policy.
 - `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)
 - `unsnooze`: remove `snoozeUntil`
 - `clear`: remove all update policy
-- `set-maturity-policy`: require updates to be at least N days old before triggering (requires `mode` and optionally `minAgeDays`)
-- `clear-maturity-policy`: remove `maturityMode` and `maturityMinAgeDays`
-- `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted
+- `set-maturity-policy`: set `mode`, optional `minAgeDays` (1–365), `skipReleases` (0–100) and `releaseFallbackDays` (0–365). Omitted count/fallback settings are preserved for older clients.
+- `clear-maturity-policy`: turn off maturity gating (`mode: all` for layered policies) and remove the minimum-age, release-count and fallback overrides
+- `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted, revealing the label, group, watcher, or built-in value
 
-`clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, watcher, or built-in value. `snoozeUntil` is always UI/API-only.
+`clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, group, watcher, or built-in value. `skip-current` and `remove-skip` start from the effective skip list, so a list inherited from a group is copied into the override, and later edits to the group's list no longer reach that field on that container until it is reverted. `snoozeUntil` is always UI/API-only.
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
@@ -478,7 +494,7 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
 # Require updates to be at least 14 days old before triggering
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
-  -d '{"action":"set-maturity-policy","mode":"mature","minAgeDays":14}'
+  -d '{"action":"set-maturity-policy","mode":"mature","minAgeDays":14,"skipReleases":2,"releaseFallbackDays":30}'
 ```
 
 ```bash
@@ -500,6 +516,107 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"revert-to-declarative"}'
+```
+
+## Get the effective policy of a container
+
+`GET /api/v1/containers/{id}/effective-policy` answers "where does each value come from, and what will dispatch do with it". It needs the `read` scope. The response is computed with the same resolvers dispatch uses, from the container as it stands now, the group policy as it stands now (so a policy saved a moment ago is already reflected) and the global update mode. It reports policy only. No runtime environment is served.
+
+- `group` is the group the container's labels resolve to, with `label` naming which of `dd.group`, `com.docker.compose.project` or `com.docker.stack.namespace` supplied it, plus the `policyId` and `revision` of the policy that applies. It is `null` for an ungrouped container, and `policyId` is `null` when the group has no policy (including a container whose `dd.group` is empty, which no policy matches).
+- `updatePolicy` has one entry per field. `value` is what takes effect, `source` is `default`, `env`, `group`, `label` or `override`, and `layers` holds the value each layer that sets the field contributes, so a shadowed layer is still visible. `snoozeUntil` is `override` or `default`, because snooze is per-container only.
+- `actions.updateMode` is the mode that binds the container: the more restrictive of the global mode and the group's `updateMode`. `source` is `group` only when the group is strictly more restrictive. Otherwise global is what binds, even if a group sets a looser value.
+- `actions.exclude` keeps the container's own `dd.action.exclude` (`label`, with `labelSource` saying whether a Docker label or a Drydock override supplied it) apart from the group's entries (`group`). Both are hard stops.
+- `actions.dispatch` is what dispatch decides. `automatic` is whether the automatic paths apply an update on their own. `trigger` is the action trigger the resolver selects (`state` is `auto`, `manual` or `blocked`, with `reason` and `excludedBy` when it is blocked), or `null` when none is authorized. `manualUpdate` says whether a manual update is admitted and, when it is not, `blockedBy`: `group-notify-only`, `global-notify`, `trigger-excluded` or `no-trigger`.
+
+```bash
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/effective-policy
+```
+
+```json
+{
+  "group": { "name": "payments", "label": "com.docker.compose.project", "policyId": "9f1c0c52-7b0e-4c6e-9a39-2f3b0c8a6d11", "revision": 3 },
+  "updatePolicy": {
+    "maturityMode": { "value": "mature", "source": "group", "layers": { "env": "all", "group": "mature" } },
+    "maturityMinAgeDays": { "value": 7, "source": "default", "layers": {} },
+    "skipTags": { "value": ["2.0.0"], "source": "label", "layers": { "group": ["1.9.9"], "label": ["2.0.0"] } },
+    "skipDigests": { "value": [], "source": "default", "layers": {} },
+    "snoozeUntil": { "value": null, "source": "default" }
+  },
+  "actions": {
+    "updateMode": { "value": "manual", "source": "group", "global": "auto", "group": "manual" },
+    "exclude": { "label": "command.backup", "labelSource": "label", "group": [] },
+    "dispatch": {
+      "automatic": false,
+      "trigger": { "id": "docker.local", "state": "auto" },
+      "manualUpdate": { "allowed": true }
+    }
+  }
+}
+```
+
+Returns 200, or 404 if the container is not found.
+
+## Label overrides
+
+Drydock can store its own value for nine fields that Docker labels normally set, so you can change them without editing a Compose file or recreating the container. An override applies on top of the label, survives container recreation, restarts and Drydock updates, and never expires. Saving only updates Drydock's own records: it never calls Docker, writes a Compose file or runs a trigger.
+
+| Field | Label it overrides | Value |
+| --- | --- | --- |
+| `displayName` | `dd.display.name` | Text, 1 to 128 characters, no control, bidirectional-control, `<` or `>` characters |
+| `displayIcon` | `dd.display.icon` | `sh:<slug>`, `hl:<slug>` or `si:<slug>` (`-` also works as the separator). URLs, `mdi:` and Font Awesome names are not accepted |
+| `dependsOn` | `dd.depends_on` | Up to 32 container names. An empty list means no dependencies |
+| `dependsOnAction` | `dd.depends_on.action` | `update` or `restart` |
+| `notificationTriggerInclude`, `notificationTriggerExclude` | `dd.notification.include`, `dd.notification.exclude` | Up to 32 trigger references, each `reference` or `reference:threshold` |
+| `actionTriggerInclude`, `actionTriggerExclude`, `actionTriggerAuto` | `dd.action.include`, `dd.action.exclude`, `dd.action.auto` | The same, for action triggers |
+
+An override belongs to a container identity: the watcher, the agent and the container name, or the Compose project and service for a Compose container, so every replica of a service shares it. Lists replace the label whole and never merge. An empty routing list is an explicit "none": it removes the label's value instead of falling back to it.
+
+| Endpoint | Scope | Purpose |
+| --- | --- | --- |
+| `GET /api/v1/containers/{id}/label-overrides` | `read` | Snapshot for one container |
+| `PATCH /api/v1/containers/{id}/label-overrides` | `admin` | Set or remove fields |
+| `DELETE /api/v1/containers/{id}/label-overrides?revision=N&overrideId=ID` | `admin` | Reset every field to its labels (`overrideId` is required once `revision` is above 0) |
+| `GET /api/v1/label-overrides` | `read` | Every stored row, with the containers each one matches |
+| `DELETE /api/v1/label-overrides/{overrideId}?revision=N` | `admin` | Delete a row, including one with no matching container |
+
+Writes need `admin` rather than `containers:update` because a routing override can grant automatic execution and redirect notifications. Sessions are not limited by scopes.
+
+The snapshot lists all nine fields. Each has the `labelKey`, the raw `label` value, the `declared` value and its source, the `override` (with `updatedAt` and `updatedBy`) when there is one, and the `effective` value with its source. Sources are `override`, `label`, `compose`, `watcher`, `default` and `unset`. `revision` is `0` and `overrideId` is `null` while the scope has no stored override. `scope.appliesTo` lists the containers the override covers. `readOnlyReason` is `rollback-container` for a temporary rollback container, which answers `409` to writes. `agentEnforcedActionRouting` is `true` when the container runs on a traditional agent that re-checks action routing against its own labels. Container responses and events also carry `labelOwnedSources`, the `effective.source` of each field, so a client can show ownership without a second request.
+
+```bash
+curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides
+```
+
+`PATCH` takes the revision and `overrideId` you last read (`overrideId` is required once `revision` is above 0) and up to nine changes, one per field. A change is `{ "field": "...", "op": "set", "value": ... }` or `{ "field": "...", "op": "remove" }`. `remove` returns that field to its label, and removing the last field deletes the row. A change that would alter nothing is dropped, so repeating a save is safe.
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides \
+  -H 'Content-Type: application/json' \
+  -d '{"revision":0,"changes":[{"field":"displayName","op":"set","value":"TV"},{"field":"actionTriggerAuto","op":"remove"}]}'
+```
+
+The response is the snapshot plus `changed` (the fields that changed) and `warnings`:
+
+- `unresolved-dependency`: no container has that name yet. The dependency is saved and starts working when one appears.
+- `cross-host-dependency`: the name only exists on another agent, so the dependency is ignored.
+- `trigger-agent-mismatch`: an action reference only matches triggers that belong to another agent.
+- `auto-inert`: no matching trigger runs with `AUTO=onauto`, so an auto reference does nothing yet.
+- `stale-trigger-reference`: a stored override names a trigger that no longer exists. It is kept and reported.
+
+Errors:
+
+- `400` with `errors: [{ field, code }]` for an invalid request. Codes include `unknown-field`, `duplicate-field`, `invalid-icon`, `display-name-invalid-characters`, `unknown-trigger-reference`, `wrong-trigger-category`, `depends-on-self`, `invalid-override-id` and `agent-enforced-widening`. List codes carry the offending `entries`.
+- `403` when an API key lacks the scope, `404` for an unknown container or row.
+- `409` for a stale `revision`, or for a save or reset whose `overrideId` is no longer the container's row, with the current `snapshot` (or `current` row) in the body and nothing written, or for a rollback container.
+- `422` with `cycle` (container names) when the dependencies would create a dependency cycle. A cycle that already existed does not block a save.
+
+On a traditional agent, action routing overrides can only narrow what the container's labels allow, because the agent checks its own labels again before it acts. An exclude override has to start with the label's exclusions in the same order and may add more after them. An include or auto entry has to name a reference the label also lists, with no wider threshold, so a container whose labels declare no include accepts no include entry. Entries are matched first-match, the way the agent matches them, and the effective value is composed against the labels each time the container is written, so a later label change is never cancelled by a stored override. Resetting is always allowed. Portwing controller-transport and controller-local containers are not restricted. Notification routing, display and dependencies always apply on the controller.
+
+Every successful change writes `label-override-set` or `label-override-cleared` to the [audit log](/docs/api#audit-trail) in the same transaction as the change. The details carry the operation (`patch`, `reset-all` or `delete-row`), the scope, and for each field the label value, declared value, previous and new override and the effective source, each cut to 256 characters. Rejected requests are not audited.
+
+```bash
+# Reset every override of one container to its labels (revision and overrideId from the last snapshot)
+curl -X DELETE 'http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/label-overrides?revision=3&overrideId=9f1c0a52-6a7e-4b52-8f0e-2d4c5a1b7e90'
 ```
 
 ## Get security vulnerability overview
@@ -587,7 +704,7 @@ This operation returns the latest SBOM document for a container in the requested
 curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/sbom?format=spdx-json
 ```
 
-Returns 200 with the lazily dereferenced SBOM document, 404 if the container is not found, or **503** if security scanning is disabled. SBOM bodies are stored under `/store/sbom` and are not embedded in the LokiJS container row.
+Returns 200 with the lazily dereferenced SBOM document, 404 if the container is not found, or **503** if security scanning is disabled. SBOM bodies are stored under `/store/sbom` and are not embedded in the container record.
 
 ## Download container logs
 
@@ -813,7 +930,7 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
   -d '{"backupId": "abc123"}'
 ```
 
-Returns 200 on success, 404 if the container/backup/trigger is not found, or 428 if confirmation is missing.
+Returns 200 on success, 404 if the container, the requested backup, or a matching Docker/Docker Compose trigger is not found, 409 if the backup was recorded by a Portainer action trigger (manual rollback needs a Docker or Docker Compose action instead) or the rollback would otherwise require an immutable digest reference that cannot be established, 428 if confirmation is missing, 501 if the container's agent connection does not support lifecycle actions, or 500 if the rollback fails.
 
 ## Get update/rollback history
 
@@ -1066,3 +1183,111 @@ curl -X DELETE http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a6
 ```
 
 Returns 204 on success, 403 if delete is disabled, 404 if the container does not exist, or 428 if confirmation is missing.
+
+## List image inventory
+
+Lists every image across image hosts (a `docker`-type watcher, local or agent-owned), with its size, its reclaimable share, how many containers reference it, and when it was last used. Requires the `read` scope.
+
+```bash
+curl http://drydock:3000/api/v1/images
+```
+
+```json
+{
+  "data": [
+    {
+      "id": "sha256:31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b8",
+      "repoTags": ["nginx:latest"],
+      "repoDigests": ["nginx@sha256:abc123..."],
+      "size": 187654321,
+      "reclaimable": 187654321,
+      "created": "2026-08-01T12:00:00.000Z",
+      "containers": 1,
+      "dangling": false,
+      "watcher": "local",
+      "agent": "edge",
+      "lastSeen": "2026-09-01T08:30:00.000Z"
+    }
+  ],
+  "total": 1,
+  "hosts": [
+    { "id": "docker.local", "name": "local", "supported": true },
+    {
+      "id": "edge.docker.remote",
+      "name": "remote",
+      "agent": "edge",
+      "supported": false,
+      "reason": "agent-transport-unsupported"
+    }
+  ]
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `host` | string | | Scope the inventory to one host id; omit to list images across every supported host |
+
+`hosts` always names every image host drydock knows about, including unsupported agent hosts that were never queried (`supported: false`, `reason: "agent-transport-unsupported"`), so a caller can render every host without a second lookup. A host that was queried but failed carries its `error` message instead of contributing images. `agent` and `lastSeen` are present only when they apply: an agent-owned image and one that at least one container currently references, respectively.
+
+Returns 200 with the inventory, 404 if a `host` query parameter names a host that doesn't exist, or 501 if a `host` query parameter names an agent host without controller Docker transport.
+
+## Preview an image prune
+
+Estimates the images and bytes a prune would reclaim on a host, without deleting anything. Requires the `admin` scope and `DD_SERVER_FEATURE_CONTAINERACTIONS`.
+
+```bash
+curl "http://drydock:3000/api/v1/images/prune-preview?host=docker.local&mode=unused"
+```
+
+```json
+{
+  "host": "docker.local",
+  "mode": "unused",
+  "images": 3,
+  "reclaimable": 542311680
+}
+```
+
+### Query parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `host` | string | ✅ | Image host id to compute the estimate for |
+| `mode` | string | ✅ | `dangling` (untagged, unreferenced images only) or `unused` (any image with no referencing containers, tagged or not) |
+
+Returns 200 with the estimate, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the preview receives no result from the agent proxy (message: "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview."), or 500 if the estimate otherwise fails.
+
+## Prune images
+
+Prunes images on a host (dangling only, or every image no container references) and writes an `image-prune` audit entry recording the outcome. Requires the `admin` scope and `DD_SERVER_FEATURE_CONTAINERACTIONS`.
+Prune is destructive and requires explicit confirmation via `X-DD-Confirm-Action: image-prune`.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/images/prune \
+  -H 'X-DD-Confirm-Action: image-prune' \
+  -H 'Content-Type: application/json' \
+  -d '{"host": "docker.local", "mode": "unused"}'
+```
+
+```json
+{
+  "message": "Image prune completed",
+  "result": {
+    "host": "docker.local",
+    "mode": "unused",
+    "imagesDeleted": 3,
+    "spaceReclaimed": 501234000
+  }
+}
+```
+
+### Body parameters
+
+| Parameter | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `host` | string | ✅ | Image host id to prune |
+| `mode` | string | ✅ | `dangling` or `unused`, same semantics as the preview endpoint |
+
+`result.imagesDeleted` and `result.spaceReclaimed` come back from Docker's own prune response, not the earlier estimate. Returns 200 with the result, 400 if `host` is missing or `mode` isn't `dangling`/`unused`, 403 if container actions are disabled, 404 if the host doesn't exist, 428 if confirmation is missing, 501 if the host is an agent host without controller Docker transport, 504 if the host is an agent host and the prune outlives the 30-second agent proxy window (message: "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list."), or 500 if the prune otherwise fails.

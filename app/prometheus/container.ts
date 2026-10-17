@@ -1,4 +1,4 @@
-import { Gauge, register } from 'prom-client';
+import { Gauge, register } from '@prometheus-io/client';
 import {
   registerContainerAdded,
   registerContainerRemoved,

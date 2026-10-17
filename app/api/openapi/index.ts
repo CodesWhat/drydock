@@ -25,7 +25,13 @@ export const openApiDocument = {
   tags: [
     { name: 'System', description: 'Health, metadata, and server endpoints' },
     { name: 'Authentication', description: 'Authentication and session lifecycle endpoints' },
+    {
+      name: 'API Keys',
+      description:
+        'Scoped API key management. Reachable with a session, or with a key that holds api-keys:manage.',
+    },
     { name: 'Containers', description: 'Container inventory and container-scoped operations' },
+    { name: 'Images', description: 'Image inventory and prune operations across image hosts' },
     { name: 'Triggers', description: 'Trigger discovery and trigger execution' },
     {
       name: 'Actions',
@@ -37,6 +43,11 @@ export const openApiDocument = {
     { name: 'Authentications', description: 'Authentication component discovery' },
     { name: 'Agents', description: 'Remote agent status and logs' },
     { name: 'Notifications', description: 'Notification rule management' },
+    {
+      name: 'Group policies',
+      description:
+        'Drydock-owned update policies keyed by exact group name. Reads need the read scope, writes need admin.',
+    },
     { name: 'Audit', description: 'Audit log endpoints' },
     { name: 'Logs', description: 'Application and container logs' },
     { name: 'Icons', description: 'Icon proxy/cache endpoints' },
@@ -59,6 +70,13 @@ export const openApiDocument = {
         name: SESSION_COOKIE_NAME,
         description:
           'Session cookie authentication. For unsafe methods, requests must also satisfy same-origin CSRF validation (Origin/Referer/Sec-Fetch-Site checks).',
+      },
+      apiKeyBearerAuth: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'ddk',
+        description:
+          'Scoped API key, sent as `Authorization: Bearer ddk_<keyId>_<secret>`. A key authenticates a single request and never establishes a session, so it is not subject to the same-origin CSRF checks that apply to cookie auth. Reachable routes are limited by the scopes the key holds; routes documented as session-only are unreachable with a key at any scope.',
       },
       webhookBearerAuth: {
         type: 'http',

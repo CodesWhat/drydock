@@ -52,6 +52,33 @@ describe('recordAuditEvent', () => {
     expect(mockInc).toHaveBeenCalledWith({ action: 'rollback' });
   });
 
+  test('an explicit identity key wins over the one derived from the container', () => {
+    recordAuditEvent({
+      action: 'rollback',
+      status: 'success',
+      container: { name: 'media-sonarr-1', watcher: 'local' },
+      containerIdentityKey: '::local::compose:media/sonarr',
+    });
+    recordAuditEvent({
+      action: 'rollback',
+      status: 'success',
+      containerName: 'media/sonarr',
+      containerIdentityKey: '::local::compose:media/sonarr',
+    });
+
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ containerIdentityKey: '::local::compose:media/sonarr' }),
+    );
+    expect(mockInsertAudit).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        containerName: 'media/sonarr',
+        containerIdentityKey: '::local::compose:media/sonarr',
+      }),
+    );
+  });
+
   test('should work when prometheus audit counter is not initialized', () => {
     mockGetAuditCounter.mockReturnValue(undefined);
 

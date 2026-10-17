@@ -97,7 +97,8 @@
       "updatesAvailable": "التحديثات المتاحة",
       "updateDetail": "{fresh} جديدة · {mature} ناضجة",
       "securityIssues": "مشكلات الأمان",
-      "registries": "السجلات"
+      "registries": "السجلات",
+      "approvals": "الموافقات"
     },
     "updateKind": {
       "major": "رئيسي",
@@ -106,9 +107,9 @@
       "digest": "تحديث الصورة"
     },
     "maintenanceWindow": {
-      "openNow": "Open now",
-      "scheduled": "Scheduled",
-      "openingSoon": "Opening soon"
+      "openNow": "مفتوحة الآن",
+      "scheduled": "مجدولة",
+      "openingSoon": "ستفتح قريبًا"
     },
     "dataLoadFailed": "فشل تحميل بيانات لوحة التحكم",
     "widgets": {
@@ -120,7 +121,8 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statApprovals": "Approvals"
     }
   }
 }

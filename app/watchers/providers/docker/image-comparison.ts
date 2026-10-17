@@ -7,6 +7,7 @@ import {
   fullName,
   validate as validateContainer,
 } from '../../../model/container.js';
+import { shouldCollectReleaseMaturity } from '../../../model/maturity-policy.js';
 import type Registry from '../../../registries/Registry.js';
 import type { RegistryLookupOptions } from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
@@ -14,7 +15,11 @@ import { isCredentialedInstance } from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
-import { getTagCandidates } from './tag-candidates.js';
+import {
+  getReleaseMaturityEvidenceForContainer,
+  getReleaseMaturityLookupCandidates,
+  getTagCandidates,
+} from './tag-candidates.js';
 
 interface ContainerTagLookupProvider {
   normalizeImage: (image: ContainerImage) => ContainerImage;
@@ -26,6 +31,7 @@ interface ContainerTagLookupProvider {
   ) => Promise<{
     digest?: string;
     created?: string;
+    softwareVersion?: string;
     version?: number;
   }>;
   getImagePublishedAt?: (
@@ -275,6 +281,9 @@ async function handleDigestWatch(
 
   result.digest = remoteDigest.digest;
   result.created = remoteDigest.created;
+  if (remoteDigest.softwareVersion) {
+    result.softwareVersion = remoteDigest.softwareVersion;
+  }
 
   if (remoteDigest.version !== 2) {
     container.image.digest.value = container.image.digest.repo;
@@ -340,8 +349,41 @@ async function handleDigestWatch(
   container.image.digest.value = firstNormalizedValue;
 }
 
+async function resolveAliasReleaseMaturity(
+  container: Container,
+  tags: string[],
+  result: ContainerResult,
+  registryProvider: ContainerTagLookupProvider,
+  lookupOptions: RegistryLookupOptions,
+  logger: ContainerWatchLogger,
+) {
+  if (!result.digest) return;
+  for (const source of getReleaseMaturityLookupCandidates(container, tags, logger)) {
+    try {
+      const image = { ...container.image, tag: { ...container.image.tag, value: source.tag } };
+      const manifest = await registryProvider.getImageManifestDigest(
+        getImageForRegistryQuery(image, registryProvider),
+        undefined,
+        lookupOptions,
+      );
+      if (manifest.digest === result.digest) {
+        result.releaseMaturity = getReleaseMaturityEvidenceForContainer(
+          container,
+          tags,
+          { tag: source.tag },
+          logger,
+        );
+        return;
+      }
+    } catch (error: unknown) {
+      logger.warn(`Release version proof lookup failed (${getErrorMessage(error)})`);
+    }
+  }
+}
+
 export interface FindNewVersionOptions {
   pinInfoEnabled?: boolean;
+  collectReleaseMaturity?: boolean;
   useRegistryPollCache?: boolean;
 }
 
@@ -479,6 +521,30 @@ export async function findNewVersion(
       logContainer.warn(`Digest watch failed (${errorMessage})`);
       container.error = { message: errorMessage };
     }
+  }
+
+  const releaseMaturity = getReleaseMaturityEvidenceForContainer(
+    container,
+    tags,
+    result,
+    logContainer,
+  );
+  if (releaseMaturity) {
+    result.releaseMaturity = releaseMaturity;
+  }
+
+  if (
+    !result.releaseMaturity &&
+    (options.collectReleaseMaturity === true || shouldCollectReleaseMaturity(container))
+  ) {
+    await resolveAliasReleaseMaturity(
+      container,
+      tags,
+      result,
+      registryProvider,
+      lookupOptions,
+      logContainer,
+    );
   }
 
   const publishedTag = result.tag || container.image.tag.value;

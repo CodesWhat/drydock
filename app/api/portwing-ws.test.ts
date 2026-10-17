@@ -7,8 +7,10 @@ import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import { getVersion } from '../configuration/index.js';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
-import type { NameBindingRecord } from '../store/name-bindings.js';
+import * as persistedAgentKeys from '../store/agent-keys.js';
+import type { Database } from '../store/db/driver.js';
 import * as nameBindingsStore from '../store/name-bindings.js';
+import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import {
   attachPortwingWsServer,
   clearLiveSessionsForTesting,
@@ -102,6 +104,7 @@ const {
     activate = vi.fn();
     onDisconnect = vi.fn().mockResolvedValue(undefined);
     readonly reconnected: boolean;
+    readonly capabilities: string[];
     // Mirrors the real EdgeAgentAdapter.terminate(): sends an error frame in
     // the same shape as sendErrorAndClose (`{ type: 'error', data: { message,
     // code } }`), then closes with (closeCode, errorCode) — so
@@ -119,10 +122,11 @@ const {
     constructor(
       _client: unknown,
       ws: { send: (data: string) => void; close: (code?: number, reason?: string) => void },
-      options: { reconnected?: boolean } = {},
+      options: { reconnected?: boolean; capabilities?: string[] } = {},
     ) {
       this.ws = ws;
       this.reconnected = options.reconnected ?? false;
+      this.capabilities = options.capabilities ?? [];
       lastAdapterInstance = this;
     }
   }
@@ -261,6 +265,7 @@ function createGateway(
   options: {
     isRateLimited?: () => boolean;
     getAgent?: () => unknown;
+    keyStore?: typeof persistedAgentKeys;
   } = {},
 ) {
   const mockKeyStore = {
@@ -288,7 +293,7 @@ function createGateway(
     >[0]['webSocketServer'],
     isRateLimited: options.isRateLimited ?? (() => false),
     serverConfiguration: {},
-    getAgentKeys: mockKeyStore,
+    getAgentKeys: options.keyStore ?? mockKeyStore,
   });
 
   return { gateway, mockWsServer, mockKeyStore, getUpgradedWs: () => upgradedWs };
@@ -1123,6 +1128,37 @@ describe('hello verification — happy path', () => {
   // still complete with a welcome — no protocol-mismatch, no compat
   // regression — since this is an additive, capability-gated negotiation,
   // not a protocol version bump.
+  test.each([
+    [['edge-request-body-stream'], ['edge-request-body-stream']],
+    [['edge-request-body-stream', 1, null], ['edge-request-body-stream']],
+    [undefined, []],
+    ['edge-request-body-stream', []],
+  ])(
+    'passes only advertised capability strings to the adapter (%j)',
+    async (capabilities, expected) => {
+      const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+      const ts = Math.floor(Date.now() / 1000);
+      const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+      const sig = signHello(privateKey, ts, nonce);
+      const { gateway, getUpgradedWs } = createGateway({
+        keyId,
+        pubkey: pubkeyBase64,
+        label: 'test',
+        createdAt: new Date().toISOString(),
+        revokedAt: null,
+      });
+      gateway.handleUpgrade(
+        createRequest('/api/portwing/ws'),
+        createMockSocket() as unknown as Socket,
+        Buffer.alloc(0),
+      );
+      sendMessageToGateway(getUpgradedWs()!, buildHello(keyId, ts, nonce, sig, { capabilities }));
+      await vi.waitFor(() =>
+        expect(getLastEdgeAgentAdapterInstance()?.capabilities).toEqual(expected),
+      );
+    },
+  );
+
   test('an old-shaped hello with no capabilities field still completes the handshake', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
@@ -3426,9 +3462,11 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
   // every process restart — including the restart that deploys this very
   // protection — which reopens the exact name-squatting window it exists to
   // close until every agent happens to reconnect. Fixed by write-through'ing
-  // every bind/prune/release to app/store/name-bindings.ts's durable LokiJS
-  // collection and reloading it into the map once at gateway creation (see
+  // every bind/prune/release to app/store/name-bindings.ts's durable SQLite
+  // table and reloading it into the map once at gateway creation (see
   // rehydrateNameBindings() in portwing-ws.ts).
+  let db: Database | undefined;
+
   beforeEach(() => {
     vi.clearAllMocks();
     clearNonceCacheForTesting();
@@ -3436,48 +3474,26 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
   });
 
   afterEach(() => {
-    // nameBindingCollection is a module-level singleton in
-    // app/store/name-bindings.ts — reset it so later test files that import
-    // this store (and every other describe block above, which never
-    // initializes it) keep seeing the uninitialized/no-op behavior they were
-    // written against.
+    // nameBindingsStore's `db` is a module-level singleton — reset it so
+    // later test files that import this store (and every other describe
+    // block above, which never initializes it) keep seeing the
+    // uninitialized/no-op behavior they were written against.
     nameBindingsStore.clearCollectionForTesting();
+    db?.close();
+    db = undefined;
   });
 
   /**
-   * A LokiJS-shaped mock db backed by a plain array that outlives any single
-   * createCollections() call — mirrors how a real Loki instance reloads the
-   * same on-disk documents into a fresh collection object after a restart.
-   * Re-invoking createCollections(db) against the SAME returned db object is
-   * exactly "re-init the collection from the same db" for a simulated reload.
+   * A real, migrated in-memory SQLite database that outlives any single
+   * createCollections() call — mirrors how a real store reopens the same
+   * on-disk `dd.sqlite` after a restart. Re-invoking createCollections(db)
+   * against the SAME connection is "re-init the module binding from the same
+   * durable store" for a simulated reload: the connection (and its rows)
+   * survives, only the module's own `db` reference and in-memory caches are
+   * wiped and rebuilt, exactly like a fresh process reopening the same file.
    */
-  function createPersistentMockDb() {
-    const docs: NameBindingRecord[] = [];
-    const matches = (doc: NameBindingRecord, query: Record<string, unknown>) =>
-      Object.entries(query).every(([k, v]) => (doc as unknown as Record<string, unknown>)[k] === v);
-    const collection = {
-      findOne: vi.fn(
-        (query: Record<string, unknown>) => docs.find((doc) => matches(doc, query)) ?? null,
-      ),
-      find: vi.fn((query?: Record<string, unknown>) =>
-        query ? docs.filter((doc) => matches(doc, query)) : [...docs],
-      ),
-      insert: vi.fn((doc: NameBindingRecord) => {
-        docs.push(doc);
-      }),
-      update: vi.fn(),
-      remove: vi.fn((doc: NameBindingRecord) => {
-        const index = docs.indexOf(doc);
-        if (index !== -1) {
-          docs.splice(index, 1);
-        }
-      }),
-    };
-    const db = {
-      getCollection: vi.fn(() => collection),
-      addCollection: vi.fn(() => collection),
-    };
-    return { db, docs, collection };
+  function createPersistentDb(): Database {
+    return createMigratedMemoryDatabase();
   }
 
   function makeKeyRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
@@ -3491,7 +3507,7 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
   }
 
   test('a binding survives a simulated process restart and still rejects a different key', async () => {
-    const { db, docs } = createPersistentMockDb();
+    db = createPersistentDb();
 
     // "Boot 1": wire the durable store and let the owner claim a name.
     nameBindingsStore.createCollections(db);
@@ -3520,17 +3536,21 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
 
     // The binding was write-through'd to the durable store, not just the map.
-    expect(docs).toHaveLength(1);
-    expect(docs[0]).toMatchObject({ agentName: 'edge-node-restart-test', keyId: owner.keyId });
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()[0]).toMatchObject({
+      agentName: 'edge-node-restart-test',
+      keyId: owner.keyId,
+    });
 
     // Simulate a process restart: wipe every in-memory cache (this is exactly
     // what a fresh process would start with)...
     clearNonceCacheForTesting();
     clearLiveSessionsForTesting();
 
-    // ...then re-init the collection from the SAME db (a real restart reloads
-    // the same on-disk JSON) and create a fresh gateway, exactly like a real
-    // server boot (store.init() → attachPortwingWsServer()).
+    // ...then re-init the module binding from the SAME durable connection (a
+    // real restart reopens the same on-disk dd.sqlite) and create a fresh
+    // gateway, exactly like a real server boot (store.init() →
+    // attachPortwingWsServer()).
     nameBindingsStore.createCollections(db);
     expect(nameBindingsSizeForTesting()).toBe(0); // map really was wiped
 
@@ -3562,7 +3582,7 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
   });
 
   test('revoking a key releases its persisted binding too, so a successor can claim the name after a restart', async () => {
-    const { db, docs } = createPersistentMockDb();
+    db = createPersistentDb();
     nameBindingsStore.createCollections(db);
 
     const owner = generateKeyPair();
@@ -3585,12 +3605,12 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
       }),
     );
     await new Promise((r) => setTimeout(r, 10));
-    expect(docs).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
 
     // Revoke the owner's key — must release the PERSISTED binding, not just
     // the in-memory one.
     disconnectByKeyId(owner.keyId);
-    expect(docs).toHaveLength(0);
+    expect(nameBindingsStore.listBindings()).toHaveLength(0);
 
     // Simulate a restart with the successor connecting fresh.
     clearNonceCacheForTesting();
@@ -3623,7 +3643,7 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
   });
 
   test('an old persisted binding survives restart and still rejects a different key', async () => {
-    const { db, docs } = createPersistentMockDb();
+    db = createPersistentDb();
     nameBindingsStore.createCollections(db);
 
     // Seed the durable store directly with a binding that was already idle
@@ -3635,11 +3655,12 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
       staleOwner.keyId,
       Date.now() - (24 * 60 * 60 * 1000 + 1_000),
     );
-    expect(docs).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
 
-    // "Restart": wipe in-memory state, re-init the collection from the same
-    // db, and create a fresh gateway. Age alone must not release the name from
-    // its key; only explicit revocation or cap-pressure eviction may do that.
+    // "Restart": wipe in-memory state, re-init the module binding from the
+    // same durable connection, and create a fresh gateway. Age alone must not
+    // release the name from its key; only explicit revocation or
+    // cap-pressure eviction may do that.
     clearNonceCacheForTesting();
     clearLiveSessionsForTesting();
     nameBindingsStore.createCollections(db);
@@ -3671,16 +3692,16 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     };
     expect(errorFrame.type).toBe('error');
     expect(errorFrame.data.code).toBe('agent-name-claimed');
-    expect(docs).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
   });
 
   test('evicts idle persisted bindings at cap and does not rehydrate them after restart', async () => {
-    const { db, docs, collection } = createPersistentMockDb();
+    db = createPersistentDb();
     nameBindingsStore.createCollections(db);
 
     const staleLastSeenAt = Date.now() - (24 * 60 * 60 * 1000 + 1_000);
     nameBindingsStore.upsertBinding('stale-cap-sentinel', 'stale-cap-key', staleLastSeenAt);
-    const persistedSentinel = docs[0];
+    const deleteBindingSpy = vi.spyOn(nameBindingsStore, 'deleteBinding');
 
     const newcomer = generateKeyPair();
     const newcomerRecord = makeKeyRecord(newcomer.keyId, newcomer.pubkeyBase64);
@@ -3715,10 +3736,17 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     await new Promise((r) => setTimeout(r, 10));
 
     expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
-    expect(collection.remove).toHaveBeenCalledWith(persistedSentinel);
-    expect(docs).toHaveLength(1);
-    expect(docs[0]).toMatchObject({ agentName: 'new-cap-agent', keyId: newcomer.keyId });
-    expect(docs.some((doc) => doc.agentName === 'stale-cap-sentinel')).toBe(false);
+    expect(deleteBindingSpy).toHaveBeenCalledWith('stale-cap-sentinel');
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()[0]).toMatchObject({
+      agentName: 'new-cap-agent',
+      keyId: newcomer.keyId,
+    });
+    expect(
+      nameBindingsStore
+        .listBindings()
+        .some((binding) => binding.agentName === 'stale-cap-sentinel'),
+    ).toBe(false);
 
     clearNonceCacheForTesting();
     clearLiveSessionsForTesting();
@@ -3729,7 +3757,117 @@ describe('name-bindings persistence (identity binding survives a restart)', () =
     createGateway(newcomerRecord);
 
     expect(nameBindingsSizeForTesting()).toBe(1);
-    expect(docs).toHaveLength(1);
-    expect(docs[0].agentName).toBe('new-cap-agent');
+    expect(nameBindingsStore.listBindings()).toHaveLength(1);
+    expect(nameBindingsStore.listBindings()[0].agentName).toBe('new-cap-agent');
+  });
+});
+
+describe('managed Edge key handoff', () => {
+  let db: Database;
+  beforeEach(() => {
+    clearNonceCacheForTesting();
+    mockSaveStore.mockResolvedValue(undefined);
+    db = createMigratedMemoryDatabase();
+    persistedAgentKeys.createCollections(db);
+    nameBindingsStore.createCollections(db);
+  });
+  afterEach(() => {
+    clearNonceCacheForTesting();
+    nameBindingsStore.clearCollectionForTesting();
+    db.close();
+    vi.restoreAllMocks();
+  });
+
+  function rotationPair() {
+    const old = generateKeyPair();
+    const next = generateKeyPair();
+    persistedAgentKeys.addKey(old.rawPublicKey, 'owner');
+    nameBindingsStore.upsertBinding('test-agent', old.keyId, Date.now());
+    fillNameBindingsForTesting(
+      new Map([['test-agent', { keyId: old.keyId, lastSeenAt: Date.now() }]]),
+    );
+    persistedAgentKeys.addRotationKey(old.keyId, 'test-agent', next.rawPublicKey);
+    return { old, next };
+  }
+
+  async function trial(
+    pair: ReturnType<typeof rotationPair>,
+    options: { wrongSignature?: boolean; wrongName?: boolean } = {},
+  ) {
+    const { gateway, getUpgradedWs } = createGateway(undefined, { keyStore: persistedAgentKeys });
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = pair.next.keyId + pair.old.keyId;
+    sendMessageToGateway(
+      ws,
+      buildHello(
+        pair.next.keyId,
+        ts,
+        nonce,
+        signHello(options.wrongSignature ? pair.old.privateKey : pair.next.privateKey, ts, nonce),
+        { agentName: options.wrongName ? 'another-agent' : 'test-agent' },
+      ),
+    );
+    await vi.waitFor(() => expect(ws.sentMessages.length).toBeGreaterThan(0));
+    return ws;
+  }
+
+  test('a fresh signed hello commits the replacement and preserves the bound agent name', async () => {
+    const pair = rotationPair();
+    const ws = await trial(pair);
+    expect(JSON.parse(ws.sentMessages[0]).type).toBe('welcome');
+    expect(persistedAgentKeys.getKey(pair.old.keyId)).toBeNull();
+    expect(persistedAgentKeys.getKey(pair.next.keyId)).not.toHaveProperty('rotationParentId');
+    expect(nameBindingsStore.listBindings()[0]).toMatchObject({
+      agentName: 'test-agent',
+      keyId: pair.next.keyId,
+    });
+  });
+
+  test.each([{ wrongSignature: true }, { wrongName: true }])(
+    'unproven or misnamed replacements cannot retire their parent: %j',
+    async (options) => {
+      const pair = rotationPair();
+      const confirm = vi.spyOn(persistedAgentKeys, 'confirmRotationKey');
+      const ws = await trial(pair, options);
+      expect(JSON.parse(ws.sentMessages[0]).type).toBe('error');
+      expect(confirm).not.toHaveBeenCalled();
+      expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+      expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
+    },
+  );
+
+  test.each([false, true])(
+    'changed ownership during admission never welcomes a staged key, explicit conflict=%s',
+    async (explicit) => {
+      const pair = rotationPair();
+      vi.spyOn(persistedAgentKeys, 'confirmRotationKey').mockImplementation(() => {
+        if (explicit) throw new persistedAgentKeys.AgentKeyConflictError('ownership changed');
+        return undefined;
+      });
+      const ws = await trial(pair);
+      expect(JSON.parse(ws.sentMessages[0]).data.code).toBe(
+        explicit ? 'agent-name-claimed' : 'internal-error',
+      );
+      expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+      expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
+    },
+  );
+
+  test('a failed durable handoff keeps the old key and binding intact', async () => {
+    const pair = rotationPair();
+    db.exec(
+      "CREATE TRIGGER reject_handoff BEFORE UPDATE ON name_bindings BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;",
+    );
+    const ws = await trial(pair);
+    expect(JSON.parse(ws.sentMessages[0]).data.code).toBe('internal-error');
+    expect(persistedAgentKeys.getKey(pair.old.keyId)).not.toBeNull();
+    expect(persistedAgentKeys.getKey(pair.next.keyId)?.rotationParentId).toBe(pair.old.keyId);
+    expect(nameBindingsStore.listBindings()[0].keyId).toBe(pair.old.keyId);
   });
 });

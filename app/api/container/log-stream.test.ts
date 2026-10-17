@@ -1,8 +1,31 @@
+// Legacy session users now consult the stored subject rows, so these tests
+// that sit above the session validator answer from an empty TOTP store.
+vi.mock('../../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
+// A socket's session is asked about again on a timer. Every session here has a
+// live row unless a test takes it away.
+const { mockGetSession } = vi.hoisted(() => ({
+  mockGetSession: vi.fn((sid: string) => ({
+    sid,
+    expiresAt: Number.MAX_SAFE_INTEGER,
+    data: JSON.stringify({ passport: { user: '{"username":"alice"}' } }),
+  })),
+}));
+vi.mock('../../store/session.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../store/session.js')>()),
+  getSession: mockGetSession,
+}));
+
 import { EventEmitter } from 'node:events';
 import { WebSocketServer } from 'ws';
 import * as configuration from '../../configuration/index.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
+import { closeStreamsForRevokedSessions, createSessionStreamRecheck } from '../session-streams.js';
 import { createIdentityAwareUpgradeRateLimitKeyResolver } from '../ws-upgrade-utils.js';
 import {
   attachContainerLogStreamWebSocketServer,
@@ -1815,6 +1838,127 @@ describe('api/container/log-stream', () => {
     });
   });
 
+  describe('a container log socket whose session ends', () => {
+    const opened: Array<Map<string, () => void>> = [];
+
+    afterEach(() => {
+      // Let every socket go, so one test's sockets are not another's to close.
+      for (const listeners of opened.splice(0)) {
+        listeners.get('close')?.();
+      }
+    });
+
+    function sessionMiddlewareFor(sessionID: string | undefined) {
+      return (req: any, _res: unknown, next: (error?: unknown) => void) => {
+        req.session = { passport: { user: '{"username":"alice"}' } };
+        if (sessionID !== undefined) {
+          req.sessionID = sessionID;
+        }
+        next();
+      };
+    }
+
+    async function connect(
+      sessionMiddleware: (req: any, res: unknown, next: (error?: unknown) => void) => void,
+    ) {
+      const listeners = new Map<string, () => void>();
+      const ws = {
+        on: vi.fn((event: string, listener: () => void) => {
+          listeners.set(event, listener);
+        }),
+        off: vi.fn(),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      const gateway = createContainerLogStreamGateway({
+        // A running container whose watcher is missing: the stream ends at
+        // once, but the socket is still open until the viewer lets go of it.
+        getContainer: vi.fn(() => ({ id: 'c1', name: 'c1', status: 'running', watcher: 'local' })),
+        getWatchers: vi.fn(() => ({})),
+        sessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: (_req, _socket, _head, callback) => callback(ws as any),
+        },
+        serverConfiguration: {},
+        isRateLimited: vi.fn(() => false),
+      });
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/containers/c1/logs/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+      opened.push(listeners);
+      ws.close.mockClear();
+      return { ws, listeners };
+    }
+
+    test('is closed with a policy close when its session id is revoked', async () => {
+      const { ws } = await connect(sessionMiddlewareFor('container-log-revoked'));
+
+      expect(closeStreamsForRevokedSessions(['someone-else'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      expect(closeStreamsForRevokedSessions(['container-log-revoked'])).toBe(1);
+      expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    });
+
+    // The timer that asks about every tracked session is covered where it
+    // lives; this is the verdict it reaches reaching a container log socket.
+    test('is closed by the session re-check once its session row is gone', async () => {
+      const { ws } = await connect(sessionMiddlewareFor('container-log-row-gone'));
+
+      createSessionStreamRecheck()(['container-log-row-gone']);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      mockGetSession.mockReturnValueOnce(undefined as never);
+      createSessionStreamRecheck()(['container-log-row-gone']);
+
+      expect(ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    });
+
+    test('is forgotten once the viewer closed it, so a later revocation finds nothing', async () => {
+      const { ws, listeners } = await connect(sessionMiddlewareFor('container-log-gone'));
+
+      listeners.get('close')?.();
+
+      expect(closeStreamsForRevokedSessions(['container-log-gone'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    test('two sockets of one session are both closed', async () => {
+      const first = await connect(sessionMiddlewareFor('container-log-twice'));
+      const second = await connect(sessionMiddlewareFor('container-log-twice'));
+
+      expect(closeStreamsForRevokedSessions(['container-log-twice'])).toBe(2);
+      expect(first.ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+      expect(second.ws.close).toHaveBeenCalledWith(1008, 'Session revoked');
+    });
+
+    test('a socket with no session id of its own is not tracked', async () => {
+      const { ws } = await connect(sessionMiddlewareFor(undefined));
+
+      expect(closeStreamsForRevokedSessions(['container-log-revoked', 'undefined'])).toBe(0);
+      expect(ws.close).not.toHaveBeenCalled();
+    });
+
+    test('a socket let in by anonymous access is not tied to the session id it rode in on', async () => {
+      const anonymousSpy = vi
+        .spyOn(registry, 'isAnonymousAuthenticationActive')
+        .mockReturnValue(true);
+      try {
+        const { ws } = await connect((req, _res, next) => {
+          req.sessionID = 'container-log-anonymous';
+          next();
+        });
+
+        expect(closeStreamsForRevokedSessions(['container-log-anonymous'])).toBe(0);
+        expect(ws.close).not.toHaveBeenCalled();
+      } finally {
+        anonymousSpy.mockRestore();
+      }
+    });
+  });
+
   describe('edge-agent container log streams', () => {
     function createAuthenticatedEdgeGateway(
       streamContainerLogs: ReturnType<typeof vi.fn>,
@@ -2460,7 +2604,7 @@ describe('api/container/log-stream', () => {
         attachContainerLogStreamWebSocketServer({
           server: server as any,
           sessionMiddleware: (req: any, _res: unknown, next: (error?: unknown) => void) => {
-            req.session = { passport: { user: '{}' } };
+            req.session = { passport: { user: '{"username":" "}' } };
             next();
           },
           serverConfiguration: {

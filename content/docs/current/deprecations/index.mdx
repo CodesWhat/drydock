@@ -135,6 +135,8 @@ Per-watcher digest watching via environment variable has been removed.
 | **Removed since** | v1.6.0 |
 | **Migration** | Use the `dd.watch.digest=true` label on individual containers instead |
 
+In v1.8, `DD_DEFAULTS_WATCH_DIGEST` adds a process-wide default beneath container labels and matching image sets. This is a new setting; the removed per-watcher variable above remains rejected. Agent processes must configure their own default. See [Digest-watch default](/docs/configuration/watchers#digest-watch-default).
+
 ### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
 
 Watching at startup is always scheduled. `WATCHATSTART` is no longer part of watcher configuration, including the former `false` suppression behavior.
@@ -176,7 +178,7 @@ The `DD_TRIGGER_*` prefix has been replaced by semantic prefixes that distinguis
 | **Deprecated since** | v1.5.0 |
 | **Removed since** | v1.7.0 |
 | **Detection** | Startup error listing every detected variable with its exact replacement; drydock does not start until all are renamed |
-| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Portainer/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
 ### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
 
@@ -240,14 +242,30 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 ## Removal in v1.8.0
 
+These changes first appear in the v1.8.0-rc.1 test candidate. v1.8.0 GA is not yet released.
+
+### SQLite replaces the live JSON store
+
+v1.8.0-rc.1 builds persist store records and sessions in `dd.sqlite`. The legacy `dd.json` is imported only when it exists and the SQLite database does not. A completed import renames it to `dd.json.pre-1.8.bak`, unless that backup already exists; in that case both legacy files are preserved and a warning is logged. Import failure stops startup. An existing SQLite database is never re-imported from JSON.
+
+Published v1.6.1 and v1.7.0-rc.24 builds already store sessions separately from the main JSON store (`dd-sessions.json` by default). The v1.8 import prefers the session file derived from `DD_STORE_FILE` (`dd.json` → `dd-sessions.json`, `tenant.json` → `tenant-sessions.json`), falling back to the older `Sessions` collection in the main JSON store, and leaves the session JSON file in place. Keep any pre-upgrade session JSON file with the main JSON snapshot for a downgrade.
+
+Backup tools must target a consistent SQLite snapshot, not `dd.json`. Stop Drydock before copying database files, or use SQLite's live backup operation. Downgrades need the appropriate pre-upgrade JSON snapshot and cannot recover changes made only in SQLite. See [Storage](/docs/configuration/storage#downgrade-notes) for the existing-backup and fresh-install cases, and [Store API](/docs/api/store) for `configuration.dbFile`.
+
+### MQTT identity-based topics and discovery
+
+For Compose-labeled containers, state topics now use an encoded `project.service` identity instead of the container name. Each component doubles literal hyphens and replaces dots with hyphens before the two are joined with a dot. Home Assistant `unique_id` is derived from the container identity independently of the topic. Rename and recreate stability applies to Compose-labeled containers, not name-identified standalone containers.
+
+With Home Assistant discovery enabled, resync clears replaced name-based discovery topics derived from known stored containers. A successful sweep is recorded per broker URL, base topic, discovery prefix and agent-topic-segment setting; failed publishes leave the sweep eligible for retry. This is not a broker-wide cleanup and does not remove all pre-v1.7 watcher or aggregate entities. Update hand-written subscriptions and any automations using old entity IDs. See [MQTT](/docs/configuration/triggers/mqtt).
+
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors. Its unversioned alias, `GET /api/auth/methods`, was removed outright in v1.7.0 (see above), ahead of this response-shape migration deadline.
+`GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route no longer serves the old shape. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead it has its own explicit **410 Gone** tombstone, registered ahead of the authentication guard so the response is the same whether or not the request carries credentials.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | Log warning on each request plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
+| **Removed since** | v1.8.0 |
 | **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` |
 
 ## Enforced security changes (no deprecation window)
@@ -305,5 +323,5 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | **Startup log warnings** | All runtime-detectable deprecations |
 | **UI deprecation banners** | Active `dd.trigger.*` container-label usage (the `DD_TRIGGER_*` env var prefix now fails startup instead, so there is no running instance left to surface a banner for) |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for active `dd.trigger.*` label usage, API tombstones, and historical observations |
-| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` and `GET /auth/strategies` |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

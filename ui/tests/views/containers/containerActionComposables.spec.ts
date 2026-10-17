@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
+import { ApiError } from '@/utils/error';
 import { loadContainerDetailListState } from '@/views/containers/loadContainerDetailListState';
 import {
   formatOperationPhase,
@@ -16,6 +17,11 @@ import {
 } from '@/views/containers/useContainerTriggers';
 
 describe('formatTimestamp (standalone, no t)', () => {
+  it('formats a valid backup timestamp using the current locale', () => {
+    const timestamp = '2026-09-10T12:00:00Z';
+    expect(formatTimestamp(timestamp)).toBe(new Date(timestamp).toLocaleString());
+  });
+
   it('returns "Unknown" when timestamp is undefined and t is not provided', () => {
     expect(formatTimestamp(undefined)).toBe('Unknown');
   });
@@ -46,9 +52,11 @@ describe('formatOperationPhase / formatOperationStatus / formatRollbackReason (m
     expect(mockT).toHaveBeenCalledWith('containerComponents.sideTabContent.unknown');
   });
 
-  it('normalizes string values regardless of whether t is provided', () => {
+  it('normalizes string values and translates recognized codes when t is provided', () => {
     expect(formatOperationPhase('IN_PROGRESS')).toBe('in progress');
-    expect(formatOperationStatus('ROLLED-BACK', vi.fn())).toBe('rolled back');
+    const t = vi.fn().mockReturnValue('Restored');
+    expect(formatOperationStatus('ROLLED-BACK', t)).toBe('Restored');
+    expect(t).toHaveBeenCalledWith('containerComponents.backups.operationValues.rolled-back');
   });
 });
 
@@ -98,6 +106,20 @@ describe('container action focused composables', () => {
     expect(value.value).toEqual([{ id: 'a' }]);
     expect(error.value).toBeNull();
     expect(loading.value).toBe(false);
+  });
+
+  it('retains localized backup context with HTTP diagnostics', async () => {
+    const error = ref<string | null>(null);
+    await loadContainerDetailListState({
+      containerId: 'container-b',
+      loading: ref(false),
+      error,
+      value: ref([]),
+      loader: vi.fn().mockRejectedValue(new ApiError('Not Found', 404)),
+      failureMessage: 'Impossible de charger les backups',
+    });
+
+    expect(error.value).toBe('Impossible de charger les backups: HTTP 404: Not Found');
   });
 
   it('handles loader failures by clearing the list and setting an error', async () => {

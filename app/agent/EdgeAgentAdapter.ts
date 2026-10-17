@@ -14,8 +14,12 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
+import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
 
+const MAX_REQUEST_BODY_BYTES = 512 * 1024 * 1024;
+const REQUEST_BODY_CHUNK_BYTES = 32 * 1024;
+const MAX_UPLOADING_BYTES = 512 * 1024 * 1024;
 const MAX_EXEC_SESSIONS = 100;
 const MAX_PENDING_REQUESTS = 100;
 const MAX_STREAM_RESPONSE_BYTES = 100 * 1024 * 1024;
@@ -101,13 +105,15 @@ interface PortwingFrame {
 }
 
 export type WebSocketLike = {
-  send: (data: string) => void;
+  send: (data: string, callback?: (error?: Error) => void) => void;
   close: (code?: number, reason?: string) => void;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
 export interface EdgeAgentAdapterOptions {
+  keyId?: string;
+  capabilities?: string[];
   reconnected?: boolean;
 }
 
@@ -127,6 +133,9 @@ export function buildEdgeSentinelConfig(agentId: string): AgentClientConfig {
 }
 
 export class EdgeAgentAdapter {
+  private readonly keyRotation?: EdgeKeyRotationController;
+  readonly supportsRequestBodyStream: boolean;
+  private uploadingBytes = 0;
   private readonly client: AgentClient;
   private readonly ws: WebSocketLike;
   private readonly agentName: string;
@@ -165,9 +174,19 @@ export class EdgeAgentAdapter {
   private orderedStateFrameChain: Promise<void> = Promise.resolve();
 
   constructor(client: AgentClient, ws: WebSocketLike, options: EdgeAgentAdapterOptions = {}) {
+    this.supportsRequestBodyStream =
+      options.capabilities?.includes('edge-request-body-stream') ?? false;
     this.client = client;
     this.ws = ws;
     this.agentName = client.name;
+    if (options.keyId && options.capabilities?.includes('edge-key-rotation')) {
+      this.keyRotation = new EdgeKeyRotationController(
+        this.agentName,
+        options.keyId,
+        (method, target, body) => this.sendRequest(method, target, undefined, body),
+        () => this.ws.close(1012, 'key rotation'),
+      );
+    }
     this.reconnected = options.reconnected ?? false;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
@@ -186,6 +205,16 @@ export class EdgeAgentAdapter {
       log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
       void this.onDisconnect();
     };
+  }
+
+  getSigningKeyRotationStatus() {
+    return this.keyRotation ? this.keyRotation.status() : { enabled: false as const };
+  }
+
+  async rotateSigningKey(action: 'rotate' | 'abort') {
+    if (this.disconnected) throw new Error('connection closed');
+    if (!this.keyRotation) throw new Error('Managed key rotation is not enabled');
+    return this.keyRotation.rotate(action);
   }
 
   /**
@@ -1119,6 +1148,9 @@ export class EdgeAgentAdapter {
     body?: unknown,
   ): Promise<unknown> {
     if (this.disconnected) return Promise.reject(new Error('connection closed'));
+    if (Buffer.isBuffer(body)) {
+      return this.sendBodyRequest(method, path, headers, body, true);
+    }
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
@@ -1159,6 +1191,9 @@ export class EdgeAgentAdapter {
     body?: unknown,
   ): Promise<unknown> {
     if (this.disconnected) return Promise.reject(new Error('connection closed'));
+    if (Buffer.isBuffer(body)) {
+      return this.sendBodyRequest(method, path, headers, body, false);
+    }
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       const requestId = uuidv7();
       try {
@@ -1199,6 +1234,106 @@ export class EdgeAgentAdapter {
         this.pendingRequests.delete(requestId);
         reject(err);
       }
+    });
+  }
+
+  private sendBodyRequest(
+    method: string,
+    path: string,
+    headers: Record<string, string> | undefined,
+    body: Buffer,
+    streaming: boolean,
+  ): Promise<unknown> {
+    if (!this.supportsRequestBodyStream) {
+      return Promise.reject(new Error('Edge agent does not support streamed request bodies'));
+    }
+    if (body.length > MAX_REQUEST_BODY_BYTES) {
+      return Promise.reject(new Error('request body exceeds 512 MiB limit'));
+    }
+    if (
+      this.pendingRequests.size >= MAX_PENDING_REQUESTS ||
+      this.uploadingBytes + body.length > MAX_UPLOADING_BYTES
+    ) {
+      return Promise.reject(new Error('concurrent upload limit reached'));
+    }
+    const requestId = uuidv7();
+    const pendingKey = streaming ? `stream:${requestId}` : requestId;
+    const upload: { body?: Buffer; offset: number } = { body, offset: 0 };
+    this.uploadingBytes += body.length;
+    // The callbacks retain this small state object, never the body after cleanup.
+    const release = () => {
+      if (upload.body) {
+        this.uploadingBytes -= upload.body.length;
+        upload.body = undefined;
+      }
+    };
+    return new Promise((resolve, reject) => {
+      const fail = (error: unknown) => {
+        if (upload.body && !this.disconnected) {
+          try {
+            this.ws.send(
+              JSON.stringify({
+                type: 'error',
+                data: { requestId, code: 'request-cancelled', message: 'request upload cancelled' },
+              }),
+            );
+          } catch {
+            /* The agent discards incomplete uploads on disconnect or idle timeout. */
+          }
+        }
+        release();
+        reject(error);
+      };
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(pendingKey);
+        fail(new Error(`Request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      }, REQUEST_TIMEOUT_MS);
+      this.pendingRequests.set(pendingKey, {
+        timer,
+        resolve: (value) => {
+          release();
+          resolve(value);
+        },
+        reject: fail,
+      });
+      const sent = (error?: Error) => {
+        if (!this.pendingRequests.has(pendingKey) || !upload.body) return;
+        if (error) {
+          clearTimeout(timer);
+          this.pendingRequests.delete(pendingKey);
+          fail(error);
+          return;
+        }
+        timer.refresh();
+        if (upload.offset < upload.body.length) {
+          const chunk = upload.body.subarray(
+            upload.offset,
+            upload.offset + REQUEST_BODY_CHUNK_BYTES,
+          );
+          upload.offset += chunk.length;
+          write({ type: 'stream', data: { requestId, data: chunk.toString('base64') } });
+        } else {
+          write({ type: 'stream_end', data: { requestId } }, true);
+        }
+      };
+      const write = (frame: PortwingFrame, terminal = false) => {
+        try {
+          this.ws.send(JSON.stringify(frame), (error) => {
+            if (terminal && !error) {
+              this.pendingRequests.get(pendingKey)?.timer.refresh();
+              release();
+              return;
+            }
+            // Even a synchronous transport callback must not recurse per chunk.
+            queueMicrotask(() => sent(error));
+          });
+        } catch (error) {
+          clearTimeout(timer);
+          this.pendingRequests.delete(pendingKey);
+          fail(error);
+        }
+      };
+      write({ type: 'request', data: { requestId, method, path, headers, bodyStream: true } });
     });
   }
 

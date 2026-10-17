@@ -1,5 +1,5 @@
 {
-  "version": "1.7.0",
+  "version": "1.8.0",
   "scripts": {
     "prepare": "lefthook install",
     "release:precheck": "node scripts/release-precut-check.mjs",
@@ -9,16 +9,16 @@
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
-    "@types/node": "25.9.9",
-    "lefthook": "2.2.1",
+    "@biomejs/biome": "2.5.12",
+    "@types/node": "25.9.5",
+    "lefthook": "2.1.12",
     "vitest": "4.1.11",
-    "yaml": "2.9.1"
+    "yaml": "2.9.0"
   },
   "overrides": {
-    "vite": "8.3.4",
-    "postcss": "8.5.29",
-    "nanoid": "6.0.2",
+    "vite": "8.2.2",
+    "postcss": "8.5.28",
+    "nanoid": "6.0.1",
     "source-map-js": "1.2.2"
   }
 }

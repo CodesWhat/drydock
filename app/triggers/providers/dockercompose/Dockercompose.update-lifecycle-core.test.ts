@@ -118,11 +118,16 @@ describe('Dockercompose Trigger', () => {
     trigger.configuration.dryrun = false;
 
     const container = makeContainer({
+      id: '123456789abc',
       name: 'drydock',
       imageName: 'codeswhat/drydock',
       tagValue: '1.0.0',
       remoteValue: '1.1.0',
       labels: { 'com.docker.compose.service': 'drydock' },
+    });
+    trigger.selfUpdateOrchestrator.resolveSelfContainerIdentity = vi.fn().mockResolvedValue({
+      id: container.id,
+      name: container.name,
     });
 
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
@@ -180,7 +185,6 @@ describe('Dockercompose Trigger', () => {
       {
         containerName: 'nginx',
         containerIdentityKey: '::local::nginx',
-        includeLegacy: false,
       },
       undefined,
     );
@@ -250,6 +254,75 @@ describe('Dockercompose Trigger', () => {
     expect(backupStore.insertBackup).toHaveBeenCalledTimes(1);
     expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
     expect(postHookSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('processComposeFile should not run the hook, prune or backup when a compose-file-once refresh aborts', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = true;
+    trigger.configuration.composeFileOnce = true;
+    getState().registry.hub.normalizeImage = (image) => image;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    const { scanAndGateSpy, preHookSpy, pruneImagesSpy, composeUpdateSpy } =
+      spyOnProcessComposeHelpers(trigger);
+    // Run the real compose refresh so its own checks decide the outcome.
+    composeUpdateSpy.mockRestore();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      imageIdentity: `nginx:1.1.0@sha256:${'a'.repeat(64)}`,
+      unboundWarn: false,
+    });
+    vi.spyOn(trigger, 'getCurrentContainer').mockResolvedValue(undefined);
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('because container nginx no longer exists');
+
+    // The preflight gated the candidate, but the refresh then refused to touch
+    // it, so nothing that sits behind that gate may have run either.
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    expect(preHookSpy).not.toHaveBeenCalled();
+    expect(pruneImagesSpy).not.toHaveBeenCalled();
+    expect(backupStore.insertBackup).not.toHaveBeenCalled();
+  });
+
+  test('processComposeFile should not run the hook, prune or backup when a compose-file-once inspect has no runtime state', async () => {
+    trigger.configuration.dryrun = false;
+    trigger.configuration.prune = true;
+    trigger.configuration.composeFileOnce = true;
+    getState().registry.hub.normalizeImage = (image) => image;
+
+    const container = makeContainer();
+
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+    );
+    const { scanAndGateSpy, preHookSpy, pruneImagesSpy, composeUpdateSpy } =
+      spyOnProcessComposeHelpers(trigger);
+    // Run the real compose refresh so its own checks decide the outcome.
+    composeUpdateSpy.mockRestore();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger as any, 'capturePulledImageIdentity').mockResolvedValue({
+      imageIdentity: `nginx:1.1.0@sha256:${'a'.repeat(64)}`,
+      unboundWarn: false,
+    });
+    vi.spyOn(trigger, 'getCurrentContainer').mockResolvedValue({ id: 'container-id' } as any);
+    // A spec with no boolean State.Running is the second abort: the refresh
+    // cannot tell whether the replacement should be started.
+    vi.spyOn(trigger, 'inspectContainer').mockResolvedValue({ State: {} } as any);
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('because Docker inspection data is missing runtime state');
+
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
+    expect(preHookSpy).not.toHaveBeenCalled();
+    expect(pruneImagesSpy).not.toHaveBeenCalled();
+    expect(backupStore.insertBackup).not.toHaveBeenCalled();
   });
 
   test('processComposeFile should run security scanning but skip post-update lifecycle in dryrun mode', async () => {

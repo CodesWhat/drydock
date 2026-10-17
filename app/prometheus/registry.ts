@@ -1,4 +1,4 @@
-import { Counter, register, Summary } from 'prom-client';
+import { Counter, register, Summary } from '@prometheus-io/client';
 
 let summaryGetTags;
 let digestCacheHitsCounter;

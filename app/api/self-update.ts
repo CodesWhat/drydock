@@ -2,6 +2,7 @@ import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getFreshSelfUpdateOperationById } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
+import { SESSION_ONLY, scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -28,6 +29,6 @@ function getSelfUpdateOperationStatus(req: Request, res: Response): void {
 
 export function init() {
   router.use(nocache());
-  router.get('/:operationId/status', getSelfUpdateOperationStatus);
+  router.get('/:operationId/status', scoped(SESSION_ONLY, getSelfUpdateOperationStatus));
   return router;
 }

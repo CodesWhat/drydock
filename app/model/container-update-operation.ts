@@ -54,6 +54,8 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'rollback-started',
   'rolled-back',
   'rollback-deferred',
+  'portainer-target',
+  'portainer-restore',
   'rollback-failed',
   'expired',
   'skipped-dependency',
@@ -79,6 +81,8 @@ export const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
   'health-gate-passed',
   'rollback-started',
   'rollback-deferred',
+  'portainer-target',
+  'portainer-restore',
 ] as const;
 
 export type InProgressContainerUpdateOperationPhase =

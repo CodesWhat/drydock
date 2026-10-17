@@ -14,6 +14,13 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
+// Legacy session users consult the stored subject rows; answer from an empty store.
+vi.mock('../store/totp.js', () => ({
+  getSubjectVersion: vi.fn(() => 0),
+  getFactorBySubject: vi.fn(() => undefined),
+  hasEnrolledUsername: vi.fn(() => false),
+}));
+
 import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   applySessionMiddleware,
@@ -1005,14 +1012,14 @@ describe('ws-upgrade-utils', () => {
       expect(resolver(request, true)).toBe('ip:10.0.0.1');
     });
 
-    test('prefers request.user over session passport user when present', () => {
+    test('prefers request.principal over the session payload', () => {
       const resolver = createIdentityAwareUpgradeRateLimitKeyResolver({
         ratelimit: { identitykeying: true },
       });
 
       const request = {
         socket: { remoteAddress: '10.0.0.1' },
-        user: { username: 'bob' },
+        principal: { kind: 'session', username: 'bob' },
         session: { passport: { user: '{"username":"alice"}' } },
       } as any;
 

@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "已複製！",
       "clickToCopy": "點選複製",
-      "failed": "Copy failed"
+      "failed": "複製失敗"
     },
     "dataFilterBar": {
       "filters": "篩選",
@@ -23,8 +23,8 @@
       "viewMode": "檢視模式",
       "viewModeLabel": "{label} 檢視",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "表格",
+        "cards": "卡片"
       }
     },
     "dataTable": {

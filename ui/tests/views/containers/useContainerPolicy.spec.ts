@@ -101,6 +101,169 @@ function createPolicyHarness(
 }
 
 describe('useContainerPolicy', () => {
+  it('keeps the age requirement visible while both maturity gates are pending', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+          updateEligibility: {
+            blockers: [
+              { reason: 'maturity-not-reached', message: 'Waiting for age' },
+              {
+                reason: 'maturity-releases-not-reached',
+                message: 'Waiting for releases',
+                details: { evidenceAvailable: false },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
+      'Mature-only policy blocks updates younger than 5 days',
+    );
+    harness.wrapper.unmount();
+  });
+  it('compares release overrides against group values and retains explicit zero ownership', async () => {
+    const baseline = { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 };
+    const meta = {
+      groupPolicy: {
+        id: 'p1',
+        group: 'payments',
+        revision: 1,
+        updatePolicy: baseline,
+        actions: {},
+      },
+      updatePolicyDeclarative: { env: {}, label: {} },
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturitySkipReleases: 0,
+        maturityReleaseFallbackDays: 20,
+      },
+      updatePolicyOverrides: { maturitySkipReleases: 0, maturityReleaseFallbackDays: 20 },
+      updatePolicySources: {
+        maturitySkipReleases: 'override',
+        maturityReleaseFallbackDays: 'override',
+      },
+    };
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: { 'container-1': meta },
+    });
+    expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+      new Set(['maturitySkipReleases', 'maturityReleaseFallbackDays']),
+    );
+    harness.containerMetaMap.value = {
+      'container-1': { ...meta, updatePolicyOverrides: baseline },
+    };
+    await nextTick();
+    expect(harness.composable.selectedPolicyOverriddenFields.value.size).toBe(0);
+    expect(harness.composable.selectedPolicyOverrideFields.value.size).toBe(2);
+    harness.containerMetaMap.value = {
+      'container-1': {
+        ...meta,
+        updatePolicyOverrides: {},
+        updatePolicySources: {
+          maturitySkipReleases: 'group',
+          maturityReleaseFallbackDays: 'group',
+        },
+      },
+    };
+    await nextTick();
+    expect(harness.composable.selectedPolicyGroupFields.value).toEqual(
+      new Set(['maturitySkipReleases', 'maturityReleaseFallbackDays']),
+    );
+    harness.wrapper.unmount();
+  });
+  it.each(['maturitySkipReleases', 'maturityReleaseFallbackDays'])(
+    'compares an invalid %s override against the disabled default',
+    (field) => {
+      const harness = createPolicyHarness({
+        selectedContainer: makeContainer(),
+        containerMetaMap: {
+          'container-1': {
+            updatePolicyOverrides: { [field]: 'invalid' },
+          },
+        },
+      });
+      expect(harness.composable.selectedPolicyOverrideFields.value).toEqual(new Set([field]));
+      expect(harness.composable.selectedPolicyOverriddenFields.value.size).toBe(0);
+      harness.wrapper.unmount();
+    },
+  );
+  it('uses the release-count explanation in list tooltips after the day gate passes', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+          updateEligibility: {
+            blockers: [
+              {
+                reason: 'maturity-releases-not-reached',
+                message: 'Waiting',
+                details: {
+                  evidenceAvailable: true,
+                  family: '2',
+                  earlierReleases: 1,
+                  requiredReleases: 2,
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
+      'Waiting for stable releases in family 2: 1 of 2 earlier releases available.',
+    );
+    harness.wrapper.unmount();
+  });
+  it('resets unsaved maturity drafts when selecting another container with identical saved values', async () => {
+    const updatePolicy = {
+      maturityMode: 'mature',
+      maturityMinAgeDays: 5,
+      maturitySkipReleases: 2,
+      maturityReleaseFallbackDays: 10,
+    };
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: { 'container-1': { updatePolicy }, 'container-2': { updatePolicy } },
+    });
+    harness.composable.maturityModeInput.value = 'all';
+    harness.composable.maturityMinAgeDaysInput.value = 8;
+    harness.composable.maturitySkipReleasesInput.value = 7;
+    harness.composable.maturityReleaseFallbackDaysInput.value = 14;
+    harness.selectedContainer.value = makeContainer({ id: 'container-2', name: 'other' });
+    await nextTick();
+    expect(harness.composable.maturitySkipReleasesInput.value).toBe(2);
+    expect(harness.composable.maturityReleaseFallbackDaysInput.value).toBe(10);
+    expect(harness.composable.maturityModeInput.value).toBe('mature');
+    expect(harness.composable.maturityMinAgeDaysInput.value).toBe(5);
+    harness.wrapper.unmount();
+  });
+  it('seeds release maturity controls from the effective policy and resets them on selection changes', async () => {
+    const harness = createPolicyHarness({
+      selectedContainer: makeContainer(),
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            maturityMode: 'mature',
+            maturitySkipReleases: 2,
+            maturityReleaseFallbackDays: 10,
+          },
+        },
+      },
+    });
+    expect(harness.composable.selectedMaturitySkipReleases?.value).toBe(2);
+    expect(harness.composable.selectedMaturityReleaseFallbackDays?.value).toBe(10);
+    expect(harness.composable.maturitySkipReleasesInput?.value).toBe(2);
+    expect(harness.composable.maturityReleaseFallbackDaysInput?.value).toBe(10);
+    harness.selectedContainer.value = makeContainer({ id: 'other', name: 'other' });
+    await nextTick();
+    expect(harness.composable.maturitySkipReleasesInput?.value).toBe(0);
+    expect(harness.composable.maturityReleaseFallbackDaysInput?.value).toBe(0);
+    harness.wrapper.unmount();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -509,5 +672,98 @@ describe('useContainerPolicy', () => {
     expect(harness.composable.maturityMinAgeDaysInput.value).toBe(4);
 
     harness.wrapper.unmount();
+  });
+  describe('group policy attribution', () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const groupPolicy = {
+      id: 'policy-1',
+      group: 'payments',
+      revision: 3,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14, skipTags: ['1.9.9'] },
+      actions: {},
+    };
+
+    it('exposes the group name and the fields the server attributed to the group', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicySources: {
+              maturityMode: 'group',
+              maturityMinAgeDays: 'group',
+              skipTags: 'label',
+              skipDigests: 'default',
+            },
+          },
+        },
+      });
+
+      expect(harness.composable.selectedPolicyGroupName.value).toBe('payments');
+      expect(harness.composable.selectedPolicyGroupFields.value).toEqual(
+        new Set(['maturityMode', 'maturityMinAgeDays']),
+      );
+      harness.wrapper.unmount();
+    });
+
+    it('shows no group attribution without a snapshot or without group sources', () => {
+      const noSnapshot = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: { 'container-1': { updatePolicySources: { skipTags: 'group' } } },
+      });
+      expect(noSnapshot.composable.selectedPolicyGroupName.value).toBeUndefined();
+      expect(noSnapshot.composable.selectedPolicyGroupFields.value).toEqual(new Set());
+      noSnapshot.wrapper.unmount();
+
+      const noSources = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: { 'container-1': { groupPolicy: { ...groupPolicy, group: '' } } },
+      });
+      expect(noSources.composable.selectedPolicyGroupName.value).toBeUndefined();
+      expect(noSources.composable.selectedPolicyGroupFields.value).toEqual(new Set());
+      noSources.wrapper.unmount();
+    });
+
+    it('uses the group value, not the global one, as the revert baseline', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicyDeclarative: { env: { maturityMode: 'all' }, label: {} },
+            updatePolicyOverrides: {
+              maturityMode: 'mature',
+              maturityMinAgeDays: 7,
+              skipTags: ['1.9.9'],
+            },
+          },
+        },
+      });
+
+      // mature equals the group value (not flagged); 7 differs from the group's 14;
+      // skipTags equals the group list.
+      expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+        new Set(['maturityMinAgeDays']),
+      );
+      harness.wrapper.unmount();
+    });
+
+    it('lets a label beat the group in the baseline', () => {
+      const harness = createPolicyHarness({
+        selectedContainer: container,
+        containerMetaMap: {
+          'container-1': {
+            groupPolicy,
+            updatePolicyDeclarative: { env: {}, label: { maturityMode: 'all' } },
+            updatePolicyOverrides: { maturityMode: 'mature' },
+          },
+        },
+      });
+
+      expect(harness.composable.selectedPolicyOverriddenFields.value).toEqual(
+        new Set(['maturityMode']),
+      );
+      harness.wrapper.unmount();
+    });
   });
 });

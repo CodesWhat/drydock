@@ -16,7 +16,7 @@ Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup|No|Pre-update backup with retention|self
 Dry-run preview|Limited|Yes|self
 Registry providers|Major registries|23 dedicated integrations|self
-Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|20 native trigger integrations|self
+Trigger integrations|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|21 native trigger integrations|self
 MQTT / Home Assistant|Yes|Yes|tie
 Distributed agents|Yes (headless agents)|Yes (SSE-based agents)|tie
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
@@ -31,7 +31,7 @@ License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|AGPL-3.0|self
   highlightsTable: `
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Dockhand's safe-pull protection rolls back if a new container fails to start, but doesn't support proactive health-check rollback, maintenance windows, or lifecycle hooks.
 radio|23 Registry Providers|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — broader registry support than Dockhand.
-bell|20 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Dockhand offers SMTP, Gotify, ntfy, Telegram, and several others, plus Apprise passthrough. Drydock's 20 native integrations include Kafka, MQTT/Home Assistant, and Matrix out of the box without needing an Apprise server.
+bell|21 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Dockhand offers SMTP, Gotify, ntfy, Telegram, and several others, plus Apprise passthrough. Drydock's 21 native integrations include Kafka, MQTT/Home Assistant, and Matrix out of the box without needing an Apprise server.
 history|Free Audit Log|Full audit trail with REST API and Prometheus counter — included free. Dockhand includes a basic activity log in the free tier, but compliance-grade audit logging requires the Enterprise edition.
 network|SSE-Based Agents|Both tools support distributed monitoring. Drydock uses SSE-based agents for real-time communication with a centralized dashboard.
 lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand gates audit logs, secret management, and some features behind an Enterprise tier.
@@ -46,7 +46,7 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand g
   },
   metadataTitle: "Dockhand vs Drydock — Container Update Monitoring Comparison",
   metadataDescription:
-    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 20 notification triggers, automatic rollback, and distributed agents compare to Dockhand's approach.",
+    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 17 notification services and 4 update actions, automatic rollback, and distributed agents compare to Dockhand's approach.",
   metadataKeywords: [
     "dockhand vs drydock",
     "dockhand alternative",

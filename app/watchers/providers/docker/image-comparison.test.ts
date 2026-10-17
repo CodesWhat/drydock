@@ -73,6 +73,450 @@ describe('image-comparison', () => {
     mockSuggestTag.mockReturnValue(null);
   });
 
+  test('retains the remote candidate version separately from the installed alias version', async () => {
+    const getImageManifestDigest = vi.fn().mockResolvedValue({
+      digest: 'sha256:remote',
+      version: 2,
+      softwareVersion: '2026.8.2',
+    });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest', '2026.8.2']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer();
+    current.image.tag.value = 'latest';
+    current.image.tag.semver = false;
+    Object.assign(current.image, { softwareVersion: '2026.7.5' });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(current as never, log);
+
+    expect(result).toHaveProperty('softwareVersion', '2026.8.2');
+    expect(result.tag).toBe('latest');
+    expect(current.image).toHaveProperty('softwareVersion', '2026.7.5');
+  });
+
+  test.each([
+    {
+      tag: 'latest',
+      semver: false,
+      version: '2026.8.2',
+      tags: ['2026.7.9', '2026.8.0', 'v2026.8.0', '2026.8.1', '2026.8.2'],
+      family: '2026.8',
+    },
+    {
+      tag: '9',
+      semver: true,
+      version: '9.0.2',
+      tags: ['8.0.0', '9.0.0', 'v9.0.0', 'V9.0.0', '9.0.1', '9.0.2', '10.0.0'],
+      family: '9',
+    },
+  ])(
+    'discovers release evidence behind $tag without changing its deploy tag or adding requests',
+    async ({ tag, semver, version, tags, family }) => {
+      const lookup = vi
+        .fn()
+        .mockResolvedValue({ digest: 'sha256:remote', version: 2, softwareVersion: version });
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue([tag, ...tags]),
+            getImageManifestDigest: lookup,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const current = createFloatingAliasContainer();
+      Object.assign(current.image.tag, { value: tag, semver });
+      const result = await findNewVersion(current as never, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+      expect(result.tag).toBe(tag);
+      expect(result.releaseMaturity).toEqual({ version, family, earlierReleases: 2 });
+      expect(lookup).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  test('release evidence uses all filtered releases, including releases older than the install', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['2.0.0', '2.0.1', '2.0.2', '2.0.3', '2.0.4']),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      excludeTags: '^2\\.0\\.[01]$',
+      tagFamily: 'loose',
+    });
+    Object.assign(current.image.tag, { value: '2.0.3', tagPrecision: 'specific' });
+    current.image.digest.watch = false;
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('2.0.4');
+    expect(result.releaseMaturity).toEqual({ version: '2.0.4', family: '2', earlierReleases: 2 });
+  });
+
+  test('release evidence preserves the strict numeric padding constraint', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['5.01.4', '5.1.5']),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({ includeTags: '^5\\.' });
+    Object.assign(current.image.tag, { value: '5.1.4', tagPrecision: 'specific' });
+    current.image.digest.watch = false;
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('5.1.5');
+    expect(result.releaseMaturity).toEqual({ version: '5.1.5', family: '5', earlierReleases: 0 });
+  });
+
+  test('does not use installed version or a remote version outside a pinned alias track as release evidence', async () => {
+    const lookup = vi
+      .fn()
+      .mockResolvedValue({ digest: 'sha256:remote', version: 2, softwareVersion: '10.0.2' });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', '9.0.0', '9.0.1', '10.0.0', '10.0.1']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer();
+    current.image.tag.value = '9';
+    Object.assign(current.image, { softwareVersion: '9.0.2' });
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('9');
+    expect(result.releaseMaturity).toBeUndefined();
+  });
+
+  test.each([
+    {
+      tag: 'latest',
+      version: '2026.8.2',
+      family: '2026.8',
+      tags: ['2026.8.0', '2026.8.1', '2026.8.2', '2026.8.3'],
+    },
+    {
+      tag: '2',
+      version: '2.0.2',
+      family: '2',
+      tags: ['2.0.0', '2.0.1', '2.0.2', '2.0.3', '3.0.0'],
+    },
+    {
+      tag: '9',
+      version: '9.0.2',
+      family: '9',
+      tags: ['9.0.0', '9.0.1', '9.0.2', '9.0.3', '10.0.0'],
+    },
+  ])(
+    'proves the concrete version behind unlabeled $tag by matching remote digests',
+    async ({ tag, version, family, tags }) => {
+      const lookup = vi.fn().mockImplementation(async (image) => ({
+        digest: [tag, version].includes(image.tag.value)
+          ? 'sha256:remote'
+          : `sha256:${image.tag.value}`,
+        version: 2,
+      }));
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue([tag, ...tags]),
+            getImageManifestDigest: lookup,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const current = createFloatingAliasContainer({
+        updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+      });
+      Object.assign(current.image.tag, { value: tag, semver: tag !== 'latest' });
+      const result = await findNewVersion(current as never, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+      expect(result.tag).toBe(tag);
+      expect(current.image.tag.value).toBe(tag);
+      expect(result.releaseMaturity).toEqual({ version, family, earlierReleases: 2 });
+      expect(lookup.mock.calls.map(([image]) => image.tag.value).slice(2)).toEqual([
+        tags[3],
+        version,
+      ]);
+    },
+  );
+
+  test('limits alias proof lookups to eight stable tags and ignores excluded or foreign tracks', async () => {
+    const lookup = vi
+      .fn()
+      .mockImplementation(async (image) => ({ digest: `sha256:${image.tag.value}`, version: 1 }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi
+            .fn()
+            .mockResolvedValue([
+              '2',
+              '3.0.99',
+              '2.0.99-beta.1',
+              '2.0.99-debug',
+              ...Array.from({ length: 15 }, (_, i) => `2.0.${i}`),
+              'v2.0.14',
+            ]),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+      excludeTags: '^2\\.0\\.14$',
+    });
+    current.image.tag.value = '2';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.releaseMaturity).toBeUndefined();
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual([
+      '2',
+      'v2.0.14',
+      '2.0.13',
+      '2.0.12',
+      '2.0.11',
+      '2.0.10',
+      '2.0.9',
+      '2.0.8',
+      '2.0.7',
+    ]);
+  });
+
+  test.each([
+    undefined,
+    { maturityMode: 'mature', maturitySkipReleases: 0 },
+    { maturityMode: 'all', maturitySkipReleases: 2 },
+  ])('adds no alias proof requests when release counting is disabled: %j', async (updatePolicy) => {
+    const lookup = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['2', '2.0.0', '2.0.1']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({ updatePolicy });
+    current.image.tag.value = '2';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(result.releaseMaturity).toBeUndefined();
+  });
+
+  test('collection hints prove transformed releases through the registry lookup image and survive one failed lookup', async () => {
+    const lookup = vi.fn().mockImplementation(async (image) => {
+      if (image.tag.value === 'release-2.0.3') throw new Error('registry unavailable');
+      return { digest: 'sha256:remote', version: 1 };
+    });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi
+            .fn()
+            .mockResolvedValue([
+              '2',
+              'release-2.0.0',
+              'release-2.0.1',
+              'release-2.0.2',
+              'release-2.0.3',
+            ]),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      transformTags: '^release-(.+) => $1',
+      includeTags: '^release-',
+      tagFamily: 'loose',
+    });
+    Object.assign(current.image, {
+      name: 'private/mirror',
+      registry: { name: 'hub', lookupImage: 'library/upstream' },
+      architecture: 'arm64',
+      os: 'linux',
+    });
+    Object.assign(current.image.tag, { value: '2', semver: true });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const result = await findNewVersion(current as never, log, {
+      collectReleaseMaturity: true,
+      useRegistryPollCache: true,
+    });
+    expect(result.releaseMaturity).toEqual({ version: '2.0.2', family: '2', earlierReleases: 2 });
+    expect(result.tag).toBe('2');
+    expect(current.image.name).toBe('private/mirror');
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Release version proof lookup failed'),
+    );
+    expect(
+      lookup.mock.calls.every(
+        ([image, digest, options]) =>
+          image.name === 'library/upstream' &&
+          image.architecture === 'arm64' &&
+          digest === undefined &&
+          options.usePollCycleCache,
+      ),
+    ).toBe(true);
+  });
+
+  test('does not fabricate release evidence when an enabled alias has no remote digest', async () => {
+    const lookup = vi.fn().mockResolvedValue({ version: 1 });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['2', '2.0.0']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    current.image.tag.value = '2';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(result.releaseMaturity).toBeUndefined();
+  });
+
+  test('proves uppercase-prefixed release tags using their exact registry spelling', async () => {
+    const lookup = vi.fn().mockImplementation(async (image) => ({
+      digest: ['9', 'V9.0.2'].includes(image.tag.value) ? 'sha256:remote' : 'sha256:other',
+      version: 1,
+    }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', 'V9.0.0', 'V9.0.1', 'V9.0.2', 'V9.0.3']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    current.image.tag.value = '9';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.tag).toBe('9');
+    expect(result.releaseMaturity).toEqual({ version: '9.0.2', family: '9', earlierReleases: 2 });
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual(['9', 'V9.0.3', 'V9.0.2']);
+  });
+
+  test('tries alternate raw tags for one canonical version without counting the release twice', async () => {
+    const lookup = vi.fn().mockImplementation(async (image) => ({
+      digest: ['9', 'v9.0.2'].includes(image.tag.value) ? 'sha256:remote' : 'sha256:other',
+      version: 1,
+    }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['9', '9.0.0', '9.0.1', '9.0.2', 'v9.0.2']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    current.image.tag.value = '9';
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.releaseMaturity).toEqual({ version: '9.0.2', family: '9', earlierReleases: 2 });
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual(['9', '9.0.2', 'v9.0.2']);
+  });
+
+  test('shares the eight-proof budget across alternate spellings and ignores duplicate raw tags', async () => {
+    const aliases = [
+      '9.0.9',
+      'v9.0.9',
+      'V9.0.9',
+      '09.0.9',
+      '9.00.9',
+      '9.0.09',
+      '09.00.9',
+      '09.0.09',
+      '09.00.09',
+    ];
+    const lookup = vi
+      .fn()
+      .mockImplementation(async (image) => ({ digest: `sha256:${image.tag.value}`, version: 1 }));
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest', aliases[0], ...aliases, '9.0.8']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const current = createFloatingAliasContainer({
+      updatePolicy: { maturityMode: 'mature', maturitySkipReleases: 2 },
+    });
+    Object.assign(current.image.tag, { value: 'latest', semver: false });
+    const result = await findNewVersion(current as never, {
+      error: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    });
+    expect(result.releaseMaturity).toBeUndefined();
+    expect(lookup.mock.calls.map(([image]) => image.tag.value)).toEqual([
+      'latest',
+      ...aliases.slice(0, 8),
+    ]);
+  });
+
   test('warns and ignores invalid digest include filters', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

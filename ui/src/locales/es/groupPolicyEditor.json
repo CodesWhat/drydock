@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Políticas de grupo",
+    "title": "Políticas de grupo",
+    "description": "Una política por grupo, aplicada a cada miembro actual y a los contenedores que se unan después.",
+    "ownership": "Se guarda en Drydock, no en las etiquetas de Docker. Las etiquetas y las anulaciones por contenedor de los miembros siguen teniendo prioridad en los campos de la política de actualización.",
+    "newPolicy": "Nueva política",
+    "loading": "Cargando políticas de grupo…",
+    "empty": "Aún no hay grupos ni políticas. Los grupos provienen de dd.group, proyectos de Compose y stacks de Swarm.",
+    "memberCount": "{count} contenedor | {count} contenedores",
+    "noMembers": "Sin miembros actuales; se aplica a los miembros futuros",
+    "hosts": "Hosts: {hosts}",
+    "controller": "Controlador",
+    "noPolicy": "Sin política",
+    "whitespaceNotice": "El nombre tiene espacios al principio o al final, mostrados como ␣.",
+    "edit": "Editar",
+    "create": "Crear política",
+    "readOnly": "Solo los administradores pueden cambiar las políticas de grupo. Esta vista es de solo lectura.",
+    "summary": {
+      "maturityMode": "Madurez: {value}",
+      "minAge": "Antigüedad mín.: {days} d",
+      "skipTags": "Etiquetas omitidas: {count}",
+      "skipDigests": "Digests omitidos: {count}",
+      "updateMode": "Actualizaciones: {mode}",
+      "exclude": "Triggers excluidos: {count}"
+    },
+    "editor": {
+      "titleCreate": "Nueva política de grupo",
+      "titleEdit": "Política de grupo: {group}",
+      "groupName": "Nombre del grupo",
+      "groupNameHelp": "Se compara de forma exacta. Cuentan las mayúsculas y los espacios.",
+      "groupNameInvalid": "Introduce un nombre de grupo que no esté en blanco.",
+      "maturityMode": "Modo de madurez",
+      "maturityOptions": {
+        "inherit": "Heredar",
+        "all": "Todas las actualizaciones",
+        "mature": "Solo maduras"
+      },
+      "minAge": "Antigüedad mínima (días)",
+      "minAgeHelp": "Días enteros, de 1 a 365. Déjalo vacío para heredar.",
+      "minAgeInvalid": "Introduce un número entero de 1 a 365.",
+      "skipTags": "Etiquetas omitidas",
+      "skipDigests": "Digests omitidos",
+      "listHelp": "Una por línea o separadas por comas.",
+      "updateMode": "Actualizaciones automáticas",
+      "updateModeOptions": {
+        "inherit": "Heredar",
+        "manual": "Solo manual",
+        "notify": "Solo notificar"
+      },
+      "updateModeHelp": "Las reglas de grupo solo pueden restringir. Modo global actual: {mode}.",
+      "exclude": "Triggers de acción excluidos",
+      "excludeHelp": "ID o nombre del trigger, opcionalmente seguido de :threshold. Uno por línea o separados por comas.",
+      "noFields": "Define al menos un campo o elimina la política.",
+      "remove": "Eliminar política",
+      "conflict": "Otra persona cambió esta política. Recárgala y vuelve a aplicar tu cambio. Tu borrador se conserva hasta que recargues.",
+      "reload": "Recargar",
+      "notFound": "Esta política ya no existe. Recarga para ver la lista actual.",
+      "forbidden": "Se necesita acceso de administrador para cambiar las políticas de grupo."
+    },
+    "remove": {
+      "header": "Eliminar política de grupo",
+      "message": "¿Eliminar la política del grupo {group}? Los miembros vuelven a sus valores de etiqueta, de watcher y globales.",
+      "accept": "Eliminar"
+    },
+    "saved": "Política guardada. {members} contenedor actualizado. | Política guardada. {members} contenedores actualizados.",
+    "removed": "Política eliminada. {members} contenedor actualizado. | Política eliminada. {members} contenedores actualizados.",
+    "warningsTitle": "Advertencias",
+    "errors": {
+      "load": "No se pudieron cargar las políticas de grupo",
+      "requestFailed": "Falló la solicitud de política de grupo (HTTP {status})",
+      "unknown": "No se pudo guardar la política de grupo"
+    }
+  }
+}

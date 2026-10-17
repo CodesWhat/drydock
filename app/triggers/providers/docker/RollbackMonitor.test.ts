@@ -33,7 +33,6 @@ function createMonitor(overrides = {}) {
     resolveContainerBackupScope: vi.fn(() => ({
       containerName: 'web',
       containerIdentityKey: '::local::web',
-      includeLegacy: true,
     })),
     ...overrides,
   });
@@ -229,7 +228,6 @@ describe('RollbackMonitor', () => {
       backupScope: {
         containerName: 'web',
         containerIdentityKey: '::local::web',
-        includeLegacy: true,
       },
       window: 120_000,
       interval: 3_000,

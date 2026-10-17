@@ -125,7 +125,7 @@ vi.mock('./prometheus', () => ({
 }));
 
 const mockSetAuthReadyFn = vi.hoisted(() => vi.fn());
-const mockGetAllIdsForIndex = vi.hoisted(() => vi.fn(() => []));
+const mockIsAuthenticationReadyForIndex = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('./health', () => ({
   init: vi.fn(() => 'health-router'),
@@ -133,7 +133,7 @@ vi.mock('./health', () => ({
 }));
 
 vi.mock('./auth-strategies', () => ({
-  getAllIds: mockGetAllIdsForIndex,
+  isAuthenticationReady: mockIsAuthenticationReadyForIndex,
 }));
 
 vi.mock('./container/log-stream', () => ({
@@ -217,15 +217,22 @@ function mockActualApiRouterStatsLifecycle() {
 
   const routerModules = [
     './agent.js',
+    './api-keys.js',
     './app.js',
+    './approvals.js',
     './audit.js',
     './authentication.js',
     './backup.js',
+    './config.js',
     './container.js',
     './container-actions.js',
+    './container-dependencies.js',
     './debug.js',
+    './dependency-groups.js',
     './group.js',
+    './group-policy.js',
     './icons.js',
+    './images.js',
     './internal-self-update.js',
     './log.js',
     './portwing.js',
@@ -235,10 +242,12 @@ function mockActualApiRouterStatsLifecycle() {
     './preview.js',
     './preferences.js',
     './registry.js',
+    './self-update.js',
     './server.js',
     './settings.js',
     './sse.js',
     './store.js',
+    './totp-factor.js',
     './trigger.js',
     './update-operations.js',
     './watcher.js',
@@ -247,10 +256,17 @@ function mockActualApiRouterStatsLifecycle() {
   ];
 
   for (const modulePath of routerModules) {
+    // An object, not a string sentinel: api.ts mounts these through
+    // mountRouter, which records the mount path on the router it is handed.
     vi.doMock(modulePath, () => ({
-      init: vi.fn(() => `${modulePath}-router`),
+      init: vi.fn(() => ({ router: `${modulePath}-router` })),
     }));
   }
+  // Two routers in one module: the container-scoped routes and the top-level collection.
+  vi.doMock('./label-override.js', () => ({
+    init: vi.fn(() => ({ router: './label-override.js-router' })),
+    initCollection: vi.fn(() => ({ router: './label-override.js-collection-router' })),
+  }));
 
   return { mockCreateContainerStatsAggregator, mockStatsAggregator };
 }
@@ -1202,6 +1218,151 @@ describe('API Index', () => {
     expect(mockApp.use).not.toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).not.toHaveBeenCalledWith('/', 'ui-router');
+    // A plain function is mounted at '/' instead, so headless deployments get
+    // a JSON 404 for UI paths rather than falling through to Express's own
+    // bare HTML 404.
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+  });
+
+  test('real Express: UI paths return a JSON 404 explaining DD_SERVER_UI_ENABLED=false, while /api/v1 and /health are unaffected', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+    const sendUiDisabledResponse = rootFunctionMountCalls[0][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const healthRouter = realExpress.Router();
+    healthRouter.get('/', (_req, res) => {
+      res.json({ status: 'ok' });
+    });
+    const v1Router = realExpress.Router();
+    v1Router.get('/containers', (_req, res) => {
+      res.json({ data: [] });
+    });
+
+    const app = realExpress.default();
+    app.use('/health', healthRouter);
+    app.use('/api/v1', v1Router);
+    app.use('/', sendUiDisabledResponse);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const expectedBody = {
+      error:
+        'The web UI is disabled (DD_SERVER_UI_ENABLED=false); the API remains available under /api/v1',
+    };
+
+    try {
+      const rootRes = await fetch(`${baseUrl}/`);
+      expect(rootRes.status).toBe(404);
+      expect(rootRes.headers.get('content-type')).toMatch(/application\/json/);
+      expect(await rootRes.json()).toEqual(expectedBody);
+
+      const containersPageRes = await fetch(`${baseUrl}/containers`);
+      expect(containersPageRes.status).toBe(404);
+      expect(containersPageRes.headers.get('content-type')).toMatch(/application\/json/);
+      expect(await containersPageRes.json()).toEqual(expectedBody);
+
+      const v1Res = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(v1Res.status).toBe(200);
+      expect(await v1Res.json()).toEqual({ data: [] });
+
+      const healthRes = await fetch(`${baseUrl}/health`);
+      expect(healthRes.status).toBe(200);
+      expect(await healthRes.json()).toEqual({ status: 'ok' });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: sendUiDisabledResponse lets unmatched API, health, and metrics paths fall through instead of returning the UI-disabled body', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      ui: { enabled: false },
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const rootFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/' && typeof call[1] === 'function',
+    );
+    expect(rootFunctionMountCalls).toHaveLength(1);
+    const sendUiDisabledResponse = rootFunctionMountCalls[0][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    // No /health, /api/v1, or /metrics routers mounted ahead of it — mirrors
+    // an unmatched request falling through all of them, exactly like the
+    // real mount order in registerRoutes.
+    app.use('/', sendUiDisabledResponse);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      // Unmatched non-GET /api/v1 path (e.g. the /api/v1 router's GET-only
+      // catch-all never resolving DELETE /api/v1/app) — startsWith branch.
+      const deleteRes = await fetch(`${baseUrl}/api/v1/app`, { method: 'DELETE' });
+      expect(deleteRes.status).toBe(404);
+      expect(await deleteRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/api' — equal branch.
+      const apiRes = await fetch(`${baseUrl}/api`);
+      expect(apiRes.status).toBe(404);
+      expect(await apiRes.text()).not.toContain('The web UI is disabled');
+
+      // Path under '/health' — startsWith branch.
+      const healthRes = await fetch(`${baseUrl}/health/foo`);
+      expect(healthRes.status).toBe(404);
+      expect(await healthRes.text()).not.toContain('The web UI is disabled');
+
+      // Path exactly '/metrics' — equal branch.
+      const metricsRes = await fetch(`${baseUrl}/metrics`);
+      expect(metricsRes.status).toBe(404);
+      expect(await metricsRes.text()).not.toContain('The web UI is disabled');
+
+      // Sanity check: an actual UI path still gets the JSON UI-disabled body.
+      const uiRes = await fetch(`${baseUrl}/some-ui-path`);
+      expect(uiRes.status).toBe(404);
+      expect(uiRes.headers.get('content-type')).toMatch(/application\/json/);
+      const uiBody = (await uiRes.json()) as { error: string };
+      expect(uiBody.error).toContain('The web UI is disabled');
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 
   test('should not mount legacy error-response normalization middleware', async () => {
@@ -1406,7 +1567,7 @@ describe('API Index', () => {
     expect(mockApp.use).not.toHaveBeenCalledWith('json-middleware');
   });
 
-  test('setAuthReadyFn should be wired before auth.init so /health gates on strategy registration', async () => {
+  test('setAuthReadyFn should be wired before auth.init so /health gates on authenticator registration', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -1427,7 +1588,7 @@ describe('API Index', () => {
     expect(setAuthReadyFnCallOrder).toBeLessThan(authInitCallOrder);
   });
 
-  test('the readiness fn passed to setAuthReadyFn should reflect getAllIds liveness', async () => {
+  test('the readiness fn passed to setAuthReadyFn should reflect authenticator chain liveness', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -1436,19 +1597,19 @@ describe('API Index', () => {
     });
 
     vi.resetModules();
-    // Mock getAllIds to start empty
-    mockGetAllIdsForIndex.mockReturnValue([]);
+    // Chain holds nothing that can authenticate a caller yet
+    mockIsAuthenticationReadyForIndex.mockReturnValue(false);
 
     const indexRouter = await import('./index.js');
     const freshHealth = await import('./health.js');
     await indexRouter.init();
 
     const readinessFn = freshHealth.setAuthReadyFn.mock.calls[0][0];
-    // Empty strategies → not ready
+    // Empty chain → not ready
     expect(readinessFn()).toBe(false);
 
-    // Populated strategies → ready
-    mockGetAllIdsForIndex.mockReturnValue(['local']);
+    // A registered authenticator → ready
+    mockIsAuthenticationReadyForIndex.mockReturnValue(true);
     expect(readinessFn()).toBe(true);
   });
 
@@ -1918,6 +2079,41 @@ describe('API Index', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+  });
+
+  test('global error handler logs an unexplained error, and only repeats an already explained one at debug', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    await import('./index.js').then((m) => m.init());
+
+    const errorHandler = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].length === 4,
+    )?.[0];
+    mockLog.error.mockClear();
+    mockLog.debug.mockClear();
+
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+    errorHandler(
+      { status: 503, message: 'Local sign-in is refused', alreadyLogged: true },
+      {},
+      res,
+      vi.fn(),
+    );
+
+    expect(mockLog.error).not.toHaveBeenCalled();
+    expect(mockLog.debug).toHaveBeenCalledWith('Refused request: Local sign-in is refused');
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+
+    errorHandler({ status: 503, message: 'something nobody explained' }, {}, res, vi.fn());
+
+    expect(mockLog.error).toHaveBeenCalledWith('Unhandled error: something nobody explained');
   });
 
   test('importing the API router module does not start stats polling before router init', async () => {

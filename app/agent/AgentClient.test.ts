@@ -87,6 +87,12 @@ vi.mock('../registry/index.js', () => ({
 
 import * as event from '../event/index.js';
 import * as gateWatch from '../maturity/gate-watch.js';
+import type { Container } from '../model/container.js';
+import {
+  applyLabelOwnedState,
+  buildLabelOwnedState,
+  inferDeclaredSources,
+} from '../model/label-owned.js';
 import Hub from '../registries/providers/hub/Hub.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -411,10 +417,39 @@ describe('AgentClient', () => {
       });
       const container = { id: 'c1', name: 'test' };
       await client.processContainer(container);
-      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container);
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(container, {
+        labelOwned: 'declared',
+      });
       expect(existing.resultChanged).toHaveBeenCalled();
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: true }),
+      );
+    });
+
+    test('drops label-owned state an agent reports before it reaches the store (spec 7.5)', async () => {
+      const forged = {
+        v: 1,
+        declared: { displayName: 'forged' },
+        declaredSources: {},
+        sources: {},
+      };
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c9' });
+      await client.processContainer({
+        id: 'c9',
+        name: 'test',
+        labelOwned: forged,
+        dependsOnSource: 'override',
+      });
+      const inserted = storeContainer.insertContainer.mock.calls.at(-1)?.[0];
+      expect(inserted).not.toHaveProperty('labelOwned');
+      expect(inserted.dependsOnSource).toBeUndefined();
+
+      storeContainer.getContainer.mockReturnValue({ id: 'c9', resultChanged: vi.fn() });
+      storeContainer.updateContainer.mockReturnValue({ id: 'c9' });
+      await client.processContainer({ id: 'c9', name: 'test', labelOwned: forged });
+      expect(storeContainer.updateContainer.mock.calls.at(-1)?.[0]).not.toHaveProperty(
+        'labelOwned',
       );
     });
 
@@ -544,6 +579,7 @@ describe('AgentClient', () => {
           result: undefined,
           updateAvailable: false,
         }),
+        { labelOwned: 'declared' },
       );
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: false }),
@@ -592,6 +628,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: false,
         }),
+        { labelOwned: 'declared' },
       );
       expect(storeContainer.updateContainer).toHaveBeenNthCalledWith(
         2,
@@ -601,6 +638,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -634,6 +672,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
       expect(event.emitContainerReport).toHaveBeenCalledWith(
         expect.objectContaining({ changed: true }),
@@ -977,6 +1016,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1', name: 'owned-updated', agent: 'test-agent' }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -1056,6 +1096,7 @@ describe('AgentClient', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1', watcher: 'new-watcher-name', agent: 'test-agent' }),
+        { labelOwned: 'declared' },
       );
       expect(mockLogChild.warn).not.toHaveBeenCalledWith(
         expect.stringContaining('watcher does not match'),
@@ -1114,6 +1155,7 @@ describe('AgentClient', () => {
           updateAvailable: true,
           updateKind: existing.updateKind,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -1252,6 +1294,52 @@ describe('AgentClient', () => {
 
       expect(client.isRegisteringComponents).toBe(false);
       expect(client.isConnected).toBe(false);
+    });
+
+    test.each([
+      ['a bare object', {}],
+      ['an object with a nested containers array', { containers: [] }],
+      ['a string', 'oops'],
+      ['a number', 42],
+    ])(
+      'rejects a non-array /api/containers body (%s) before deregistering triggers (DR-25)',
+      async (_label, body) => {
+        axios.get.mockResolvedValueOnce({ data: body });
+
+        await expect(client.handshake()).rejects.toThrow(/Handshake failed for agent test-agent/);
+
+        expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+        expect(registry.registerComponent).not.toHaveBeenCalled();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          expect.stringContaining('non-array /api/containers body'),
+        );
+        expect(client.isConnected).toBe(false);
+      },
+    );
+
+    test('a null /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get.mockResolvedValueOnce({ data: null });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await expect(client.handshake()).rejects.toThrow();
+
+      // `null` fails Array.isArray the same as any other non-array body; the
+      // "control" here is that it is rejected the same way and never reaches
+      // deregisterAgentComponents, not that it is somehow accepted.
+      expect(registry.deregisterAgentComponents).not.toHaveBeenCalled();
+    });
+
+    test('an empty-array /api/containers body handshakes normally (DR-25 control)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
+      expect(client.isConnected).toBe(true);
     });
 
     test('should emit agent-connected when transitioning to connected state', async () => {
@@ -2405,6 +2493,26 @@ describe('AgentClient', () => {
       await Promise.resolve();
     });
 
+    test.each(['added', 'updated', 'removed'])(
+      'ignores additive inventory %s events without report or enrichment handling',
+      async (kind) => {
+        const process = vi.spyOn(client, 'processContainer');
+        const refresh = vi.spyOn(client as never, 'refreshControllerDockerTransportContainer');
+        const remove = vi.spyOn(storeContainer, 'deleteContainer');
+        await client.handleEvent(`dd:inventory-${kind}`, {
+          context: {
+            origin: 'inventory',
+            operationId: 'inventory-operation',
+            source: { type: 'docker', name: 'local' },
+          },
+          container: { id: 'c1', name: 'test', watcher: 'local' },
+        });
+        expect(process).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+        expect(remove).not.toHaveBeenCalled();
+      },
+    );
+
     test('should process container on dd:container-added', async () => {
       const spy = vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
       const container = { id: 'c1', name: 'test' };
@@ -3364,6 +3472,7 @@ describe('AgentClient', () => {
         operationId: 'remote-op-active',
         containerName: 'local_nginx',
         containerId: 'c1',
+        triggerName: 'test-agent.docker.update',
         status: 'in-progress',
         phase: 'pulling',
       });
@@ -3374,6 +3483,7 @@ describe('AgentClient', () => {
           kind: 'container-update',
           containerName: 'local_nginx',
           containerId: 'c1',
+          triggerName: 'test-agent.docker.update',
           status: 'in-progress',
           phase: 'pulling',
         }),
@@ -4573,6 +4683,7 @@ describe('AgentClient', () => {
           agent: 'test-agent',
           updateAvailable: true,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -4617,6 +4728,82 @@ describe('AgentClient', () => {
       await client.runRemoteTriggerBatch(containers, 'docker', 'update');
       const [, postedBody] = axios.post.mock.calls[0];
       expect(postedBody).toBe(containers);
+    });
+
+    describe('overrides never flow to agents', () => {
+      function overridden(id: string): Container {
+        const base = {
+          id,
+          name: `app-${id}`,
+          displayName: 'Declared',
+          displayIcon: 'mdi:docker',
+          status: 'running',
+          watcher: 'local',
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          actionTriggerInclude: 'docker.declared',
+        } as unknown as Container;
+        const declared = {
+          displayName: 'Declared',
+          dependsOn: ['db'],
+          actionTriggerInclude: 'docker.declared',
+        };
+        const overrides = {
+          displayName: { value: 'Override', updatedAt: 'a', updatedBy: 'u' },
+          dependsOn: { value: ['api'], updatedAt: 'a', updatedBy: 'u' },
+          actionTriggerInclude: { value: ['docker.override'], updatedAt: 'a', updatedBy: 'u' },
+        };
+        const state = buildLabelOwnedState(
+          declared,
+          inferDeclaredSources(declared, base, 'compose'),
+          overrides,
+        );
+        return applyLabelOwnedState({ ...base }, state, overrides);
+      }
+
+      function expectDeclared(payload: Record<string, unknown>) {
+        expect(payload).not.toHaveProperty('labelOwned');
+        expect(payload).toMatchObject({
+          displayName: 'Declared',
+          dependsOn: ['db'],
+          dependsOnSource: 'compose',
+          actionTriggerInclude: 'docker.declared',
+        });
+        expect(JSON.stringify(payload)).not.toContain('Override');
+        expect(JSON.stringify(payload)).not.toContain('docker.override');
+      }
+
+      test('a non-update trigger payload carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        const container = overridden('c1');
+        expect(container.displayName).toBe('Override');
+        await client.runRemoteTrigger(container, 'command', 'run');
+        expectDeclared(axios.post.mock.calls[0][1]);
+      });
+
+      test('a non-update batch carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1'), overridden('c2')], 'command', 'run');
+        const [, postedBody] = axios.post.mock.calls[0];
+        expect(postedBody).toHaveLength(2);
+        postedBody.forEach(expectDeclared);
+      });
+
+      test('an update batch with operation ids carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1')], 'docker', 'update', {
+          operationIds: { c1: 'op-1' },
+        });
+        const [, postedBody] = axios.post.mock.calls[0];
+        expectDeclared(postedBody[0]);
+        expect(postedBody[0]).toHaveProperty('operationId', 'op-1');
+      });
+
+      test('an update batch with no operation ids carries declared values and no state', async () => {
+        axios.post.mockResolvedValue({ data: {} });
+        await client.runRemoteTriggerBatch([overridden('c1')], 'docker', 'update');
+        expectDeclared(axios.post.mock.calls[0][1][0]);
+      });
     });
 
     test('should not embed operationIds for notification batch triggers', async () => {
@@ -4807,6 +4994,7 @@ describe('AgentClient', () => {
             maturityMinAgeDays: 'override',
           },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: controllerOverrides,
@@ -4862,6 +5050,7 @@ describe('AgentClient', () => {
             skipDigests: 'override',
           },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: controllerOverrides,
@@ -4910,6 +5099,7 @@ describe('AgentClient', () => {
           updatePolicyOverrides: {},
           updatePolicySources: { skipTags: 'env' },
         }),
+        { labelOwned: 'declared' },
       );
       expect(result.container).toMatchObject({
         updatePolicy: { skipTags: ['stable'] },
@@ -6383,6 +6573,36 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('qualifyAgentTriggerName', () => {
+    test('qualifies an unscoped update trigger id with the agent name', () => {
+      expect((client as any).qualifyAgentTriggerName('docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('leaves an already-qualified update trigger id unchanged', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.docker.update')).toBe(
+        'test-agent.docker.update',
+      );
+    });
+
+    test('qualifies a two-part trigger id without treating its first part as an agent', () => {
+      expect((client as any).qualifyAgentTriggerName('portainer.docker')).toBe(
+        'test-agent.portainer.docker',
+      );
+    });
+
+    test('preserves an unknown trigger type when it is qualified for this agent', () => {
+      expect((client as any).qualifyAgentTriggerName('test-agent.future.update')).toBe(
+        'test-agent.future.update',
+      );
+    });
+
+    test('rejects a trigger id qualified for a different agent', () => {
+      expect((client as any).qualifyAgentTriggerName('other-agent.docker.update')).toBeUndefined();
+    });
+  });
+
   describe('getStoredContainerForAgentOperation', () => {
     test('finds one agent-owned container by name when payload ids are absent', () => {
       const row = { id: 'container-1', name: 'nginx', agent: 'test-agent' };
@@ -6475,6 +6695,32 @@ describe('AgentClient', () => {
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
     });
 
+    test('preserves controller trigger provenance when updating an existing active row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'uuid-controller-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
     test('marks the controller-issued row terminal when agent echoes back the controller operationId', () => {
       const controllerRow = {
         id: 'uuid-controller-1',
@@ -6495,6 +6741,60 @@ describe('AgentClient', () => {
         'uuid-controller-1',
         expect.objectContaining({ status: 'succeeded' }),
       );
+    });
+
+    test('preserves controller trigger provenance when marking a terminal row', () => {
+      const controllerRow = {
+        id: 'uuid-controller-terminal-trigger',
+        status: 'in-progress',
+        containerName: 'tautulli',
+        triggerName: 'test-agent.docker.update',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-terminal-trigger') return controllerRow as any;
+        return undefined;
+      });
+
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-terminal-trigger',
+        containerName: 'tautulli',
+        triggerName: 'docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-terminal-trigger',
+        expect.objectContaining({ triggerName: 'test-agent.docker.update' }),
+      );
+    });
+
+    test('ignores an active event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-active',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    test('ignores a terminal event qualified for a different agent', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-wrong-agent-terminal',
+        containerName: 'tautulli',
+        triggerName: 'other-agent.docker.update',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.updateOperation).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
     });
 
     test('falls back to agent-scoped id and inserts new row when no controller row exists', () => {
@@ -9258,6 +9558,286 @@ describe('AgentClient', () => {
           updateMaturityLevel: existing.updateMaturityLevel,
           updateEligibility: existing.updateEligibility,
         }),
+        { labelOwned: 'declared' },
+      );
+    });
+
+    test('marker-mode inventory keeps dd.watch.digest alive across a Portwing runtime-state report (DR-38)', async () => {
+      // digest.watch is derived from the dd.watch.digest label by the
+      // controller's own bridged Docker watcher, never by Portwing itself —
+      // Portwing hardcodes image.digest.watch to false on every report since
+      // it doesn't do digest watching. Without restoring the previously
+      // derived value here, a later "live runtime state" report from
+      // Portwing silently turns digest watching back off.
+      await registerAnonymousHub();
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: true, repo: 'sha256:current' },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            digest: expect.objectContaining({ watch: true }),
+          }),
+        }),
+        { labelOwned: 'declared' },
+      );
+    });
+
+    test('marker-mode inventory skips the digest.watch restore when the incoming report has no image', async () => {
+      // A malformed dd:container_sync frame (EdgeAgentAdapter casts
+      // `data.containers` straight to `Container[]` with no schema
+      // validation before this reaches preserveControllerDockerEnrichment)
+      // can omit `image` entirely. The restore must not throw trying to
+      // spread a nonexistent `merged.image`, and it must not fabricate one.
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: true, repo: 'sha256:current' },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+      const [savedContainer] = vi.mocked(storeContainer.updateContainer).mock.calls[0];
+      expect(savedContainer.id).toBe('c1');
+      expect(savedContainer.image).toBeUndefined();
+    });
+
+    test('marker-mode inventory leaves digest.watch false for a container that never carried the label', async () => {
+      await registerAnonymousHub();
+      const existing = {
+        id: 'c1',
+        name: 'web',
+        watcher: 'docker',
+        agent: 'test-agent',
+        status: 'running',
+        image: {
+          id: 'sha256:current',
+          registry: { name: 'unknown', url: 'docker.io' },
+          name: 'busybox',
+          tag: { value: 'latest', semver: false },
+          digest: { watch: false },
+          architecture: 'arm64',
+          os: 'linux',
+        },
+        resultChanged: vi.fn().mockReturnValue(false),
+      };
+      vi.mocked(storeContainer.getContainer).mockReturnValue(existing as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementation((value) => value);
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          image: expect.objectContaining({
+            digest: expect.objectContaining({ watch: false }),
+          }),
+        }),
+        { labelOwned: 'declared' },
+      );
+    });
+
+    test('pins dd.watch.digest=true across two Portwing reports and keeps the container eligible for digest comparison (DR-38 regression guard)', async () => {
+      // Independent confirmation of DR-38, driven end to end through two
+      // real handleContainerSync calls rather than a pre-seeded `existing`
+      // mock: report 1 is the first-ever sighting (dd.watch.digest=true,
+      // watcher-side digest.repo already resolved); report 2 is Portwing's
+      // next "live runtime state" push, which hardcodes digest.watch: false
+      // on the wire but still carries the same digest.repo. The gate
+      // `image-comparison.ts` reads before comparing a pinned digest against
+      // the registry is `container.image.digest.watch && container.image.digest.repo`
+      // (image-comparison.ts:376) — so this asserts both fields survive the
+      // second report, not just `watch` in isolation.
+      await registerAnonymousHub();
+      await client.handleComponentSync(
+        [
+          {
+            type: 'docker',
+            name: 'docker',
+            configuration: {
+              transport: 'docker-api',
+              execution: 'controller',
+              events: 'portwing',
+            },
+          },
+        ],
+        [],
+      );
+
+      // buildContainerReport() and preserveControllerDockerEnrichment() each
+      // call storeContainer.getContainer() once per report, so the store
+      // stub must persist across both calls within a report rather than
+      // being consumed after the first (mockReturnValueOnce would starve
+      // the second call and silently fall through the insert path).
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: true, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const firstStored = vi.mocked(storeContainer.insertContainer).mock.calls[0][0];
+      expect(firstStored.image?.digest).toEqual(
+        expect.objectContaining({ watch: true, repo: 'sha256:current' }),
+      );
+
+      vi.mocked(storeContainer.getContainer).mockReturnValue(firstStored as never);
+      vi.mocked(storeContainer.updateContainer).mockImplementationOnce((value) => value);
+
+      await client.handleContainerSync([
+        {
+          id: 'c1',
+          name: 'web',
+          watcher: 'docker',
+          status: 'running',
+          labels: { 'dd.watch.digest': 'true' },
+          image: {
+            id: 'sha256:current',
+            registry: { name: 'unknown', url: 'docker.io' },
+            name: 'busybox',
+            tag: { value: 'latest', semver: false },
+            digest: { watch: false, repo: 'sha256:current' },
+            architecture: 'arm64',
+            os: 'linux',
+          },
+        } as never,
+      ]);
+
+      const secondStored = vi.mocked(storeContainer.updateContainer).mock.calls[0][0];
+      expect(secondStored.image?.digest.watch).toBe(true);
+      expect(secondStored.image?.digest.repo).toBe('sha256:current');
+      expect(Boolean(secondStored.image?.digest.watch && secondStored.image?.digest.repo)).toBe(
+        true,
       );
     });
 
@@ -9559,6 +10139,7 @@ describe('AgentClient', () => {
           updateKind: existing.updateKind,
           updateDetectedAt: existing.updateDetectedAt,
         }),
+        { labelOwned: 'declared' },
       );
     });
 
@@ -9712,6 +10293,7 @@ describe('AgentClient', () => {
           updateAvailable: false,
           updateKind: { kind: 'unknown' },
         }),
+        { labelOwned: 'declared' },
       );
       expect(vi.mocked(storeContainer.updateContainer).mock.calls[0][0].result).toBeUndefined();
     });
@@ -9969,6 +10551,22 @@ describe('AgentClient', () => {
       await expect(
         client.requestDockerApi('POST', '/v1.44/containers/create', {}, Buffer.from('{invalid')),
       ).rejects.toThrow('must be valid JSON');
+    });
+
+    test('capable edge agents receive the original binary and JSON bytes', async () => {
+      const sendRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      const sendStreamRequest = vi.fn().mockResolvedValue({ statusCode: 200 });
+      client.edgeAdapter = {
+        supportsRequestBodyStream: true,
+        sendRequest,
+        sendStreamRequest,
+      } as never;
+      const binary = Buffer.from([0, 255, 128]);
+      const json = Buffer.from(' { "n": 1234567890123456789 } ');
+      await client.requestDockerApi('POST', '/build', {}, binary);
+      await client.requestDockerApi('POST', '/containers/create', {}, json);
+      expect(sendStreamRequest).toHaveBeenCalledWith('POST', '/build', {}, binary);
+      expect(sendRequest).toHaveBeenCalledWith('POST', '/containers/create', {}, json);
     });
 
     test('edge mode normalizes response body and header variants', async () => {

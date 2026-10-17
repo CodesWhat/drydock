@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Tweestapsverificatie",
+    "description": "Vraag bij elke aanmelding om een code uit je authenticator-app, naast je wachtwoord.",
+    "loading": "Status van tweestapsverificatie laden",
+    "retry": "Opnieuw proberen",
+    "status": {
+      "off": "Uit",
+      "on": "Aan",
+      "onSince": "Aan sinds {date}",
+      "recoveryRemaining": "{count} herstelcode over | {count} herstelcodes over",
+      "recoveryNone": "Geen herstelcodes meer over. Maak een nieuwe set aan voordat je de toegang tot je authenticator-app kwijtraakt.",
+      "recoveryLow": "Je herstelcodes raken op. Maak een nieuwe set aan.",
+      "pending": "Installatie gestart en wacht op een code. Verloopt om {time}."
+    },
+    "unavailable": {
+      "notLocal": "Tweestapsverificatie is alleen beschikbaar voor lokale accounts die met een wachtwoord zijn aangemeld. Is dat bij jou zo, meld je dan af en weer aan.",
+      "httpsRequired": "Voor het instellen van tweestapsverificatie is HTTPS nodig. Open Drydock via HTTPS, of vraag een beheerder DD_AUTH_TOTP_ALLOWHTTP=true in te stellen als het netwerk vertrouwd is.",
+      "noKeyRing": "Tweestapsverificatie instellen is op deze server niet beschikbaar. Een beheerder moet eerst een coderingssleutelring configureren.",
+      "recoverySession": "Je bent aangemeld met een herstelcode, dus deze actie is niet toegestaan. Meld je aan met een code uit je authenticator-app."
+    },
+    "actions": {
+      "enable": "Inschakelen",
+      "replace": "Authenticator vervangen",
+      "regenerate": "Nieuwe herstelcodes",
+      "remove": "Uitschakelen",
+      "cancelSetup": "Installatie annuleren",
+      "cancel": "Annuleren"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Bevestig dat jij het bent",
+        "replace": "Bevestig dat jij het bent om je authenticator te vervangen",
+        "regenerate": "Bevestig dat jij het bent om nieuwe herstelcodes te krijgen",
+        "remove": "Bevestig dat jij het bent om tweestapsverificatie uit te schakelen"
+      },
+      "hint": "Voer je wachtwoord in. Na deze stap wordt niets bewaard.",
+      "hintWithCode": "Voer je wachtwoord en een huidige code in. Na deze stap wordt niets bewaard.",
+      "passwordLabel": "Wachtwoord",
+      "passwordPlaceholder": "Voer je wachtwoord in",
+      "codeLabel": "Verificatiecode",
+      "codePlaceholder": "6-cijferige code",
+      "recoveryLabel": "Herstelcode",
+      "recoveryPlaceholder": "Voer een herstelcode in",
+      "useRecovery": "Een herstelcode gebruiken",
+      "useCode": "Een authenticatiecode gebruiken",
+      "submit": {
+        "enable": "Doorgaan",
+        "replace": "Doorgaan",
+        "regenerate": "Nieuwe codes aanmaken",
+        "remove": "Tweestapsverificatie uitschakelen",
+        "busy": "Controleren..."
+      }
+    },
+    "scan": {
+      "heading": "Scan met je authenticator-app",
+      "instructions": "Open je authenticator-app, voeg een account toe en scan deze code. Voer daarna de 6-cijferige code in die de app toont.",
+      "replaceNote": "Je huidige authenticator blijft werken totdat je de nieuwe bevestigt.",
+      "qrLabel": "QR-code voor het instellen van verificatie in twee stappen",
+      "qrFailed": "De QR-code kon niet worden getekend. Voer in plaats daarvan de installatiesleutel in.",
+      "secretLabel": "Scannen lukt niet? Voer deze installatiesleutel in",
+      "copySecret": "Sleutel kopiëren",
+      "copied": "Gekopieerd",
+      "expiresAt": "Deze installatie verloopt om {time}.",
+      "codeLabel": "Verificatiecode",
+      "codeHint": "Voer de 6-cijferige code uit je authenticator-app in.",
+      "codePlaceholder": "6-cijferige code",
+      "confirm": "Bevestigen en inschakelen",
+      "confirming": "Bevestigen..."
+    },
+    "codes": {
+      "heading": "Bewaar je herstelcodes",
+      "description": "Elke code werkt één keer als je je authenticator-app kwijtraakt. Dit is het enige moment dat ze worden getoond.",
+      "copy": "Codes kopiëren",
+      "copied": "Gekopieerd",
+      "download": "Downloaden",
+      "fileHeading": "Drydock-herstelcodes",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Ik heb deze codes bewaard",
+      "done": "Klaar",
+      "downloadFailed": "Je browser downloadde het bestand niet. Kopieer de codes in plaats daarvan."
+    },
+    "remove": {
+      "header": "Tweestapsverificatie uitschakelen?",
+      "message": "Aanmelden vraagt daarna weer alleen om je wachtwoord, en je andere sessies worden beëindigd.",
+      "accept": "Uitschakelen"
+    },
+    "notice": {
+      "enabled": "Tweestapsverificatie is ingeschakeld.",
+      "replaced": "Je nieuwe authenticator is actief.",
+      "regenerated": "Je nieuwe herstelcodes zijn actief. De oude werken niet meer.",
+      "removed": "Tweestapsverificatie is uitgeschakeld."
+    },
+    "errors": {
+      "load": "De status van tweestapsverificatie kon niet worden geladen.",
+      "network": "De server is niet bereikbaar. Probeer het opnieuw.",
+      "generic": "Er ging iets mis. Probeer het opnieuw.",
+      "sessionEnded": "Je sessie is beëindigd. Meld je opnieuw aan.",
+      "reauthFailed": "Dat wachtwoord of die code klopt niet. Controleer ze en probeer het opnieuw.",
+      "locked": "Te veel pogingen. Probeer het over {time} opnieuw.",
+      "lockedLater": "Te veel pogingen. Probeer het later opnieuw.",
+      "busy": "Er loopt nog een andere controle. Probeer het zo opnieuw.",
+      "invalidRequest": "Voer je wachtwoord en een geldige code in.",
+      "codeFormat": "Voer de 6 cijfers uit je authenticator-app in.",
+      "codeWrong": "Die code werkte niet. Controleer hem en probeer het opnieuw.",
+      "enrollmentExpired": "Deze installatie is verlopen. Begin opnieuw.",
+      "enrollmentGone": "Deze installatie is gesloten na te veel foute codes. Begin opnieuw.",
+      "stateChanged": "De instellingen voor tweestapsverificatie zijn elders gewijzigd. Bekijk ze en probeer het opnieuw.",
+      "notActive": "Tweestapsverificatie is niet ingeschakeld."
+    }
+  }
+}

@@ -15,7 +15,7 @@
     "copyableTag": {
       "copied": "Kopiert!",
       "clickToCopy": "Zum Kopieren klicken",
-      "failed": "Copy failed"
+      "failed": "Kopieren fehlgeschlagen"
     },
     "dataFilterBar": {
       "filters": "Filter",
@@ -23,8 +23,8 @@
       "viewMode": "Ansichtsmodus",
       "viewModeLabel": "{label}-Ansicht",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards"
+        "table": "Tabelle",
+        "cards": "Karten"
       }
     },
     "dataTable": {

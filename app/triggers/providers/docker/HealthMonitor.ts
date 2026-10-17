@@ -1,7 +1,7 @@
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
-import { buildRollbackImageReference, type ContainerBackupScope } from '../../../util/backup.js';
+import { type ContainerBackupScope, resolveRollbackImageReference } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   cleanupCreatedContainerCandidate,
@@ -46,6 +46,21 @@ interface TriggerInstanceLike {
     containerRef: ContainerRef,
     log: LoggerLike,
   ): Promise<void>;
+  /**
+   * Same post-pull identity binder the update path and the manual rollback
+   * API (`app/util/backup.ts`) use, exposed here so auto-rollback can resolve
+   * its reference through `resolveRollbackImageReference` (DR-59). A trigger
+   * instance that doesn't implement it (test doubles) falls back to the
+   * mutable tag inside that helper.
+   */
+  bindPulledImageIdentity?: (
+    dockerApi: unknown,
+    imageReference: string,
+    container: unknown,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: { preferredDigest: string | null },
+  ) => Promise<{ imageIdentity?: string; skipSecurityGate?: boolean }>;
+  getRollbackIdentityBindingPolicy?: (container: unknown) => 'required' | 'optional' | 'disabled';
 }
 
 interface HealthMonitorOptions {
@@ -67,21 +82,16 @@ interface HealthMonitorOptions {
  * because a rollback is a trigger lifecycle call like any other: the compose
  * action reads the registry name, the watcher and the compose labels off it to
  * find the service to rewrite, and an `{ id, name }` stand-in threw a
- * TypeError before it got as far as the compose file (DR-101).
- *
- * `watcher` and `image` are required, and there is no index signature, so the
- * stand-in that caused DR-101 fails to compile rather than only failing the
- * test that reproduces it. They are what `Dockercompose.recreateContainer`
- * reads off the container before it resolves anything: the registry to look
- * up and the tag it falls back to for the running image. `labels` stays
- * optional because the compose service lookup one level down reports a
- * missing compose label as a compose error rather than a TypeError.
+ * TypeError before it got as far as the compose file (DR-101). The fields
+ * named here are the ones this module's own consumers read; the rest ride
+ * along under the index signature.
  */
 interface MonitoredContainer {
   watcher: string;
   agent?: string;
-  labels?: Record<string, string>;
+  labels: Record<string, string>;
   image: { registry: { name: string }; tag: { value: string } };
+  [field: string]: unknown;
 }
 
 interface ContainerRef extends MonitoredContainer {
@@ -203,7 +213,24 @@ async function performRollback(context: RollbackContext): Promise<void> {
     }
 
     const latestBackup = backups[0];
-    const backupImage = buildRollbackImageReference(latestBackup, backupImageDigest);
+    // A record written before backup-time digest capture carries no
+    // imageDigest of its own; the pre-update running image's digest (captured
+    // before the health-checked update replaced it) is a trustworthy stand-in
+    // because it is the exact image that was backed up. Route through the same
+    // resolveRollbackImageReference the manual rollback API uses (DR-43) so
+    // this fallback and the required-policy refusal it enforces both apply
+    // here (DR-59), instead of pinning to whatever it finds unconditionally.
+    const backupForResolution =
+      backupImageDigest && !latestBackup.imageDigest
+        ? { ...latestBackup, imageDigest: backupImageDigest }
+        : latestBackup;
+    const backupImage = await resolveRollbackImageReference(
+      triggerInstance,
+      dockerApi,
+      containerRef,
+      backupForResolution,
+      log,
+    );
 
     log.info(`Auto-rollback: resolving backup image ${backupImage}`);
     // Actually pull it, and pull it first. Neither recreate path fetches the

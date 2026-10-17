@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "قائمة الوكلاء غير متاحة. قد لا يظهر بعض الوكلاء الذين تم تكوينهم.",
+      "title": "حالة الأسطول",
+      "description": "حالة الأسطول بالكامل. يكتشف تحديث الجرد الحاويات دون فحص السجلات أو تنفيذ التحديثات.",
+      "reload": "إعادة تحميل الحالة",
+      "refresh": "تحديث الجرد",
+      "configured": "تم الإعداد",
+      "connected": "متصل",
+      "disconnected": "غير متصل",
+      "unavailable": "غير متاح",
+      "agentUnavailable": "حالة الوكلاء غير متاحة. قد تكون البيانات المحفوظة قديمة.",
+      "watcherUnavailable": "بيانات المراقبين الوصفية غير متاحة. قد تكون البيانات المحفوظة قديمة.",
+      "total": "الحاويات: {count}",
+      "lastKnown": "آخر بيانات معروفة",
+      "lastSeen": "آخر ظهور: {value}",
+      "unsupported": "تتطلب جميع الأهداف مراقبي Docker يدعمون تحديث الجرد.",
+      "complete": "الجرد مكتمل",
+      "partial": "الجرد غير مكتمل",
+      "reloadFailed": "تعذرت إعادة تحميل قائمة الحاويات. تبقى نتائج الجرد ظاهرة."
+    },
+    "fleetBulk": {
+      "label": "إجراءات الأسطول المصفّى",
+      "updateAll": "تحديث الكل ({count})",
+      "snoozePatch": "تأجيل كل مرشحي التصحيح",
+      "patchCount": "{count} مرشح تصحيح",
+      "duration": "مدة التأجيل",
+      "days": "{count} أيام",
+      "untilDate": "حتى تاريخ",
+      "date": "التأجيل حتى نهاية التاريخ",
+      "snoozeConfirm": "تأجيل {count} مرشح تصحيح؟",
+      "snoozeScope": "لهذه الحاويات مرشحو تصحيح حاليًا. أجّل جميع تحديثاتها لمدة {duration}، وليس التصحيحات فقط. ينطبق ذلك على القائمة الحالية المصفّاة، لا على خانات الاختيار. يشمل التاريخ نهاية اليوم بالتوقيت المحلي.",
+      "snoozeResult": "تم التأجيل: {succeeded}. فشل: {failed}.",
+      "refreshFailed": "حُفظت السياسات لكن تعذّر تحديث القائمة. أعد تحميلها.",
+      "disabled": "إجراءات الحاويات معطّلة. لم تتغير السياسات.",
+      "invalid": "مدة غير صالحة. لم تتغير السياسات.",
+      "busy": "هناك إجراء آخر قيد التشغيل. لم تتغير سياسات إضافية."
+    },
+    "fleetDimensions": {
+      "groupBy": "تجميع حسب",
+      "none": "بدون تجميع",
+      "agent": "الوكيل",
+      "registry": "السجل",
+      "status": "الحالة",
+      "tagType": "نوع الوسم",
+      "label": "التسمية",
+      "groupLabel": "تجميع حسب مفتاح التسمية",
+      "allAgents": "كل الوكلاء",
+      "allRegistries": "كل عناوين السجلات",
+      "all": "كل أنواع الوسوم",
+      "specific": "وسم محدد",
+      "floating": "وسم متغير",
+      "digest": "بصمة مثبتة",
+      "semver": "وسم إصدار",
+      "tag": "وسم غير إصداري",
+      "unknown": "غير معروف",
+      "local": "المراقبون المحليون",
+      "running": "قيد التشغيل",
+      "stopped": "متوقف",
+      "labelKey": "مفتاح التسمية",
+      "labelMatch": "مطابقة التسمية",
+      "labelValue": "قيمة التسمية",
+      "exists": "التسمية موجودة",
+      "equals": "يساوي",
+      "missing": "التسمية مفقودة",
+      "missingLabel": "بلا تسمية",
+      "emptyValue": "قيمة فارغة"
+    },
     "fullPageActions": {
       "updateWorkflow": "سير عمل التحديث",
       "actionsGroup": "الإجراءات",
@@ -28,8 +95,9 @@
       "clearSkips": "مسح التخطيات",
       "clearPolicy": "مسح السياسة",
       "overridden": "تم التجاوز",
+      "groupSource": "المجموعة: {group}",
       "revert": "تراجع عن التجاوز",
-      "revertAll": "الرجوع إلى الإعدادات التصريحية",
+      "revertAll": "الرجوع إلى السياسة الموروثة",
       "snoozedUntil": "مؤجل حتى:",
       "maturityMode": "وضع النضج:",
       "matureOnlyMinimum": "الناضج فقط ({days} يوم كحد أدنى)",
@@ -58,6 +126,12 @@
       "runningButton": "جارٍ التشغيل...",
       "runButton": "تشغيل",
       "noTriggersAssociated": "لا توجد مشغّلات مرتبطة بهذه الحاوية",
+      "unavailableTriggers": "مشغّلات غير متاحة",
+      "unavailableTriggerReason": {
+        "agentOwnership": "تنتمي إلى وكيل مختلف عن هذه الحاوية.",
+        "structuralIncompatibility": "مشروع أو خدمة أو ملف Compose لا يطابق هذه الحاوية.",
+        "labelScope": "مستبعدة بواسطة تصنيفات dd.action/dd.notification للتضمين أو الاستبعاد الخاصة بهذه الحاوية."
+      },
       "backupsRollback": "النسخ الاحتياطية والتراجع",
       "rollingBack": "جارٍ التراجع...",
       "rollbackLatest": "التراجع إلى الأحدث",
@@ -71,7 +145,13 @@
       "versionLabel": "الإصدار:",
       "rollbackReasonLabel": "سبب التراجع:",
       "lastErrorLabel": "آخر خطأ:",
-      "noUpdateOperations": "لم تُسجَّل أي عملية تحديث بعد"
+      "noUpdateOperations": "لم تُسجَّل أي عملية تحديث بعد",
+      "skipReleases": "عدد الإصدارات الأولى المراد تخطيها",
+      "skipReleasesHint": "تخطي أول N إصدارات مستقرة متميزة في كل عائلة: إصدار رئيسي في SemVer أو شهر في CalVer. القيمة 0 تعطل هذا الشرط.",
+      "releaseFallbackDays": "استثناء حسب العمر (أيام)",
+      "releaseFallbackHint": "السماح بعد هذا العدد من الأيام إذا غابت بيانات الإصدارات أو لم يتحقق العدد المطلوب. القيمة 0 تعطل الاستثناء. يظل الحد الأدنى للعمر ساريًا.",
+      "releasePolicySummary": "تخطي أول {count} إصدارات في كل عائلة.",
+      "releaseFallbackSummary": "استثناء شرط عدد الإصدارات بعد {days} أيام."
     },
     "fullPageDetail": {
       "statusUpdating": "جارٍ التحديث",
@@ -111,7 +191,7 @@
       "volumes": "وحدات التخزين",
       "composeFiles": "ملفات Compose",
       "version": "الإصدار",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "إصدار البرنامج",
       "currentLabel": "الحالي:",
       "latestLabel": "الأحدث:",
       "digestLabel": "الملخص:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "لا توجد منافذ مكشوفة",
       "notConfigured": "غير مُعدّ",
       "noVolumesMounted": "لم تُركَّب وحدات تخزين",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "مدة التشغيل",
+      "uptimeAriaLabel": "مدة تشغيل الحاوية"
     },
     "containerLogs": {
       "title": "سجلات الحاوية",
       "download": "تنزيل",
       "allLevels": "جميع المستويات",
       "downloadError": "تعذّر تنزيل السجلات",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "آخر {count} سطر",
+      "tailAll": "كل السطور",
+      "statusPaused": "متوقف مؤقتًا",
+      "statusLive": "مباشر",
+      "statusOffline": "غير متصل",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "جارٍ تحميل الحاويات...",
+      "fleetUpdateProgress": "تحديث الحاويات: {done} من {total}",
+      "fleetUpdateProgressRunning": "قيد التحديث الآن: {names}",
+      "fleetUpdateProgressRunningMore": "قيد التحديث الآن: {names} و{more} أخرى",
       "searchPlaceholder": "البحث بالاسم أو الصورة...",
       "allStatuses": "جميع الحالات",
       "running": "تعمل",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "تحديث الحاوية",
-      "thisContainer": "this container",
+      "thisContainer": "هذه الحاوية",
       "confirmTagChange": "تحديث {name}؟ سيغيّر ذلك تسمية الصورة من :{currentTag} إلى :{newTag}{kind}.",
       "confirmDigestChange": "تحديث {name}؟ يتوفر إصدار بناء أحدث من :{currentTag} (تغيير الملخص).",
       "confirmLatest": "تحديث {name} الآن؟ سيُطبَّق آخر صورة مكتشفة.",
       "updating": "جارٍ التحديث...",
       "update": "تحديث",
-      "updateFailed": "Update failed"
+      "updateFailed": "فشل التحديث"
     },
     "floatingTag": {
       "badgeText": "تسمية متحركة",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · يُفتح في {date}",
       "maturityClockPublished": "نُشر المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | نُشر المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "maturityClockDetected": "اكتُشف المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | اكتُشف المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
+      "groupManualOnly": "سياسة المجموعة '{group}' تسمح بالتحديثات اليدوية فقط. لن يطبّق Drydock هذا التحديث تلقائيًا.",
       "updateButton": "تحديث الآن",
       "blockedButton": "التحديث محظور",
       "notificationsOnlyButton": "إشعارات فقط",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "لم يُهيَّأ مشغّل تحديث",
         "self-update-unavailable": "التحديث الذاتي غير متاح",
         "maintenance-window-closed": "نافذة الصيانة مغلقة",
-        "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية"
+        "group-notify-only": "المجموعة تسمح بالإشعارات فقط",
+        "group-manual-only": "المجموعة تتطلب تحديثات يدوية",
+        "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية",
+        "maturity-releases-not-reached": "سياسة النضج بانتظار"
       },
       "actions": {
         "editPolicy": "تعديل سياسة التحديث",
@@ -439,25 +526,28 @@
         "configureTriggers": "تهيئة مشغّلات التحديث",
         "configureThreshold": "تهيئة حد المشغّل",
         "configureSelfUpdate": "تهيئة التحديث الذاتي",
-        "configureMaintenance": "تهيئة نافذة الصيانة"
-      }
+        "configureMaintenance": "تهيئة نافذة الصيانة",
+        "editGroupPolicy": "تعديل سياسة المجموعة"
+      },
+      "releaseMaturityCount": "بانتظار إصدارات مستقرة ضمن العائلة {family}: يتوفر {count} من أصل {required} إصدارًا أقدم.",
+      "releaseMaturityUnavailable": "بيانات إصدار النسخة المرشحة غير متاحة. تظل التحديثات التلقائية معلقة."
     },
     "maturityBadge": {
       "new": "تم الاكتشاف منذ {duration}"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "إلغاء",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "إيقاف الحاوية",
+        "message": "إيقاف {name}؟",
+        "acceptLabel": "إيقاف",
+        "successMessage": "تم الإيقاف: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "إعادة تشغيل الحاوية",
+        "message": "إعادة تشغيل {name}؟",
+        "acceptLabel": "إعادة تشغيل",
+        "successMessage": "تمت إعادة التشغيل: {name}"
       },
       "forceUpdate": {
         "header": "فرض التحديث",
@@ -505,6 +595,19 @@
         "failedDetail": "فشل تحديث سلسلة الاعتمادية لـ {name}.",
         "staleChainTitle": "تغيّرت سلسلة الاعتمادية",
         "staleChainDetail": "تغيّرت سلسلة الاعتمادية لـ {name} منذ آخر معاينة لها. أعد فتح مربع حوار التحديث لمراجعة السلسلة الحالية قبل التأكيد."
+      },
+      "bulkUpdate": {
+        "header": "تحديث حاوية واحدة | تحديث {count} حاويات",
+        "accept": "تحديث حاوية واحدة | تحديث {count} حاويات",
+        "acceptWithParents": "إضافة عنصر أصلي واحد والتحديث | إضافة {count} من العناصر الأصلية والتحديث",
+        "dispatchHeading": "سيتم التحديث",
+        "blockedHeading": "محظور، سيُترك دون تغيير",
+        "softOverridesHeading": "التحديث رغم التحذيرات",
+        "skippedHeading": "متخطى",
+        "staleParentsHeading": "عناصر أصلية بها تحديثات معلقة، تُضاف عند القبول",
+        "agentCountInfo": "يشمل {count} وكلاء؛ يُشغّل كل وكيل تحديثاته الخاصة.",
+        "stackCountInfo": "يشمل {count} مكدسات.",
+        "successMessage": "بدأ التحديث لحاوية واحدة | بدأ التحديث لـ {count} حاويات"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "فشلت إعادة الفحص لـ {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "إدخال واحد ({count})",
+      "entryCountPlural": "عدد الإدخالات: {count}",
       "kindLabels": {
         "tag": "تسمية",
         "digest": "ملخص"
@@ -561,14 +664,16 @@
         "setAll": "تم ضبط سياسة النضج للسماح بجميع التحديثات",
         "skipped": "تم تخطي التحديث الحالي لـ {name}",
         "removeSkip": "تمت إزالة {kind} {value} المتخطّى",
-        "revertField": "تمت إعادة {field} إلى السياسة التصريحية",
-        "revertAll": "تمت إعادة كل التجاوزات إلى السياسة التصريحية",
+        "revertField": "تمت إعادة {field} إلى السياسة الموروثة",
+        "revertAll": "تمت إعادة كل التجاوزات إلى السياسة الموروثة",
         "failedTitle": "فشل تحديث السياسة: {name}",
         "failedDetail": "فشل تحديث السياسة"
       },
       "validation": {
         "snoozeDate": "اختر تاريخ تأجيل صالح",
-        "maturityAge": "أدخل عمر نضج بين {min} و {max} يوم"
+        "maturityAge": "أدخل عمر نضج بين {min} و {max} يوم",
+        "maturityReleases": "أدخل عددًا صحيحًا للإصدارات من 0 إلى 100.",
+        "maturityFallback": "أدخل عددًا صحيحًا لأيام الاستثناء من 0 إلى 365."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "في قائمة الانتظار",
+        "pulling": "جارٍ تنزيل الصورة",
+        "scanning": "جارٍ فحص الصورة",
+        "sbom-generating": "جارٍ إنشاء SBOM",
+        "pull-failed": "فشل تنزيل الصورة",
+        "prepare": "جارٍ تحضير التحديث",
+        "dryrun": "تشغيل تجريبي",
+        "renamed": "أُعيدت تسمية الحاوية",
+        "new-created": "أُنشئت الحاوية الجديدة",
+        "old-stopped": "أُوقفت الحاوية القديمة",
+        "new-started": "بُدئت الحاوية الجديدة",
+        "health-gate": "فحص الصحة",
+        "health-gate-passed": "نجح فحص الصحة",
+        "succeeded": "نجاح",
+        "failed": "فشل",
+        "recovered-cleanup-temp": "تم الاسترداد: نُظفت الحاويات المؤقتة",
+        "recovered-rollback": "تم الاسترداد: اكتمل التراجع",
+        "recovered-active": "تم الاسترداد: تم الاحتفاظ بالحاوية النشطة",
+        "recovery-failed": "فشل الاسترداد",
+        "recovery-missing-containers": "الاسترداد: حاويات مفقودة",
+        "rollback-started": "بدأ التراجع",
+        "rolled-back": "تم التراجع",
+        "rollback-deferred": "أُجّل التراجع",
+        "rollback-failed": "فشل التراجع",
+        "expired": "انتهت الصلاحية",
+        "skipped-dependency": "تم التخطي بسبب تبعية",
+        "in-progress": "قيد التنفيذ",
+        "update-runtime-failed": "فشل تنفيذ التحديث",
+        "create-new-failed": "فشل إنشاء الحاوية الجديدة",
+        "stop-old-failed": "فشل إيقاف الحاوية القديمة",
+        "start-new-failed": "فشل بدء الحاوية الجديدة",
+        "health-gate-failed": "فشل فحص الصحة",
+        "cancelled": "أُلغي",
+        "compose-runtime-refresh-failed": "فشل تحديث حالة تشغيل Compose"
+      },
       "timestampUnknown": "غير معروف",
       "loadFailed": "فشل تحميل النسخ الاحتياطية",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "صريح",
+        "inherited": "موروث",
+        "unknown": "غير معروف"
       },
       "timeoutDefault": "60000ms (افتراضي)",
       "preAbortYes": "إلغاء التحديث عند فشل الخطاف المسبق",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "نظرة عامة",
+        "stats": "الإحصائيات",
+        "logs": "السجلات",
+        "environment": "البيئة",
+        "labels": "التسميات",
+        "actions": "الإجراءات"
       }
     },
     "logViewer": {
       "invalidRegex": "تعبير نمطي غير صالح"
+    },
+    "dependencyGraph": {
+      "dependsOn": "يعتمد على",
+      "requiredBy": "مطلوب من قِبل",
+      "cycle": "جزء من دورة تبعيات",
+      "toggle": "إظهار التبعيات",
+      "updateGroup": "تحديث مجموعة التبعيات ({count})",
+      "staleParentsWarning": "{name} يعتمد على {parents}، الذي لديه أيضًا تحديث معلق. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عنصر أصلي قديم. | {name} يعتمد على {parents}، التي لديها أيضًا تحديثات معلقة. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عناصر أصلية قديمة.",
+      "staleParentsOverflow": "و{count} إضافية",
+      "staleParentsAccept": "التحديث على أي حال"
+    },
+    "selection": {
+      "selectRow": "تحديد {name}",
+      "selectAll": "تحديد كل الحاويات المرئية",
+      "barLabel": "الحاويات المحددة",
+      "count": "تم تحديد حاوية واحدة | تم تحديد {count} حاويات",
+      "updateSelected": "تحديث المحدد",
+      "clear": "مسح",
+      "reasons": {
+        "stale": "لم تعد في القائمة",
+        "inFlight": "قيد التحديث بالفعل",
+        "noUpdate": "لا يوجد تحديث متاح"
+      }
     }
   }
 }

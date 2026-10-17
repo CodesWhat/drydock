@@ -10,6 +10,7 @@ import { containersViewTemplateContextKey } from '../components/containers/conta
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
+import { useDependencyGraph } from '../composables/useDependencyGraph';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
@@ -35,6 +36,8 @@ import {
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
 import { useContainerActions } from './containers/useContainerActions';
+import { useFleetBulkActions } from './containers/useFleetBulkActions';
+import { useFleetHealth } from './containers/useFleetHealth';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
 import { useContainerSsePatchPipeline } from './containers/useContainerSsePatchPipeline';
@@ -54,6 +57,7 @@ const { t } = useI18n();
 
 const loading = ref(true);
 const error = ref<string | null>(null);
+const containerInventoryAvailable = ref(false);
 
 const containers = ref<Container[]>([]);
 const containerIdMap = ref<Record<string, string>>({});
@@ -125,6 +129,7 @@ function updatePolicyMetadataFingerprint(apiContainers: Record<string, unknown>[
       updatePolicyDeclarative: container.updatePolicyDeclarative,
       updatePolicyOverrides: container.updatePolicyOverrides,
       updatePolicySources: container.updatePolicySources,
+      groupPolicy: container.groupPolicy,
     })),
   );
 }
@@ -140,7 +145,7 @@ let committedUpdatePolicyMetadataFingerprint = '';
  *
  * Only hashes fields that affect row rendering or the downstream computed
  * chain (identity, tag, status, update indicators, safety state). Deep
- * structures like `details` (ports/volumes/env/labels) are intentionally
+ * structures like `details` (ports/volumes/env) are intentionally
  * excluded — they do not change the grouped table render and would dominate
  * the cost of this walk on every reload. See #301.
  *
@@ -160,6 +165,15 @@ function containerRowFingerprint(c: Container): string {
     c.status,
     c.server ?? '',
     c.registry ?? '',
+    JSON.stringify([
+      c.agent,
+      c.registryName,
+      c.registryUrl,
+      c.tagPrecision,
+      c.imageTagSemver,
+      c.isDigestPinned,
+      c.labels,
+    ]),
     c.updateKind ?? '',
     c.updateDetectedAt ?? '',
     c.imageCreated ?? '',
@@ -247,7 +261,7 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
   return next;
 }
 
-async function loadContainers() {
+async function loadContainers(throwOnFailure = false) {
   try {
     const apiContainers = await getAllContainers();
     const mappedRaw = mapApiContainers(apiContainers, t);
@@ -280,8 +294,18 @@ async function loadContainers() {
     if (groupByStack.value) {
       await loadGroups();
     }
+    // Fire-and-forget: the dependency graph is a distinct global resource from
+    // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
+    // its own error ref rather than surfacing into this view's error state.
+    // Reloaded on every successful list load, not just on mount, so the
+    // dependency rows and the child-before-parent guard never read edges from
+    // before a recheck, an SSE refresh, a delete or a group update.
+    void useDependencyGraph().loadDependencyGraph();
+    containerInventoryAvailable.value = true;
   } catch (e: unknown) {
+    containerInventoryAvailable.value = false;
     error.value = errorMessage(e, t('containersView.error.loadFailed'));
+    if (throwOnFailure) throw e;
   } finally {
     loading.value = false;
   }
@@ -445,7 +469,9 @@ const {
   clearMaturityPolicySelected,
   clearSkipsSelected,
   confirmClearPolicy,
+  confirmBulkUpdate,
   confirmDelete,
+  confirmDependencyGroupUpdate,
   confirmForceUpdate,
   confirmUpdate,
   confirmRollback,
@@ -473,6 +499,7 @@ const {
   policyInProgress,
   policyMessage,
   previewError,
+  previewErrorAction,
   previewLoading,
   removeSkipDigestSelected,
   removeSkipTagSelected,
@@ -488,7 +515,11 @@ const {
   scanContainer,
   selectedHasMaturityPolicy,
   selectedMaturityMinAgeDays,
+  selectedMaturitySkipReleases,
+  selectedMaturityReleaseFallbackDays,
   selectedMaturityMode,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
   selectedSkipDigests,
@@ -502,6 +533,8 @@ const {
   snoozeDateInput,
   maturityModeInput,
   maturityMinAgeDaysInput,
+  maturitySkipReleasesInput,
+  maturityReleaseFallbackDaysInput,
   snoozeSelected,
   snoozeSelectedUntilDate,
   startContainer,
@@ -509,6 +542,7 @@ const {
   triggerMessage,
   triggerRunInProgress,
   triggersLoading,
+  unassociatedTriggers,
   unsnoozeSelected,
   updateAllInGroup,
   updateContainer,
@@ -541,6 +575,7 @@ const tableActionStyle = usePreference(
 );
 
 const {
+  fleet,
   filterSearch,
   filterStatus,
   filterRegistry,
@@ -606,6 +641,7 @@ const QUERY_SYNC_KEYS = new Set([
   'filterBouncer',
   'filterServer',
   'groupByStack',
+  'group-by-label',
   'sort',
 ] as const);
 const VALID_CONTAINER_SORT_KEYS = [
@@ -705,6 +741,7 @@ function applyFilterSearchFromQuery(
   // When navigating with a search query (e.g. from Ctrl+K), clear persisted
   // dropdown filters so the target container is always visible.
   if (filterSearch.value) {
+    fleet.clearFilters();
     filterStatus.value = DEFAULT_FILTER_VALUE;
     filterRegistry.value = DEFAULT_FILTER_VALUE;
     filterBouncer.value = DEFAULT_FILTER_VALUE;
@@ -753,12 +790,43 @@ const groupByStack = usePreference(
   },
 );
 
+watch(
+  fleet.groupBy,
+  (value) => {
+    if (value !== 'none') groupByStack.value = false;
+  },
+  { immediate: true },
+);
+watch(groupByStack, (value) => {
+  if (value) fleet.groupBy.value = 'none';
+});
+watch(fleet.groupLabel, (value, previous) => {
+  if (!value && previous && fleet.groupBy.value === 'label') fleet.groupBy.value = 'none';
+});
+
 function applyGroupByStackFromQuery(queryValue: unknown) {
   const raw = firstQueryValue(queryValue);
   if (raw === undefined) {
     return;
   }
   groupByStack.value = raw === 'true' || raw === '1';
+}
+
+let hadGroupLabelQuery = false;
+function applyGroupLabelFromQuery(queryValue: unknown, stackQueryValue: unknown) {
+  const previouslyPresent = hadGroupLabelQuery;
+  hadGroupLabelQuery = Object.hasOwn(route.query, 'group-by-label');
+  if (isSyncingRouteFromState.value || (!hadGroupLabelQuery && !previouslyPresent)) return;
+  const stack = firstQueryValue(stackQueryValue);
+  if (stack === 'true' || stack === '1') return;
+  const label = firstQueryValue(queryValue) ?? '';
+  fleet.groupLabel.value = label;
+  if (label) {
+    groupByStack.value = false;
+    fleet.groupBy.value = 'label';
+  } else if (fleet.groupBy.value === 'label') {
+    fleet.groupBy.value = 'none';
+  }
 }
 
 watch(
@@ -770,6 +838,7 @@ watch(
     route.query.filterBouncer,
     route.query.filterServer,
     route.query.groupByStack,
+    route.query['group-by-label'],
     route.query.sort,
   ],
   ([
@@ -780,6 +849,7 @@ watch(
     queryFilterBouncer,
     queryFilterServer,
     queryGroupByStack,
+    queryGroupLabel,
     querySort,
   ]) => {
     applyFilterSearchFromQuery(querySearch, {
@@ -815,6 +885,7 @@ watch(
       DEFAULT_FILTER_VALUE,
     );
     applyGroupByStackFromQuery(queryGroupByStack);
+    applyGroupLabelFromQuery(queryGroupLabel, queryGroupByStack);
     applySortFromQuery(querySort);
   },
   { immediate: true },
@@ -864,6 +935,8 @@ function buildSyncedRouteQuery(): Record<string, string> {
   }
   if (groupByStack.value) {
     nextQuery.groupByStack = 'true';
+  } else if (fleet.groupBy.value === 'label' && fleet.groupLabel.value) {
+    nextQuery['group-by-label'] = fleet.groupLabel.value;
   }
   const sortQuery = encodeSortQueryValue(containerSortKey.value, containerSortAsc.value);
   if (sortQuery) {
@@ -904,6 +977,8 @@ watch(
     filterBouncer,
     filterServer,
     groupByStack,
+    fleet.groupBy,
+    fleet.groupLabel,
     containerSortKey,
     containerSortAsc,
   ],
@@ -926,13 +1001,13 @@ function toggleContainerSort(key: string) {
 // When containerIds is set (deep-link e.g. from Security's "View in Containers") it's a directed
 // lookup, so it bypasses filter state — otherwise Hide Pinned / kind / server filters could hide
 // the exact container the link targets (#299).
-const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
+const liveActionContainers = computed(() => {
   const ids = filterContainerIds.value;
   const sourceContainers =
     ids.size > 0
       ? containers.value.filter((container) => ids.has(container.id))
       : filteredContainers.value;
-  const live = sourceContainers.map((container) =>
+  return sourceContainers.map((container) =>
     skippedUpdates.value.has(container.id) || skippedUpdates.value.has(container.name)
       ? {
           ...container,
@@ -942,6 +1017,10 @@ const displayContainers = computed<Array<Container & { _pending?: true }>>(() =>
         }
       : container,
   );
+});
+
+const displayContainers = computed<Array<Container & { _pending?: true }>>(() => {
+  const live = liveActionContainers.value;
   const liveIdentityKeys = new Set(
     live.map((container) => getContainerActionIdentityKey(container)).filter(Boolean),
   );
@@ -949,6 +1028,32 @@ const displayContainers = computed<Array<Container & { _pending?: true }>>(() =>
     .filter((snapshot) => !liveIdentityKeys.has(getContainerActionIdentityKey(snapshot)))
     .map((snapshot) => ({ ...snapshot, _pending: true as const }));
   return [...live, ...ghosts].map(projectContainerDisplayState);
+});
+
+const fleetBulk = useFleetBulkActions({
+  containers,
+  scope: liveActionContainers,
+  containerActionsEnabled,
+  busy: computed(
+    () => loading.value || actionInProgress.value.size > 0 || Boolean(policyInProgress.value),
+  ),
+  updateMode,
+  isContainerRowLocked,
+  isContainerUpdateInProgress,
+  isContainerUpdateQueued,
+  groupKeyForContainer: getEffectiveContainerGroup,
+  confirmBulkUpdate,
+  loadContainers,
+  t,
+});
+
+const fleetHealth = useFleetHealth({
+  containers,
+  inventoryAvailable: containerInventoryAvailable,
+  busy: computed(
+    () => loading.value || actionInProgress.value.size > 0 || Boolean(policyInProgress.value),
+  ),
+  loadContainers: () => loadContainers(true),
 });
 
 const sortedContainers = computed(() => {
@@ -1267,6 +1372,7 @@ const groupedContainers = computed<RenderGroup[]>(() => {
 });
 
 const renderGroups = computed<RenderGroup[]>(() => {
+  if (fleet.groupBy.value !== 'none') return fleet.group(sortedContainers.value, t);
   if (!groupByStack.value) {
     return [
       {
@@ -1476,6 +1582,9 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  fleetHealth,
+  fleet,
+  fleetBulk,
   containerCardReflowForced,
   error,
   loading,
@@ -1528,6 +1637,7 @@ provide(containersViewTemplateContextKey, {
   openActionsMenu,
   toggleActionsMenu,
   openContainerGroupDialog,
+  groupKeyForContainer: getEffectiveContainerGroup,
   updateContainer,
   confirmUpdate,
   confirmStop,
@@ -1535,6 +1645,8 @@ provide(containersViewTemplateContextKey, {
   confirmRestart,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
+  confirmBulkUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,
@@ -1550,7 +1662,7 @@ provide(containersViewTemplateContextKey, {
   parseServer,
   registryColorBg,
   registryColorText,
-  registryLabel,
+  registryLabel: (registry, url, name) => registryLabel(registry, url, name, t),
   detailPanelOpen,
   isMobile,
   panelSize,
@@ -1609,13 +1721,19 @@ provide(containersViewTemplateContextKey, {
   selectedHasMaturityPolicy,
   selectedMaturityMode,
   selectedMaturityMinAgeDays,
+  selectedMaturitySkipReleases,
+  selectedMaturityReleaseFallbackDays,
   maturityModeInput,
   maturityMinAgeDaysInput,
+  maturitySkipReleasesInput,
+  maturityReleaseFallbackDaysInput,
   setMaturityPolicySelected,
   clearMaturityPolicySelected,
   confirmClearPolicy,
   clearPolicySelected,
   revertPolicySelected,
+  selectedPolicyGroupFields,
+  selectedPolicyGroupName,
   selectedPolicyOverriddenFields,
   selectedPolicyOverrideFields,
   policyMessage,
@@ -1625,8 +1743,10 @@ provide(containersViewTemplateContextKey, {
   detailPreview,
   detailComposePreview,
   previewError,
+  previewErrorAction,
   triggersLoading,
   detailTriggers,
+  unassociatedTriggers,
   getTriggerKey,
   triggerRunInProgress,
   runAssociatedTrigger,

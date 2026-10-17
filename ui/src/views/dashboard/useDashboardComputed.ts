@@ -15,6 +15,7 @@ import type {
   DashboardServerInfo,
   DashboardServerRow,
   DashboardStatCard,
+  DashboardVulnerabilityRow,
   RecentAuditStatus,
   RecentUpdateRow,
   UpdateBreakdownBucket,
@@ -289,6 +290,7 @@ function formatAgentHost(agent: DashboardAgent): string | undefined {
 
 interface UseDashboardComputedInput {
   agents: Ref<DashboardAgent[]>;
+  approvalPendingCount: Ref<number>;
   containerSummary: Ref<DashboardContainerSummary | null>;
   containers: Ref<Container[]>;
   hidePinned: Ref<boolean>;
@@ -612,6 +614,18 @@ function useStatsComputed(
         colorMuted: 'var(--dd-primary-muted)',
         route: ROUTES.REGISTRIES,
       },
+      {
+        id: 'stat-approvals',
+        label: t('dashboardView.stats.approvals'),
+        value: String(input.approvalPendingCount.value),
+        icon: 'updates',
+        color: input.approvalPendingCount.value > 0 ? 'var(--dd-warning)' : 'var(--dd-neutral)',
+        colorMuted:
+          input.approvalPendingCount.value > 0
+            ? 'var(--dd-warning-muted)'
+            : 'var(--dd-neutral-muted)',
+        route: ROUTES.APPROVALS,
+      },
     ];
   });
 }
@@ -772,7 +786,7 @@ function compareVulnerableContainers(left: Container, right: Container): number 
   return rightCritical - leftCritical;
 }
 
-function toVulnerabilityRow(container: Container) {
+function toVulnerabilityRow(container: Container): DashboardVulnerabilityRow {
   return {
     id: container.name,
     severity: container.bouncer === 'blocked' ? 'CRITICAL' : 'HIGH',

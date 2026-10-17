@@ -1,0 +1,112 @@
+{
+  "totpFactor": {
+    "title": "Zwei-Faktor-Authentifizierung",
+    "description": "Frage bei jeder Anmeldung zusätzlich zu deinem Passwort nach einem Code aus deiner Authenticator-App.",
+    "loading": "Zwei-Faktor-Status wird geladen",
+    "retry": "Erneut versuchen",
+    "status": {
+      "off": "Aus",
+      "on": "Ein",
+      "onSince": "Aktiv seit {date}",
+      "recoveryRemaining": "{count} Wiederherstellungscode übrig | {count} Wiederherstellungscodes übrig",
+      "recoveryNone": "Keine Wiederherstellungscodes mehr übrig. Erzeuge einen neuen Satz, bevor du den Zugriff auf deine Authenticator-App verlierst.",
+      "recoveryLow": "Deine Wiederherstellungscodes werden knapp. Erzeuge einen neuen Satz.",
+      "pending": "Einrichtung gestartet, wartet auf einen Code. Sie läuft um {time} ab."
+    },
+    "unavailable": {
+      "notLocal": "Die Zwei-Faktor-Authentifizierung ist nur für lokale Konten verfügbar, die mit einem Passwort angemeldet sind. Falls das auf dich zutrifft, melde dich ab und wieder an.",
+      "httpsRequired": "Für die Zwei-Faktor-Einrichtung ist HTTPS nötig. Öffne Drydock über HTTPS oder bitte einen Administrator, DD_AUTH_TOTP_ALLOWHTTP=true zu setzen, falls das Netzwerk vertrauenswürdig ist.",
+      "noKeyRing": "Die Zwei-Faktor-Einrichtung ist auf diesem Server nicht verfügbar. Ein Administrator muss zuerst einen Verschlüsselungs-Schlüsselbund konfigurieren.",
+      "recoverySession": "Du hast dich mit einem Wiederherstellungscode angemeldet, daher ist diese Aktion nicht erlaubt. Melde dich mit einem Code aus deiner Authenticator-App an."
+    },
+    "actions": {
+      "enable": "Aktivieren",
+      "replace": "Authenticator ersetzen",
+      "regenerate": "Neue Wiederherstellungscodes",
+      "remove": "Deaktivieren",
+      "cancelSetup": "Einrichtung abbrechen",
+      "cancel": "Abbrechen"
+    },
+    "reauth": {
+      "heading": {
+        "enable": "Bestätige, dass du es bist",
+        "replace": "Bestätige, dass du es bist, um deinen Authenticator zu ersetzen",
+        "regenerate": "Bestätige, dass du es bist, um neue Wiederherstellungscodes zu erhalten",
+        "remove": "Bestätige, dass du es bist, um die Zwei-Faktor-Authentifizierung zu deaktivieren"
+      },
+      "hint": "Gib dein Passwort ein. Nach diesem Schritt wird nichts gespeichert.",
+      "hintWithCode": "Gib dein Passwort und einen aktuellen Code ein. Nach diesem Schritt wird nichts gespeichert.",
+      "passwordLabel": "Passwort",
+      "passwordPlaceholder": "Passwort eingeben",
+      "codeLabel": "Authentifizierungscode",
+      "codePlaceholder": "6-stelliger Code",
+      "recoveryLabel": "Wiederherstellungscode",
+      "recoveryPlaceholder": "Wiederherstellungscode eingeben",
+      "useRecovery": "Wiederherstellungscode verwenden",
+      "useCode": "Authenticator-Code verwenden",
+      "submit": {
+        "enable": "Weiter",
+        "replace": "Weiter",
+        "regenerate": "Neue Codes erzeugen",
+        "remove": "Zwei-Faktor deaktivieren",
+        "busy": "Wird geprüft..."
+      }
+    },
+    "scan": {
+      "heading": "Mit deiner Authenticator-App scannen",
+      "instructions": "Öffne deine Authenticator-App, füge ein Konto hinzu und scanne diesen Code. Gib dann den 6-stelligen Code ein, den die App anzeigt.",
+      "replaceNote": "Dein aktueller Authenticator funktioniert weiter, bis du den neuen bestätigst.",
+      "qrLabel": "QR-Code zum Einrichten der Zwei-Schritt-Bestätigung",
+      "qrFailed": "Der QR-Code konnte nicht dargestellt werden. Gib stattdessen den Einrichtungsschlüssel ein.",
+      "secretLabel": "Scannen nicht möglich? Gib diesen Einrichtungsschlüssel ein",
+      "copySecret": "Schlüssel kopieren",
+      "copied": "Kopiert",
+      "expiresAt": "Diese Einrichtung läuft um {time} ab.",
+      "codeLabel": "Authentifizierungscode",
+      "codeHint": "Gib den 6-stelligen Code aus deiner Authenticator-App ein.",
+      "codePlaceholder": "6-stelliger Code",
+      "confirm": "Bestätigen und aktivieren",
+      "confirming": "Wird bestätigt..."
+    },
+    "codes": {
+      "heading": "Speichere deine Wiederherstellungscodes",
+      "description": "Jeder Code funktioniert einmal, falls du deine Authenticator-App verlierst. Das ist das einzige Mal, dass sie angezeigt werden.",
+      "copy": "Codes kopieren",
+      "copied": "Kopiert",
+      "download": "Herunterladen",
+      "fileHeading": "Drydock-Wiederherstellungscodes",
+      "filename": "drydock-recovery-codes.txt",
+      "saved": "Ich habe diese Codes gespeichert",
+      "done": "Fertig",
+      "downloadFailed": "Dein Browser hat den Download nicht ausgeführt. Kopiere die Codes stattdessen."
+    },
+    "remove": {
+      "header": "Zwei-Faktor-Authentifizierung deaktivieren?",
+      "message": "Für die Anmeldung reicht danach wieder dein Passwort, und deine anderen Sitzungen werden beendet.",
+      "accept": "Deaktivieren"
+    },
+    "notice": {
+      "enabled": "Die Zwei-Faktor-Authentifizierung ist aktiviert.",
+      "replaced": "Dein neuer Authenticator ist aktiv.",
+      "regenerated": "Deine neuen Wiederherstellungscodes sind aktiv. Die alten funktionieren nicht mehr.",
+      "removed": "Die Zwei-Faktor-Authentifizierung ist deaktiviert."
+    },
+    "errors": {
+      "load": "Der Zwei-Faktor-Status konnte nicht geladen werden.",
+      "network": "Der Server ist nicht erreichbar. Versuche es erneut.",
+      "generic": "Etwas ist schiefgelaufen. Versuche es erneut.",
+      "sessionEnded": "Deine Sitzung ist abgelaufen. Melde dich erneut an.",
+      "reauthFailed": "Passwort oder Code stimmen nicht. Prüfe sie und versuche es erneut.",
+      "locked": "Zu viele Versuche. Versuche es in {time} erneut.",
+      "lockedLater": "Zu viele Versuche. Versuche es später erneut.",
+      "busy": "Eine andere Prüfung läuft noch. Versuche es gleich noch einmal.",
+      "invalidRequest": "Gib dein Passwort und einen gültigen Code ein.",
+      "codeFormat": "Gib die 6 Ziffern aus deiner Authenticator-App ein.",
+      "codeWrong": "Dieser Code hat nicht funktioniert. Prüfe ihn und versuche es erneut.",
+      "enrollmentExpired": "Diese Einrichtung ist abgelaufen. Starte neu.",
+      "enrollmentGone": "Diese Einrichtung wurde nach zu vielen falschen Codes geschlossen. Starte neu.",
+      "stateChanged": "Die Zwei-Faktor-Einstellungen wurden an anderer Stelle geändert. Prüfe sie und versuche es erneut.",
+      "notActive": "Die Zwei-Faktor-Authentifizierung ist nicht aktiviert."
+    }
+  }
+}

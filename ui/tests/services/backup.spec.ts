@@ -8,6 +8,20 @@ describe('Backup Service', () => {
   });
 
   describe('getBackups', () => {
+    it('keeps HTTP status as structured data without an English UI prefix', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as Response);
+
+      await expect(getBackups('bad-id')).rejects.toMatchObject({
+        name: 'ApiError',
+        status: 404,
+        message: 'Not Found',
+      });
+    });
+
     it('fetches backups for a container', async () => {
       const mockBackups = [
         { id: 'b1', imageTag: '1.0.0', timestamp: '2025-01-01T00:00:00Z' },
@@ -47,13 +61,59 @@ describe('Backup Service', () => {
         statusText: 'Not Found',
       } as any);
 
-      await expect(getBackups('bad-id')).rejects.toThrow(
-        'Failed to get backups for container bad-id: Not Found',
-      );
+      await expect(getBackups('bad-id')).rejects.toThrow('Not Found');
     });
   });
 
   describe('rollback', () => {
+    it.each([null, { error: '' }, { error: '  ' }, { error: { message: 'not a string' } }])(
+      'does not stringify unusable error envelopes: %j',
+      async (body) => {
+        vi.mocked(fetch).mockResolvedValueOnce({
+          ok: false,
+          status: 503,
+          statusText: '',
+          json: async () => body,
+        } as Response);
+
+        await expect(rollback('container-1')).rejects.toMatchObject({
+          name: 'ApiError',
+          status: 503,
+          message: '',
+        });
+      },
+    );
+
+    it('retains HTTP status when the parser throws no usable diagnostic', async () => {
+      const response = new Response('', {
+        status: 502,
+        statusText: 'Bad Gateway',
+      });
+      vi.spyOn(response, 'json').mockRejectedValueOnce(null);
+      vi.mocked(fetch).mockResolvedValueOnce(response);
+
+      await expect(rollback('container-1')).rejects.toMatchObject({
+        name: 'ApiError',
+        status: 502,
+        message: 'Bad Gateway',
+      });
+    });
+
+    it('preserves server diagnostics and status without an English UI prefix', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        json: async () => ({ error: 'Backup belongs to a different container' }),
+      } as Response);
+
+      await expect(rollback('container-1')).rejects.toMatchObject({
+        name: 'ApiError',
+        status: 409,
+        message: 'Conflict (Backup belongs to a different container)',
+      });
+    });
+
     it('posts rollback with backupId', async () => {
       const mockResult = { message: 'Container rolled back successfully' };
       vi.mocked(fetch).mockResolvedValueOnce({
@@ -103,11 +163,11 @@ describe('Backup Service', () => {
       } as any);
 
       await expect(rollback('container-1', 'bad-backup')).rejects.toThrow(
-        'Rollback failed: Not Found (No backups found for this container)',
+        'Not Found (No backups found for this container)',
       );
     });
 
-    it('throws without detail when response body parsing fails', async () => {
+    it('preserves the parsing diagnostic without an English wrapper', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -116,12 +176,10 @@ describe('Backup Service', () => {
         },
       } as any);
 
-      await expect(rollback('container-1')).rejects.toThrow(
-        'Rollback failed: Internal Server Error',
-      );
+      await expect(rollback('container-1')).rejects.toThrow('Internal Server Error (parse error)');
     });
 
-    it('includes unknown parsing error detail when parser throws a non-Error value', async () => {
+    it('preserves string parsing diagnostics', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -130,9 +188,7 @@ describe('Backup Service', () => {
         },
       } as any);
 
-      await expect(rollback('container-1')).rejects.toThrow(
-        'Rollback failed: Internal Server Error (unable to parse error response: Unknown parsing error)',
-      );
+      await expect(rollback('container-1')).rejects.toThrow('Internal Server Error (parse-failed)');
     });
 
     it('throws without error detail when body has no error field', async () => {
@@ -142,7 +198,7 @@ describe('Backup Service', () => {
         json: async () => ({}),
       } as any);
 
-      await expect(rollback('container-1')).rejects.toThrow('Rollback failed: Bad Request');
+      await expect(rollback('container-1')).rejects.toThrow('Bad Request');
     });
   });
 });

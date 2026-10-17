@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Impossibile caricare il riepilogo delle approvazioni",
+      "detailLoadFailed": "Impossibile caricare l’approvazione",
+      "approveFailed": "Impossibile approvare l’aggiornamento",
+      "rejectFailed": "Impossibile rifiutare l’aggiornamento",
+      "deferFailed": "Impossibile posticipare l’aggiornamento"
+    },
+    "ofCount": "Elementi mostrati: {count}",
+    "refresh": "Aggiorna",
+    "loading": "Caricamento delle approvazioni…",
+    "loadError": "Impossibile caricare le approvazioni",
+    "notifyModeBanner": "La modalità di aggiornamento è notify. Le approvazioni sono disabilitate finché la modalità non viene impostata su manual o auto.",
+    "tabs": {
+      "pending": "In attesa",
+      "deferred": "Rimandate",
+      "decided": "Decise"
+    },
+    "columns": {
+      "container": "Container",
+      "image": "Immagine",
+      "version": "Versione",
+      "scan": "Scansione",
+      "age": "Tempo trascorso"
+    },
+    "semver": {
+      "major": "Versione principale",
+      "minor": "Versione secondaria",
+      "patch": "Patch",
+      "prerelease": "Versione preliminare",
+      "unknown": "Sconosciuta"
+    },
+    "actions": {
+      "notesAriaLabel": "Mostra le note di rilascio e i motivi di sospensione",
+      "approve": "Approva",
+      "approveAriaLabel": "Approva aggiornamento",
+      "approveDisabledNotify": "La modalità di aggiornamento è notify; le approvazioni sono disabilitate",
+      "reject": "Rifiuta",
+      "rejectAriaLabel": "Rifiuta aggiornamento",
+      "defer": "Rimanda",
+      "deferAriaLabel": "Rimanda aggiornamento"
+    },
+    "detail": {
+      "loading": "Caricamento dei dettagli…",
+      "holdReasons": "Motivi di sospensione",
+      "viewFullNotes": "Visualizza le note complete",
+      "empty": "Nessuna nota di rilascio o motivo di sospensione per questo aggiornamento"
+    },
+    "empty": {
+      "pending": "Nessuna approvazione in attesa",
+      "deferred": "Nessuna approvazione rimandata",
+      "decided": "Nessuna approvazione ancora decisa",
+      "all": "Nessuna approvazione"
+    },
+    "confirm": {
+      "cancel": "Annulla",
+      "approve": {
+        "header": "Approva aggiornamento",
+        "message": "Approvare l’aggiornamento di {name} a {toRef}?",
+        "softBlockerSuffix": "\n\nQuesto aggiornamento presenta motivi di sospensione non risolti:\n{list}",
+        "acceptLabel": "Approva"
+      },
+      "reject": {
+        "header": "Rifiuta aggiornamento",
+        "message": "Rifiutare l’aggiornamento di {name} a {toRef}? Non verrà applicato automaticamente.",
+        "acceptLabel": "Rifiuta"
+      },
+      "defer": {
+        "header": "Rimanda aggiornamento",
+        "message": "Rimandare l’aggiornamento di {name} di {days} giorni?",
+        "acceptLabel": "Rimanda"
+      }
+    },
+    "toast": {
+      "approved": "Approvazione richiesta per {name}",
+      "approveFailed": "Impossibile approvare {name}",
+      "rejected": "Aggiornamento rifiutato per {name}",
+      "rejectFailed": "Impossibile rifiutare {name}",
+      "deferred": "Aggiornamento rimandato per {name}",
+      "deferFailed": "Impossibile rimandare {name}"
+    }
+  }
+}

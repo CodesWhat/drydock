@@ -67,7 +67,7 @@ jobs:
         # Grype matches the lockfile-resolved versions — not the manifest
         # requirement graph — so it does not emit the phantom-dependency
         # findings the SCM manifest-graph scanners do.
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         id: grype-deps
         with:
           path: .
@@ -79,7 +79,7 @@ jobs:
         # Code scanning uploads need a public repo or GHAS. Drydock is public,
         # so this runs; the guard keeps the job green on a fork/private mirror.
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: ${{ steps.grype-deps.outputs.sarif }}
           category: grype-deps
@@ -136,7 +136,7 @@ jobs:
       - name: Run Grype vulnerability scanner
         # The built image's package catalog is the dependency set actually
         # shipped — so this is the authoritative view of the runtime CVE surface.
-        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         id: grype
         env:
           # Load the repo-root .grype.yaml explicitly (it documents why the
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload Grype SARIF to code scanning
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938  # v4.37.9
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image

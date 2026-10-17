@@ -9,6 +9,7 @@ import * as storeContainer from '../../store/container.js';
 import { markContainerFreshForScheduledPollSkip } from '../../watchers/registry-webhook-fresh.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getFirstHeaderValue } from '../header-value.js';
+import { SESSION_ONLY, scoped } from '../route-scopes.js';
 import { parseRegistryWebhookPayload } from './parsers/index.js';
 import { runRegistryWebhookDispatch } from './registry-dispatch.js';
 import { verifyRegistryWebhookSignature } from './signature.js';
@@ -108,6 +109,6 @@ export function init() {
 
   router.use(webhookLimiter);
   router.use(nocache());
-  router.post('/', handleRegistryWebhook);
+  router.post('/', scoped(SESSION_ONLY, handleRegistryWebhook));
   return router;
 }

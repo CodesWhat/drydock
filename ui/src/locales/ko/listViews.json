@@ -42,6 +42,30 @@
       "info": "정보"
     },
     "actions": {
+      "webhook-watch": "웹훅 감시",
+      "webhook-watch-container": "웹훅 컨테이너 감시",
+      "webhook-update": "웹훅 업데이트",
+      "mqtt-command-update": "MQTT 업데이트 명령",
+      "security-scan-skipped": "보안 검사 건너뜀",
+      "scanner-asset-pull-started": "스캐너 이미지 다운로드 시작",
+      "scanner-asset-pull-succeeded": "스캐너 이미지 다운로드 성공",
+      "scanner-asset-pull-failed": "스캐너 이미지 다운로드 실패",
+      "scanner-asset-warm-started": "스캐너 준비 시작",
+      "scanner-asset-warm-succeeded": "스캐너 준비 성공",
+      "scanner-asset-warm-failed": "스캐너 준비 실패",
+      "container-unhealthy": "컨테이너 비정상",
+      "env-reveal": "환경 변수 표시됨",
+      "debug-dump": "디버그 데이터 다운로드됨",
+      "config-read": "설정 읽음",
+      "config-validated": "설정 검증됨",
+      "config-reloaded": "설정 다시 로드됨",
+      "config-written": "설정 기록됨",
+      "update-approved": "업데이트 승인됨",
+      "update-rejected": "업데이트 거부됨",
+      "update-deferred": "업데이트 연기됨",
+      "api-key-created": "API 키 생성됨",
+      "api-key-revoked": "API 키 폐기됨",
+      "api-key-auth-failed": "API 키 인증 실패",
       "container-update": "컨테이너 업데이트",
       "container-added": "컨테이너 추가됨",
       "container-removed": "컨테이너 제거됨",
@@ -49,6 +73,13 @@
       "container-stop": "컨테이너 중지",
       "container-restart": "컨테이너 재시작",
       "auth-login": "인증 로그인",
+      "totp-recovery-used": "복구 코드 사용",
+      "totp-enrollment-started": "2단계 인증 등록 시작",
+      "totp-enabled": "2단계 인증 활성화",
+      "totp-replaced": "2단계 인증 교체",
+      "totp-disabled": "2단계 인증 비활성화",
+      "totp-recovery-codes-replaced": "복구 코드 교체",
+      "totp-break-glass": "2단계 인증 오프라인 복구",
       "authenticated": "인증됨",
       "authfail": "인증 실패",
       "hook-configured": "훅 구성됨",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "자동 업데이트 차단됨",
       "update-policy-override-set": "업데이트 정책 재정의 설정됨",
       "update-policy-override-cleared": "업데이트 정책 재정의 해제됨",
+      "group-policy-set": "그룹 정책 설정됨",
+      "group-policy-cleared": "그룹 정책 해제됨",
+      "label-override-set": "레이블 재정의 설정됨",
+      "label-override-cleared": "레이블 재정의 해제됨",
       "auto-rollback": "자동 롤백",
       "rollback": "롤백",
       "preview": "미리 보기",
       "agent-disconnect": "에이전트 연결 해제",
       "notification-delivery-failed": "알림 전송 실패",
       "security-alert": "보안 경고",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "대기 기간 종료",
+      "image-prune": "이미지 정리"
     },
     "target": {
       "container": "컨테이너",
-      "agent": "에이전트"
+      "agent": "에이전트",
+      "group": "그룹"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "성숙도 해제됨",
         "description": "성숙도 정책으로 보류된 업데이트가 적용 가능해질 때"
+      },
+      "update-pending-approval": {
+        "name": "업데이트 승인 대기 중",
+        "description": "수동 모드 업데이트가 승인 대기열에 들어갈 때"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "클린"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "이미지",
+      "scanned": "스캔됨"
     },
     "fixableBadge": "{count}개 수정 가능",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "이름으로 필터...",
     "clear": "초기화",
     "emptyFiltered": "필터와 일치하는 트리거가 없습니다",
-    "testContainerName": "Test Container",
+    "testContainerName": "테스트 컨테이너",
     "columns": {
       "trigger": "트리거",
       "type": "유형",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "워처 불러오는 중...",
     "loadError": "워처를 불러오지 못했습니다",
-    "soon": "soon",
+    "soon": "곧",
     "filterPlaceholder": "이름으로 필터...",
     "clear": "초기화",
     "emptyFiltered": "필터와 일치하는 워처가 없습니다",

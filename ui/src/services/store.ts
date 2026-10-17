@@ -1,6 +1,7 @@
 interface StoreConfiguration {
   path: string;
   file: string;
+  dbFile?: string;
 }
 
 interface StoreResponse {

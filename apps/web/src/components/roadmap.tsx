@@ -1,16 +1,14 @@
 import { ChevronRight } from "lucide-react";
 import { SectionHeading } from "@/components/section-heading";
-import { type Milestone, roadmap } from "@/lib/site-content";
+import { getRoadmapHead, type Milestone, roadmap } from "@/lib/site-content";
 
 // Locked: Roadmap = the git-graph timeline (newest-first, planned on top).
 // Released = filled node, HEAD highlighted, planned = hollow dashed node.
 // Rows with more than two items expand inline. Styled like a commit graph for
 // the vibe — not literally `git log` output.
 
-const released = roadmap.filter((m) => m.status === "released");
-// HEAD: an in-progress "next" release (active RC) takes priority; otherwise the last released milestone.
-const headRelease = (roadmap.find((m) => m.status === "next") ??
-  released[released.length - 1]) as Milestone;
+// HEAD follows the newest active candidate when an older RC train is retained.
+const headRelease = getRoadmapHead() as Milestone;
 
 function GitItem({ item, isReleased }: { item: string; isReleased: boolean }) {
   return (

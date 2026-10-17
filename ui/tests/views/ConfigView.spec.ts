@@ -8,6 +8,7 @@ const mockClearIconCache = vi.fn();
 const mockDownloadDebugDump = vi.fn();
 const mockGetUser = vi.fn();
 const mockPushInitialSync = vi.fn();
+const mockTransitionTheme = vi.fn((change: () => void, _event?: MouseEvent) => change());
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -36,6 +37,25 @@ vi.mock('@/services/auth', () => ({
 vi.mock('@/preferences/sync', () => ({
   pushInitialSync: (...args: any[]) => mockPushInitialSync(...args),
 }));
+
+const mockListApiKeys = vi.fn();
+vi.mock('@/services/api-key', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/api-key')>();
+  return {
+    ...actual,
+    listApiKeys: (...args: any[]) => mockListApiKeys(...args),
+    createApiKey: vi.fn(),
+    revokeApiKey: vi.fn(),
+  };
+});
+
+const mockListGroupPolicies = vi.fn();
+vi.mock('@/services/group-policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/group-policy')>();
+  return { ...actual, listGroupPolicies: (...args: any[]) => mockListGroupPolicies(...args) };
+});
+vi.mock('@/services/container', () => ({ getContainerGroups: vi.fn().mockResolvedValue([]) }));
+vi.mock('@/services/trigger', () => ({ getAllTriggers: vi.fn().mockResolvedValue([]) }));
 
 const mockDisableIconifyApi = vi.fn();
 vi.mock('@/boot/icons', () => ({
@@ -167,7 +187,7 @@ vi.mock('@/theme/useTheme', () => ({
     themeVariant: { value: 'dark', __v_isRef: true },
     isDark: { value: true, __v_isRef: true },
     setThemeFamily: vi.fn(),
-    transitionTheme: vi.fn((cb: () => void) => cb()),
+    transitionTheme: mockTransitionTheme,
   }),
 }));
 
@@ -301,10 +321,6 @@ describe('ConfigView', () => {
     mockLoadUpdateMode.mockResolvedValue(undefined);
     mockGetUser.mockResolvedValue({
       username: 'admin',
-      email: 'admin@test.com',
-      role: 'admin',
-      lastLogin: '2026-01-01',
-      sessions: 2,
     });
     mockGetAppInfos.mockResolvedValue({ version: '1.4.0' });
     mockGetStore.mockResolvedValue({ configuration: { path: '/store', file: 'dd.json' } });
@@ -440,7 +456,25 @@ describe('ConfigView', () => {
       expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
     });
 
-    it('displays store fields after loading', async () => {
+    it.each(['dd.sqlite', 'production.sqlite'])(
+      'displays active SQLite store file %s',
+      async (dbFile) => {
+        mockGetStore.mockResolvedValue({
+          configuration: { path: '/var/drydock', file: 'dd.json', dbFile },
+        });
+
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(w.text()).not.toContain('Loading');
+        });
+
+        expect(w.text()).toContain('/var/drydock');
+        expect(w.text()).toContain(dbFile);
+        expect(w.text()).not.toContain('dd.json');
+      },
+    );
+
+    it('displays legacy store fields when no SQLite file is reported', async () => {
       mockGetServer.mockResolvedValue({
         configuration: {
           port: 3000,
@@ -616,6 +650,65 @@ describe('ConfigView', () => {
     });
   });
 
+  describe('profile fallback labels', () => {
+    it.each([
+      ['ar', 'مستخدم غير معروف'],
+      ['de', 'Unbekannter Benutzer'],
+      ['it', 'Utente sconosciuto'],
+      ['ja', '不明なユーザー'],
+      ['ko', '알 수 없는 사용자'],
+      ['nl', 'Onbekende gebruiker'],
+      ['pl', 'Nieznany użytkownik'],
+      ['pt-BR', 'Usuário desconhecido'],
+      ['ru', 'Неизвестный пользователь'],
+      ['tr', 'Bilinmeyen kullanıcı'],
+      ['uk', 'Невідомий користувач'],
+      ['vi', 'Người dùng không xác định'],
+      ['zh-TW', '未知使用者'],
+    ] as const)(
+      'updates the missing identity caption in %s without reloading the profile',
+      async (locale, expected) => {
+        mockRouteQuery.value = { tab: 'profile' };
+        mockGetUser.mockResolvedValue({ username: '' });
+        mockGetServer.mockResolvedValue({ configuration: {} });
+        const wrapper = factory();
+        try {
+          await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+          await nextTick();
+          const heading = () => wrapper.get('.dd-text-heading-section.truncate').text();
+          expect(heading()).toBe('Unknown User');
+          setI18nLocale(locale);
+          await nextTick();
+          expect(heading()).toBe(expected);
+          expect(mockGetUser).toHaveBeenCalledOnce();
+          expect(mockUpdateSettings).not.toHaveBeenCalled();
+          expect(mockPushInitialSync).not.toHaveBeenCalled();
+        } finally {
+          wrapper.unmount();
+          setI18nLocale('en');
+        }
+      },
+    );
+
+    it('preserves a real username that matches the English fallback', async () => {
+      mockRouteQuery.value = { tab: 'profile' };
+      mockGetUser.mockResolvedValue({ username: 'Unknown User' });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      const wrapper = factory();
+      try {
+        await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+        await nextTick();
+        setI18nLocale('ar');
+        await nextTick();
+        expect(wrapper.get('.dd-text-heading-section.truncate').text()).toBe('Unknown User');
+        expect(mockGetUser).toHaveBeenCalledOnce();
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    });
+  });
+
   describe('cross-device sync toggle', () => {
     async function mountAppearance(username = 'admin') {
       mockRouteQuery.value = { tab: 'appearance' };
@@ -717,6 +810,37 @@ describe('ConfigView', () => {
   });
 
   describe('cache clear', () => {
+    it('renders the real cache service HTTP error for a null response', async () => {
+      const actual =
+        await vi.importActual<typeof import('@/services/settings')>('@/services/settings');
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockClearIconCache.mockImplementationOnce(actual.clearIconCache);
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = vi.fn().mockResolvedValue(new Response('null', { status: 503 }));
+      globalThis.fetch = fetchSpy;
+      const wrapper = factory();
+      try {
+        await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
+        await nextTick();
+        const clearButton = wrapper
+          .findAll('button')
+          .find((button) => button.text().includes('Clear Cache'))!;
+        expect(fetchSpy).not.toHaveBeenCalled();
+        await clearButton.trigger('click');
+        await vi.waitFor(() => expect(wrapper.text()).toContain('HTTP 503'));
+        expect(wrapper.text()).not.toContain('Cannot read properties');
+        expect(clearButton.attributes('disabled')).toBeUndefined();
+        expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/api/v1/icons/cache', {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+      } finally {
+        wrapper.unmount();
+        globalThis.fetch = originalFetch;
+        mockClearIconCache.mockReset();
+      }
+    });
+
     it('calls clearIconCache and shows result', async () => {
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockClearIconCache.mockResolvedValue({ cleared: 42 });
@@ -762,6 +886,7 @@ describe('ConfigView', () => {
     });
 
     afterEach(() => {
+      setI18nLocale('en');
       Object.defineProperty(URL, 'createObjectURL', {
         configurable: true,
         writable: true,
@@ -792,7 +917,40 @@ describe('ConfigView', () => {
       expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:debug-dump');
     });
 
-    it('shows debug dump download error', async () => {
+    it('translates unsupported downloads and clears the error on a successful retry', async () => {
+      preferences.locale.language = 'fr';
+      setI18nLocale('fr');
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      Object.defineProperty(URL, 'createObjectURL', { value: undefined });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockLoadUpdateMode).toHaveBeenCalled());
+      await nextTick();
+
+      const downloadButton = w.get('[data-test="download-debug-dump"]');
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => {
+        expect(w.text()).toContain('Impossible de télécharger le dump debug');
+      });
+      expect(w.text()).not.toContain('Browser does not support file downloads');
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(mockDownloadDebugDump).toHaveBeenCalledOnce();
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
+
+      Object.defineProperty(URL, 'createObjectURL', { value: createObjectUrlSpy });
+      await downloadButton.trigger('click');
+
+      await vi.waitFor(() => expect(revokeObjectUrlSpy).toHaveBeenCalledWith('blob:debug-dump'));
+      expect(mockDownloadDebugDump).toHaveBeenCalledTimes(2);
+      expect(w.text()).not.toContain('Impossible de télécharger le dump debug');
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(document.body.querySelector('a[download="drydock-debug-dump.json"]')).toBeNull();
+    });
+
+    it('preserves API download errors in a non-English locale', async () => {
+      preferences.locale.language = 'fr';
+      setI18nLocale('fr');
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockDownloadDebugDump.mockRejectedValue(new Error('debug dump unavailable'));
 
@@ -806,6 +964,9 @@ describe('ConfigView', () => {
       await vi.waitFor(() => {
         expect(w.text()).toContain('debug dump unavailable');
       });
+      expect(downloadButton.classes()).not.toContain('pointer-events-none');
+      expect(createObjectUrlSpy).not.toHaveBeenCalled();
+      expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -839,6 +1000,27 @@ describe('ConfigView', () => {
       const w = await mountAppearanceTab();
       expect(w.text()).toContain('One Dark');
       expect(w.text()).toContain('GitHub');
+    });
+
+    it('keeps pointer coordinates when selecting a theme family', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      const event = new MouseEvent('click', { bubbles: true, clientX: 40, clientY: 80 });
+      button.element.dispatchEvent(event);
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), event);
+    });
+
+    it('uses the centered transition fallback for theme clicks without pointer coordinates', async () => {
+      const wrapper = await mountAppearanceTab();
+      const button = wrapper
+        .findAll('button')
+        .find((candidate) => candidate.text().includes('GitHub'));
+      if (!button) throw new Error('Missing theme family button');
+      button.element.dispatchEvent(new Event('click', { bubbles: true }));
+      expect(mockTransitionTheme).toHaveBeenLastCalledWith(expect.any(Function), undefined);
     });
 
     it('renders font options', async () => {
@@ -956,7 +1138,38 @@ describe('ConfigView', () => {
 
       const text = w.text();
       expect(text).toContain('admin');
-      expect(text).toContain('admin@test.com');
+      expect(text).toContain('Active Sessions');
+      expect(text).not.toContain('admin@test.com');
+    });
+
+    it('keeps empty profile fields when the response includes unsupported metadata', async () => {
+      mockGetUser.mockResolvedValue({
+        username: 'admin',
+        displayName: 'Legacy Display Name',
+        email: 'legacy@example.com',
+        role: 'legacy-role',
+        provider: 'legacy-provider',
+        lastLogin: '2026-01-01',
+        sessions: 7,
+      });
+
+      const w = await mountProfileTab();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.text()).toContain('admin');
+      expect(w.text()).not.toContain('Legacy Display Name');
+      expect(w.text()).not.toContain('legacy@example.com');
+      expect(w.text()).not.toContain('legacy-role');
+      expect(w.text()).not.toContain('legacy-provider');
+      const sessions = w
+        .findAll('div')
+        .find(
+          (element) =>
+            element.element.children.length === 2 &&
+            element.element.children[0].textContent === 'Active Sessions',
+        );
+      expect(sessions?.element.children[1].textContent).toBe('0');
     });
 
     it('shows profile error state when user fetch fails', async () => {
@@ -980,6 +1193,54 @@ describe('ConfigView', () => {
       const text = w.text();
       expect(text).toContain('Username');
       expect(text).toContain('Active Sessions');
+    });
+  });
+
+  describe('api keys tab', () => {
+    beforeEach(() => {
+      mockListApiKeys.mockResolvedValue({ data: [], total: 0, hasMore: false });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+    });
+
+    it('offers the tab alongside the others', async () => {
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.findAll('button').some((b) => b.text().includes('API Keys'))).toBe(true);
+    });
+
+    it('selects the api keys tab from the query param and loads the keys', async () => {
+      mockRouteQuery.value = { tab: 'apiKeys' };
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockListApiKeys).toHaveBeenCalled());
+      await nextTick();
+      await nextTick();
+
+      expect(w.text()).toContain('No API keys yet');
+    });
+  });
+
+  describe('group policies tab', () => {
+    beforeEach(() => {
+      mockListGroupPolicies.mockReset().mockResolvedValue([]);
+    });
+
+    it('offers the tab alongside the others', async () => {
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+
+      expect(w.findAll('button').some((b) => b.text().includes('Group policies'))).toBe(true);
+    });
+
+    it('selects the group policies tab from the query param and loads the policies', async () => {
+      mockRouteQuery.value = { tab: 'groupPolicies' };
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockListGroupPolicies).toHaveBeenCalled());
+      await vi.waitFor(() => expect(w.text()).toContain('No groups or policies yet'));
     });
   });
 });

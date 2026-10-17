@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
+import type AppButton from '@/components/AppButton.vue';
 import ContainerSideTabContent from '@/components/containers/ContainerSideTabContent.vue';
 import type { ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
@@ -120,16 +122,23 @@ const selectedMaturityMode = ref('mature');
 const selectedMaturityMinAgeDays = ref(7);
 const maturityModeInput = ref('all');
 const maturityMinAgeDaysInput = ref(7);
+const maturitySkipReleasesInput = ref(0);
+const maturityReleaseFallbackDaysInput = ref(0);
 const mockClearPolicySelected = vi.fn();
 const mockRevertPolicySelected = vi.fn();
 const selectedPolicyOverrideFields = ref(
   new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
 );
 const selectedPolicyOverriddenFields = ref(new Set(['maturityMode', 'skipTags']));
+const selectedPolicyGroupFields = ref(new Set<string>());
+const selectedPolicyGroupName = ref<string | undefined>(undefined);
 const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const triggersLoading = ref(false);
 const detailTriggers = ref<Array<{ type: string; name: string; agent?: string }>>([]);
+const unassociatedTriggers = ref<
+  Array<{ id: string; type: string; name: string; agent?: string; reason: string }>
+>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -210,11 +219,15 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     selectedMaturityMinAgeDays,
     maturityModeInput,
     maturityMinAgeDaysInput,
+    maturitySkipReleasesInput,
+    maturityReleaseFallbackDaysInput,
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
     revertPolicySelected: mockRevertPolicySelected,
     selectedPolicyOverrideFields,
+    selectedPolicyGroupFields,
+    selectedPolicyGroupName,
     selectedPolicyOverriddenFields,
     policyMessage,
     policyError,
@@ -225,6 +238,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     previewError,
     triggersLoading,
     detailTriggers,
+    unassociatedTriggers,
     getTriggerKey: (trigger: { type: string; name: string }) => `${trigger.type}.${trigger.name}`,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -272,6 +286,10 @@ function mountComponent() {
           template:
             '<div data-test="container-stats-stub" :data-id="containerId" :data-compact="compact === undefined ? `false` : `true`"></div>',
         },
+        LabelOverridesPanel: {
+          props: ['containerId'],
+          template: '<div data-test="label-overrides-panel-stub" :data-id="containerId" />',
+        },
         UpdateStatusPanel: {
           props: ['container', 'mode'],
           emits: ['update', 'open-tab'],
@@ -290,6 +308,45 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
 }
 
 describe('ContainerSideTabContent - Environment Variables', () => {
+  it.each([
+    ['image', -300_000, '5m', '5min'],
+    ['metadata', -90 * 86_400_000, '2 months', '2\u00a0mois'],
+    ['image', 60_000, 'now', 'maintenant'],
+  ] as const)(
+    'localizes image age from %s at offset %s without refetching',
+    async (source, offset, english, french) => {
+      const originalLocale = i18n.global.locale.value;
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-09-16T16:00:00Z'));
+      i18n.global.locale.value = 'en';
+      const timestamp = new Date(Date.now() + offset).toISOString();
+      activeDetailTab.value = 'overview';
+      selectedContainer.value = {
+        ...createSelectedContainer(),
+        imageCreated: source === 'image' ? timestamp : undefined,
+      };
+      if (source === 'metadata') selectedImageMetadata.value.created = timestamp;
+      const container = selectedContainer.value;
+      const wrapper = mountComponent();
+      try {
+        const row = wrapper.find('[data-test="container-image-age-detail"]');
+        expect(row.find('.font-mono').text()).toBe(english);
+        const originalTimestamp = row.find('.truncate').text();
+        i18n.global.locale.value = 'fr';
+        await nextTick();
+        expect(row.find('.font-mono').text()).toBe(french);
+        expect(row.find('.truncate').text()).toBe(originalTimestamp);
+        expect(selectedContainer.value).toBe(container);
+        expect(runContainerPreview).not.toHaveBeenCalled();
+        expect(mockConfirmUpdate).not.toHaveBeenCalled();
+      } finally {
+        wrapper.unmount();
+        i18n.global.locale.value = originalLocale;
+        vi.useRealTimers();
+      }
+    },
+  );
+
   afterEach(() => {
     activeDetailTab.value = 'environment';
     selectedComposePaths.value = [];
@@ -345,10 +402,13 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     selectedMaturityMinAgeDays.value = 7;
     maturityModeInput.value = 'all';
     maturityMinAgeDaysInput.value = 7;
+    maturitySkipReleasesInput.value = 0;
+    maturityReleaseFallbackDaysInput.value = 0;
     policyMessage.value = null;
     policyError.value = null;
     triggersLoading.value = false;
     detailTriggers.value = [];
+    unassociatedTriggers.value = [];
     triggerRunInProgress.value = null;
     triggerMessage.value = null;
     triggerError.value = null;
@@ -384,6 +444,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
       'skipDigests',
     ]);
     selectedPolicyOverriddenFields.value = new Set(['maturityMode', 'skipTags']);
+    selectedPolicyGroupFields.value = new Set();
+    selectedPolicyGroupName.value = undefined;
     loadDetailSecurityData.mockReset();
     loadDetailSbom.mockReset();
     mockScanContainer.mockReset();
@@ -818,6 +880,36 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockConfirmRollback).toHaveBeenCalledWith('backup-1');
   });
 
+  it('shows why an unassociated trigger does not apply to the container (DR-78)', () => {
+    activeDetailTab.value = 'actions';
+    unassociatedTriggers.value = [
+      { id: 'docker.deploy', type: 'docker', name: 'deploy', reason: 'agentOwnership' },
+      {
+        id: 'slack.notify',
+        type: 'slack',
+        name: 'notify',
+        agent: 'agent-2',
+        reason: 'labelScope',
+      },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Unavailable Triggers');
+    const dockerRow = wrapper.get('[data-unassociated-trigger-key="docker.deploy"]');
+    expect(dockerRow.text()).toContain('docker.deploy');
+    expect(dockerRow.text()).toContain('Belongs to a different agent than this container.');
+
+    const slackRow = wrapper.get('[data-unassociated-trigger-key="slack.notify"]');
+    expect(slackRow.text()).toContain('agent: agent-2');
+    expect(slackRow.text()).toContain(
+      "Excluded by this container's dd.action/dd.notification include or exclude labels.",
+    );
+    expect(wrapper.find('[data-unassociated-trigger-key="docker.deploy"] button').exists()).toBe(
+      false,
+    );
+  });
+
   it('renders populated overview rows for ports, volumes, runtime warnings, and hook variables', () => {
     activeDetailTab.value = 'overview';
     const withOverviewData = createSelectedContainer();
@@ -917,6 +1009,19 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('com.example.role=web');
   });
 
+  it('mounts the label override panel for the selected container on the labels tab', () => {
+    activeDetailTab.value = 'labels';
+    selectedContainer.value = createSelectedContainer();
+
+    const wrapper = mountComponent();
+
+    const panel = wrapper.find('[data-test="label-overrides-panel-stub"]');
+    expect(panel.exists()).toBe(true);
+    expect(panel.attributes('data-id')).toBe(selectedContainer.value.id);
+    activeDetailTab.value = 'overview';
+    expect(mountComponent().find('[data-test="label-overrides-panel-stub"]').exists()).toBe(false);
+  });
+
   it('fires action, skip, snooze, reset, and rollback latest handlers', async () => {
     activeDetailTab.value = 'actions';
     const actionable = createSelectedContainer();
@@ -978,6 +1083,32 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockConfirmRollback).toHaveBeenCalledWith();
   });
 
+  it('uses plain policy reset buttons and prevents resets while a policy action is pending', async () => {
+    activeDetailTab.value = 'actions';
+    const fields = ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'];
+    selectedPolicyOverrideFields.value = new Set(fields);
+    const wrapper = mountComponent();
+
+    for (const field of fields) {
+      const button = wrapper.findComponent<typeof AppButton>(
+        `[data-test="policy-revert-${field}"]`,
+      );
+      expect(button.props('variant')).toBe('plain');
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected.mock.calls).toEqual(fields.map((field) => [field]));
+
+    policyInProgress.value = 'saving';
+    await nextTick();
+    for (const field of fields) {
+      const button = wrapper.find(`[data-test="policy-revert-${field}"]`);
+      expect(button.attributes('disabled')).toBeDefined();
+      await button.trigger('click');
+    }
+    expect(mockRevertPolicySelected).toHaveBeenCalledTimes(fields.length);
+    wrapper.unmount();
+  });
+
   it('shows material override badges and wires field and whole-policy reverts', async () => {
     activeDetailTab.value = 'actions';
     selectedSkipTags.value = ['ui-tag'];
@@ -994,6 +1125,42 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
     expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
+  });
+
+  it('shows a text group chip naming the group only for fields the server attributed to it', async () => {
+    activeDetailTab.value = 'actions';
+    selectedPolicyGroupName.value = 'payments';
+    selectedPolicyGroupFields.value = new Set(['maturityMinAgeDays', 'skipDigests']);
+    selectedSkipDigests.value = ['sha256:abc'];
+    const wrapper = mountComponent();
+
+    for (const field of ['maturityMinAgeDays', 'skipDigests']) {
+      const chip = wrapper.find(`[data-test="policy-group-${field}"]`);
+      expect(chip.exists()).toBe(true);
+      expect(chip.text()).toBe('Group: payments');
+    }
+    expect(wrapper.find('[data-test="policy-group-maturityMode"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="policy-group-skipTags"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('renders no group chip when no group name came from the server', () => {
+    selectedPolicyGroupFields.value = new Set(['maturityMode']);
+    activeDetailTab.value = 'actions';
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-group-maturityMode"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('words the revert controls as reverting to the inherited policy', () => {
+    activeDetailTab.value = 'actions';
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-revert-all"]').text()).toBe(
+      'Revert to inherited policy',
+    );
+    wrapper.unmount();
   });
 
   it('fires force update handler for blocked containers', async () => {

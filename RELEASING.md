@@ -15,7 +15,7 @@ Two shapes of release come out of the same workflow:
 
 ## Before dispatching
 
-1. **Sync `main` with the active dev branch first if it's drifted.** `main` is never an independent commit target — it only advances by merging from `dev/vX.Y` immediately before a cut, for every RC, not just GA. The workflow itself asserts this (see [Branch flow](#branch-flow-and-drift-check) below) and fails the whole run if it's out of sync, so do the merge before dispatching, not after.
+1. **Sync `main` with the active dev branch first if it's drifted.** `main` is never an independent commit target — it only advances by merging from `dev/vX.Y` immediately before a cut, for every RC, not just GA. A retained-line GA promotion is the narrow exception described below; it reuses an RC already built from `main`. The workflow itself asserts the normal-cut invariant (see [Branch flow](#branch-flow-and-drift-check) below) and fails the whole run if it's out of sync, so do the merge before dispatching, not after.
 
 2. **Run the local precheck** — this cannot run in CI because it reads a gitignored file:
 
@@ -34,6 +34,8 @@ Two shapes of release come out of the same workflow:
    No leading `v` in the heading, unlike the tag itself. (For a GA promoted from an RC, this heading is added to `main` on GA day — it's never present in the RC's own commit.)
 
 4. **Green CI on the target SHA.** The workflow polls for a successful `ci-verify.yml` run, then separately for a successful `e2e-playwright.yml` run, both on the SHA it's about to release — each poll allows up to 18 attempts, 300s apart (up to 90 minutes per workflow) before failing the run. Don't dispatch against a commit that hasn't finished CI; you'll just be waiting out the polling budget for something that was never going to turn green.
+
+For a long release entry, keep the complete details in `CHANGELOG.md` and add one `<!-- release-summary:start -->` / `<!-- release-summary:end -->` pair around a compact publishable summary. Keep the version heading and upgrade warnings before the start marker; release mode preserves that prefix. The summary should link to the full versioned changelog. `--format release` selects this explicit summary, while the default extractor and website retain the full entry. With the current extractor, malformed, empty or oversized summaries fail validation before the image build. The entry budget is 100,000 characters, and the final assembled body is checked against [GitHub's 125,000-character capacity](https://github.com/cli/cli/issues/7815) after standing and promotion disclosures are appended. Retained older extractors accept the extra valued argument and keep their existing full-entry output; their final assembled body is still checked.
 
 ## Cutting an RC
 
@@ -107,6 +109,8 @@ git diff --quiet origin/main origin/dev/vX.Y
 
 **This compares trees, not commit ancestry — deliberately.** drydock's branch protection allows squash merges only (`allow_squash_merge: true`, `allow_merge_commit: false`, `allow_rebase_merge: false`). Every `dev` → `main` sync therefore mints a brand-new commit that `dev` itself never has, which means `git merge-base --is-ancestor origin/dev/vX.Y origin/main` would fail on *every* cut after the first, sync or no sync. Tree equality is the invariant that actually holds.
 
+Secret-scan policy follows the same trust boundary. Ordinary PRs restore the scanner script, configuration and ignore file from their protected base. A main-promotion PR can use the matching `dev/vX.Y` policy only after a fresh fetch confirms that its entire tree equals that protected development commit and its release base is the same as or newer than main. CI pins the selected commit before restoring those files and keeps complete history and release tags available for the configured scan. An unanswered development-ref fetch, an older release base or any tree difference retains base policy.
+
 If the two have drifted, the run fails with a diffstat and refuses to tag — forward-port the missing content into `dev/vX.Y` (or reconcile whichever side is ahead) and re-dispatch. If `dev/vX.Y` doesn't exist on origin at all (retired post-GA, or not yet cut), the check is a no-op.
 
 The same step also asserts `renovate.json`'s `baseBranchPatterns` names exactly the `dev/vX.Y` branch this cut targets. Renovate has to name one concrete branch (a pattern would double every dependency PR against every matching `dev/vX.Y`), so it has to be rotated at every branch cut — this is the one moment in the pipeline where the correct target is unambiguous, so a stale value fails the cut with the exact value to set rather than silently leaving the bot aimed at a dead branch.
@@ -122,10 +126,10 @@ The workflow still only dispatches from `main`. What changes is the optional `so
 - Must match `dev/vX.Y` exactly — no arbitrary ref.
 - Must exist as a branch on origin.
 - Its `vX.Y` line must match `release_tag`'s line (`v1.6.1` from `dev/v1.6` is valid; `v1.7.0` from `dev/v1.6` is not).
-- Must **not** be the active line — if `dev/v1.6` is still the highest `dev/vX.Y` on origin, this is a normal cut and `source_ref` is a mistake.
-- `release_tag`'s patch component must be nonzero (`v1.6.1`, `v1.6.1-rc.1` — not `v1.6.0`). A maintenance cut is for patches; a new `vX.Y.0` line is cut from `main` normally.
+- Must **not** be main's active line, derived from main's `package.json` version. Branch-name ordering does not decide which line is active.
+- For maintenance builds, `release_tag`'s patch component must be nonzero (`v1.6.1`, `v1.6.1-rc.1` — not `v1.6.0-rc.1`). New minor prereleases build from `main` only. A patch-zero final GA may use a retained older line only through the exact-candidate promotion below.
 
-When `source_ref` is set:
+When `source_ref` selects a nonzero-patch maintenance cut:
 
 - The main-sync drift guard is **skipped**, not run and passed — there's no drift claim to make between `main` and a line it's already moved past.
 - The target/source SHA, the `CHANGELOG.md` read for the release-notes/validation steps, and the `git archive` build source all come from `source_ref`'s tip instead of `main` HEAD. **This means the CHANGELOG heading for the maintenance release must be committed onto the maintenance branch itself** (e.g. `## [1.6.1] - 2026-08-20` on `dev/v1.6`), the same way a normal release needs the heading on `main` before dispatch.
@@ -134,6 +138,20 @@ When `source_ref` is set:
 - **Maintenance artifacts ship without build-provenance attestations** (`.intoto.jsonl` is absent from the release assets, and `gh attestation verify` has nothing to verify for these tags). GitHub's OIDC `sha` claim is fixed to the dispatch ref — always `main` HEAD for this workflow — so a provenance statement for a maintenance artifact would falsely claim it was built from a commit it wasn't. Publishing nothing is honest; publishing that would not be. Cosign signing and verification are unaffected (they attest to the signing identity, which really is `release-cut.yml@refs/heads/main`), and the true source branch and SHA are recorded in the release notes and job summary.
 
 A maintenance GA works the same way as a normal GA (candidate download/verify/promote, no rebuild), it just also needs `source_ref` set on the GA dispatch — the drift guard and CHANGELOG read are unconditional steps that run before the RC/GA branch, so a maintenance GA without `source_ref` would fail the (now-meaningless) drift check against a `main` that has moved on. `candidate_tag`/`candidate_digest` resolve by git tag and registry digest, which are branch-agnostic, so nothing else about the promotion path changes.
+
+## Promoting a retained minor line after main advances
+
+A new minor RC can soak while the previous minor's final RC is still awaiting GA. For example, after `main` advances to v1.8, `v1.7.0-rc.24` can still be promoted to `v1.7.0` without rebuilding it or resetting its soak.
+
+For this case, dispatch from `main` with `source_ref=dev/v1.7`, `release_tag=v1.7.0`, the exact published `candidate_tag=v1.7.0-rc.24`, and its freshly verified `candidate_digest`. Keep the retained branch until GA is verified. Prepare its GA changelog/metadata through a reviewed PR into `dev/v1.7`, then dispatch and pass CI Verify and Playwright on that exact metadata SHA before cutting. This input path does not authorize an early GA or a soak override.
+
+The source guard requires an older minor line, an exact matching `vX.Y.0-rc.N` candidate and a full lowercase SHA-256 digest. It rejects a soak override and refuses publication if any newer GA already exists, so this bridge cannot move stable tags back after the new train reaches GA. An unanswered release lookup fails closed. The later GA checks still require the published prerelease, matching tag/base/source, seven full days, matching image digest across all registries, signatures, archive reproducibility and original provenance. Missing or invalid evidence stops publication. No new minor RC can be built from a retained branch. Both CI Verify and Playwright must pass on the original candidate SHA and separately on the retained metadata SHA; the workflow checks both before changing checkout or publishing.
+
+Retained metadata CI may need CI-policy or exact package-pin repairs before it can pass against current repository refs. Carry those through a reviewed PR on the retained branch before dispatching its metadata CI. The candidate artifacts remain unchanged.
+
+The retained branch supplies the GA changelog and parser snapshot only. The artifacts and GA git tag come from the original candidate, as in normal GA promotion. Unlike an off-main maintenance build, this candidate was built from `main`: its original provenance is required, verified against its original source SHA, and copied into the GA release. No new build-provenance claim is generated for the later workflow commit. The release notes and job summary identify the retained-line promotion.
+
+When starting the new active train, rotate Renovate to that train because the normal-cut drift guard checks it. Retaining an older branch for this GA path does not require keeping Renovate pointed at it. Preserve held dependency PR dispositions and do not delete the retained branch until its GA and any final forward-port are complete.
 
 ## If something goes wrong
 

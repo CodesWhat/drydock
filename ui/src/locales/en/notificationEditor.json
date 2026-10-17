@@ -1,0 +1,25 @@
+{
+  "notificationEditor": {
+    "title": "Notification policy",
+    "edit": "Edit notification policy",
+    "boundary": "Edit delivery policy and security digest templates. Saving does not test the trigger or send a notification. Credentials, destinations and execution settings remain read-only.",
+    "providerForced": "This provider controls this value. It cannot be edited here.",
+    "triggerUnavailable": "This exact notification trigger is not available in the editor snapshot.",
+    "apiUnavailable": "This server does not provide the notification policy editor API.",
+    "fields": {
+      "threshold": "Update threshold",
+      "once": "Notify only once",
+      "mode": "Delivery mode",
+      "securitymode": "Security delivery mode",
+      "digestcron": "Digest schedule (cron)",
+      "resolvenotifications": "Send resolution notifications",
+      "securitydigesttitle": "Security digest title",
+      "securitydigestbody": "Security digest body"
+    },
+    "templateHelp": "Removing a template restores the built-in defaults when rendering. Templates cannot be empty. Editing a template does not change the security delivery mode.",
+    "templateUnavailable": "This server does not provide this template field.",
+    "templateEmpty": "Templates cannot be empty. Enter text or explicitly remove the file value.",
+    "providerUnsupported": "This provider does not support security digest templates.",
+    "interpolationHelp": "Whole values such as {reference} or {fallback} use YAML environment interpolation and become read-only after reload. Scan expressions such as {expression} remain editable. Do not put secrets in templates."
+  }
+}

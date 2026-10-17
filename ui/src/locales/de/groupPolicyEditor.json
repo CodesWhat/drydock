@@ -1,0 +1,75 @@
+{
+  "groupPolicyEditor": {
+    "tab": "Gruppenrichtlinien",
+    "title": "Gruppenrichtlinien",
+    "description": "Eine Richtlinie pro Gruppe, angewendet auf jedes aktuelle Mitglied und auf Container, die später dazukommen.",
+    "ownership": "In Drydock gespeichert, nicht in Docker-Labels. Labels und Überschreibungen pro Container gelten bei den Update-Richtlinienfeldern weiterhin vorrangig.",
+    "newPolicy": "Neue Richtlinie",
+    "loading": "Gruppenrichtlinien werden geladen…",
+    "empty": "Noch keine Gruppen oder Richtlinien. Gruppen stammen aus dd.group, Compose-Projekten und Swarm-Stacks.",
+    "memberCount": "{count} Container | {count} Container",
+    "noMembers": "Keine aktuellen Mitglieder; gilt für künftige Mitglieder",
+    "hosts": "Hosts: {hosts}",
+    "controller": "Controller",
+    "noPolicy": "Keine Richtlinie",
+    "whitespaceNotice": "Der Name enthält führende oder abschließende Leerzeichen, dargestellt als ␣.",
+    "edit": "Bearbeiten",
+    "create": "Richtlinie erstellen",
+    "readOnly": "Nur Admins können Gruppenrichtlinien ändern. Diese Ansicht ist schreibgeschützt.",
+    "summary": {
+      "maturityMode": "Reife: {value}",
+      "minAge": "Mindestalter: {days} T",
+      "skipTags": "Übersprungene Tags: {count}",
+      "skipDigests": "Übersprungene Digests: {count}",
+      "updateMode": "Updates: {mode}",
+      "exclude": "Ausgeschlossene Trigger: {count}"
+    },
+    "editor": {
+      "titleCreate": "Neue Gruppenrichtlinie",
+      "titleEdit": "Gruppenrichtlinie: {group}",
+      "groupName": "Gruppenname",
+      "groupNameHelp": "Es wird exakt verglichen. Groß-/Kleinschreibung und Leerzeichen zählen.",
+      "groupNameInvalid": "Gib einen Gruppennamen ein, der nicht leer ist.",
+      "maturityMode": "Reifemodus",
+      "maturityOptions": {
+        "inherit": "Erben",
+        "all": "Alle Updates",
+        "mature": "Nur ausgereifte"
+      },
+      "minAge": "Mindestalter (Tage)",
+      "minAgeHelp": "Ganze Tage, 1 bis 365. Leer lassen, um zu erben.",
+      "minAgeInvalid": "Gib eine ganze Zahl von 1 bis 365 ein.",
+      "skipTags": "Übersprungene Tags",
+      "skipDigests": "Übersprungene Digests",
+      "listHelp": "Einer pro Zeile oder durch Kommas getrennt.",
+      "updateMode": "Automatische Updates",
+      "updateModeOptions": {
+        "inherit": "Erben",
+        "manual": "Nur manuell",
+        "notify": "Nur benachrichtigen"
+      },
+      "updateModeHelp": "Gruppenregeln können nur einschränken. Aktueller globaler Modus: {mode}.",
+      "exclude": "Ausgeschlossene Aktions-Trigger",
+      "excludeHelp": "Trigger-ID oder -Name, optional gefolgt von :threshold. Einer pro Zeile oder durch Kommas getrennt.",
+      "noFields": "Lege mindestens ein Feld fest oder entferne die Richtlinie.",
+      "remove": "Richtlinie entfernen",
+      "conflict": "Diese Richtlinie wurde von jemand anderem geändert. Lade sie neu und wende deine Änderung dann erneut an. Dein Entwurf bleibt bis zum Neuladen erhalten.",
+      "reload": "Neu laden",
+      "notFound": "Diese Richtlinie existiert nicht mehr. Lade neu, um die aktuelle Liste zu sehen.",
+      "forbidden": "Zum Ändern von Gruppenrichtlinien sind Admin-Rechte erforderlich."
+    },
+    "remove": {
+      "header": "Gruppenrichtlinie entfernen",
+      "message": "Richtlinie für die Gruppe {group} entfernen? Die Mitglieder fallen auf ihre Label-, Watcher- und globalen Werte zurück.",
+      "accept": "Entfernen"
+    },
+    "saved": "Richtlinie gespeichert. {members} Container aktualisiert. | Richtlinie gespeichert. {members} Container aktualisiert.",
+    "removed": "Richtlinie entfernt. {members} Container aktualisiert. | Richtlinie entfernt. {members} Container aktualisiert.",
+    "warningsTitle": "Warnungen",
+    "errors": {
+      "load": "Gruppenrichtlinien konnten nicht geladen werden",
+      "requestFailed": "Anfrage zur Gruppenrichtlinie fehlgeschlagen (HTTP {status})",
+      "unknown": "Die Gruppenrichtlinie konnte nicht gespeichert werden"
+    }
+  }
+}

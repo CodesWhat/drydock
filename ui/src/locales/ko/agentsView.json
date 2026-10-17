@@ -1,6 +1,11 @@
 {
   "agentsView": {
     "list": {
+      "density": {
+        "label": "에이전트 테이블 간격",
+        "normal": "기본 간격",
+        "compact": "좁은 간격"
+      },
       "loading": "에이전트 불러오는 중...",
       "filterPlaceholder": "이름으로 필터...",
       "clearFilter": "초기화",

@@ -1,3 +1,5 @@
+import { i18n } from '../boot/i18n';
+import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface TriggerDetailPathOptions {
@@ -109,10 +111,12 @@ function getTriggerProviderColor(type: string) {
 async function getAllTriggers() {
   const response = await fetch('/api/v1/triggers', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get triggers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('triggersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ApiComponentResponse>(payload);
 }
 
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
@@ -131,7 +135,7 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get trigger: ${response.statusText}`);
   }
-  return readJsonResponse(response);
+  return readJsonResponse<ApiComponentResponse>(response);
 }
 
 async function runTrigger({
@@ -149,9 +153,14 @@ async function runTrigger({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(container),
   });
-  const json = await readJsonResponse<{ error?: string } & Record<string, unknown>>(response);
+  const json = await readJsonResponse<{ error?: unknown } & Record<string, unknown>>(response);
   if (response.status !== 200) {
-    throw new Error(json.error ? json.error : 'Unknown error');
+    const message = json?.error;
+    throw new Error(
+      typeof message === 'string' && message.trim()
+        ? message
+        : `${i18n.global.t('triggersView.test.defaultError')} (HTTP ${response.status})`,
+    );
   }
   return json;
 }

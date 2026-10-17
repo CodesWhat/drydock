@@ -1,10 +1,9 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { ROUTES } from '../../src/router/routes';
 import viteConfig, {
+  buildSpaNavigateFallbackPattern,
   isApiRequest,
-  isServerOwnedNavigation,
-  SERVER_OWNED_NAVIGATION_PATTERNS,
+  navigateFallbackAllowlist,
 } from '../../vite.config';
 
 type CodeSplittingGroup = { name: string; test: RegExp };
@@ -76,143 +75,82 @@ describe('service-worker /api runtime-caching rule', () => {
   });
 });
 
-describe('service-worker navigation-fallback denylist', () => {
-  // A helper matching NavigationRoute's own constructor default: it always
-  // has an origin, so build these the same way workbox does.
-  const url = (pathAndSearch: string): URL => new URL(pathAndSearch, 'https://drydock.example');
-
-  it('keeps the OIDC callback and every other server-owned route off the app shell', () => {
-    // The regression in #939: this is a document navigation, so the app shell
-    // used to answer it and Express never ran the code exchange.
-    expect(isServerOwnedNavigation(url('/auth/oidc/authentik/cb?code=x'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/auth/oidc/authentik/cb'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/auth/oidc/authentik/redirect'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/auth/login'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/health'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/health?verbose=1'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/metrics'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/api'))).toBe(true);
-    expect(isServerOwnedNavigation(url('/api/v1/containers'))).toBe(true);
+// DR-102: the service worker's navigation fallback (whether a document navigation to a
+// given URL is served the offline app shell) is an allowlist built directly from the
+// router's own ROUTES table (routes.ts) rather than a hand-maintained list of
+// server-owned paths, so a route added to the router without a matching allowlist
+// entry is impossible by construction — the allowlist is Object.values(ROUTES) run
+// through buildSpaNavigateFallbackPattern, not a second list someone has to remember
+// to update in step. These tests pin that property: every ROUTES path (concrete and
+// parametrized) matches, and every known server-owned path — including the OIDC
+// callback that #939/#1016 fixed, and /health and /metrics, neither of which the old
+// denylist covered — does not.
+describe('service-worker navigation-fallback allowlist (DR-102)', () => {
+  it('has exactly one pattern per route in ROUTES', () => {
+    expect(navigateFallbackAllowlist).toHaveLength(Object.keys(ROUTES).length);
   });
 
-  it('leaves SPA routes on the app shell, including the /auth view Express does not answer', () => {
-    expect(isServerOwnedNavigation(url('/'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/containers'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/containers/abc123/logs'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/login?next=%2Fcontainers'))).toBe(false);
-    // Bare /auth is ROUTES.AUTH, a real SPA view; Express matches the mount
-    // but has no handler there, so the shell should answer.
-    expect(isServerOwnedNavigation(url('/auth'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/auth?tab=providers'))).toBe(false);
-    // Prefixes that merely start with a server-owned name are still the SPA's.
-    expect(isServerOwnedNavigation(url('/authorization'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/healthcheck'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/metrics-guide'))).toBe(false);
-    expect(isServerOwnedNavigation(url('/apiary'))).toBe(false);
-  });
-
-  it('matches (or misses) the same way workbox-routing NavigationRoute itself would', async () => {
-    // workbox-routing is reachable here as a transitive dependency of
-    // vite-plugin-pwa (ui/package.json), not a direct devDependency, so
-    // import it dynamically rather than adding a package purely for this
-    // assertion. This exercises the real matching logic from
-    // node_modules/workbox-routing/NavigationRoute.js instead of our mirror
-    // of it.
-    //
-    // workbox-core's logger reads `self` unconditionally on module load,
-    // since it's written to run inside a service worker's global scope.
-    // This file runs under the node test environment (no `self`), so stub
-    // it the same way a real service worker global would provide it.
-    (globalThis as { self?: typeof globalThis }).self ??= globalThis;
-    const { NavigationRoute } = await import('workbox-routing');
-    // Cast .match to the minimal shape it actually reads (url and
-    // request.mode — see NavigationRoute.js's _match), rather than
-    // constructing an ExtendableEvent, which isn't in this project's `lib`.
-    const matches = (route: InstanceType<typeof NavigationRoute>, requestUrl: URL): boolean =>
-      (route.match as unknown as (options: { url: URL; request: { mode: string } }) => boolean)({
-        url: requestUrl,
-        request: { mode: 'navigate' },
-      });
-    const route = new NavigationRoute(async () => new Response(), {
-      denylist: SERVER_OWNED_NAVIGATION_PATTERNS,
-    });
-    const oldApiOnlyDenylistRoute = new NavigationRoute(async () => new Response(), {
-      denylist: [/^\/api\//],
-    });
-    const callbackUrl = new URL('https://drydock.example/auth/oidc/authentik/cb?code=x');
-
-    expect(matches(route, callbackUrl)).toBe(false);
-    expect(matches(oldApiOnlyDenylistRoute, callbackUrl)).toBe(true);
-  });
-
-  it('is the exact array the service worker navigation fallback is configured with', () => {
-    // VitePWA keeps its resolved options in a closure, so assert the wiring at
-    // the source instead: an inlined literal here would silently un-fix #939.
-    const source = readFileSync(
-      fileURLToPath(new URL('../../vite.config.ts', import.meta.url)),
-      'utf8',
-    );
-
-    expect(source).toContain('navigateFallbackDenylist: SERVER_OWNED_NAVIGATION_PATTERNS,');
-    expect(SERVER_OWNED_NAVIGATION_PATTERNS.map(String)).toEqual([
-      String(/^\/api(?:[/?]|$)/),
-      String(/^\/auth\//),
-      String(/^\/health(?:[/?]|$)/),
-      String(/^\/metrics(?:[/?]|$)/),
-    ]);
-  });
-});
-
-describe('service-worker denylist stays coupled to the Express route table', () => {
-  // Every top-level mount that reaches Express by top-level navigation but
-  // is meant to be answered by the SPA shell instead, with why.
-  const SPA_OWNED_MOUNTS = [
-    // uiRouter: the SPA's own static assets and history fallback.
-    '/',
-    // app.use('/auth', router) in app/api/auth.ts matches this exact path,
-    // but the router defines no handler for it (only subpaths like
-    // /auth/login do), so an unauthenticated GET falls through to
-    // requireAuthentication and returns 401. ROUTES.AUTH is a real SPA view,
-    // so the shell should answer instead.
-    '/auth',
-  ];
-
-  const extractAppMountPaths = (source: string): string[] => {
-    // Only app.<method>('/literal', ...) — a router mounted at root
-    // (router.use(...)) isn't a top-level Express mount point.
-    const pattern = /\bapp\.(?:use|get|post|all)\(\s*(['"])(\/[^'"]*)\1/g;
-    return [...source.matchAll(pattern)].map((match) => match[2]);
-  };
-
-  it('denies (or explicitly exempts) every top-level mount in app/api/index.ts and app/api/auth.ts', () => {
-    const indexSource = readFileSync(
-      fileURLToPath(new URL('../../../app/api/index.ts', import.meta.url)),
-      'utf8',
-    );
-    const authSource = readFileSync(
-      fileURLToPath(new URL('../../../app/api/auth.ts', import.meta.url)),
-      'utf8',
-    );
-    const mountPaths = new Set([
-      ...extractAppMountPaths(indexSource),
-      ...extractAppMountPaths(authSource),
-    ]);
-
-    // Guards the extractor itself: if it ever stops finding anything (e.g.
-    // the mount syntax changes), the loop below would vacuously pass.
-    expect(mountPaths.size).toBeGreaterThan(0);
-
-    for (const mountPath of mountPaths) {
-      if (SPA_OWNED_MOUNTS.includes(mountPath)) {
-        continue;
+  it('matches every concrete ROUTES path, including a trailing slash and a query string', () => {
+    for (const routePath of Object.values(ROUTES)) {
+      const concretePath = routePath.replace(/:[^/]+/g, 'sample-id');
+      expect(
+        navigateFallbackAllowlist.some((pattern) => pattern.test(concretePath)),
+        `expected an allowlist pattern to match ${concretePath} (from route ${routePath})`,
+      ).toBe(true);
+      if (!concretePath.endsWith('/')) {
+        expect(navigateFallbackAllowlist.some((pattern) => pattern.test(`${concretePath}/`))).toBe(
+          true,
+        );
       }
-
-      // A new mount like app.use('/webhooks', ...) with no matching
-      // denylist pattern and no SPA_OWNED_MOUNTS entry fails right here.
-      expect(isServerOwnedNavigation(new URL(mountPath, 'https://drydock.example'))).toBe(true);
-      expect(isServerOwnedNavigation(new URL(`${mountPath}/x`, 'https://drydock.example'))).toBe(
-        true,
-      );
+      expect(
+        navigateFallbackAllowlist.some((pattern) => pattern.test(`${concretePath}?tab=general`)),
+      ).toBe(true);
     }
+  });
+
+  it('does not match server-owned paths the SPA router does not define', () => {
+    const serverPaths = [
+      '/api/containers',
+      '/auth/oidc/example/redirect',
+      '/auth/oidc/example/cb',
+      '/auth/oidc/example/cb?code=abc123',
+      '/health',
+      '/health?verbose=1',
+      '/metrics',
+    ];
+    for (const path of serverPaths) {
+      expect(
+        navigateFallbackAllowlist.some((pattern) => pattern.test(path)),
+        `expected no allowlist pattern to match ${path}`,
+      ).toBe(false);
+    }
+  });
+
+  it('matches bare /auth (the SPA auth view) but not its OIDC subpaths', () => {
+    expect(navigateFallbackAllowlist.some((pattern) => pattern.test(ROUTES.AUTH))).toBe(true);
+    expect(
+      navigateFallbackAllowlist.some((pattern) => pattern.test(`${ROUTES.AUTH}/oidc/example/cb`)),
+    ).toBe(false);
+  });
+
+  it('turns a param segment into a wildcard that matches any single segment but not a deeper path', () => {
+    const pattern = buildSpaNavigateFallbackPattern(ROUTES.CONTAINER_LOGS);
+    expect(pattern.test('/containers/abc123/logs')).toBe(true);
+    expect(pattern.test('/containers/abc123/logs/')).toBe(true);
+    expect(pattern.test('/containers/abc123/logs?tail=200')).toBe(true);
+    expect(pattern.test('/containers/logs')).toBe(false);
+    expect(pattern.test('/containers/abc123/def456/logs')).toBe(false);
+    // The param wildcard must not swallow a `?`: a plain `[^/]+` would consume
+    // "abc?x" whole and still find the literal "/logs" that follows, matching a
+    // request whose actual pathname is only /containers/abc with "?x/logs" as
+    // query text tacked on.
+    expect(pattern.test('/containers/abc?x/logs')).toBe(false);
+  });
+
+  it('matches the dashboard root exactly, not every path', () => {
+    const pattern = buildSpaNavigateFallbackPattern(ROUTES.DASHBOARD);
+    expect(pattern.test('/')).toBe(true);
+    expect(pattern.test('/?tab=overview')).toBe(true);
+    expect(pattern.test('/containers')).toBe(false);
   });
 });

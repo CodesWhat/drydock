@@ -19,8 +19,11 @@ class TestSocket extends EventEmitter {
     const frame = JSON.parse(raw);
     if (frame.type !== 'request') return;
     expect(frame.data.method).toBe('GET');
-    this.requestReceived.resolve(frame.data.path);
-    if (this.holdRequests) return;
+    expect(['/version', '/containers/json?all=true']).toContain(frame.data.path);
+    if (frame.data.path === '/containers/json?all=true') {
+      this.requestReceived.resolve(frame.data.path);
+      if (this.holdRequests) return;
+    }
     queueMicrotask(() =>
       this.emit(
         'message',
@@ -30,7 +33,7 @@ class TestSocket extends EventEmitter {
             requestId: frame.data.requestId,
             statusCode: 200,
             headers: { 'content-type': 'application/json' },
-            body: [],
+            body: frame.data.path === '/version' ? { Version: '29.0.0' } : [],
           },
         }),
       ),

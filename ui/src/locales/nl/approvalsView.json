@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Goedkeuringsoverzicht kon niet worden geladen",
+      "detailLoadFailed": "Goedkeuring kon niet worden geladen",
+      "approveFailed": "Update kon niet worden goedgekeurd",
+      "rejectFailed": "Update kon niet worden afgewezen",
+      "deferFailed": "Update kon niet worden uitgesteld"
+    },
+    "ofCount": "{count} weergegeven",
+    "refresh": "Vernieuwen",
+    "loading": "Goedkeuringen laden…",
+    "loadError": "Goedkeuringen konden niet worden geladen",
+    "notifyModeBanner": "De updatemodus is notify. Goedkeuren is uitgeschakeld totdat de modus op manual of auto is ingesteld.",
+    "tabs": {
+      "pending": "In afwachting",
+      "deferred": "Uitgesteld",
+      "decided": "Beslist"
+    },
+    "columns": {
+      "container": "Container",
+      "image": "Image",
+      "version": "Versie",
+      "scan": "Scan",
+      "age": "Ouderdom"
+    },
+    "semver": {
+      "major": "Hoofdversie",
+      "minor": "Subversie",
+      "patch": "Patch",
+      "prerelease": "Voorlopige versie",
+      "unknown": "Onbekend"
+    },
+    "actions": {
+      "notesAriaLabel": "Uitgaveopmerkingen en redenen voor tegenhouden tonen",
+      "approve": "Goedkeuren",
+      "approveAriaLabel": "Update goedkeuren",
+      "approveDisabledNotify": "De updatemodus is notify; goedkeuren is uitgeschakeld",
+      "reject": "Afwijzen",
+      "rejectAriaLabel": "Update afwijzen",
+      "defer": "Uitstellen",
+      "deferAriaLabel": "Update uitstellen"
+    },
+    "detail": {
+      "loading": "Details laden…",
+      "holdReasons": "Redenen voor tegenhouden",
+      "viewFullNotes": "Volledige opmerkingen bekijken",
+      "empty": "Geen uitgaveopmerkingen of redenen voor tegenhouden voor deze update"
+    },
+    "empty": {
+      "pending": "Geen goedkeuringen in afwachting",
+      "deferred": "Geen uitgestelde goedkeuringen",
+      "decided": "Nog geen beslissingen over goedkeuringen",
+      "all": "Geen goedkeuringen"
+    },
+    "confirm": {
+      "cancel": "Annuleren",
+      "approve": {
+        "header": "Update goedkeuren",
+        "message": "De update van {name} naar {toRef} goedkeuren?",
+        "softBlockerSuffix": "\n\nDeze update heeft nog openstaande redenen voor tegenhouden:\n{list}",
+        "acceptLabel": "Goedkeuren"
+      },
+      "reject": {
+        "header": "Update afwijzen",
+        "message": "De update van {name} naar {toRef} afwijzen? Deze wordt niet automatisch toegepast.",
+        "acceptLabel": "Afwijzen"
+      },
+      "defer": {
+        "header": "Update uitstellen",
+        "message": "De update voor {name} met {days} dagen uitstellen?",
+        "acceptLabel": "Uitstellen"
+      }
+    },
+    "toast": {
+      "approved": "Goedkeuring aangevraagd voor {name}",
+      "approveFailed": "Goedkeuren van {name} mislukt",
+      "rejected": "Update voor {name} afgewezen",
+      "rejectFailed": "Afwijzen van {name} mislukt",
+      "deferred": "Update voor {name} uitgesteld",
+      "deferFailed": "Uitstellen van {name} mislukt"
+    }
+  }
+}

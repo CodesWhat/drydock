@@ -42,6 +42,30 @@
       "info": "Informacja"
     },
     "actions": {
+      "webhook-watch": "Sprawdzenie przez webhook",
+      "webhook-watch-container": "Sprawdzenie kontenera przez webhook",
+      "webhook-update": "Aktualizacja przez webhook",
+      "mqtt-command-update": "Polecenie aktualizacji MQTT",
+      "security-scan-skipped": "Pominięto skanowanie bezpieczeństwa",
+      "scanner-asset-pull-started": "Rozpoczęto pobieranie obrazu skanera",
+      "scanner-asset-pull-succeeded": "Pobrano obraz skanera",
+      "scanner-asset-pull-failed": "Pobieranie obrazu skanera nie powiodło się",
+      "scanner-asset-warm-started": "Rozpoczęto przygotowanie skanera",
+      "scanner-asset-warm-succeeded": "Przygotowano skaner",
+      "scanner-asset-warm-failed": "Przygotowanie skanera nie powiodło się",
+      "container-unhealthy": "Kontener w złym stanie",
+      "env-reveal": "Wyświetlono zmienne środowiskowe",
+      "debug-dump": "Pobrano dane diagnostyczne",
+      "config-read": "Odczytano konfigurację",
+      "config-validated": "Zweryfikowano konfigurację",
+      "config-reloaded": "Ponownie wczytano konfigurację",
+      "config-written": "Zapisano konfigurację",
+      "update-approved": "Zatwierdzono aktualizację",
+      "update-rejected": "Odrzucono aktualizację",
+      "update-deferred": "Odroczono aktualizację",
+      "api-key-created": "Utworzono klucz API",
+      "api-key-revoked": "Unieważniono klucz API",
+      "api-key-auth-failed": "Uwierzytelnianie kluczem API nie powiodło się",
       "container-update": "Aktualizacja kontenera",
       "container-added": "Kontener dodany",
       "container-removed": "Kontener usunięty",
@@ -49,6 +73,13 @@
       "container-stop": "Zatrzymanie kontenera",
       "container-restart": "Restart kontenera",
       "auth-login": "Logowanie uwierzytelniające",
+      "totp-recovery-used": "Użyto kodu odzyskiwania",
+      "totp-enrollment-started": "Rozpoczęto rejestrację uwierzytelniania dwuskładnikowego",
+      "totp-enabled": "Włączono uwierzytelnianie dwuskładnikowe",
+      "totp-replaced": "Zastąpiono uwierzytelnianie dwuskładnikowe",
+      "totp-disabled": "Wyłączono uwierzytelnianie dwuskładnikowe",
+      "totp-recovery-codes-replaced": "Zastąpiono kody odzyskiwania",
+      "totp-break-glass": "Odzyskiwanie offline uwierzytelniania dwuskładnikowego",
       "authenticated": "Uwierzytelniony",
       "authfail": "Błąd uwierzytelniania",
       "hook-configured": "Hak skonfigurowany",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
       "update-policy-override-set": "Ustawiono nadpisanie polityki aktualizacji",
       "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
+      "group-policy-set": "Ustawiono politykę grupy",
+      "group-policy-cleared": "Wyczyszczono politykę grupy",
+      "label-override-set": "Ustawiono nadpisanie etykiety",
+      "label-override-cleared": "Wyczyszczono nadpisanie etykiety",
       "auto-rollback": "Automatyczne cofnięcie",
       "rollback": "Cofnięcie",
       "preview": "Podgląd",
       "agent-disconnect": "Rozłączenie agenta",
       "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
       "security-alert": "Alert bezpieczeństwa",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Okres oczekiwania zakończony",
+      "image-prune": "Czyszczenie obrazu"
     },
     "target": {
       "container": "Kontener",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Grupa"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Dojrzałość wyczyszczona",
         "description": "Gdy aktualizacja wstrzymana przez politykę dojrzałości staje się dostępna"
+      },
+      "update-pending-approval": {
+        "name": "Aktualizacja oczekuje na zatwierdzenie",
+        "description": "Gdy aktualizacja w trybie ręcznym trafia do kolejki zatwierdzeń"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Czysty"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "obrazy",
+      "scanned": "przeskanowano"
     },
     "fixableBadge": "{count} do naprawy",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żadne wyzwalacze nie pasują do Twoich filtrów",
-    "testContainerName": "Test Container",
+    "testContainerName": "Kontener testowy",
     "columns": {
       "trigger": "Wyzwalacz",
       "type": "Wpisz",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Ładowanie obserwatorów...",
     "loadError": "Nie udało się załadować obserwatorów",
-    "soon": "soon",
+    "soon": "wkrótce",
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żaden obserwator nie pasuje do Twoich filtrów",

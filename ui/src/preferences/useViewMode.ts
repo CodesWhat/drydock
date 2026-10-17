@@ -16,7 +16,8 @@ type ViewKey =
   | 'watchers'
   | 'servers'
   | 'registries'
-  | 'auth';
+  | 'auth'
+  | 'images';
 
 /**
  * Shorthand for binding a view's mode preference.

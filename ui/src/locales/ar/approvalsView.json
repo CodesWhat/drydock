@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "فشل تحميل ملخص الموافقات",
+      "detailLoadFailed": "فشل تحميل الموافقة",
+      "approveFailed": "فشلت الموافقة على التحديث",
+      "rejectFailed": "فشل رفض التحديث",
+      "deferFailed": "فشل تأجيل التحديث"
+    },
+    "ofCount": "المعروض: {count}",
+    "refresh": "تحديث",
+    "loading": "جارٍ تحميل طلبات الموافقة…",
+    "loadError": "تعذّر تحميل طلبات الموافقة",
+    "notifyModeBanner": "وضع التحديث هو notify. الموافقة معطّلة حتى يُضبط الوضع على manual أو auto.",
+    "tabs": {
+      "pending": "قيد الانتظار",
+      "deferred": "مؤجّلة",
+      "decided": "تم البت فيها"
+    },
+    "columns": {
+      "container": "الحاوية",
+      "image": "الصورة",
+      "version": "الإصدار",
+      "scan": "الفحص",
+      "age": "مدة الانتظار"
+    },
+    "semver": {
+      "major": "إصدار رئيسي",
+      "minor": "إصدار فرعي",
+      "patch": "إصدار تصحيحي",
+      "prerelease": "إصدار تجريبي",
+      "unknown": "غير معروف"
+    },
+    "actions": {
+      "notesAriaLabel": "عرض ملاحظات الإصدار وأسباب التعليق",
+      "approve": "موافقة",
+      "approveAriaLabel": "الموافقة على التحديث",
+      "approveDisabledNotify": "وضع التحديث هو notify؛ الموافقة معطّلة",
+      "reject": "رفض",
+      "rejectAriaLabel": "رفض التحديث",
+      "defer": "تأجيل",
+      "deferAriaLabel": "تأجيل التحديث"
+    },
+    "detail": {
+      "loading": "جارٍ تحميل التفاصيل…",
+      "holdReasons": "أسباب التعليق",
+      "viewFullNotes": "عرض الملاحظات كاملة",
+      "empty": "لا توجد ملاحظات إصدار أو أسباب تعليق لهذا التحديث"
+    },
+    "empty": {
+      "pending": "لا توجد طلبات موافقة قيد الانتظار",
+      "deferred": "لا توجد طلبات موافقة مؤجّلة",
+      "decided": "لم يتم البت في أي طلبات موافقة بعد",
+      "all": "لا توجد طلبات موافقة"
+    },
+    "confirm": {
+      "cancel": "إلغاء",
+      "approve": {
+        "header": "الموافقة على التحديث",
+        "message": "هل تريد الموافقة على تحديث {name} إلى {toRef}؟",
+        "softBlockerSuffix": "\n\nلهذا التحديث أسباب تعليق لم تُحل بعد:\n{list}",
+        "acceptLabel": "موافقة"
+      },
+      "reject": {
+        "header": "رفض التحديث",
+        "message": "هل تريد رفض تحديث {name} إلى {toRef}؟ لن يُطبّق تلقائيًا.",
+        "acceptLabel": "رفض"
+      },
+      "defer": {
+        "header": "تأجيل التحديث",
+        "message": "هل تريد تأجيل تحديث {name} لمدة {days} أيام؟",
+        "acceptLabel": "تأجيل"
+      }
+    },
+    "toast": {
+      "approved": "تم طلب الموافقة على {name}",
+      "approveFailed": "تعذّرت الموافقة على {name}",
+      "rejected": "تم رفض تحديث {name}",
+      "rejectFailed": "تعذّر رفض {name}",
+      "deferred": "تم تأجيل تحديث {name}",
+      "deferFailed": "تعذّر تأجيل {name}"
+    }
+  }
+}

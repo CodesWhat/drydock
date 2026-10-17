@@ -148,12 +148,13 @@ describe('Registry Service', () => {
     it('throws when fetching registries fails', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
+        status: 500,
         statusText: 'Internal Server Error',
         json: async () => ({}),
       } as any);
 
       await expect(getAllRegistries()).rejects.toThrow(
-        'Failed to get registries: Internal Server Error',
+        'Failed to load registries (HTTP 500): Internal Server Error',
       );
     });
   });

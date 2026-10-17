@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Lista de agentes no disponible. Puede que falten algunos agentes configurados.",
+      "title": "Estado de la flota",
+      "description": "Estado de toda la flota. El inventario detecta contenedores sin consultar registros ni ejecutar actualizaciones.",
+      "reload": "Recargar estado",
+      "refresh": "Actualizar inventario",
+      "configured": "Configurado",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "unavailable": "No disponible",
+      "agentUnavailable": "Estado de agentes no disponible. Los datos conservados pueden estar desactualizados.",
+      "watcherUnavailable": "Metadatos de monitores no disponibles. Los datos conservados pueden estar desactualizados.",
+      "total": "{count} contenedor | {count} contenedores",
+      "lastKnown": "Último dato conocido",
+      "lastSeen": "Última conexión: {value}",
+      "unsupported": "Todos los destinos requieren monitores Docker compatibles con el inventario.",
+      "complete": "Inventario completo",
+      "partial": "Inventario incompleto",
+      "reloadFailed": "No se pudo recargar la lista de contenedores. Los resultados del inventario siguen visibles."
+    },
+    "fleetBulk": {
+      "label": "Acciones de la flota filtrada",
+      "updateAll": "Actualizar todos ({count})",
+      "snoozePatch": "Posponer todos los parches",
+      "patchCount": "{count} candidatos de parche",
+      "duration": "Duración",
+      "days": "{count} días",
+      "untilDate": "Hasta la fecha",
+      "date": "Posponer hasta esta fecha",
+      "snoozeConfirm": "¿Posponer {count} candidatos de parche?",
+      "snoozeScope": "Estos contenedores tienen parches disponibles. Posponer todas sus actualizaciones durante {duration}, no solo los parches. Se usa la lista activa filtrada, no las casillas seleccionadas. La fecha incluye el final del día local.",
+      "snoozeResult": "Pospuestos: {succeeded}. Fallidos: {failed}.",
+      "refreshFailed": "Políticas guardadas, pero no se pudo actualizar la lista. Recárguela.",
+      "disabled": "Acciones desactivadas. No se modificaron políticas.",
+      "invalid": "Duración no válida. No se modificaron políticas.",
+      "busy": "Ya hay otra acción en curso. No se modificaron más políticas."
+    },
+    "fleetDimensions": {
+      "groupBy": "Agrupar por",
+      "none": "Sin agrupar",
+      "agent": "Agente",
+      "registry": "Registro",
+      "status": "Estado",
+      "tagType": "Tipo de etiqueta",
+      "label": "Etiqueta Docker",
+      "groupLabel": "Agrupar por clave de etiqueta",
+      "allAgents": "Todos los agentes",
+      "allRegistries": "Todas las direcciones de registro",
+      "all": "Todos los tipos de etiqueta",
+      "specific": "Etiqueta específica",
+      "floating": "Etiqueta flotante",
+      "digest": "Digest fijado",
+      "semver": "Etiqueta de versión",
+      "tag": "Etiqueta sin versión",
+      "unknown": "Desconocido",
+      "local": "Monitores locales",
+      "running": "En ejecución",
+      "stopped": "Detenido",
+      "labelKey": "Clave de etiqueta Docker",
+      "labelMatch": "Coincidencia de etiqueta",
+      "labelValue": "Valor de etiqueta",
+      "exists": "Tiene etiqueta",
+      "equals": "Igual a",
+      "missing": "Falta la etiqueta",
+      "missingLabel": "Sin etiqueta",
+      "emptyValue": "Valor vacío"
+    },
     "fullPageActions": {
       "updateWorkflow": "Flujo de actualización",
       "actionsGroup": "Acciones",
@@ -28,8 +95,9 @@
       "clearSkips": "Limpiar omisiones",
       "clearPolicy": "Limpiar política",
       "overridden": "Sobrescrito",
+      "groupSource": "Grupo: {group}",
       "revert": "Revertir",
-      "revertAll": "Revertir a declarativo",
+      "revertAll": "Revertir a la política heredada",
       "snoozedUntil": "Pospuesto hasta:",
       "maturityMode": "Modo de madurez:",
       "matureOnlyMinimum": "Solo maduras (mínimo {days} d)",
@@ -58,6 +126,12 @@
       "runningButton": "Ejecutando...",
       "runButton": "Ejecutar",
       "noTriggersAssociated": "No hay triggers asociados a este contenedor",
+      "unavailableTriggers": "Triggers no disponibles",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Pertenece a un agente distinto al de este contenedor.",
+        "structuralIncompatibility": "El proyecto, servicio o archivo de Compose no coincide con este contenedor.",
+        "labelScope": "Excluido por las etiquetas de inclusión o exclusión dd.action/dd.notification de este contenedor."
+      },
       "backupsRollback": "Backups y rollback",
       "rollingBack": "Haciendo rollback...",
       "rollbackLatest": "Rollback al último",
@@ -71,7 +145,13 @@
       "versionLabel": "Versión:",
       "rollbackReasonLabel": "Motivo del rollback:",
       "lastErrorLabel": "Último error:",
-      "noUpdateOperations": "Aún no hay operaciones de actualización registradas"
+      "noUpdateOperations": "Aún no hay operaciones de actualización registradas",
+      "skipReleases": "Versiones iniciales que omitir",
+      "skipReleasesHint": "Omite las primeras N versiones estables distintas de cada familia: versión mayor de SemVer o mes de CalVer. 0 desactiva este filtro.",
+      "releaseFallbackDays": "Excepción por antigüedad (días)",
+      "releaseFallbackHint": "Permite la actualización tras estos días si faltan datos de versiones o no se alcanza la cantidad. 0 desactiva la excepción. La antigüedad mínima sigue aplicándose.",
+      "releasePolicySummary": "Omitir las primeras {count} versiones de cada familia.",
+      "releaseFallbackSummary": "Excepción al recuento de versiones tras {days} días."
     },
     "fullPageDetail": {
       "statusUpdating": "Actualizando",
@@ -111,7 +191,7 @@
       "volumes": "Volúmenes",
       "composeFiles": "Archivos compose",
       "version": "Versión",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Versión del software",
       "currentLabel": "Actual:",
       "latestLabel": "Última:",
       "digestLabel": "Digest:",
@@ -156,18 +236,18 @@
       "notConfigured": "No configurado",
       "noVolumesMounted": "No hay volúmenes montados",
       "uptime": "Tiempo en funcionamiento",
-      "uptimeAriaLabel": "Container uptime"
+      "uptimeAriaLabel": "Tiempo de actividad del contenedor"
     },
     "containerLogs": {
       "title": "Registros del contenedor",
       "download": "Descargar",
       "allLevels": "Todos los niveles",
       "downloadError": "No se pudieron descargar los registros",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
+      "tailCount": "Últimas {count} líneas",
+      "tailAll": "Todas las líneas",
       "statusPaused": "Pausado",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "statusLive": "En directo",
+      "statusOffline": "Sin conexión",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Cargando contenedores...",
+      "fleetUpdateProgress": "Actualización: {done} de {total} contenedores",
+      "fleetUpdateProgressRunning": "En curso: {names}",
+      "fleetUpdateProgressRunningMore": "En curso: {names} y {more} más",
       "searchPlaceholder": "Buscar nombre o imagen...",
       "allStatuses": "Todos los estados",
       "running": "En ejecución",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · se desbloquea el {date}",
       "maturityClockPublished": "Candidato publicado el {date} — falta {count} día para el mínimo de {minDays} días | Candidato publicado el {date} — faltan {count} días para el mínimo de {minDays} días",
       "maturityClockDetected": "Candidato detectado el {date} — falta {count} día para el mínimo de {minDays} días | Candidato detectado el {date} — faltan {count} días para el mínimo de {minDays} días",
+      "groupManualOnly": "La política del grupo '{group}' solo permite actualizaciones manuales. Drydock no aplicará esta automáticamente.",
       "updateButton": "Actualizar ahora",
       "blockedButton": "Actualización bloqueada",
       "notificationsOnlyButton": "Sólo notificaciones",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "No hay un trigger de actualización configurado",
         "self-update-unavailable": "Autoactualización no disponible",
         "maintenance-window-closed": "Ventana de mantenimiento cerrada",
-        "dry-run-trigger": "Configuración del trigger en modo dry-run"
+        "group-notify-only": "El grupo solo permite notificaciones",
+        "group-manual-only": "El grupo exige actualizaciones manuales",
+        "dry-run-trigger": "Configuración del trigger en modo dry-run",
+        "maturity-releases-not-reached": "Política de madurez en espera"
       },
       "actions": {
         "editPolicy": "Editar política de actualización",
@@ -439,25 +526,28 @@
         "configureTriggers": "Configurar triggers de actualización",
         "configureThreshold": "Configurar umbral del trigger",
         "configureSelfUpdate": "Configurar autoactualización",
-        "configureMaintenance": "Configurar ventana de mantenimiento"
-      }
+        "configureMaintenance": "Configurar ventana de mantenimiento",
+        "editGroupPolicy": "Editar política de grupo"
+      },
+      "releaseMaturityCount": "Esperando versiones estables de la familia {family}: hay {count} de {required} versiones anteriores disponibles.",
+      "releaseMaturityUnavailable": "No hay datos de versiones para este candidato. Las actualizaciones automáticas quedan retenidas."
     },
     "maturityBadge": {
       "new": "Detectado hace {duration}"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Cancelar",
       "stop": {
         "header": "Detener contenedor",
-        "message": "Stop {name}?",
+        "message": "¿Detener {name}?",
         "acceptLabel": "Detener",
-        "successMessage": "Stopped: {name}"
+        "successMessage": "Detenido: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Reiniciar contenedor",
+        "message": "¿Reiniciar {name}?",
+        "acceptLabel": "Reiniciar",
+        "successMessage": "Reiniciado: {name}"
       },
       "forceUpdate": {
         "header": "Forzar actualización",
@@ -505,6 +595,19 @@
         "failedDetail": "No se pudo actualizar la cadena de dependencias para {name}.",
         "staleChainTitle": "La cadena de dependencias ha cambiado",
         "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar."
+      },
+      "bulkUpdate": {
+        "header": "Actualizar 1 contenedor | Actualizar {count} contenedores",
+        "accept": "Actualizar 1 contenedor | Actualizar {count} contenedores",
+        "acceptWithParents": "Añadir 1 elemento superior y actualizar | Añadir {count} elementos superiores y actualizar",
+        "dispatchHeading": "Se actualizarán",
+        "blockedHeading": "Bloqueados, se dejarán como están",
+        "softOverridesHeading": "Actualizando a pesar de las advertencias",
+        "skippedHeading": "Omitidos",
+        "staleParentsHeading": "Elementos superiores con actualizaciones pendientes, añadidos al aceptar",
+        "agentCountInfo": "Abarca {count} agentes; cada agente ejecuta sus propias actualizaciones.",
+        "stackCountInfo": "Abarca {count} stacks.",
+        "successMessage": "Actualización iniciada para 1 contenedor | Actualización iniciada para {count} contenedores"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "La comprobación falló para {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} entrada",
+      "entryCountPlural": "{count} entradas",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -561,14 +664,16 @@
         "setAll": "Política de madurez establecida para permitir todas las actualizaciones",
         "skipped": "Se omitió la actualización actual de {name}",
         "removeSkip": "Se quitó el {kind} omitido {value}",
-        "revertField": "Se revirtió {field} a la política declarativa",
-        "revertAll": "Se revirtieron todas las anulaciones a la política declarativa",
+        "revertField": "Se revirtió {field} a la política heredada",
+        "revertAll": "Se revirtieron todas las anulaciones a la política heredada",
         "failedTitle": "Actualización de política fallida: {name}",
         "failedDetail": "No se pudo actualizar la política"
       },
       "validation": {
         "snoozeDate": "Selecciona una fecha de posposición válida",
-        "maturityAge": "Introduce una antigüedad de madurez entre {min} y {max} días"
+        "maturityAge": "Introduce una antigüedad de madurez entre {min} y {max} días",
+        "maturityReleases": "Introduce un número entero de versiones entre 0 y 100.",
+        "maturityFallback": "Introduce un número entero de días para la excepción entre 0 y 365."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "En cola",
+        "pulling": "Descargando imagen",
+        "scanning": "Analizando imagen",
+        "sbom-generating": "Generando SBOM",
+        "pull-failed": "Error al descargar la imagen",
+        "prepare": "Preparando actualización",
+        "dryrun": "Simulación",
+        "renamed": "Contenedor renombrado",
+        "new-created": "Nuevo contenedor creado",
+        "old-stopped": "Contenedor anterior detenido",
+        "new-started": "Nuevo contenedor iniciado",
+        "health-gate": "Comprobación de salud",
+        "health-gate-passed": "Comprobación de salud superada",
+        "succeeded": "Completado",
+        "failed": "Error",
+        "recovered-cleanup-temp": "Recuperado: contenedores temporales eliminados",
+        "recovered-rollback": "Recuperado: reversión completada",
+        "recovered-active": "Recuperado: contenedor activo conservado",
+        "recovery-failed": "Error de recuperación",
+        "recovery-missing-containers": "Recuperación: faltan contenedores",
+        "rollback-started": "Reversión iniciada",
+        "rolled-back": "Revertido",
+        "rollback-deferred": "Reversión aplazada",
+        "rollback-failed": "Error de reversión",
+        "expired": "Caducado",
+        "skipped-dependency": "Omitido por dependencia",
+        "in-progress": "En curso",
+        "update-runtime-failed": "Error en la ejecución de la actualización",
+        "create-new-failed": "Error al crear el nuevo contenedor",
+        "stop-old-failed": "Error al detener el contenedor anterior",
+        "start-new-failed": "Error al iniciar el nuevo contenedor",
+        "health-gate-failed": "Error en la comprobación de salud",
+        "cancelled": "Cancelado",
+        "compose-runtime-refresh-failed": "Error al actualizar el estado de ejecución de Compose"
+      },
       "timestampUnknown": "Desconocido",
       "loadFailed": "No se pudieron cargar los backups",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explícito",
+        "inherited": "Heredado",
+        "unknown": "Desconocido"
       },
       "timeoutDefault": "60000ms (predeterminado)",
       "preAbortYes": "Abortar la actualización si falla el hook previo",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Resumen",
+        "stats": "Estadísticas",
+        "logs": "Registros",
+        "environment": "Entorno",
+        "labels": "Etiquetas",
+        "actions": "Acciones"
       }
     },
     "logViewer": {
       "invalidRegex": "Expresión regular no válida"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depende de",
+      "requiredBy": "Requerido por",
+      "cycle": "Forma parte de un ciclo de dependencias",
+      "toggle": "Mostrar dependencias",
+      "updateGroup": "Actualizar grupo de dependencias ({count})",
+      "staleParentsWarning": "{name} depende de {parents}, que también tiene una actualización pendiente. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra un elemento superior desactualizado. | {name} depende de {parents}, que también tienen actualizaciones pendientes. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra elementos superiores desactualizados.",
+      "staleParentsOverflow": "y {count} más",
+      "staleParentsAccept": "Actualizar de todos modos"
+    },
+    "selection": {
+      "selectRow": "Seleccionar {name}",
+      "selectAll": "Seleccionar todos los contenedores visibles",
+      "barLabel": "Contenedores seleccionados",
+      "count": "1 contenedor seleccionado | {count} contenedores seleccionados",
+      "updateSelected": "Actualizar selección",
+      "clear": "Limpiar",
+      "reasons": {
+        "stale": "ya no está en la lista",
+        "inFlight": "ya se está actualizando",
+        "noUpdate": "no hay actualización disponible"
+      }
     }
   }
 }

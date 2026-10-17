@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "에이전트 목록을 사용할 수 없습니다. 구성된 일부 에이전트가 누락될 수 있습니다.",
+      "title": "플릿 상태",
+      "description": "전체 플릿의 상태입니다. 인벤토리 새로 고침은 레지스트리 확인이나 업데이트 작업 없이 컨테이너를 검색합니다.",
+      "reload": "상태 다시 불러오기",
+      "refresh": "인벤토리 새로 고침",
+      "configured": "구성됨",
+      "connected": "연결됨",
+      "disconnected": "연결 끊김",
+      "unavailable": "사용할 수 없음",
+      "agentUnavailable": "에이전트 상태를 사용할 수 없습니다. 보관된 데이터가 오래되었을 수 있습니다.",
+      "watcherUnavailable": "감시자 메타데이터를 사용할 수 없습니다. 보관된 데이터가 오래되었을 수 있습니다.",
+      "total": "컨테이너 {count}개",
+      "lastKnown": "마지막으로 확인됨",
+      "lastSeen": "마지막 접속: {value}",
+      "unsupported": "모든 대상에 인벤토리 새로 고침을 지원하는 Docker 감시자가 필요합니다.",
+      "complete": "인벤토리 완료",
+      "partial": "인벤토리 불완전",
+      "reloadFailed": "컨테이너 목록을 다시 불러오지 못했습니다. 인벤토리 결과는 계속 표시됩니다."
+    },
+    "fleetBulk": {
+      "label": "필터링된 플릿 작업",
+      "updateAll": "모두 업데이트 ({count})",
+      "snoozePatch": "모든 패치 후보 미루기",
+      "patchCount": "패치 후보 {count}개",
+      "duration": "미루기 기간",
+      "days": "{count}일",
+      "untilDate": "날짜까지",
+      "date": "이 날짜 종료까지 미루기",
+      "snoozeConfirm": "패치 후보 {count}개를 미룰까요?",
+      "snoozeScope": "이 컨테이너에는 현재 패치 후보가 있습니다. 패치뿐 아니라 나열된 컨테이너의 모든 업데이트를 {duration} 미룹니다. 체크박스 선택이 아닌 필터링된 현재 목록에 적용됩니다. 날짜는 현지 시간의 하루 끝까지 포함합니다.",
+      "snoozeResult": "미룸: {succeeded}. 실패: {failed}.",
+      "refreshFailed": "정책은 저장되었지만 목록 새로 고침에 실패했습니다. 다시 불러오세요.",
+      "disabled": "컨테이너 작업이 비활성화되었습니다. 정책 변경이 없습니다.",
+      "invalid": "잘못된 기간입니다. 정책 변경이 없습니다.",
+      "busy": "다른 작업이 진행 중입니다. 추가 정책 변경이 없습니다."
+    },
+    "fleetDimensions": {
+      "groupBy": "그룹 기준",
+      "none": "그룹화 안 함",
+      "agent": "에이전트",
+      "registry": "레지스트리",
+      "status": "상태",
+      "tagType": "태그 유형",
+      "label": "레이블",
+      "groupLabel": "레이블 키로 그룹화",
+      "allAgents": "모든 에이전트",
+      "allRegistries": "모든 레지스트리 주소",
+      "all": "모든 태그 유형",
+      "specific": "특정 태그",
+      "floating": "가변 태그",
+      "digest": "다이제스트 고정",
+      "semver": "버전 태그",
+      "tag": "버전이 아닌 태그",
+      "unknown": "알 수 없음",
+      "local": "로컬 감시자",
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "labelKey": "레이블 키",
+      "labelMatch": "레이블 일치 조건",
+      "labelValue": "레이블 값",
+      "exists": "레이블 있음",
+      "equals": "같음",
+      "missing": "레이블 누락",
+      "missingLabel": "레이블 없음",
+      "emptyValue": "빈 값"
+    },
     "fullPageActions": {
       "updateWorkflow": "업데이트 워크플로",
       "actionsGroup": "작업",
@@ -28,8 +95,9 @@
       "clearSkips": "건너뛰기 초기화",
       "clearPolicy": "정책 초기화",
       "overridden": "재정의됨",
+      "groupSource": "그룹: {group}",
       "revert": "되돌리기",
-      "revertAll": "선언적 설정으로 되돌리기",
+      "revertAll": "상속된 설정으로 되돌리기",
       "snoozedUntil": "일시 중지 기한:",
       "maturityMode": "성숙도 모드:",
       "matureOnlyMinimum": "기존만 ({days}일 최소)",
@@ -58,6 +126,12 @@
       "runningButton": "실행 중...",
       "runButton": "실행",
       "noTriggersAssociated": "이 컨테이너에 연결된 트리거가 없습니다",
+      "unavailableTriggers": "사용할 수 없는 트리거",
+      "unavailableTriggerReason": {
+        "agentOwnership": "이 컨테이너와 다른 에이전트에 속해 있습니다.",
+        "structuralIncompatibility": "Compose 프로젝트, 서비스 또는 파일이 이 컨테이너와 일치하지 않습니다.",
+        "labelScope": "이 컨테이너의 dd.action/dd.notification include 또는 exclude 라벨에 의해 제외되었습니다."
+      },
       "backupsRollback": "백업 및 롤백",
       "rollingBack": "롤백 중...",
       "rollbackLatest": "최신 버전으로 롤백",
@@ -71,7 +145,13 @@
       "versionLabel": "버전:",
       "rollbackReasonLabel": "롤백 사유:",
       "lastErrorLabel": "마지막 오류:",
-      "noUpdateOperations": "아직 기록된 업데이트 작업이 없습니다"
+      "noUpdateOperations": "아직 기록된 업데이트 작업이 없습니다",
+      "skipReleases": "건너뛸 초기 릴리스 수",
+      "skipReleasesHint": "계열마다 처음 N개의 서로 다른 안정 릴리스를 건너뜁니다. 계열은 SemVer 주 버전 또는 CalVer 연월입니다. 0은 이 조건을 끕니다.",
+      "releaseFallbackDays": "경과 일수 예외 (일)",
+      "releaseFallbackHint": "릴리스 정보가 없거나 필요한 수에 미달하면 이 일수가 지난 뒤 허용합니다. 0은 예외를 끕니다. 최소 경과 일수 조건은 계속 적용됩니다.",
+      "releasePolicySummary": "계열마다 처음 {count}개 릴리스를 건너뜁니다.",
+      "releaseFallbackSummary": "{days}일 후 릴리스 수 조건을 면제합니다."
     },
     "fullPageDetail": {
       "statusUpdating": "업데이트 중",
@@ -111,7 +191,7 @@
       "volumes": "볼륨",
       "composeFiles": "Compose 파일",
       "version": "버전",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "소프트웨어 버전",
       "currentLabel": "현재:",
       "latestLabel": "최신:",
       "digestLabel": "다이제스트:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "노출된 포트 없음",
       "notConfigured": "구성되지 않음",
       "noVolumesMounted": "마운트된 볼륨이 없습니다",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "가동 시간",
+      "uptimeAriaLabel": "컨테이너 가동 시간"
     },
     "containerLogs": {
       "title": "컨테이너 로그",
       "download": "다운로드",
       "allLevels": "전체 레벨",
       "downloadError": "로그를 다운로드할 수 없습니다",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "마지막 {count}줄",
+      "tailAll": "모든 줄",
+      "statusPaused": "일시 중지됨",
+      "statusLive": "실시간",
+      "statusOffline": "연결 끊김",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "컨테이너 불러오는 중...",
+      "fleetUpdateProgress": "컨테이너 업데이트: {total}개 중 {done}개",
+      "fleetUpdateProgressRunning": "현재 업데이트 중: {names}",
+      "fleetUpdateProgressRunningMore": "현재 업데이트 중: {names} 외 {more}개",
       "searchPlaceholder": "이름 또는 이미지로 검색...",
       "allStatuses": "전체 상태",
       "running": "실행 중",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "컨테이너 업데이트",
-      "thisContainer": "this container",
+      "thisContainer": "이 컨테이너",
       "confirmTagChange": "{name}을(를) 업데이트하시겠습니까? 이미지 태그가 :{currentTag}에서 :{newTag}{kind}(으)로 변경됩니다.",
       "confirmDigestChange": "{name}을(를) 업데이트하시겠습니까? :{currentTag}의 최신 빌드가 사용 가능합니다 (다이제스트 변경).",
       "confirmLatest": "{name}을(를) 지금 업데이트하시겠습니까? 최신 발견된 이미지가 적용됩니다.",
       "updating": "업데이트 중...",
       "update": "업데이트",
-      "updateFailed": "Update failed"
+      "updateFailed": "업데이트 실패"
     },
     "floatingTag": {
       "badgeText": "유동 태그",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · {date}에 잠금 해제",
       "maturityClockPublished": "후보가 {date}에 게시됨 — {minDays}일 최소 기간까지 {count}일 남음",
       "maturityClockDetected": "후보가 {date}에 감지됨 — {minDays}일 최소 기간까지 {count}일 남음",
+      "groupManualOnly": "그룹 정책 '{group}'은(는) 수동 업데이트만 허용합니다. Drydock이 이 업데이트를 자동으로 적용하지 않습니다.",
       "updateButton": "지금 업데이트",
       "blockedButton": "업데이트 차단됨",
       "notificationsOnlyButton": "알림만",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "구성된 업데이트 트리거 없음",
         "self-update-unavailable": "자체 업데이트를 사용할 수 없음",
         "maintenance-window-closed": "유지 관리 시간이 종료됨",
-        "dry-run-trigger": "트리거 구성이 드라이런 모드임"
+        "group-notify-only": "그룹이 알림만 허용합니다",
+        "group-manual-only": "그룹이 수동 업데이트를 요구합니다",
+        "dry-run-trigger": "트리거 구성이 드라이런 모드임",
+        "maturity-releases-not-reached": "성숙도 정책 대기 중"
       },
       "actions": {
         "editPolicy": "업데이트 정책 편집",
@@ -439,25 +526,28 @@
         "configureTriggers": "업데이트 트리거 구성",
         "configureThreshold": "트리거 임계값 구성",
         "configureSelfUpdate": "자체 업데이트 구성",
-        "configureMaintenance": "유지 관리 시간 구성"
-      }
+        "configureMaintenance": "유지 관리 시간 구성",
+        "editGroupPolicy": "그룹 정책 편집"
+      },
+      "releaseMaturityCount": "{family} 계열의 안정 릴리스를 기다리는 중입니다. 필요한 이전 릴리스 {required}개 중 {count}개를 확인했습니다.",
+      "releaseMaturityUnavailable": "후보의 릴리스 정보를 확인할 수 없습니다. 자동 업데이트가 보류됩니다."
     },
     "maturityBadge": {
       "new": "{duration} 전에 감지됨"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "취소",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "컨테이너 중지",
+        "message": "{name} 중지 여부를 확인하세요.",
+        "acceptLabel": "중지",
+        "successMessage": "중지됨: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "컨테이너 재시작",
+        "message": "{name} 재시작 여부를 확인하세요.",
+        "acceptLabel": "재시작",
+        "successMessage": "재시작됨: {name}"
       },
       "forceUpdate": {
         "header": "강제 업데이트",
@@ -505,6 +595,19 @@
         "failedDetail": "{name}의 종속성 체인 업데이트에 실패했습니다.",
         "staleChainTitle": "종속성 체인이 변경됨",
         "staleChainDetail": "{name}의 종속성 체인이 마지막으로 미리 본 이후 변경되었습니다. 확인하기 전에 업데이트 대화상자를 다시 열어 현재 체인을 검토하세요."
+      },
+      "bulkUpdate": {
+        "header": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
+        "accept": "컨테이너 1개 업데이트 | 컨테이너 {count}개 업데이트",
+        "acceptWithParents": "상위 항목 1개 추가 후 업데이트 | 상위 항목 {count}개 추가 후 업데이트",
+        "dispatchHeading": "업데이트될 항목",
+        "blockedHeading": "차단됨, 그대로 둠",
+        "softOverridesHeading": "경고를 무시하고 업데이트",
+        "skippedHeading": "건너뜀",
+        "staleParentsHeading": "업데이트 대기 중인 상위 항목, 수락 시 추가됨",
+        "agentCountInfo": "{count}개 에이전트에 걸쳐 있습니다. 각 에이전트는 자체적으로 업데이트를 실행합니다.",
+        "stackCountInfo": "{count}개 스택에 걸쳐 있습니다.",
+        "successMessage": "컨테이너 1개에 대한 업데이트가 시작되었습니다 | 컨테이너 {count}개에 대한 업데이트가 시작되었습니다"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "{name} 재확인 실패"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count}개 항목",
+      "entryCountPlural": "{count}개 항목",
       "kindLabels": {
         "tag": "태그",
         "digest": "다이제스트"
@@ -561,14 +664,16 @@
         "setAll": "성숙도 정책을 모든 업데이트 허용으로 설정했습니다",
         "skipped": "{name}의 현재 업데이트를 건너뛰었습니다",
         "removeSkip": "건너뛴 {kind} {value}을(를) 제거했습니다",
-        "revertField": "{field}을(를) 선언적 정책으로 되돌렸습니다",
-        "revertAll": "모든 재정의를 선언적 정책으로 되돌렸습니다",
+        "revertField": "{field}을(를) 상속된 정책으로 되돌렸습니다",
+        "revertAll": "모든 재정의를 상속된 정책으로 되돌렸습니다",
         "failedTitle": "정책 업데이트 실패: {name}",
         "failedDetail": "정책을 업데이트하지 못했습니다"
       },
       "validation": {
         "snoozeDate": "유효한 일시 중지 날짜를 선택하세요",
-        "maturityAge": "{min}일에서 {max}일 사이의 성숙도 기간을 입력하세요"
+        "maturityAge": "{min}일에서 {max}일 사이의 성숙도 기간을 입력하세요",
+        "maturityReleases": "릴리스 수는 0~100의 정수로 입력하세요.",
+        "maturityFallback": "예외 적용 일수는 0~365의 정수로 입력하세요."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "대기 중",
+        "pulling": "이미지 내려받는 중",
+        "scanning": "이미지 검사 중",
+        "sbom-generating": "SBOM 생성 중",
+        "pull-failed": "이미지 내려받기 실패",
+        "prepare": "업데이트 준비 중",
+        "dryrun": "모의 실행",
+        "renamed": "컨테이너 이름 변경됨",
+        "new-created": "새 컨테이너 생성됨",
+        "old-stopped": "이전 컨테이너 중지됨",
+        "new-started": "새 컨테이너 시작됨",
+        "health-gate": "상태 검사",
+        "health-gate-passed": "상태 검사 통과",
+        "succeeded": "성공",
+        "failed": "실패",
+        "recovered-cleanup-temp": "복구됨: 임시 컨테이너 정리 완료",
+        "recovered-rollback": "복구됨: 롤백 완료",
+        "recovered-active": "복구됨: 실행 중인 컨테이너 유지",
+        "recovery-failed": "복구 실패",
+        "recovery-missing-containers": "복구: 컨테이너 누락",
+        "rollback-started": "롤백 시작됨",
+        "rolled-back": "롤백 완료",
+        "rollback-deferred": "롤백 연기됨",
+        "rollback-failed": "롤백 실패",
+        "expired": "만료됨",
+        "skipped-dependency": "종속성으로 인해 건너뜀",
+        "in-progress": "진행 중",
+        "update-runtime-failed": "업데이트 실행 실패",
+        "create-new-failed": "새 컨테이너 생성 실패",
+        "stop-old-failed": "이전 컨테이너 중지 실패",
+        "start-new-failed": "새 컨테이너 시작 실패",
+        "health-gate-failed": "상태 검사 실패",
+        "cancelled": "취소됨",
+        "compose-runtime-refresh-failed": "Compose 실행 상태 새로 고침 실패"
+      },
       "timestampUnknown": "알 수 없음",
       "loadFailed": "백업을 불러오지 못했습니다",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "명시적",
+        "inherited": "상속됨",
+        "unknown": "알 수 없음"
       },
       "timeoutDefault": "60000ms (기본값)",
       "preAbortYes": "사전 훅 실패 시 업데이트 중단",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "개요",
+        "stats": "통계",
+        "logs": "로그",
+        "environment": "환경",
+        "labels": "레이블",
+        "actions": "작업"
       }
     },
     "logViewer": {
       "invalidRegex": "잘못된 정규식입니다"
+    },
+    "dependencyGraph": {
+      "dependsOn": "의존 대상",
+      "requiredBy": "필요로 하는 항목",
+      "cycle": "종속성 순환의 일부",
+      "toggle": "종속성 표시",
+      "updateGroup": "종속성 그룹 업데이트 ({count})",
+      "staleParentsWarning": "{name}은(는) {parents}에 종속되어 있으며, 여기에는 대기 중인 업데이트가 있습니다. 종속 항목을 먼저 업데이트하면 오래된 상위 항목에 대해 계속 실행될 수 있습니다. | {name}은(는) {parents}에 종속되어 있으며, 이들에는 대기 중인 업데이트가 있습니다. 종속 항목을 먼저 업데이트하면 오래된 상위 항목들에 대해 계속 실행될 수 있습니다.",
+      "staleParentsOverflow": "외 {count}개 더",
+      "staleParentsAccept": "그래도 업데이트"
+    },
+    "selection": {
+      "selectRow": "{name} 선택",
+      "selectAll": "표시된 모든 컨테이너 선택",
+      "barLabel": "선택된 컨테이너",
+      "count": "컨테이너 1개 선택됨 | 컨테이너 {count}개 선택됨",
+      "updateSelected": "선택 항목 업데이트",
+      "clear": "지우기",
+      "reasons": {
+        "stale": "더 이상 목록에 없음",
+        "inFlight": "이미 업데이트 중",
+        "noUpdate": "사용 가능한 업데이트 없음"
+      }
     }
   }
 }

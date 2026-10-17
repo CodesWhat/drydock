@@ -29,7 +29,6 @@ interface Agent {
   name: string;
   host: string;
   status: 'connected' | 'disconnected';
-  dockerVersion?: string;
   os?: string;
   arch?: string;
   cpus?: number;
@@ -146,7 +145,6 @@ async function fetchAgents() {
       name: a.name,
       host: `${a.host}${a.port ? `:${a.port}` : ''}`,
       status: a.connected ? 'connected' : 'disconnected',
-      dockerVersion: typeof a.dockerVersion === 'string' ? a.dockerVersion : undefined,
       os: typeof a.os === 'string' ? a.os : undefined,
       arch: typeof a.arch === 'string' ? a.arch : undefined,
       cpus: Number.isFinite(a.cpus) ? Number(a.cpus) : undefined,
@@ -171,12 +169,7 @@ async function fetchAgents() {
             : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
       build: distinctBuild(a.version, a.build),
-      uptime:
-        typeof a.uptime === 'string'
-          ? a.uptime
-          : Number.isFinite(a.uptimeSeconds)
-            ? formatUptime(Number(a.uptimeSeconds))
-            : undefined,
+      uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
       watchers: watchersByAgent[normalizeAgentKey(a.name)] ?? [],
@@ -271,6 +264,12 @@ onUnmounted(() => {
 const searchQuery = ref('');
 const showFilters = ref(false);
 const agentViewMode = useViewMode('agents');
+const agentDensity = usePreference(
+  () => preferences.views.agents.density,
+  (value) => {
+    preferences.views.agents.density = value;
+  },
+);
 // Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
 // width has already forced cards, so the switcher isn't a dead control at that size.
 const cardReflowForced = ref(false);
@@ -353,16 +352,6 @@ const agentAllColumns = computed(() => [
     required: false,
   },
   {
-    key: 'docker',
-    label: t('agentsView.list.columns.docker'),
-    size: 140,
-    minSize: 112,
-    maxSize: 190,
-    sortable: true,
-    required: false,
-    cardPriority: -1,
-  },
-  {
     key: 'os',
     label: t('agentsView.list.columns.os'),
     size: 120,
@@ -420,7 +409,7 @@ const {
 
 /**
  * Compact mode (< 1024px) used to swap the active column set down to just the required
- * columns. Now `agentAllColumns` always returns the full 7-column set (so card mode can
+ * columns. Now `agentAllColumns` always returns the full 6-column set (so card mode can
  * surface the `status` cardPriority annotation on mobile), and the non-required columns are
  * force-hidden here instead — the union of the picker's hidden set with every non-required
  * column key. The picker itself is hidden in compact mode (see template) so a user can never
@@ -509,9 +498,6 @@ function getResourceFields(agent: Agent): AgentDetailField[] {
 
 function getSystemFields(agent: Agent): AgentDetailField[] {
   const fields: AgentDetailField[] = [];
-  if (agent.dockerVersion) {
-    fields.push({ label: t('agentsView.detail.fields.docker'), value: agent.dockerVersion });
-  }
   if (agent.os) {
     fields.push({ label: t('agentsView.detail.fields.os'), value: agent.os });
   }
@@ -593,6 +579,13 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
+              <select v-if="!inCardMode"
+                      v-model="agentDensity"
+                      :aria-label="t('agentsView.list.density.label')"
+                      class="min-h-[44px] px-2 dd-rounded text-2xs-plus dd-bg dd-text border dd-border-strong cursor-pointer">
+                <option value="normal">{{ t('agentsView.list.density.normal') }}</option>
+                <option value="compact">{{ t('agentsView.list.density.compact') }}</option>
+              </select>
               <DataTableColumnPicker
                 v-if="!isCompact"
                 :columns="pickerColumns"
@@ -613,6 +606,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      :selected-key="selectedAgent?.id ?? null"
                      :hidden-column-keys="hiddenColumnKeys"
                      :prefer-cards="agentViewMode === 'cards'"
+                     :density="agentDensity"
                      :hoist-card-sort="inCardMode"
                      @update:sort-key="agentSortKey = $event"
                      @update:sort-asc="agentSortAsc = $event"
@@ -645,11 +639,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             <template #cell-containers="{ row }">
               <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span>
               <span class="dd-text-muted">/{{ row.containers.total }}</span>
-            </template>
-            <template #cell-docker="{ row }">
-              <span class="font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">
-                {{ row.dockerVersion ?? '—' }}
-              </span>
             </template>
             <template #cell-os="{ row }">
               <span :class="row.os ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.os ?? '—' }}</span>
@@ -697,10 +686,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                     <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
                       v{{ row.version }}
                     </span>
-                  </div>
-                  <div class="field flex items-baseline justify-between gap-3">
-                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.docker') }}</span>
-                    <span class="text-2xs-plus font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.dockerVersion ?? '—' }}</span>
                   </div>
                   <div class="field flex items-baseline justify-between gap-3">
                     <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.os') }}</span>

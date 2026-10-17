@@ -722,6 +722,93 @@ describe('computeUpdateEligibility', () => {
   });
 
   describe('maturity-not-reached', () => {
+    test('reports release count holds as soft blockers without inventing a completion date', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 20 * 86_400_000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+        updatePolicySources: { maturitySkipReleases: 'group' },
+        result: {
+          tag: '2.0.8',
+          releaseMaturity: { version: '2.0.8', family: '2', earlierReleases: 1 },
+        },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find(
+        (entry) => entry.reason === 'maturity-releases-not-reached',
+      );
+      expect(blocker).toMatchObject({
+        severity: 'soft',
+        actionable: true,
+        details: {
+          requiredReleases: 2,
+          earlierReleases: 1,
+          version: '2.0.8',
+          family: '2',
+          evidenceAvailable: true,
+          policySource: 'group',
+        },
+      });
+      expect(blocker?.liftableAt).toBeUndefined();
+      expect(
+        result.blockers.find((entry) => entry.reason === 'maturity-not-reached'),
+      ).toBeUndefined();
+    });
+
+    test('reports missing evidence honestly and only supplies a deadline for an explicit fallback', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 6 * 86_400_000).toISOString(),
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 5,
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+      });
+      const blocker = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW }),
+      ).blockers.find((entry) => entry.reason === 'maturity-releases-not-reached');
+      expect(blocker).toMatchObject({
+        severity: 'soft',
+        liftableAt: new Date(FIXED_NOW + 4 * 86_400_000).toISOString(),
+        details: { requiredReleases: 2, evidenceAvailable: false, fallbackDays: 10 },
+      });
+      expect(blocker?.message).toContain('unavailable');
+    });
+
+    test('release evidence or reached fallback clears only the release blocker', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 2 * 86_400_000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+        result: {
+          tag: '2.0.2',
+          releaseMaturity: { version: '2.0.2', family: '2', earlierReleases: 2 },
+        },
+      });
+      const eligible = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(
+        eligible.blockers.find((entry) => entry.reason === 'maturity-releases-not-reached'),
+      ).toBeUndefined();
+      expect(
+        eligible.blockers.find((entry) => entry.reason === 'maturity-not-reached'),
+      ).toBeDefined();
+    });
+
+    test('does not invent a fallback deadline when the candidate has no maturity clock', () => {
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturitySkipReleases: 2,
+          maturityReleaseFallbackDays: 10,
+        },
+      });
+      const blocker = computeUpdateEligibility(
+        container,
+        makeContext({ now: FIXED_NOW }),
+      ).blockers.find((entry) => entry.reason === 'maturity-releases-not-reached');
+      expect(blocker).toMatchObject({ details: { evidenceAvailable: false, fallbackDays: 10 } });
+      expect(blocker?.liftableAt).toBeUndefined();
+    });
     test('emits blocker when maturityMode=mature and update is not old enough', () => {
       // Update detected 2 days ago, min age is 7 days
       const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
@@ -1007,6 +1094,56 @@ describe('computeUpdateEligibility', () => {
       expect(blocker).toBeDefined();
     });
 
+    test('does not count an incompatible Portainer trigger for a generic container', () => {
+      const portainerTrigger = {
+        type: 'portainer',
+        agent: undefined,
+        configuration: {},
+        getId: () => 'portainer.update',
+      };
+      const container = makeContainerWithTagUpdate();
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'portainer.update': portainerTrigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(
+        result.blockers.find((b) => b.reason === 'no-update-trigger-configured'),
+      ).toBeDefined();
+      expect(result.actionPolicy).toBeUndefined();
+    });
+
+    test('does not count a Portainer trigger for a digest candidate', () => {
+      const portainerTrigger = {
+        type: 'portainer',
+        agent: undefined,
+        configuration: {},
+        getId: () => 'portainer.update',
+      };
+      const container = makeContainerWithTagUpdate({
+        updateKind: { kind: 'digest', remoteValue: 'sha256:new' },
+        labels: {
+          'com.docker.compose.project': 'demo',
+          'com.docker.compose.service': 'web',
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'portainer.update': portainerTrigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(
+        result.blockers.find((b) => b.reason === 'no-update-trigger-configured'),
+      ).toBeDefined();
+      expect(result.actionPolicy).toBeUndefined();
+    });
+
     describe('severity during the trigger registration window (#605)', () => {
       test('downgrades to soft when container is agent-owned and its agent is pending registration', () => {
         const container = makeContainerWithTagUpdate({ agent: 'agent-b' });
@@ -1244,6 +1381,29 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.severity).toBe('hard');
     });
 
+    test('names the Drydock override in the message when the exclude is an override', () => {
+      const trigger = makeTrigger({
+        isTriggerExcluded: () => true,
+        isTriggerIncluded: () => true,
+      });
+      const container = makeContainerWithTagUpdate({
+        actionTriggerExclude: 'docker.update',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerExclude: 'override' },
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'trigger-excluded')?.message).toBe(
+        "Trigger excluded by the Drydock override of dd.action.exclude='docker.update'.",
+      );
+    });
+
     test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
       // The deprecated triggerExclude/notificationTriggerExclude mirror carries a
       // value that WOULD exclude this trigger if it were (wrongly) consulted.
@@ -1264,6 +1424,152 @@ describe('computeUpdateEligibility', () => {
       );
 
       expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
+    });
+  });
+
+  describe('group policy action rules (spec 7.3)', () => {
+    function groupPolicy(
+      actions: NonNullable<Container['groupPolicy']>['actions'],
+    ): NonNullable<Container['groupPolicy']> {
+      return { id: 'policy-1', group: 'payments', revision: 2, updatePolicy: {}, actions };
+    }
+    const context = (overrides: Partial<UpdateEligibilityContext> = {}) =>
+      makeContext({
+        triggers: { 'docker.update': makeTrigger() as never },
+        now: FIXED_NOW,
+        ...overrides,
+      });
+
+    test('a notify group is a hard group-notify-only blocker with the group in the details', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ updateMode: 'notify' }) }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'group-notify-only');
+      expect(blocker).toMatchObject({
+        severity: 'hard',
+        actionable: true,
+        message: "Group policy 'payments' allows notifications only.",
+        actionHint: 'Change the group policy, or move the container with dd.group.',
+        details: { group: 'payments', policyId: 'policy-1' },
+      });
+      expect(result.eligible).toBe(false);
+      expect(getPrimaryHardBlocker(result)?.reason).toBe('group-notify-only');
+    });
+
+    test('a manual group, an exclude-only group and no group add no such blocker', () => {
+      for (const groupPolicyValue of [
+        groupPolicy({ updateMode: 'manual' }),
+        groupPolicy({ exclude: ['other.trigger'] }),
+        undefined,
+      ]) {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate({ groupPolicy: groupPolicyValue }),
+          context(),
+        );
+        expect(result.blockers.map((b) => b.reason)).not.toContain('group-notify-only');
+        expect(result.eligible).toBe(true);
+      }
+    });
+
+    test('a container with no raw update still reports only no-update-available', () => {
+      const result = computeUpdateEligibility(
+        makeContainer({ groupPolicy: groupPolicy({ updateMode: 'notify' }) }),
+        context(),
+      );
+      expect(result.blockers.map((b) => b.reason)).toEqual(['no-update-available']);
+    });
+
+    test('a group exclusion is trigger-excluded and names the group, not the container label', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ exclude: ['docker.update'] }) }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
+      expect(blocker).toMatchObject({
+        severity: 'hard',
+        message: "Trigger excluded by group policy 'payments' (docker.update).",
+        actionHint: 'Change the group policy, or move the container with dd.group.',
+        details: {
+          triggerExclude: 'docker.update',
+          triggerId: 'docker.update',
+          excludedBy: 'group',
+          group: 'payments',
+          policyId: 'policy-1',
+        },
+      });
+      expect(result.actionPolicy).toEqual({
+        state: 'blocked',
+        reason: 'excluded',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('the container label keeps the attribution when both exclude the trigger', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({
+          actionTriggerExclude: 'docker.update',
+          groupPolicy: groupPolicy({ exclude: ['docker.update'] }),
+        }),
+        context(),
+      );
+      const blocker = result.blockers.find((b) => b.reason === 'trigger-excluded');
+      expect(blocker?.message).toBe(
+        "Trigger excluded by container label dd.action.exclude='docker.update'.",
+      );
+      expect(blocker?.details).toEqual({
+        triggerExclude: 'docker.update',
+        triggerId: 'docker.update',
+      });
+    });
+
+    test('an include label cannot lift a group exclusion', () => {
+      const result = computeUpdateEligibility(
+        makeContainerWithTagUpdate({
+          actionTriggerInclude: 'docker.update',
+          groupPolicy: groupPolicy({ exclude: ['update'] }),
+        }),
+        context(),
+      );
+      expect(result.blockers.map((b) => b.reason)).toContain('trigger-excluded');
+    });
+
+    describe('updateMode reflection', () => {
+      test('is omitted unless the caller supplies the global mode', () => {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate({ groupPolicy: groupPolicy({ updateMode: 'manual' }) }),
+          context(),
+        );
+        expect(result.updateMode).toBeUndefined();
+      });
+
+      test('is the global mode when there is no group policy', () => {
+        const result = computeUpdateEligibility(
+          makeContainerWithTagUpdate(),
+          context({ updateMode: 'auto' }),
+        );
+        expect(result.updateMode).toEqual({ value: 'auto', source: 'global' });
+      });
+
+      test('names the group only when it is stricter than global', () => {
+        const container = makeContainerWithTagUpdate({
+          groupPolicy: groupPolicy({ updateMode: 'manual' }),
+        });
+        expect(
+          computeUpdateEligibility(container, context({ updateMode: 'auto' })).updateMode,
+        ).toEqual({ value: 'manual', source: 'group', group: 'payments' });
+        expect(
+          computeUpdateEligibility(container, context({ updateMode: 'notify' })).updateMode,
+        ).toEqual({ value: 'notify', source: 'global' });
+      });
+
+      test('is carried on a no-update-available result too', () => {
+        const result = computeUpdateEligibility(
+          makeContainer({ groupPolicy: groupPolicy({ updateMode: 'manual' }) }),
+          context({ updateMode: 'auto' }),
+        );
+        expect(result.updateMode).toEqual({ value: 'manual', source: 'group', group: 'payments' });
+      });
     });
   });
 
@@ -1299,6 +1605,26 @@ describe('computeUpdateEligibility', () => {
       );
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker?.actionHint).toContain('dd.action.auto');
+    });
+
+    test('names the Drydock override in the message when the include is an override', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'oninclude', threshold: 'all' } });
+      const container = makeContainerWithTagUpdate({
+        actionTriggerInclude: 'other.trigger',
+        labelOwned: {
+          v: 1,
+          declared: {},
+          declaredSources: {},
+          sources: { actionTriggerInclude: 'override' },
+        },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')?.message).toBe(
+        "Trigger not matched by the Drydock override of dd.action.include='other.trigger'.",
+      );
     });
 
     test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
@@ -1734,6 +2060,7 @@ describe('computeUpdateEligibility', () => {
         'threshold-not-reached',
         'trigger-excluded',
         'trigger-not-included',
+        'group-notify-only',
         'agent-mismatch',
         'no-update-trigger-configured',
         'maintenance-window-closed',
@@ -1755,6 +2082,7 @@ describe('computeUpdateEligibility', () => {
       // (spec-6.0.1-action-policy.md slice 6) — see DEPRECATIONS.md.
       expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('hard');
       expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('hard');
+      expect(BLOCKER_SEVERITY['group-notify-only']).toBe('hard');
     });
 
     test('soft severities cover policy reasons that manual update bypasses', () => {

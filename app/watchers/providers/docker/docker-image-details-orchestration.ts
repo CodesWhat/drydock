@@ -1,8 +1,10 @@
+import { getDefaultDigestWatch } from '../../../configuration/index.js';
 import {
   type Container,
   getCanonicalContainerName,
   normalizeContainerHealth,
 } from '../../../model/container.js';
+import { pickLabelOwnedFlat, toDeclaredProjection } from '../../../model/label-owned.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -17,7 +19,9 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  mergeConfigWithImgset,
   resolveContainerDependsOn,
+  resolveLabelsFromContainer,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
@@ -33,6 +37,7 @@ import {
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
+import { normalizeContainer } from './image-comparison.js';
 import {
   areRuntimeDetailsEqual,
   getRuntimeDetailsFromContainerSummary,
@@ -66,7 +71,7 @@ export interface ContainerLabelOverrides {
   registryLookupUrl?: string;
 }
 
-interface DockerContainerSummary {
+export type DockerContainerSummary = {
   Id: string;
   Image: string;
   Labels?: Record<string, string>;
@@ -74,9 +79,9 @@ interface DockerContainerSummary {
   Names?: string[];
   Ports?: unknown;
   Mounts?: unknown;
-}
+};
 
-interface DockerContainerInspectPayload {
+export interface DockerContainerInspectPayload {
   Config?: {
     Image?: string;
     [key: string]: unknown;
@@ -235,6 +240,22 @@ interface DockerImageDetailsHelpers {
   getMatchingImgsetConfiguration: (
     parsedImage: ParsedDockerImageReference,
   ) => ResolvedImgset | undefined;
+}
+
+export function createDockerImageDetailsHelpers(
+  watcher: Pick<
+    DockerImageDetailsHelpers,
+    'resolveImageName' | 'resolveTagName' | 'getMatchingImgsetConfiguration'
+  >,
+): DockerImageDetailsHelpers {
+  return {
+    resolveLabelsFromContainer,
+    mergeConfigWithImgset,
+    normalizeContainer,
+    resolveImageName: (...args) => watcher.resolveImageName(...args),
+    resolveTagName: (...args) => watcher.resolveTagName(...args),
+    getMatchingImgsetConfiguration: (...args) => watcher.getMatchingImgsetConfiguration(...args),
+  };
 }
 
 type RuntimeDetails = ReturnType<typeof getRuntimeDetailsFromContainerSummary>;
@@ -521,6 +542,16 @@ async function applyContainerDependsOn(
   container.dependsOnAction = resolution.dependsOnAction;
 }
 
+function getDependencyFields(
+  container: Container,
+): Pick<Container, 'dependsOn' | 'dependsOnSource' | 'dependsOnAction'> {
+  return {
+    dependsOn: container.dependsOn,
+    dependsOnSource: container.dependsOnSource,
+    dependsOnAction: container.dependsOnAction,
+  };
+}
+
 async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyInStoreContext) {
   const {
     watcher,
@@ -534,19 +565,41 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.ensureLogger();
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
+  // Spec 7.5: this pass re-derives what the watcher declares, so it starts from the
+  // declared values of the label-owned fields rather than from any Drydock override
+  // the stored record shows. Otherwise an override reads as a change on every pass, and
+  // a display-name override stops rename tracking. The effective values go back on the
+  // record once the patch below has been written.
+  const effectiveLabelOwned = containerInStore.labelOwned
+    ? pickLabelOwnedFlat(containerInStore)
+    : undefined;
+  if (containerInStore.labelOwned) {
+    Object.assign(containerInStore, pickLabelOwnedFlat(toDeclaredProjection(containerInStore)));
+  }
+
+  const nameBeforeRefresh = containerInStore.name;
+  const displayNameBeforeRefresh = containerInStore.displayName;
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
+  const identityChanged =
+    containerInStore.name !== nameBeforeRefresh ||
+    containerInStore.displayName !== displayNameBeforeRefresh;
+
   applyDockerDeclarativeUpdatePolicy(
     containerInStore,
     container.Labels || {},
     watcher.configuration,
     { logger: watcher.log, containerName: dockerContainerName },
   );
+  const dependenciesBeforeRefresh = getDependencyFields(containerInStore);
   await applyContainerDependsOn(
     containerInStore,
     container.Labels || {},
     watcher,
     dockerContainerName,
   );
+  const dependenciesAfterRefresh = getDependencyFields(containerInStore);
+  const dependenciesChanged =
+    JSON.stringify(dependenciesAfterRefresh) !== JSON.stringify(dependenciesBeforeRefresh);
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
   // tag-repair gating) so the cron leg is an actual fallback for the
@@ -556,6 +609,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   // the inspect actually succeeded — a failed inspect degrades gracefully by
   // leaving the previously stored health value untouched.
   const containerInspect = await inspectDiscoveredContainer(watcher, container.Id);
+  const healthObserved = containerInspect !== undefined;
   if (containerInspect) {
     containerInStore.health = normalizeContainerHealth(containerInspect.State?.Health?.Status);
   }
@@ -565,12 +619,17 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore.details,
     containerInspect,
   );
+  let detailsChanged = false;
   if (!areRuntimeDetailsEqual(containerInStore.details, runtimeDetailsToApply)) {
     containerInStore.details = runtimeDetailsToApply;
+    detailsChanged = true;
   }
 
   // Reconcile container status from Docker summary (covers events missed during reconnect gaps)
+  const statusBeforeReconcile = containerInStore.status;
   reconcileStoredContainerStatus(containerInStore, container.State);
+  const statusChanged = containerInStore.status !== statusBeforeReconcile;
+
   await refreshStoredContainerImageFields({
     watcher,
     container,
@@ -580,6 +639,54 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
     containerInStore,
     containerInspect,
   });
+
+  // Persist the runtime observations this discovery pass owns (name,
+  // displayName, health, details, status) the moment they're observed —
+  // before the registry lookup that follows in the watch cycle, which can
+  // run long enough that a whole-record write at the end would carry a
+  // stale copy of whatever this block just refreshed (roadmap 7-STORE,
+  // slice 9 / spec 4.3). `image` is deliberately left out here: it's still
+  // being resolved by `refreshStoredContainerImageFields` above and by the
+  // registry lookup that follows, and lands in the store via the scan
+  // patch in `mapContainerToContainerReport` once that settles.
+  const runtimeObservationPatch: Partial<Container> = {};
+  if (identityChanged) {
+    runtimeObservationPatch.name = containerInStore.name;
+    runtimeObservationPatch.displayName = containerInStore.displayName;
+  }
+  if (healthObserved) {
+    runtimeObservationPatch.health = containerInStore.health;
+  }
+  if (detailsChanged) {
+    runtimeObservationPatch.details = containerInStore.details;
+  }
+  if (statusChanged) {
+    runtimeObservationPatch.status = containerInStore.status;
+  }
+  // Compose `depends_on` can only be re-read here, so a compose file edit
+  // reaches the store through this patch or not at all.
+  if (dependenciesChanged) {
+    Object.assign(runtimeObservationPatch, dependenciesAfterRefresh);
+  }
+  // The patch carries observed label-derived values, so it updates the declared layer
+  // of the label-owned fields and leaves any override in force.
+  const persisted =
+    Object.keys(runtimeObservationPatch).length > 0
+      ? storeContainer.updateContainerFields(
+          containerInStore.id,
+          runtimeObservationPatch,
+          undefined,
+          { labelOwned: 'declared' },
+        )
+      : undefined;
+  if (effectiveLabelOwned) {
+    Object.assign(
+      containerInStore,
+      effectiveLabelOwned,
+      persisted && pickLabelOwnedFlat(persisted),
+    );
+    containerInStore.labelOwned = persisted?.labelOwned ?? containerInStore.labelOwned;
+  }
 
   return containerInStore;
 }
@@ -713,6 +820,7 @@ function resolveContainerImageState(
       tagPrecision,
       tagName,
       container.Image,
+      getDefaultDigestWatch(),
     ),
     repoDigest: repoDigests?.[0],
     repoDigests,
@@ -862,7 +970,6 @@ export async function addImageDetailsToContainerOrchestration(
   helpers: DockerImageDetailsHelpers,
 ): Promise<Container | undefined> {
   const containerId = container.Id;
-  const containerLabels: Record<string, string> = container.Labels || {};
   const dockerContainerName = getContainerName(container);
 
   // Podman pod infra containers have an empty Image field — skip them
@@ -894,6 +1001,30 @@ export async function addImageDetailsToContainerOrchestration(
 
   const image = await inspectImageForContainer(watcher, containerId, container.Image);
   const containerInspect = await inspectDiscoveredContainer(watcher, containerId);
+  const discovered = await buildDiscoveredContainer(
+    watcher,
+    container,
+    labelOverrides,
+    helpers,
+    image,
+    containerInspect,
+  );
+  if (discovered) removeStaleContainerEntriesWithSameName(watcher, discovered);
+  return discovered;
+}
+
+export async function buildDiscoveredContainer(
+  watcher: DockerImageDetailsWatcher,
+  container: DockerContainerSummary,
+  labelOverrides: ContainerLabelOverrides,
+  helpers: DockerImageDetailsHelpers,
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+): Promise<Container | undefined> {
+  const containerId = container.Id;
+  const containerLabels = container.Labels || {};
+  const dockerContainerName = getContainerName(container);
+  const runtimeDetailsFromSummary = getRuntimeDetailsFromContainerSummary(container);
   const resolvedImageState = resolveContainerImageState({
     watcher,
     container,
@@ -1012,8 +1143,6 @@ export async function addImageDetailsToContainerOrchestration(
     containerName: dockerContainerName,
   });
   await applyContainerDependsOn(containerToReturn, containerLabels, watcher, dockerContainerName);
-  removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
-
   return containerToReturn;
 }
 

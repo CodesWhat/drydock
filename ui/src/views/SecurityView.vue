@@ -8,6 +8,7 @@ import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerLinkActions from '../components/containers/ContainerLinkActions.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
 import DataSortControl from '../components/DataSortControl.vue';
+import type { DataTableColumn } from '../components/DataTable.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
@@ -463,7 +464,7 @@ async function refreshScanResults() {
   }
 }
 
-const tableColumns = computed(() => [
+const tableColumns = computed<(DataTableColumn & PickerColumn)[]>(() => [
   {
     key: 'image',
     label: t('securityView.columns.image'),
@@ -607,6 +608,19 @@ onUnmounted(() => {
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
         {{ error }}
+      </div>
+
+      <div v-if="runtimeError"
+           role="alert"
+           class="mb-3 px-3 py-2 text-2xs-plus dd-rounded flex flex-wrap items-center gap-2"
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        <span class="min-w-0 break-words">{{ runtimeError }}</span>
+        <AppButton v-if="!runtimeStatus"
+                   size="sm" variant="text-danger" weight="semibold"
+                   :disabled="runtimeLoading"
+                   @click="fetchSecurityRuntimeStatus">
+          {{ t('common.retry') }}
+        </AppButton>
       </div>
 
       <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('securityView.loadingVulnerabilityData') }}</div>

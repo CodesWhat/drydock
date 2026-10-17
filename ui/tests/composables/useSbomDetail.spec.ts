@@ -59,6 +59,47 @@ describe('useSbomDetail', () => {
     vi.clearAllMocks();
   });
 
+  it('propagates the real SBOM API timestamp and opaque document without asserting a schema', async () => {
+    const { getContainerSbom } =
+      await vi.importActual<typeof import('@/services/container')>('@/services/container');
+    const response = {
+      generator: 'syft',
+      image: 'nginx:1.27',
+      generatedAt: '2026-09-10T12:00:00Z',
+      format: 'cyclonedx-json',
+      document: { bomFormat: 'CycloneDX', components: [{ name: 'nginx' }], extension: ['kept'] },
+    };
+    const previousFetch = globalThis.fetch;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(response), { headers: { 'Content-Type': 'application/json' } }),
+      );
+    globalThis.fetch = fetchMock;
+    onTestFinished(() => {
+      globalThis.fetch = previousFetch;
+    });
+    mockGetContainerSbom.mockImplementationOnce(getContainerSbom);
+    const state = useSbomDetail({ containerIdsByImage: ref({ nginx: ['container-1'] }) });
+    state.selectedSbomFormat.value = 'cyclonedx-json';
+    state.openDetail(makeSummary());
+    await vi.waitFor(() => expect(state.detailSbomLoading.value).toBe(false));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/containers/container-1/sbom?format=cyclonedx-json',
+      {
+        credentials: 'include',
+      },
+    );
+    expect(state.detailSbomResult.value).toEqual(response);
+    expect(state.detailSbomGeneratedAt.value).toBe(response.generatedAt);
+    expect(state.detailSbomDocument.value).toEqual(response.document);
+    expect(state.detailSbomComponentCount.value).toBe(1);
+    state.handleDetailOpenChange(false);
+    expect(state.detailSbomGeneratedAt.value).toBeUndefined();
+    expect(state.detailSbomDocument.value).toBeUndefined();
+  });
+
   it('opens detail and loads sbom for the selected image', async () => {
     mockGetContainerSbom.mockResolvedValue({
       generatedAt: '2026-03-01T00:00:00.000Z',

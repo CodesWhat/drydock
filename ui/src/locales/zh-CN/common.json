@@ -1,5 +1,11 @@
 {
   "common": {
+    "uptime": "已运行 {duration}",
+    "apiResponse": {
+      "html": "{context} 返回了 HTML 而不是 JSON。请检查 API 服务器或演示模拟服务是否正在运行。",
+      "contentType": "{context} 返回了 {contentType} 而不是 JSON。",
+      "invalidJson": "{context} 返回了无效的 JSON。"
+    },
     "loading": "加载中...",
     "back": "返回",
     "cancel": "取消",
@@ -9,8 +15,8 @@
     "close": "关闭",
     "retry": "重试",
     "unknown": "未知",
-    "yes": "yes",
-    "no": "no",
+    "yes": "是",
+    "no": "否",
     "errorSummary": {
       "rateLimitHit": "仓库速率限制已触发",
       "accessDenied": "仓库访问被拒绝",
@@ -22,13 +28,13 @@
       "signatureFailed": "签名验证失败"
     },
     "display": {
-      "custom": "Custom"
+      "custom": "自定义"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "刚刚"
     },
     "imageAge": {
-      "now": "now"
+      "now": "现在"
     }
   }
 }

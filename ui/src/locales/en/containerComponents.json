@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Agent roster unavailable. Some configured agents may be missing.",
+      "title": "Fleet health",
+      "description": "Fleet-wide status. Inventory refresh discovers containers without registry checks or update actions.",
+      "reload": "Reload status",
+      "refresh": "Refresh inventory",
+      "configured": "Configured",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "unavailable": "Unavailable",
+      "agentUnavailable": "Agent status unavailable. Retained data may be stale.",
+      "watcherUnavailable": "Watcher metadata unavailable. Retained data may be stale.",
+      "total": "{count} container | {count} containers",
+      "lastKnown": "Last known",
+      "lastSeen": "Last seen: {value}",
+      "unsupported": "Inventory refresh requires supported Docker watchers on every target.",
+      "complete": "Inventory complete",
+      "partial": "Inventory incomplete",
+      "reloadFailed": "Container list reload failed. Inventory results remain visible."
+    },
+    "fleetBulk": {
+      "label": "Filtered fleet actions",
+      "updateAll": "Update all ({count})",
+      "snoozePatch": "Snooze all patch",
+      "patchCount": "{count} patch candidate | {count} patch candidates",
+      "duration": "Snooze duration",
+      "days": "{count} day | {count} days",
+      "untilDate": "Until date",
+      "date": "Snooze through date",
+      "snoozeConfirm": "Snooze {count} patch candidate? | Snooze {count} patch candidates?",
+      "snoozeScope": "These containers currently have patch candidates. Snooze all updates for each listed container for {duration}, not just patch updates. This applies to the filtered live list, not checkbox selection. A date runs through local end of day.",
+      "snoozeResult": "Snoozed: {succeeded}. Failed: {failed}.",
+      "refreshFailed": "Policy writes finished, but refreshing the list failed. Reload to see the current state.",
+      "disabled": "Container actions are disabled. No policies changed.",
+      "invalid": "Invalid snooze duration. No policies changed.",
+      "busy": "Another action is already running. No additional policies changed."
+    },
+    "fleetDimensions": {
+      "groupBy": "Group by",
+      "none": "No grouping",
+      "agent": "Agent",
+      "registry": "Registry",
+      "status": "Status",
+      "tagType": "Tag type",
+      "label": "Label",
+      "groupLabel": "Group by label key",
+      "allAgents": "All agents",
+      "allRegistries": "All registry endpoints",
+      "all": "All tag types",
+      "specific": "Specific tag",
+      "floating": "Floating tag",
+      "digest": "Digest pinned",
+      "semver": "Version tag",
+      "tag": "Non-version tag",
+      "unknown": "Unknown",
+      "local": "Local watchers",
+      "running": "Running",
+      "stopped": "Stopped",
+      "labelKey": "Label key",
+      "labelMatch": "Label match",
+      "labelValue": "Label value",
+      "exists": "Has label",
+      "equals": "Equals",
+      "missing": "Missing label",
+      "missingLabel": "No label",
+      "emptyValue": "Empty value"
+    },
     "fullPageActions": {
       "updateWorkflow": "Update Workflow",
       "actionsGroup": "Actions",
@@ -28,8 +95,9 @@
       "clearSkips": "Clear Skips",
       "clearPolicy": "Clear Policy",
       "overridden": "Overridden",
+      "groupSource": "Group: {group}",
       "revert": "Revert",
-      "revertAll": "Revert to Declarative",
+      "revertAll": "Revert to inherited policy",
       "snoozedUntil": "Snoozed until:",
       "maturityMode": "Maturity mode:",
       "matureOnlyMinimum": "Mature only ({days}d minimum)",
@@ -58,6 +126,12 @@
       "runningButton": "Running...",
       "runButton": "Run",
       "noTriggersAssociated": "No triggers associated with this container",
+      "unavailableTriggers": "Unavailable Triggers",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Belongs to a different agent than this container.",
+        "structuralIncompatibility": "Compose project, service, or file doesn't match this container.",
+        "labelScope": "Excluded by this container's dd.action/dd.notification include or exclude labels."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rolling back...",
       "rollbackLatest": "Rollback Latest",
@@ -71,7 +145,13 @@
       "versionLabel": "Version:",
       "rollbackReasonLabel": "Rollback reason:",
       "lastErrorLabel": "Last error:",
-      "noUpdateOperations": "No update operations recorded yet"
+      "noUpdateOperations": "No update operations recorded yet",
+      "skipReleases": "Early releases to skip",
+      "skipReleasesHint": "Skip the first N distinct stable releases per family: a SemVer major or CalVer month. 0 disables this gate.",
+      "releaseFallbackDays": "Age fallback (days)",
+      "releaseFallbackHint": "Allow after this many days if release evidence is missing or the count is unmet. 0 disables this fallback. The minimum age still applies.",
+      "releasePolicySummary": "Skip first {count} releases per family.",
+      "releaseFallbackSummary": "Release-count fallback after {days} days."
     },
     "fullPageDetail": {
       "statusUpdating": "Updating",
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Loading containers...",
+      "fleetUpdateProgress": "Updating {done} of {total} containers",
+      "fleetUpdateProgressRunning": "Running now: {names}",
+      "fleetUpdateProgressRunningMore": "Running now: {names} +{more} more",
       "searchPlaceholder": "Search name or image...",
       "allStatuses": "All Statuses",
       "running": "Running",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · unlocks {date}",
       "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
       "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
+      "groupManualOnly": "Group policy '{group}' allows manual updates only. Drydock won't apply this one automatically.",
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
       "notificationsOnlyButton": "Notifications only",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "No update trigger configured",
         "self-update-unavailable": "Self-update unavailable",
         "maintenance-window-closed": "Maintenance window closed",
-        "dry-run-trigger": "Dry-run trigger configuration"
+        "group-notify-only": "Group allows notifications only",
+        "group-manual-only": "Group requires manual updates",
+        "dry-run-trigger": "Dry-run trigger configuration",
+        "maturity-releases-not-reached": "Maturity policy waiting"
       },
       "actions": {
         "editPolicy": "Edit update policy",
@@ -439,8 +526,11 @@
         "configureTriggers": "Configure update triggers",
         "configureThreshold": "Configure trigger threshold",
         "configureSelfUpdate": "Configure self-update",
-        "configureMaintenance": "Configure maintenance window"
-      }
+        "configureMaintenance": "Configure maintenance window",
+        "editGroupPolicy": "Edit group policy"
+      },
+      "releaseMaturityCount": "Waiting for stable releases in family {family}: {count} of {required} earlier releases available.",
+      "releaseMaturityUnavailable": "Candidate release evidence is unavailable. Automatic updates are held."
     },
     "maturityBadge": {
       "new": "Detected {duration} ago"
@@ -505,6 +595,19 @@
         "failedDetail": "Failed to update the dependency chain for {name}.",
         "staleChainTitle": "Dependency chain has changed",
         "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+      },
+      "bulkUpdate": {
+        "header": "Update 1 container | Update {count} containers",
+        "accept": "Update 1 container | Update {count} containers",
+        "acceptWithParents": "Add 1 parent and update | Add {count} parents and update",
+        "dispatchHeading": "Will update",
+        "blockedHeading": "Blocked, will be left alone",
+        "softOverridesHeading": "Updating despite warnings",
+        "skippedHeading": "Skipped",
+        "staleParentsHeading": "Parents with updates waiting, added when you accept",
+        "agentCountInfo": "Spans {count} agents; each agent runs its own updates.",
+        "stackCountInfo": "Spans {count} stacks.",
+        "successMessage": "Update started for 1 container | Update started for {count} containers"
       }
     },
     "actionToasts": {
@@ -561,14 +664,16 @@
         "setAll": "Maturity policy set to allow all updates",
         "skipped": "Skipped current update for {name}",
         "removeSkip": "Removed skipped {kind} {value}",
-        "revertField": "Reverted {field} to declarative policy",
-        "revertAll": "Reverted all overrides to declarative policy",
+        "revertField": "Reverted {field} to inherited policy",
+        "revertAll": "Reverted all overrides to inherited policy",
         "failedTitle": "Policy update failed: {name}",
         "failedDetail": "Failed to update policy"
       },
       "validation": {
         "snoozeDate": "Select a valid snooze date",
-        "maturityAge": "Enter a maturity age between {min} and {max} days"
+        "maturityAge": "Enter a maturity age between {min} and {max} days",
+        "maturityReleases": "Use a whole release count from 0 to 100.",
+        "maturityFallback": "Use whole fallback days from 0 to 365."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "Queued",
+        "pulling": "Pulling image",
+        "scanning": "Scanning image",
+        "sbom-generating": "Generating SBOM",
+        "pull-failed": "Image pull failed",
+        "prepare": "Preparing update",
+        "dryrun": "Dry run",
+        "renamed": "Container renamed",
+        "new-created": "New container created",
+        "old-stopped": "Old container stopped",
+        "new-started": "New container started",
+        "health-gate": "Health check",
+        "health-gate-passed": "Health check passed",
+        "succeeded": "Succeeded",
+        "failed": "Failed",
+        "recovered-cleanup-temp": "Recovered: temporary containers cleaned up",
+        "recovered-rollback": "Recovered: rollback completed",
+        "recovered-active": "Recovered: active container retained",
+        "recovery-failed": "Recovery failed",
+        "recovery-missing-containers": "Recovery: containers missing",
+        "rollback-started": "Rollback started",
+        "rolled-back": "Rolled back",
+        "rollback-deferred": "Rollback deferred",
+        "rollback-failed": "Rollback failed",
+        "expired": "Expired",
+        "skipped-dependency": "Skipped due to dependency",
+        "in-progress": "In progress",
+        "update-runtime-failed": "Update runtime failed",
+        "create-new-failed": "Failed to create new container",
+        "stop-old-failed": "Failed to stop old container",
+        "start-new-failed": "Failed to start new container",
+        "health-gate-failed": "Health check failed",
+        "cancelled": "Cancelled",
+        "compose-runtime-refresh-failed": "Compose runtime refresh failed"
+      },
       "timestampUnknown": "Unknown",
       "loadFailed": "Failed to load backups",
       "rollback": {
@@ -670,6 +811,29 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depends on",
+      "requiredBy": "Required by",
+      "cycle": "Part of a dependency cycle",
+      "toggle": "Show dependencies",
+      "updateGroup": "Update dependency group ({count})",
+      "staleParentsWarning": "{name} depends on {parents}, which also has an update pending. Updating the child first can leave it running against an outdated parent. | {name} depends on {parents}, which also have updates pending. Updating the child first can leave it running against an outdated parent.",
+      "staleParentsOverflow": "and {count} more",
+      "staleParentsAccept": "Update anyway"
+    },
+    "selection": {
+      "selectRow": "Select {name}",
+      "selectAll": "Select all visible containers",
+      "barLabel": "Selected containers",
+      "count": "1 container selected | {count} containers selected",
+      "updateSelected": "Update selected",
+      "clear": "Clear",
+      "reasons": {
+        "stale": "no longer in the list",
+        "inFlight": "already updating",
+        "noUpdate": "no update available"
+      }
     }
   }
 }

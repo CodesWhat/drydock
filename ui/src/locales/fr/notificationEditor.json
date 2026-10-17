@@ -1,0 +1,25 @@
+{
+  "notificationEditor": {
+    "title": "Politique de notification",
+    "edit": "Modifier la politique de notification",
+    "boundary": "Modifiez la politique de livraison et les modèles de synthèse de sécurité. L’enregistrement ne teste pas le déclencheur et n’envoie aucune notification. Les identifiants, destinations et paramètres d’exécution restent en lecture seule.",
+    "providerForced": "Cette valeur est contrôlée par le fournisseur et ne peut pas être modifiée ici.",
+    "triggerUnavailable": "Ce déclencheur de notification précis est absent de l’instantané de l’éditeur.",
+    "apiUnavailable": "Ce serveur ne fournit pas l’API de l’éditeur de politiques de notification.",
+    "fields": {
+      "threshold": "Seuil de mise à jour",
+      "once": "Notifier une seule fois",
+      "mode": "Mode d’envoi",
+      "securitymode": "Mode d’envoi des alertes de sécurité",
+      "digestcron": "Planification du résumé (cron)",
+      "resolvenotifications": "Envoyer les notifications de résolution",
+      "securitydigesttitle": "Titre de la synthèse de sécurité",
+      "securitydigestbody": "Corps de la synthèse de sécurité"
+    },
+    "templateHelp": "Supprimer un modèle rétablit les valeurs intégrées lors du rendu. Les modèles ne peuvent pas être vides. Modifier un modèle ne change pas le mode de livraison de sécurité.",
+    "templateUnavailable": "Ce serveur ne fournit pas ce champ de modèle.",
+    "templateEmpty": "Les modèles ne peuvent pas être vides. Saisissez du texte ou supprimez explicitement la valeur du fichier.",
+    "providerUnsupported": "Ce fournisseur ne prend pas en charge les modèles de synthèse de sécurité.",
+    "interpolationHelp": "Les valeurs complètes comme {reference} ou {fallback} utilisent l’interpolation des variables d’environnement YAML et deviennent en lecture seule après rechargement. Les expressions d’analyse comme {expression} restent modifiables. Ne mettez pas de secrets dans les modèles."
+  }
+}

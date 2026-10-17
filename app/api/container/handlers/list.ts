@@ -12,6 +12,7 @@ import {
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
 import { getContainerMaintenanceWindowOpen } from '../../../model/watcher-maintenance-window.js';
+import { getUpdateMode } from '../../../store/settings.js';
 import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
@@ -101,14 +102,11 @@ export function attachInProgressUpdateOperation(
   container: Container,
 ): Container {
   const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
-  // Scoped by agent+watcher so cross-agent same-named ops don't pollute list responses (issue #411).
-  const byName = byId
+  // Scoped by identity so cross-agent same-named ops don't pollute list responses (issue #411).
+  const byIdentity = byId
     ? undefined
-    : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
-        agent: container.agent,
-        watcher: container.watcher,
-      });
-  const matched = byId ?? byName;
+    : context.updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
+  const matched = byId ?? byIdentity;
   const operation = sanitizeActiveUpdateOperation(matched);
 
   if (!operation) {
@@ -121,18 +119,16 @@ export function attachInProgressUpdateOperation(
 function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibilityContext {
   return {
     triggers: context.getTriggers ? context.getTriggers() : undefined,
+    updateMode: getUpdateMode(),
     isAgentPendingRegistration: (agentName) =>
       context.getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (container: Container) => {
       const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
-      // Scoped by agent+watcher so cross-agent same-named ops don't affect eligibility (issue #411).
-      const byName = byId
+      // Scoped by identity so cross-agent same-named ops don't affect eligibility (issue #411).
+      const byIdentity = byId
         ? undefined
-        : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
-            agent: container.agent,
-            watcher: container.watcher,
-          });
-      const matched = byId ?? byName;
+        : context.updateOperationStore.getActiveOperationByContainerIdentity(container.identityKey);
+      const matched = byId ?? byIdentity;
       if (!matched || typeof matched !== 'object') {
         return undefined;
       }

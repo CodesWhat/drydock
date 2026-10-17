@@ -14,13 +14,15 @@ export type UpdateBlockerReason =
   | 'skip-tag'
   | 'skip-digest'
   | 'maturity-not-reached'
+  | 'maturity-releases-not-reached'
   | 'threshold-not-reached'
   | 'trigger-excluded'
   | 'trigger-not-included'
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
-  | 'maintenance-window-closed';
+  | 'maintenance-window-closed'
+  | 'group-notify-only';
 
 /**
  * Severity controls how the UI gates the Update button:
@@ -56,14 +58,62 @@ export interface ActionPolicy {
   reason?: ActionPolicyBlockedReason;
 }
 
+/**
+ * The update mode that binds this container and whose it is, resolved by the server
+ * (app/model/update-eligibility.ts). The UI renders it and never re-derives the ceiling.
+ */
+export interface UpdateEligibilityUpdateMode {
+  value: 'notify' | 'manual' | 'auto';
+  source: 'global' | 'group';
+  group?: string;
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: ActionPolicy;
+  updateMode?: UpdateEligibilityUpdateMode;
 }
 
 /** Shared UI container type used across views, composables, and templates. */
+
+/** Where an effective update-policy field came from, as resolved by the server. */
+export type ContainerUpdatePolicySource = 'env' | 'group' | 'label' | 'override';
+
+/** The nine container fields whose value a Docker label can set and a Drydock override can replace. */
+export type LabelOwnedField =
+  | 'displayName'
+  | 'displayIcon'
+  | 'dependsOn'
+  | 'dependsOnAction'
+  | 'notificationTriggerInclude'
+  | 'notificationTriggerExclude'
+  | 'actionTriggerInclude'
+  | 'actionTriggerExclude'
+  | 'actionTriggerAuto';
+
+/** Where a label-owned field's effective value comes from, as resolved by the server. */
+export type LabelOwnedSource = 'override' | 'label' | 'compose' | 'watcher' | 'default' | 'unset';
+
+/** The declarative (non-snooze) update-policy fields a group policy can set. */
+export interface ContainerDeclarativeUpdatePolicy {
+  maturityMode?: 'all' | 'mature';
+  maturityMinAgeDays?: number;
+  maturitySkipReleases?: number;
+  maturityReleaseFallbackDays?: number;
+  skipTags?: string[];
+  skipDigests?: string[];
+}
+
+/** The group policy snapshot the server applied to a container; absent when none applies. */
+export interface ContainerGroupPolicySnapshot {
+  id: string;
+  group: string;
+  revision: number;
+  updatePolicy: ContainerDeclarativeUpdatePolicy;
+  actions: { updateMode?: 'manual' | 'notify'; exclude?: string[] };
+}
 
 export interface ContainerDetails {
   ports: string[];
@@ -188,6 +238,7 @@ export interface Container {
   imageCreated?: string;
   server: string;
   agent?: string;
+  labels?: Record<string, unknown>;
   portLabel?: string;
   includeTags?: string;
   excludeTags?: string;
@@ -195,6 +246,8 @@ export interface Container {
   triggerInclude?: string;
   triggerExclude?: string;
   updateEligibility?: UpdateEligibility;
+  /** Where each label-owned field's effective value comes from; absent when the server sends none. */
+  labelOwnedSources?: Partial<Record<LabelOwnedField, LabelOwnedSource>>;
   /** Cheap dependency-ordering badge counts (#219); full graph detail comes from getContainerDependencies(). */
   dependencyCount?: number;
   dependentCount?: number;
@@ -213,7 +266,7 @@ export interface DependencyGraphEdge {
   from: string;
   to: string;
   action: 'update' | 'restart';
-  source: 'label' | 'compose';
+  source: 'label' | 'compose' | 'override';
 }
 
 export interface DependencyGraphUnresolvedEdge {

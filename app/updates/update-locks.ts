@@ -62,6 +62,7 @@ class UpdateLifecycleGate {
     exclusive: boolean,
     fn: () => Promise<T>,
     retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined,
+    retainExclusiveOnError?: (error: unknown) => RetainedExclusiveLifecycle | undefined,
   ): Promise<T> {
     const release = await this.acquire(exclusive);
     if (exclusive) {
@@ -75,6 +76,12 @@ class UpdateLifecycleGate {
           ? retainExclusiveOnResult(result)
           : undefined;
       return result;
+    } catch (error: unknown) {
+      retainedLifecycle =
+        exclusive && retainExclusiveOnError !== undefined
+          ? retainExclusiveOnError(error)
+          : undefined;
+      throw error;
     } finally {
       if (retainedLifecycle) {
         const releasedEarly = this.earlyReleaseOperationIds.has(retainedLifecycle.operationId);
@@ -221,9 +228,15 @@ export async function withContainerUpdateLocks<T>(
   options?: {
     bypassGlobalCap?: boolean;
     exclusive?: boolean;
+    skipLifecycleGate?: boolean;
+    skipUpdateLocks?: boolean;
     retainExclusiveOnResult?: (result: T) => RetainedExclusiveLifecycle | undefined;
+    retainExclusiveOnError?: (error: unknown) => RetainedExclusiveLifecycle | undefined;
   },
 ): Promise<T> {
+  if (options?.skipLifecycleGate === true) {
+    return options.skipUpdateLocks === true ? fn() : updateLockManager.withLocks(keys, fn);
+  }
   return updateLifecycleGate.withAccess(
     options?.exclusive === true,
     async () => {
@@ -239,6 +252,7 @@ export async function withContainerUpdateLocks<T>(
       }
     },
     options?.retainExclusiveOnResult,
+    options?.retainExclusiveOnError,
   );
 }
 
@@ -251,6 +265,15 @@ export function buildComposeProjectLockKey(
   composeProject: string,
 ): string {
   return `compose:${container.watcher}:${composeProject}`;
+}
+
+export function buildComposeFileLockKeys(
+  container: ContainerLockReference,
+  composeFiles: readonly string[],
+): string[] {
+  return [...new Set(composeFiles)]
+    .sort()
+    .map((composeFile) => `compose-file:${container.watcher}:${composeFile}`);
 }
 
 export interface UpdateLockSnapshot {

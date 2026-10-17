@@ -1,4 +1,4 @@
-import { collectDefaultMetrics, register } from 'prom-client';
+import { collectDefaultMetrics, register } from '@prometheus-io/client';
 
 import logger from '../log/index.js';
 

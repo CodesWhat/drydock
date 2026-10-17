@@ -1,5 +1,9 @@
 import { i18n } from '../boot/i18n';
-import type { ApiContainerUpdateOperation } from '../types/api';
+import type {
+  ApiContainerTrigger,
+  ApiContainerUpdateOperation,
+  ApiUnassociatedContainerTrigger,
+} from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
@@ -18,6 +22,11 @@ interface ContainerGroup {
   containers: ContainerGroupMember[];
   containerCount: number;
   updatesAvailable: number;
+}
+
+interface ContainerSbomResult extends Record<string, unknown> {
+  generatedAt?: string;
+  document?: unknown;
 }
 
 interface ContainerSummary {
@@ -135,7 +144,9 @@ async function getAllContainers(
     ...(options.signal ? { signal: options.signal } : {}),
   });
   if (!response.ok) {
-    throw new Error(`Failed to get containers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containersView.error.loadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   const payload = await readJsonResponse(response, 'Containers API');
   return extractCollectionData<ApiContainerInput>(payload);
@@ -156,7 +167,9 @@ async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get container recent status: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('dashboardView.dataLoadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
 }
@@ -167,9 +180,15 @@ async function refreshAllContainers() {
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to refresh all containers: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containersView.error.recheckFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse(response, 'Container refresh API');
+}
+
+function actionHttpFailure(response: Response, message: string): string {
+  return `${message} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`;
 }
 
 async function refreshContainer(containerId: string) {
@@ -181,7 +200,14 @@ async function refreshContainer(containerId: string) {
     return undefined;
   }
   if (!response.ok) {
-    throw new Error(`Failed to refresh container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.recheckFailedDetail', {
+          name: containerId,
+        }),
+      ),
+    );
   }
   return readJsonResponse(response, 'Container refresh API');
 }
@@ -195,7 +221,12 @@ async function deleteContainer(containerId: string) {
     },
   });
   if (!response.ok) {
-    throw new Error(`Failed to delete container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.actionToasts.deleteFailedDetail', { name: containerId }),
+      ),
+    );
   }
   return response;
 }
@@ -209,6 +240,35 @@ async function getContainerTriggers(containerId: string) {
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
   return extractCollectionData<Record<string, unknown>>(payload);
+}
+
+/**
+ * GET /api/v1/containers/:id/triggers — single request for both the associated trigger list
+ * (`data`) and the unassociated-trigger reason list (`unassociatedTriggers`, DR-78). Reading both
+ * from one response, instead of issuing the request twice, avoids the trigger/agent/label
+ * configuration changing between two separate round trips and briefly showing a trigger in both
+ * lists or neither.
+ */
+async function getContainerTriggersWithReasons(containerId: string): Promise<{
+  data: ApiContainerTrigger[];
+  unassociatedTriggers: ApiUnassociatedContainerTrigger[];
+}> {
+  const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(
+      `${i18n.global.t('containerComponents.triggers.toasts.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
+  }
+  const payload = await readJsonResponse(response, 'Container triggers API');
+  const envelope = payload as { unassociatedTriggers?: unknown };
+  return {
+    data: extractCollectionData<ApiContainerTrigger>(payload),
+    unassociatedTriggers: Array.isArray(envelope.unassociatedTriggers)
+      ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+      : [],
+  };
 }
 
 async function runTrigger({
@@ -249,7 +309,7 @@ async function getContainerUpdateOperations(
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to get update operations for container ${containerId}: ${response.statusText}`,
+      `${i18n.global.t('containerComponents.backups.operationHistoryLoadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   const payload = await readJsonResponse(response, 'Container update operations API');
@@ -262,7 +322,7 @@ async function getContainerVulnerabilities(containerId: string) {
   });
   if (!response.ok) {
     throw new Error(
-      `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
+      `${i18n.global.t('containerComponents.security.loadVulnerabilitiesFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
     );
   }
   return readJsonResponse<Record<string, unknown>>(response, 'Container vulnerabilities API');
@@ -273,7 +333,9 @@ async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerability
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get aggregated vulnerabilities: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.vulnerabilities.loadFailed')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
   return readJsonResponse<SecurityVulnerabilityOverview>(response, 'Container vulnerabilities API');
 }
@@ -286,9 +348,11 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
     },
   );
   if (!response.ok) {
-    throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
+    throw new Error(
+      `${i18n.global.t('containerComponents.sbomDetail.loadFailed')} (${containerId}) (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+    );
   }
-  return readJsonResponse<Record<string, unknown>>(response, 'Container SBOM API');
+  return readJsonResponse<ContainerSbomResult>(response, 'Container SBOM API');
 }
 
 async function updateContainerPolicy(
@@ -315,7 +379,7 @@ async function updateContainerPolicy(
       // Ignore parsing error and fallback to status text.
     }
     throw new Error(
-      `Failed to update container policy ${action}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, `${i18n.global.t('containerComponents.policy.toasts.failedDetail')} (${action})`)}${details}`,
     );
   }
   return readJsonResponse(response, 'Container policy API');
@@ -360,7 +424,12 @@ async function previewUpdateChain(containerId: string): Promise<UpdateChainPrevi
   );
   if (!response.ok) {
     throw new Error(
-      `Failed to preview update chain for container ${containerId}: ${response.statusText}`,
+      actionHttpFailure(
+        response,
+        i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.previewFailedDetail', {
+          name: containerId,
+        }),
+      ),
     );
   }
   return readJsonResponse<UpdateChainPreview>(response, 'Container update-chain preview API');
@@ -420,7 +489,7 @@ async function updateDependencyGroup(
       console.debug(`Unable to parse dependency group update response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to update dependency group ${rootId}: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.confirmDialogs.dependencyGroup.failedDetail', { name: rootId }))}${details}`,
       response.status,
     );
   }
@@ -474,7 +543,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
       console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
     }
     throw new ApiError(
-      `Failed to scan container: ${response.statusText}${details}`,
+      `${actionHttpFailure(response, i18n.global.t('containerComponents.actionToasts.scanFailedDetail', { name: containerId }))}${details}`,
       response.status,
     );
   }
@@ -539,15 +608,21 @@ async function getUpdateOperationById(
   return readJsonResponse<ApiContainerUpdateOperation>(response, 'Container update operation API');
 }
 
+interface RevealedContainerEnv {
+  env: { key: string; value: string; sensitive: boolean }[];
+}
+
 async function revealContainerEnv(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/env/reveal`, {
     method: 'POST',
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to reveal env vars: ${response.statusText}`);
+    throw new Error(
+      actionHttpFailure(response, i18n.global.t('containerComponents.sideTabContent.revealFailed')),
+    );
   }
-  return readJsonResponse(response, 'Container env API');
+  return readJsonResponse<RevealedContainerEnv>(response, 'Container env API');
 }
 
 export type { ContainerGroup };
@@ -563,6 +638,7 @@ export {
   getContainerSbom,
   getContainerSummary,
   getContainerTriggers,
+  getContainerTriggersWithReasons,
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   getSecurityVulnerabilityOverview,

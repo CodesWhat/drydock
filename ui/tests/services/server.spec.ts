@@ -23,11 +23,14 @@ describe('Server Service', () => {
   it('throws when fetching server configuration fails', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
       json: async () => ({}),
     } as any);
 
-    await expect(getServer()).rejects.toThrow('Failed to get server: Internal Server Error');
+    await expect(getServer()).rejects.toThrow(
+      'Failed to load server data (HTTP 500): Internal Server Error',
+    );
   });
 
   it('fetches security runtime status', async () => {
@@ -48,36 +51,39 @@ describe('Server Service', () => {
   it('throws with API error details when runtime call fails', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 400,
       statusText: 'Bad Request',
       json: vi.fn().mockResolvedValue({ error: 'missing trivy' }),
     } as any);
 
     await expect(getSecurityRuntime()).rejects.toThrow(
-      'Failed to get security runtime status: Bad Request (missing trivy)',
+      'Failed to load security runtime status (HTTP 400): Bad Request (missing trivy)',
     );
   });
 
   it('throws without error details when response body has no error field', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 400,
       statusText: 'Bad Request',
       json: vi.fn().mockResolvedValue({ message: 'something else' }),
     } as any);
 
     await expect(getSecurityRuntime()).rejects.toThrow(
-      'Failed to get security runtime status: Bad Request',
+      'Failed to load security runtime status (HTTP 400): Bad Request',
     );
   });
 
   it('throws with status text only when response body is not JSON', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 500,
       statusText: 'Internal Server Error',
       json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token')),
     } as any);
 
     await expect(getSecurityRuntime()).rejects.toThrow(
-      'Failed to get security runtime status: Internal Server Error',
+      'Failed to load security runtime status (HTTP 500): Internal Server Error',
     );
   });
 
@@ -95,12 +101,13 @@ describe('Server Service', () => {
   it('reports scanner asset lifecycle failures', async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
+      status: 503,
       statusText: 'Service Unavailable',
       json: vi.fn().mockResolvedValue({ error: 'pull denied' }),
     } as any);
 
     await expect(manageSecurityAsset('trivy', 'pull')).rejects.toThrow(
-      'Scanner asset operation failed: Service Unavailable (pull denied)',
+      'Scanner asset operation failed (HTTP 503): Service Unavailable (pull denied)',
     );
   });
 });

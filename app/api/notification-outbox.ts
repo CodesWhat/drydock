@@ -13,6 +13,7 @@ import {
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 
@@ -222,8 +223,8 @@ function deleteOutboxEntry(req: Request<{ id: string }>, res: Response) {
 
 export function init() {
   router.use(nocache());
-  router.get('/', getOutboxEntries);
-  router.post('/:id/retry', retryOutboxEntry);
-  router.delete('/:id', deleteOutboxEntry);
+  router.get('/', scoped('read', getOutboxEntries));
+  router.post('/:id/retry', scoped('triggers:test', retryOutboxEntry));
+  router.delete('/:id', scoped('triggers:test', deleteOutboxEntry));
   return router;
 }

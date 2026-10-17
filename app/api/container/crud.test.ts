@@ -14,6 +14,7 @@ vi.mock('../../event/index.js', () => ({
 
 import { isRollbackContainer } from '../../model/container.js';
 import { createCrudHandlers } from './crud.js';
+import { toApiContainer } from './shared.js';
 import { sortContainers } from './sorting.js';
 
 type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
@@ -174,11 +175,11 @@ function createHarness(options: { containers?: any[] } = {}) {
       }),
     },
     updateOperationStore: {
-      getOperationsByContainerName: vi.fn(() => []),
+      getOperationsByContainerIdentity: vi.fn(() => []),
       getOperationsByContainerId: vi.fn(() => []),
-      getInProgressOperationByContainerName: vi.fn(() => undefined),
+      getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
       getInProgressOperationByContainerId: vi.fn(() => undefined),
-      getActiveOperationByContainerName: vi.fn(() => undefined),
+      getActiveOperationByContainerIdentity: vi.fn(() => undefined),
       getActiveOperationByContainerId: vi.fn(() => undefined),
     },
     getServerConfiguration: vi.fn(() => ({ feature: { delete: true } })),
@@ -2505,6 +2506,55 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining(redacted));
     });
 
+    test('names the Drydock override in the eligibility message of a projected container', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            id: 'c1',
+            result: { tag: '1.1.0' },
+            updateKind: {
+              kind: 'tag',
+              localValue: '1.0.0',
+              remoteValue: '1.1.0',
+              semverDiff: 'minor',
+            },
+            actionTriggerInclude: 'other.trigger',
+            labelOwned: {
+              v: 1,
+              declared: {},
+              declaredSources: {},
+              sources: { actionTriggerInclude: 'override' },
+            },
+          }),
+        ],
+      });
+      harness.deps.redactContainerRuntimeEnv.mockImplementation(toApiContainer);
+      const grouped = groupCrudDeps(harness.deps);
+      const handlers = createCrudHandlers({
+        ...grouped,
+        agentApi: {
+          ...grouped.agentApi,
+          getTriggers: () =>
+            ({
+              'docker.update': {
+                type: 'docker',
+                configuration: { auto: 'oninclude', threshold: 'all' },
+                getId: () => 'docker.update',
+              },
+            }) as never,
+        },
+      });
+
+      const res = callGetContainer(handlers, 'c1');
+
+      const body = res.json.mock.calls[0][0];
+      expect(body.labelOwned).toBeUndefined();
+      expect(
+        body.updateEligibility.blockers.find((b: any) => b.reason === 'trigger-not-included')
+          ?.message,
+      ).toBe("Trigger not matched by the Drydock override of dd.action.include='other.trigger'.");
+    });
+
     test('returns 404 when container id does not exist', () => {
       const harness = createHarness();
 
@@ -2518,7 +2568,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-1',
         status: 'in-progress',
         phase: 'old-stopped',
@@ -2533,9 +2583,11 @@ describe('api/container/crud', () => {
       const listRes = callGetContainers(harness.handlers);
       const singleRes = callGetContainer(harness.handlers, 'c1');
 
+      // No identityKey on the container fixture, so the identity-scoped lookup is called
+      // with undefined.
       expect(
-        harness.deps.updateOperationStore.getActiveOperationByContainerName,
-      ).toHaveBeenCalledWith('edge-api', { agent: undefined, watcher: 'local' });
+        harness.deps.updateOperationStore.getActiveOperationByContainerIdentity,
+      ).toHaveBeenCalledWith(undefined);
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           data: [
@@ -2572,7 +2624,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-1',
         status: 'queued',
         phase: 'queued',
@@ -2613,7 +2665,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-1',
         status: 'queued',
         phase: 'queued',
@@ -2677,7 +2729,7 @@ describe('api/container/crud', () => {
         harness.deps.updateOperationStore.getActiveOperationByContainerId,
       ).toHaveBeenCalledWith('new-c1');
       expect(
-        harness.deps.updateOperationStore.getActiveOperationByContainerName,
+        harness.deps.updateOperationStore.getActiveOperationByContainerIdentity,
       ).not.toHaveBeenCalled();
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2709,7 +2761,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getActiveOperationByContainerName.mockReturnValue({
+      harness.deps.updateOperationStore.getActiveOperationByContainerIdentity.mockReturnValue({
         id: 'op-1',
         status: 'success',
         phase: 'complete',
@@ -2733,16 +2785,18 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         { id: 'op-1' },
         { id: 'op-2' },
       ]);
 
       const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
 
-      expect(harness.deps.updateOperationStore.getOperationsByContainerName).toHaveBeenCalledWith(
-        'edge-api',
-      );
+      // No identityKey on the container fixture, so the identity-scoped lookup is called
+      // with undefined.
+      expect(
+        harness.deps.updateOperationStore.getOperationsByContainerIdentity,
+      ).toHaveBeenCalledWith(undefined);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         data: [{ id: 'op-1' }, { id: 'op-2' }],
@@ -2757,7 +2811,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         { id: 'op-1' },
         { id: 'op-2' },
         { id: 'op-3' },
@@ -2786,7 +2840,7 @@ describe('api/container/crud', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         { id: 'op-1' },
         { id: 'op-2' },
         { id: 'op-3' },
@@ -2814,14 +2868,16 @@ describe('api/container/crud', () => {
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
-      expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
+      expect(
+        harness.deps.updateOperationStore.getOperationsByContainerIdentity,
+      ).not.toHaveBeenCalled();
     });
 
     test('strips container snapshot from operations before returning to API consumer', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         {
           id: 'op-1',
           containerName: 'edge-api',
@@ -2850,7 +2906,7 @@ describe('api/container/crud', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ]);
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([]);
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([]);
 
       const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
 
@@ -2889,8 +2945,9 @@ describe('api/container/crud', () => {
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
       ]);
-      // Name lookup returns both containers' ops — sibling (c2) should be excluded
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      // Identity lookup returns both containers' ops; op-c2 is excluded because it carries a
+      // containerId field (not a legacy op), regardless of the sibling-name match.
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         {
           id: 'op-c1',
           containerId: 'c1',
@@ -2918,7 +2975,7 @@ describe('api/container/crud', () => {
         containers: [createContainer({ id: 'c1', name: 'edge-api' })],
       });
       harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([]);
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([
         { id: 'op-legacy', containerName: 'edge-api', updatedAt: '2026-01-01T00:00:00.000Z' },
       ]);
 
@@ -2941,7 +2998,7 @@ describe('api/container/crud', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       };
       harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([op]);
-      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([op]);
+      harness.deps.updateOperationStore.getOperationsByContainerIdentity.mockReturnValue([op]);
 
       const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
 
@@ -3034,9 +3091,9 @@ describe('api/container/crud', () => {
             deleteContainer: vi.fn(),
           },
           updateOperationStore: {
-            getOperationsByContainerName: vi.fn(() => []),
+            getOperationsByContainerIdentity: vi.fn(() => []),
             getOperationsByContainerId: vi.fn(() => []),
-            getInProgressOperationByContainerName: vi.fn(() => undefined),
+            getInProgressOperationByContainerIdentity: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
           },
         },

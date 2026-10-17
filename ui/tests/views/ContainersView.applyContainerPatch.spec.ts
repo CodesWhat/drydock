@@ -62,7 +62,9 @@ vi.mock('@/services/container', () => ({
   getContainerLogs: vi.fn(),
   getContainerUpdateOperations: vi.fn().mockResolvedValue([]),
   getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
-  getContainerTriggers: vi.fn().mockResolvedValue([]),
+  getContainerTriggersWithReasons: vi
+    .fn()
+    .mockResolvedValue({ data: [], unassociatedTriggers: [] }),
   getContainerVulnerabilities: vi.fn().mockResolvedValue({
     status: 'not-scanned',
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
@@ -108,6 +110,7 @@ vi.mock('@/stores/operations', () => ({
       return mockStoreOperationsById.value[containerId];
     },
     getBatchProgress: vi.fn().mockReturnValue(undefined),
+    getActiveBatchProgress: vi.fn().mockReturnValue([]),
     captureDisplayBatch: vi.fn(),
     clearDisplayBatch: vi.fn(),
     getDisplayBatch: vi.fn().mockReturnValue(undefined),
@@ -155,21 +158,25 @@ const mockFilterServer = ref('all');
 const mockFilterKind = ref('all');
 const mockFilterHidePinned = ref(false);
 
-vi.mock('@/composables/useContainerFilters', () => ({
-  useContainerFilters: vi.fn(() => ({
-    filterSearch: mockFilterSearch,
-    filterStatus: mockFilterStatus,
-    filterRegistry: mockFilterRegistry,
-    filterBouncer: mockFilterBouncer,
-    filterServer: mockFilterServer,
-    filterKind: mockFilterKind,
-    filterHidePinned: mockFilterHidePinned,
-    showFilters: mockShowFilters,
-    activeFilterCount: mockActiveFilterCount,
-    filteredContainers: mockFilteredContainers,
-    clearFilters: mockClearFilters,
-  })),
-}));
+vi.mock('@/composables/useContainerFilters', async () => {
+  const { useFleetDimensions } = await import('@/composables/useFleetDimensions');
+  return {
+    useContainerFilters: vi.fn((containers) => ({
+      fleet: useFleetDimensions(containers),
+      filterSearch: mockFilterSearch,
+      filterStatus: mockFilterStatus,
+      filterRegistry: mockFilterRegistry,
+      filterBouncer: mockFilterBouncer,
+      filterServer: mockFilterServer,
+      filterKind: mockFilterKind,
+      filterHidePinned: mockFilterHidePinned,
+      showFilters: mockShowFilters,
+      activeFilterCount: mockActiveFilterCount,
+      filteredContainers: mockFilteredContainers,
+      clearFilters: mockClearFilters,
+    })),
+  };
+});
 
 const mockIsMobile = ref(false);
 const mockWindowNarrow = ref(false);

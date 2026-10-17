@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import Dockerode from 'dockerode';
-import { getDetectedServerName, setDetectedServerName } from '../../../configuration/index.js';
+import {
+  getDetectedServerName,
+  isWatcherSocketExplicitlyConfigured,
+  setDetectedServerName,
+} from '../../../configuration/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { getErrorMessage } from './docker-helpers.js';
+import { resolveDockerSocketPath } from './docker-socket-resolution.js';
 import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
   initializeRemoteOidcStateFromConfiguration,
@@ -88,6 +93,23 @@ async function detectLocalDaemonServerName(watcher: DockerRemoteAuthWatcher): Pr
   }
 }
 
+function createSocketDockerApi(options: Dockerode.DockerOptions): Dockerode {
+  const ambientDockerHost = process.env.DOCKER_HOST;
+  try {
+    // docker-modem reads all Docker CLI environment defaults before merging
+    // explicit options. Hiding DOCKER_HOST for this synchronous construction
+    // keeps ambient TLS and certificate settings out of a Unix-socket client.
+    delete process.env.DOCKER_HOST;
+    return new Dockerode(options);
+  } finally {
+    if (ambientDockerHost === undefined) {
+      delete process.env.DOCKER_HOST;
+    } else {
+      process.env.DOCKER_HOST = ambientDockerHost;
+    }
+  }
+}
+
 export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
   const options: Dockerode.DockerOptions = {};
   watcher.remoteAuthBlockedReason = undefined;
@@ -131,18 +153,39 @@ export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher
       );
     }
   } else {
-    options.socketPath = watcher.configuration.socket;
+    // docker-modem merges explicit options over defaults sourced from DOCKER_HOST.
+    // Explicitly clear every remote/TLS option and force plain HTTP, which is the
+    // request transport used over a local Unix socket.
+    options.host = undefined;
+    options.port = undefined;
+    options.protocol = 'http';
+    options.ca = undefined;
+    options.cert = undefined;
+    options.key = undefined;
+    // When the configured socket is still the schema default and that
+    // default path doesn't exist, probe Podman's known socket paths (#10.4)
+    // rather than failing straight into "socket not found" with no hint
+    // that Podman needs a different mount. An explicitly configured socket
+    // is never second-guessed — even one explicitly set to the default path
+    // — so isWatcherSocketExplicitlyConfigured (true when the raw, pre-Joi
+    // watcher config actually carried a `socket` key) always wins over probing.
+    const resolvedSocketPath = resolveDockerSocketPath(watcher.configuration.socket, {
+      socketExplicit: isWatcherSocketExplicitlyConfigured(watcher.name),
+    });
+    options.socketPath = resolvedSocketPath;
     // Pin the daemon's API version so all requests use versioned paths
     // (e.g. /v1.44/images/…).  This prevents Podman's Docker-compat
     // layer from returning 301 redirects for unversioned endpoints,
     // which triggers a crash in docker-modem's redirect handler
     // (getaddrinfo EAI_AGAIN — see GitHub issue #182).
-    const apiVersion = await probeSocketApiVersion(watcher.configuration.socket);
+    const apiVersion = await probeSocketApiVersion(resolvedSocketPath);
     if (apiVersion) {
       options.version = `v${apiVersion}`;
     }
   }
-  watcher.dockerApi = new Dockerode(options);
+  watcher.dockerApi = watcher.configuration.host
+    ? new Dockerode(options)
+    : createSocketDockerApi(options);
   if (!watcher.configuration.host) {
     disableSocketRedirects(watcher.dockerApi);
   }

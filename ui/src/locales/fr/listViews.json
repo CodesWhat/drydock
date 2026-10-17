@@ -42,6 +42,30 @@
       "info": "Info"
     },
     "actions": {
+      "webhook-watch": "Surveillance par webhook",
+      "webhook-watch-container": "Surveillance du conteneur par webhook",
+      "webhook-update": "Mise à jour par webhook",
+      "mqtt-command-update": "Commande de mise à jour MQTT",
+      "security-scan-skipped": "Analyse de sécurité ignorée",
+      "scanner-asset-pull-started": "Téléchargement de l’image du scanner démarré",
+      "scanner-asset-pull-succeeded": "Image du scanner téléchargée",
+      "scanner-asset-pull-failed": "Échec du téléchargement de l’image du scanner",
+      "scanner-asset-warm-started": "Préparation du scanner démarrée",
+      "scanner-asset-warm-succeeded": "Préparation du scanner réussie",
+      "scanner-asset-warm-failed": "Échec de la préparation du scanner",
+      "container-unhealthy": "Conteneur défaillant",
+      "env-reveal": "Variables d’environnement affichées",
+      "debug-dump": "Données de débogage téléchargées",
+      "config-read": "Configuration lue",
+      "config-validated": "Configuration validée",
+      "config-reloaded": "Configuration rechargée",
+      "config-written": "Configuration écrite",
+      "update-approved": "Mise à jour approuvée",
+      "update-rejected": "Mise à jour rejetée",
+      "update-deferred": "Mise à jour reportée",
+      "api-key-created": "Clé API créée",
+      "api-key-revoked": "Clé API révoquée",
+      "api-key-auth-failed": "Échec d’authentification par clé API",
       "container-update": "Mise à jour de conteneur",
       "container-added": "Conteneur ajouté",
       "container-removed": "Conteneur supprimé",
@@ -49,6 +73,13 @@
       "container-stop": "Arrêt de conteneur",
       "container-restart": "Redémarrage de conteneur",
       "auth-login": "Connexion",
+      "totp-recovery-used": "Code de récupération utilisé",
+      "totp-enrollment-started": "Inscription à la double authentification démarrée",
+      "totp-enabled": "Double authentification activée",
+      "totp-replaced": "Double authentification remplacée",
+      "totp-disabled": "Double authentification désactivée",
+      "totp-recovery-codes-replaced": "Codes de récupération remplacés",
+      "totp-break-glass": "Récupération hors ligne de la double authentification",
       "authenticated": "Authentifié",
       "authfail": "Échec d'authentification",
       "hook-configured": "Hook configuré",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Mise à jour automatique bloquée",
       "update-policy-override-set": "Substitution de la policy de mise à jour définie",
       "update-policy-override-cleared": "Substitution de la policy de mise à jour effacée",
+      "group-policy-set": "Policy de groupe définie",
+      "group-policy-cleared": "Policy de groupe effacée",
+      "label-override-set": "Substitution de label définie",
+      "label-override-cleared": "Substitution de label effacée",
       "auto-rollback": "Rollback automatique",
       "rollback": "Rollback",
       "preview": "Aperçu",
       "agent-disconnect": "Déconnexion d'agent",
       "notification-delivery-failed": "Échec de l'envoi de notification",
       "security-alert": "Alerte de sécurité",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Période de maturation écoulée",
+      "image-prune": "Nettoyage d'image"
     },
     "target": {
       "container": "Conteneur",
-      "agent": "Agent"
+      "agent": "Agent",
+      "group": "Groupe"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Maturité effacée",
         "description": "Quand une mise à jour retenue par la politique de maturité devient applicable"
+      },
+      "update-pending-approval": {
+        "name": "Mise à jour en attente d'approbation",
+        "description": "Quand une mise à jour en mode manuel entre dans la file d'approbation"
       }
     },
     "columns": {
@@ -209,7 +250,7 @@
     },
     "countLabel": {
       "images": "images",
-      "scanned": "scanned"
+      "scanned": "analysés"
     },
     "fixableBadge": "{count} corrigeables",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Filtrer par nom...",
     "clear": "Effacer",
     "emptyFiltered": "Aucun trigger ne correspond à vos filtres",
-    "testContainerName": "Test Container",
+    "testContainerName": "Conteneur de test",
     "columns": {
       "trigger": "Trigger",
       "type": "Type",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "Chargement des watchers...",
     "loadError": "Impossible de charger les watchers",
-    "soon": "soon",
+    "soon": "bientôt",
     "filterPlaceholder": "Filtrer par nom...",
     "clear": "Effacer",
     "emptyFiltered": "Aucun watcher ne correspond à vos filtres",

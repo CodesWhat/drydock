@@ -7,13 +7,15 @@ vi.mock('express', () => ({
   },
 }));
 
-vi.mock('passport', () => ({
+vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
+
+// The API key authenticator imported below reaches the store, which builds a
+// component logger at import time.
+vi.mock('../log/index.js', () => ({
   default: {
-    authenticate: vi.fn(() => 'auth-middleware'),
+    child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() })),
   },
 }));
-
-vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../prometheus', () => ({
   output: vi.fn(async () => 'metrics-output'),
@@ -25,15 +27,24 @@ vi.mock('../configuration', () => ({
   })),
 }));
 
+const { mockRequireAuthentication } = vi.hoisted(() => ({
+  mockRequireAuthentication: vi.fn(),
+}));
 vi.mock('./auth', () => ({
-  getAllIds: vi.fn(() => ['basic.default']),
+  requireAuthentication: mockRequireAuthentication,
 }));
 
-import passport from 'passport';
+const { mockRateLimit } = vi.hoisted(() => ({
+  mockRateLimit: vi.fn(() => 'metrics-auth-limiter'),
+}));
+vi.mock('express-rate-limit', () => ({ default: mockRateLimit }));
+
 import { getServerConfiguration } from '../configuration/index.js';
 import { output } from '../prometheus/index.js';
-import * as auth from './auth.js';
+import { apiKeyAuthenticator } from './api-key-auth.js';
+import { clearAuthenticators, registerAuthenticator } from './authenticator-chain.js';
 import * as prometheusRouter from './prometheus.js';
+import { getRouteScope } from './route-scopes.js';
 
 describe('Prometheus Router', () => {
   beforeEach(async () => {
@@ -43,14 +54,108 @@ describe('Prometheus Router', () => {
     });
   });
 
-  test('should initialize router with auth by default', async () => {
+  test('should initialize router with the authenticator chain by default', async () => {
     const router = prometheusRouter.init();
 
     expect(router).toBeDefined();
-    expect(auth.getAllIds).toHaveBeenCalled();
-    expect(passport.authenticate).toHaveBeenCalledWith(['basic.default']);
-    expect(router.use).toHaveBeenCalledWith('auth-middleware');
+    expect(router.use).toHaveBeenCalledWith(mockRequireAuthentication);
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+  });
+
+  test('should charge only failed attempts against the credential fallback budget', () => {
+    const router = prometheusRouter.init();
+
+    expect(mockRateLimit).toHaveBeenCalledWith({
+      windowMs: 15 * 60 * 1000,
+      max: 100,
+      skipSuccessfulRequests: true,
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: { xForwardedForHeader: false },
+    });
+    // The budget has to sit in front of the credential check, or a guess is
+    // answered before it is counted.
+    const useArguments = router.use.mock.calls.map(([middleware]) => middleware);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeGreaterThanOrEqual(0);
+    expect(useArguments.indexOf('metrics-auth-limiter')).toBeLessThan(
+      useArguments.indexOf(mockRequireAuthentication),
+    );
+  });
+
+  describe('the scope a key needs to scrape', () => {
+    // /metrics is mounted on the app, not under the /api/v1 router, so the
+    // completeness walk cannot see it and `scoped()` is the only thing that
+    // puts a scope on it. Without one, requireAuthentication accepted any
+    // valid key: a triggers:test-only key could read the container inventory
+    // it is not otherwise allowed to see.
+    test('declares read, on both the credential and the fallback branch', () => {
+      const fallbackRouter = prometheusRouter.init();
+      expect(getRouteScope(fallbackRouter.get.mock.calls[0][1])).toBe('read');
+
+      getServerConfiguration.mockReturnValue({ metrics: { auth: true, token: 'metrics-secret' } });
+      const credentialRouter = prometheusRouter.init();
+      expect(getRouteScope(credentialRouter.get.mock.calls[0][1])).toBe('read');
+    });
+
+    test('a key without read is refused before any metric is rendered', async () => {
+      const router = prometheusRouter.init();
+      const handler = router.get.mock.calls[0][1];
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        json: vi.fn(),
+      };
+
+      await handler(
+        {
+          principal: {
+            kind: 'api-key',
+            keyId: 'abcdef012345',
+            name: 'ci',
+            scopes: ['triggers:test'],
+          },
+        },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(output).not.toHaveBeenCalled();
+    });
+
+    test('a read key scrapes, and so does an admin key that implies it', async () => {
+      const router = prometheusRouter.init();
+      const handler = router.get.mock.calls[0][1];
+
+      for (const scopes of [['read'], ['admin']]) {
+        const res = {
+          status: vi.fn().mockReturnThis(),
+          type: vi.fn().mockReturnThis(),
+          send: vi.fn(),
+          json: vi.fn(),
+        };
+        await handler(
+          { principal: { kind: 'api-key', keyId: 'abcdef012345', name: 'ci', scopes } },
+          res,
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      }
+    });
+
+    test('a session scrape is not gated by the scope at all', async () => {
+      const router = prometheusRouter.init();
+      const handler = router.get.mock.calls[0][1];
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
+        json: vi.fn(),
+      };
+
+      await handler({ principal: { kind: 'session', username: 'scott' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
   });
 
   test('should allow unauthenticated metrics when disabled in configuration', async () => {
@@ -63,7 +168,8 @@ describe('Prometheus Router', () => {
     const router = prometheusRouter.init();
 
     expect(router).toBeDefined();
-    expect(passport.authenticate).not.toHaveBeenCalled();
+    expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
+    expect(mockRateLimit).not.toHaveBeenCalled();
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
   });
 
@@ -110,8 +216,10 @@ describe('Prometheus Router', () => {
     test('should use bearer token middleware when token is configured', () => {
       const router = prometheusRouter.init();
 
-      expect(passport.authenticate).not.toHaveBeenCalled();
+      expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
       expect(router.use).toHaveBeenCalledWith(prometheusRouter.authenticateMetricsToken);
+      // A single configured secret compared in constant time; no budget needed.
+      expect(mockRateLimit).not.toHaveBeenCalled();
     });
 
     test('should return 200 for valid bearer token', () => {
@@ -177,7 +285,7 @@ describe('Prometheus Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
 
-    test('should fall back to passport auth when token is empty string', () => {
+    test('should fall back to the authenticator chain when token is empty string', () => {
       getServerConfiguration.mockReturnValue({
         metrics: {
           auth: true,
@@ -187,8 +295,7 @@ describe('Prometheus Router', () => {
 
       const router = prometheusRouter.init();
 
-      expect(passport.authenticate).toHaveBeenCalledWith(['basic.default']);
-      expect(router.use).toHaveBeenCalledWith('auth-middleware');
+      expect(router.use).toHaveBeenCalledWith(mockRequireAuthentication);
     });
 
     test('should use timing-safe comparison to prevent timing attacks', () => {
@@ -233,6 +340,53 @@ describe('Prometheus Router', () => {
       expect(rotatedNext).not.toHaveBeenCalled();
       expect(rotatedRes.status).toHaveBeenCalledWith(401);
       expect(rotatedRes.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    });
+
+    describe('coexistence with API key authentication', () => {
+      /**
+       * When a metrics token is configured this route never reaches the
+       * authenticator chain, so the API key authenticator cannot see the
+       * header and cannot consume it. These pin that, because a future change
+       * that mounted requireAuthentication here would silently hand every
+       * `ddk_` bearer to the key authenticator instead.
+       */
+      test('never mounts the authenticator chain when a token is configured', () => {
+        getServerConfiguration.mockReturnValue({ metrics: { auth: true, token: testToken } });
+
+        const router = prometheusRouter.init();
+
+        expect(router.use).toHaveBeenCalledWith(prometheusRouter.authenticateMetricsToken);
+        expect(router.use).not.toHaveBeenCalledWith(mockRequireAuthentication);
+      });
+
+      test('a Prometheus scrape still authenticates with the key authenticator registered', () => {
+        registerAuthenticator(apiKeyAuthenticator);
+        initMetricsTokenAuth();
+        const req = { headers: { authorization: `Bearer ${testToken}` } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        const next = vi.fn();
+
+        prometheusRouter.authenticateMetricsToken(req, res, next);
+
+        expect(next).toHaveBeenCalled();
+        clearAuthenticators();
+      });
+
+      test('a ddk_ bearer is compared against the metrics secret, not rescued by a key', () => {
+        registerAuthenticator(apiKeyAuthenticator);
+        initMetricsTokenAuth();
+        const req = {
+          headers: { authorization: `Bearer ddk_${'a'.repeat(12)}_${'A'.repeat(43)}` },
+        };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        const next = vi.fn();
+
+        prometheusRouter.authenticateMetricsToken(req, res, next);
+
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(401);
+        clearAuthenticators();
+      });
     });
   });
 });

@@ -14,6 +14,20 @@ describe('Container Actions Service', () => {
     vi.mocked(fetch).mockClear();
   });
 
+  it.each([
+    ['start', () => startContainer('abc123')],
+    ['stop', () => stopContainer('abc123')],
+    ['restart', () => restartContainer('abc123')],
+    ['update', () => updateContainer('abc123')],
+    ['bulk update', () => updateContainers(['abc123'])],
+    ['cancel', () => cancelUpdateOperation('op-123')],
+  ] as const)('preserves a nonempty %s diagnostic verbatim', async (_name, request) => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      Response.json({ error: '  Provider diagnostic  ' }, { status: 503 }),
+    );
+    await expect(request()).rejects.toMatchObject({ message: '  Provider diagnostic  ' });
+  });
+
   describe('startContainer', () => {
     it('posts to start endpoint', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
@@ -40,7 +54,7 @@ describe('Container Actions Service', () => {
       await expect(startContainer('abc123')).rejects.toThrow('Feature disabled');
     });
 
-    it('throws with statusText when response body parsing fails', async () => {
+    it('leaves missing diagnostics empty for the caller to localize', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -49,9 +63,7 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(startContainer('abc123')).rejects.toThrow(
-        'Failed to start container: Internal Server Error',
-      );
+      await expect(startContainer('abc123')).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -81,7 +93,7 @@ describe('Container Actions Service', () => {
       await expect(stopContainer('abc123')).rejects.toThrow('Feature disabled');
     });
 
-    it('throws with statusText when response body parsing fails', async () => {
+    it('leaves missing diagnostics empty for the caller to localize', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -90,9 +102,7 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(stopContainer('abc123')).rejects.toThrow(
-        'Failed to stop container: Internal Server Error',
-      );
+      await expect(stopContainer('abc123')).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -122,7 +132,7 @@ describe('Container Actions Service', () => {
       await expect(restartContainer('abc123')).rejects.toThrow('Feature disabled');
     });
 
-    it('throws with statusText when response body parsing fails', async () => {
+    it('leaves missing diagnostics empty for the caller to localize', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -131,9 +141,7 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(restartContainer('abc123')).rejects.toThrow(
-        'Failed to restart container: Internal Server Error',
-      );
+      await expect(restartContainer('abc123')).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -179,7 +187,7 @@ describe('Container Actions Service', () => {
       );
     });
 
-    it('throws with statusText when response body parsing fails', async () => {
+    it('leaves missing diagnostics empty for the caller to localize', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -188,9 +196,7 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(updateContainer('abc123')).rejects.toThrow(
-        'Failed to update container: Internal Server Error',
-      );
+      await expect(updateContainer('abc123')).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -248,7 +254,7 @@ describe('Container Actions Service', () => {
       await expect(updateContainers(['abc123'])).rejects.toThrow('Queue already active');
     });
 
-    it('throws with statusText when bulk update error parsing fails', async () => {
+    it('leaves missing bulk diagnostics empty for the caller to localize', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         statusText: 'Internal Server Error',
@@ -257,9 +263,7 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(updateContainers(['abc123'])).rejects.toThrow(
-        'Failed to update containers: Internal Server Error',
-      );
+      await expect(updateContainers(['abc123'])).rejects.toMatchObject({ message: '' });
     });
   });
 
@@ -334,7 +338,7 @@ describe('Container Actions Service', () => {
       expect((caught as { statusCode?: number }).statusCode).toBe(404);
     });
 
-    it('throws with statusText when response body parsing fails', async () => {
+    it('leaves missing diagnostics empty while preserving the cancellation status', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -344,9 +348,10 @@ describe('Container Actions Service', () => {
         },
       } as any);
 
-      await expect(cancelUpdateOperation('op-123')).rejects.toThrow(
-        'Failed to cancel operation: Internal Server Error',
-      );
+      await expect(cancelUpdateOperation('op-123')).rejects.toMatchObject({
+        message: '',
+        statusCode: 500,
+      });
     });
   });
 });

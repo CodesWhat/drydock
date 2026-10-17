@@ -76,7 +76,7 @@ export const features: Feature[] = [
   },
   {
     icon: Bell,
-    title: "20 Triggers",
+    title: "21 Triggers",
     color: "text-amber-500 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/50",
     description:
@@ -294,8 +294,17 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
+    version: "v1.6.1",
+    title: "Latest stable release",
+    emoji: "\u{1F512}",
+    status: "released",
+    dotColor:
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
+    items: ["Stable maintenance and security fixes from the 1.6.1 candidate train"],
+  },
+  {
     version: "v1.7.0-rc.24",
-    title: "Smart Updates & UX",
+    title: "Smart Updates & UX (RC, GA pending)",
     emoji: "\u{1F680}",
     status: "next",
     dotColor:
@@ -307,16 +316,17 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.8.0",
-    title: "Fleet Management & Live Config",
+    version: "v1.8.0-rc.1",
+    title: "Fleet Management & SQLite (RC, testing only)",
     emoji: "\u{2699}️",
-    status: "planned",
+    status: "next",
     dotColor:
-      "border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-400",
+      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
-      "Live configuration surfaces",
-      "Config file and API foundation",
-      "Fleet-scale operations and storage path",
+      "Landed: drydock.yml configuration with environment overrides",
+      "Landed: revision-checked editors for selected local file-owned settings",
+      "Landed: fleet bulk actions with confirmation and bounded update concurrency",
+      "Landed: SQLite persistence and one-time legacy JSON import",
     ],
   },
   {
@@ -399,3 +409,10 @@ export const roadmap: Milestone[] = [
     ],
   },
 ];
+
+export function getRoadmapHead(milestones: Milestone[] = roadmap): Milestone | undefined {
+  return (
+    milestones.findLast((milestone) => milestone.status === "next") ??
+    milestones.findLast((milestone) => milestone.status === "released")
+  );
+}

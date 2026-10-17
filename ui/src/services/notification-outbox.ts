@@ -42,8 +42,8 @@ type ErrorEnvelope = {
   error?: unknown;
 };
 
-function messageFromErrorEnvelope(body: ErrorEnvelope, fallback: string): string {
-  return typeof body.error === 'string' && body.error.trim() ? body.error : fallback;
+function messageFromErrorEnvelope(body: ErrorEnvelope | null): string {
+  return typeof body?.error === 'string' && body.error.trim() ? body.error : '';
 }
 
 async function readErrorEnvelope(response: Response, context: string): Promise<ErrorEnvelope> {
@@ -66,9 +66,7 @@ async function getOutboxEntries(
   const response = await fetch(url, { credentials: 'include' });
   if (!response.ok) {
     const body = await readErrorEnvelope(response, 'Outbox API');
-    throw new Error(
-      messageFromErrorEnvelope(body, `Failed to load outbox: ${response.statusText}`),
-    );
+    throw new Error(messageFromErrorEnvelope(body));
   }
   return readJsonResponse<NotificationOutboxResponse>(response, 'Outbox API');
 }
@@ -80,10 +78,7 @@ async function retryOutboxEntry(id: string): Promise<NotificationOutboxEntry> {
   });
   if (!response.ok) {
     const body = await readErrorEnvelope(response, 'Outbox retry API');
-    throw withStatusCode(
-      new Error(messageFromErrorEnvelope(body, `Failed to retry entry: ${response.statusText}`)),
-      response.status,
-    );
+    throw withStatusCode(new Error(messageFromErrorEnvelope(body)), response.status);
   }
   return readJsonResponse<NotificationOutboxEntry>(response, 'Outbox retry API');
 }
@@ -95,10 +90,7 @@ async function deleteOutboxEntry(id: string): Promise<void> {
   });
   if (!response.ok) {
     const body = await readErrorEnvelope(response, 'Outbox delete API');
-    throw withStatusCode(
-      new Error(messageFromErrorEnvelope(body, `Failed to delete entry: ${response.statusText}`)),
-      response.status,
-    );
+    throw withStatusCode(new Error(messageFromErrorEnvelope(body)), response.status);
   }
 }
 

@@ -42,6 +42,30 @@
       "info": "Bilgi"
     },
     "actions": {
+      "webhook-watch": "Webhook ile kontrol",
+      "webhook-watch-container": "Webhook ile konteyner kontrolü",
+      "webhook-update": "Webhook ile güncelleme",
+      "mqtt-command-update": "MQTT güncelleme komutu",
+      "security-scan-skipped": "Güvenlik taraması atlandı",
+      "scanner-asset-pull-started": "Tarayıcı imajı indirmesi başladı",
+      "scanner-asset-pull-succeeded": "Tarayıcı imajı indirildi",
+      "scanner-asset-pull-failed": "Tarayıcı imajı indirilemedi",
+      "scanner-asset-warm-started": "Tarayıcı hazırlığı başladı",
+      "scanner-asset-warm-succeeded": "Tarayıcı hazırlığı tamamlandı",
+      "scanner-asset-warm-failed": "Tarayıcı hazırlığı başarısız",
+      "container-unhealthy": "Konteyner sağlıksız",
+      "env-reveal": "Ortam değişkenleri gösterildi",
+      "debug-dump": "Hata ayıklama verileri indirildi",
+      "config-read": "Yapılandırma okundu",
+      "config-validated": "Yapılandırma doğrulandı",
+      "config-reloaded": "Yapılandırma yeniden yüklendi",
+      "config-written": "Yapılandırma yazıldı",
+      "update-approved": "Güncelleme onaylandı",
+      "update-rejected": "Güncelleme reddedildi",
+      "update-deferred": "Güncelleme ertelendi",
+      "api-key-created": "API anahtarı oluşturuldu",
+      "api-key-revoked": "API anahtarı iptal edildi",
+      "api-key-auth-failed": "API anahtarı kimlik doğrulaması başarısız",
       "container-update": "Kapsayıcı Güncellemesi",
       "container-added": "Kapsayıcı Eklendi",
       "container-removed": "Kapsayıcı Kaldırıldı",
@@ -49,6 +73,13 @@
       "container-stop": "Kapsayıcı Durdurma",
       "container-restart": "Kapsayıcı Yeniden Başlatma",
       "auth-login": "Kimlik doğrulama girişi",
+      "totp-recovery-used": "Kurtarma kodu kullanıldı",
+      "totp-enrollment-started": "İki aşamalı doğrulama kaydı başlatıldı",
+      "totp-enabled": "İki aşamalı doğrulama etkinleştirildi",
+      "totp-replaced": "İki aşamalı doğrulama değiştirildi",
+      "totp-disabled": "İki aşamalı doğrulama devre dışı bırakıldı",
+      "totp-recovery-codes-replaced": "Kurtarma kodları değiştirildi",
+      "totp-break-glass": "İki aşamalı doğrulama çevrimdışı kurtarıldı",
       "authenticated": "Kimliği doğrulandı",
       "authfail": "Kimlik doğrulama başarısız",
       "hook-configured": "Hook yapılandırıldı",
@@ -65,17 +96,23 @@
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
       "update-policy-override-set": "Güncelleme politikası geçersiz kılma ayarlandı",
       "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
+      "group-policy-set": "Grup politikası ayarlandı",
+      "group-policy-cleared": "Grup politikası temizlendi",
+      "label-override-set": "Etiket geçersiz kılma ayarlandı",
+      "label-override-cleared": "Etiket geçersiz kılma temizlendi",
       "auto-rollback": "Otomatik Geri Alma",
       "rollback": "Geri Al",
       "preview": "Önizleme",
       "agent-disconnect": "Ajan Bağlantı Kesimi",
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
-      "maturity-cleared": "Maturity Cleared"
+      "maturity-cleared": "Bekleme süresi doldu",
+      "image-prune": "İmaj Temizleme"
     },
     "target": {
       "container": "Kapsayıcı",
-      "agent": "Ajan"
+      "agent": "Ajan",
+      "group": "Grup"
     }
   },
   "notificationsView": {
@@ -118,6 +155,10 @@
       "maturity-cleared": {
         "name": "Olgunluk Temizlendi",
         "description": "Olgunluk politikası tarafından tutulan bir güncelleme uygulanabilir hale geldiğinde"
+      },
+      "update-pending-approval": {
+        "name": "Güncelleme onay bekliyor",
+        "description": "Manuel modda bir güncelleme onay kuyruğuna girdiğinde"
       }
     },
     "columns": {
@@ -208,8 +249,8 @@
       "clean": "Temiz"
     },
     "countLabel": {
-      "images": "images",
-      "scanned": "scanned"
+      "images": "imajlar",
+      "scanned": "tarandı"
     },
     "fixableBadge": "{count} düzeltme",
     "delta": {
@@ -354,7 +395,7 @@
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen tetikleyici yok",
-    "testContainerName": "Test Container",
+    "testContainerName": "Test konteyneri",
     "columns": {
       "trigger": "Tetikleyici",
       "type": "Tür",
@@ -389,7 +430,7 @@
   "watchersView": {
     "loadingWatchers": "İzleyiciler yükleniyor...",
     "loadError": "İzleyiciler yüklenemedi",
-    "soon": "soon",
+    "soon": "yakında",
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen izleyici yok",

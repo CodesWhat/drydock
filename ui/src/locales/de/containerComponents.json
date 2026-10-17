@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Agentenliste nicht verfügbar. Einige konfigurierte Agenten fehlen möglicherweise.",
+      "title": "Flottenzustand",
+      "description": "Status der gesamten Flotte. Die Inventaraktualisierung erkennt Container ohne Registry-Prüfungen oder Update-Aktionen.",
+      "reload": "Status neu laden",
+      "refresh": "Inventar aktualisieren",
+      "configured": "Konfiguriert",
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "unavailable": "Nicht verfügbar",
+      "agentUnavailable": "Agentenstatus nicht verfügbar. Beibehaltene Daten können veraltet sein.",
+      "watcherUnavailable": "Watcher-Metadaten nicht verfügbar. Beibehaltene Daten können veraltet sein.",
+      "total": "{count} Container",
+      "lastKnown": "Zuletzt bekannt",
+      "lastSeen": "Zuletzt gesehen: {value}",
+      "unsupported": "Alle Ziele benötigen Docker-Watcher mit Unterstützung für Inventaraktualisierungen.",
+      "complete": "Inventar vollständig",
+      "partial": "Inventar unvollständig",
+      "reloadFailed": "Containerliste konnte nicht neu geladen werden. Inventarergebnisse bleiben sichtbar."
+    },
+    "fleetBulk": {
+      "label": "Aktionen für gefilterte Flotte",
+      "updateAll": "Alle aktualisieren ({count})",
+      "snoozePatch": "Alle Patch-Kandidaten pausieren",
+      "patchCount": "{count} Patch-Kandidaten",
+      "duration": "Pausendauer",
+      "days": "{count} Tage",
+      "untilDate": "Bis Datum",
+      "date": "Bis einschließlich Datum pausieren",
+      "snoozeConfirm": "{count} Patch-Kandidaten pausieren?",
+      "snoozeScope": "Diese Container haben aktuell Patch-Kandidaten. Alle Updates der aufgeführten Container für {duration} pausieren, nicht nur Patches. Es gilt die gefilterte Live-Liste, nicht die Checkbox-Auswahl. Ein Datum gilt bis zum lokalen Tagesende.",
+      "snoozeResult": "Pausiert: {succeeded}. Fehlgeschlagen: {failed}.",
+      "refreshFailed": "Richtlinien gespeichert, aber Listenaktualisierung fehlgeschlagen. Liste neu laden.",
+      "disabled": "Container-Aktionen deaktiviert. Keine Richtlinien geändert.",
+      "invalid": "Ungültige Dauer. Keine Richtlinien geändert.",
+      "busy": "Eine andere Aktion läuft bereits. Keine weiteren Richtlinien geändert."
+    },
+    "fleetDimensions": {
+      "groupBy": "Gruppieren nach",
+      "none": "Keine Gruppierung",
+      "agent": "Agent",
+      "registry": "Registry",
+      "status": "Status",
+      "tagType": "Tag-Typ",
+      "label": "Label",
+      "groupLabel": "Nach Label-Schlüssel gruppieren",
+      "allAgents": "Alle Agenten",
+      "allRegistries": "Alle Registry-Adressen",
+      "all": "Alle Tag-Typen",
+      "specific": "Spezifischer Tag",
+      "floating": "Variabler Tag",
+      "digest": "Digest fixiert",
+      "semver": "Versions-Tag",
+      "tag": "Tag ohne Version",
+      "unknown": "Unbekannt",
+      "local": "Lokale Watcher",
+      "running": "Läuft",
+      "stopped": "Gestoppt",
+      "labelKey": "Label-Schlüssel",
+      "labelMatch": "Label-Abgleich",
+      "labelValue": "Label-Wert",
+      "exists": "Label vorhanden",
+      "equals": "Gleich",
+      "missing": "Label fehlt",
+      "missingLabel": "Kein Label",
+      "emptyValue": "Leerer Wert"
+    },
     "fullPageActions": {
       "updateWorkflow": "Update-Workflow",
       "actionsGroup": "Aktionen",
@@ -28,8 +95,9 @@
       "clearSkips": "Überspringungen löschen",
       "clearPolicy": "Policy löschen",
       "overridden": "Überschrieben",
+      "groupSource": "Gruppe: {group}",
       "revert": "Zurücksetzen",
-      "revertAll": "Auf deklarative Policy zurücksetzen",
+      "revertAll": "Auf geerbte Policy zurücksetzen",
       "snoozedUntil": "Pausiert bis:",
       "maturityMode": "Reife-Modus:",
       "matureOnlyMinimum": "Nur reife (mind. {days} T)",
@@ -58,6 +126,12 @@
       "runningButton": "Läuft...",
       "runButton": "Ausführen",
       "noTriggersAssociated": "Keine Trigger mit diesem Container verknüpft",
+      "unavailableTriggers": "Nicht verfügbare Trigger",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Gehört zu einem anderen Agent als diesem Container.",
+        "structuralIncompatibility": "Compose-Projekt, -Service oder -Datei stimmt nicht mit diesem Container überein.",
+        "labelScope": "Durch die dd.action-/dd.notification-Include- oder -Exclude-Labels dieses Containers ausgeschlossen."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rollback läuft...",
       "rollbackLatest": "Letztes Backup zurückrollen",
@@ -71,7 +145,13 @@
       "versionLabel": "Version:",
       "rollbackReasonLabel": "Rollback-Grund:",
       "lastErrorLabel": "Letzter Fehler:",
-      "noUpdateOperations": "Noch keine Update-Operationen aufgezeichnet"
+      "noUpdateOperations": "Noch keine Update-Operationen aufgezeichnet",
+      "skipReleases": "Frühe Releases überspringen",
+      "skipReleasesHint": "Die ersten N unterschiedlichen stabilen Releases je Familie überspringen: SemVer-Hauptversion oder CalVer-Monat. 0 deaktiviert diese Sperre.",
+      "releaseFallbackDays": "Altersausnahme (Tage)",
+      "releaseFallbackHint": "Nach so vielen Tagen zulassen, wenn Release-Nachweise fehlen oder die Anzahl nicht erreicht ist. 0 deaktiviert die Ausnahme. Das Mindestalter gilt weiterhin.",
+      "releasePolicySummary": "Erste {count} Releases je Familie überspringen.",
+      "releaseFallbackSummary": "Altersausnahme für die Release-Anzahl nach {days} Tagen."
     },
     "fullPageDetail": {
       "statusUpdating": "Aktualisiert",
@@ -111,7 +191,7 @@
       "volumes": "Volumes",
       "composeFiles": "Compose-Dateien",
       "version": "Version",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Softwareversion",
       "currentLabel": "Aktuell:",
       "latestLabel": "Neueste:",
       "digestLabel": "Digest:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "Keine Ports veröffentlicht",
       "notConfigured": "Nicht konfiguriert",
       "noVolumesMounted": "Keine Volumes gemountet",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Laufzeit",
+      "uptimeAriaLabel": "Container-Laufzeit"
     },
     "containerLogs": {
       "title": "Container-Logs",
       "download": "Herunterladen",
       "allLevels": "Alle Level",
       "downloadError": "Logs konnten nicht heruntergeladen werden",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "Letzte {count} Zeilen",
+      "tailAll": "Alle Zeilen",
+      "statusPaused": "Pausiert",
+      "statusLive": "Aktiv",
+      "statusOffline": "Nicht verbunden",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Container werden geladen...",
+      "fleetUpdateProgress": "Container-Aktualisierung: {done} von {total}",
+      "fleetUpdateProgressRunning": "Aktuell in Bearbeitung: {names}",
+      "fleetUpdateProgressRunningMore": "Aktuell in Bearbeitung: {names} und {more} weitere",
       "searchPlaceholder": "Name oder Image suchen...",
       "allStatuses": "Alle Status",
       "running": "Läuft",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "Container aktualisieren",
-      "thisContainer": "this container",
+      "thisContainer": "diesen Container",
       "confirmTagChange": "{name} aktualisieren? Der Image-Tag wird von :{currentTag} auf :{newTag}{kind} geändert.",
       "confirmDigestChange": "{name} aktualisieren? Ein neuerer Build von :{currentTag} ist verfügbar (Digest-Änderung).",
       "confirmLatest": "{name} jetzt aktualisieren? Das neueste erkannte Image wird angewendet.",
       "updating": "Aktualisiert...",
       "update": "Aktualisieren",
-      "updateFailed": "Update failed"
+      "updateFailed": "Aktualisierung fehlgeschlagen"
     },
     "floatingTag": {
       "badgeText": "Floating Tag",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · entsperrt am {date}",
       "maturityClockPublished": "Kandidat veröffentlicht am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat veröffentlicht am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
       "maturityClockDetected": "Kandidat erkannt am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat erkannt am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
+      "groupManualOnly": "Die Gruppenrichtlinie '{group}' erlaubt nur manuelle Updates. Drydock wendet dieses Update nicht automatisch an.",
       "updateButton": "Jetzt aktualisieren",
       "blockedButton": "Update blockiert",
       "notificationsOnlyButton": "Nur Benachrichtigungen",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Kein Update-Trigger konfiguriert",
         "self-update-unavailable": "Selbstaktualisierung nicht verfügbar",
         "maintenance-window-closed": "Wartungsfenster geschlossen",
-        "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus"
+        "group-notify-only": "Gruppe erlaubt nur Benachrichtigungen",
+        "group-manual-only": "Gruppe verlangt manuelle Updates",
+        "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus",
+        "maturity-releases-not-reached": "Reife-Policy wartet"
       },
       "actions": {
         "editPolicy": "Update-Policy bearbeiten",
@@ -439,25 +526,28 @@
         "configureTriggers": "Update-Trigger konfigurieren",
         "configureThreshold": "Trigger-Schwelle konfigurieren",
         "configureSelfUpdate": "Selbstaktualisierung konfigurieren",
-        "configureMaintenance": "Wartungsfenster konfigurieren"
-      }
+        "configureMaintenance": "Wartungsfenster konfigurieren",
+        "editGroupPolicy": "Gruppenrichtlinie bearbeiten"
+      },
+      "releaseMaturityCount": "Warte auf stabile Releases in Familie {family}: {count} von {required} früheren Releases verfügbar.",
+      "releaseMaturityUnavailable": "Für diesen Kandidaten sind keine Release-Nachweise verfügbar. Automatische Updates bleiben zurückgehalten."
     },
     "maturityBadge": {
       "new": "Vor {duration} erkannt"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Abbrechen",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Container stoppen",
+        "message": "{name} stoppen?",
+        "acceptLabel": "Stoppen",
+        "successMessage": "Gestoppt: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Container neu starten",
+        "message": "{name} neu starten?",
+        "acceptLabel": "Neu starten",
+        "successMessage": "Neu gestartet: {name}"
       },
       "forceUpdate": {
         "header": "Update erzwingen",
@@ -505,6 +595,19 @@
         "failedDetail": "Die Abhängigkeitskette für {name} konnte nicht aktualisiert werden.",
         "staleChainTitle": "Abhängigkeitskette hat sich geändert",
         "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen."
+      },
+      "bulkUpdate": {
+        "header": "1 Container aktualisieren | {count} Container aktualisieren",
+        "accept": "1 Container aktualisieren | {count} Container aktualisieren",
+        "acceptWithParents": "1 übergeordnetes Element hinzufügen und aktualisieren | {count} übergeordnete Elemente hinzufügen und aktualisieren",
+        "dispatchHeading": "Wird aktualisiert",
+        "blockedHeading": "Blockiert, wird unverändert gelassen",
+        "softOverridesHeading": "Wird trotz Warnungen aktualisiert",
+        "skippedHeading": "Übersprungen",
+        "staleParentsHeading": "Übergeordnete Elemente mit ausstehenden Updates, die bei Bestätigung hinzugefügt werden",
+        "agentCountInfo": "Umfasst {count} Agenten; jeder Agent führt seine eigenen Updates aus.",
+        "stackCountInfo": "Umfasst {count} Stacks.",
+        "successMessage": "Update für 1 Container gestartet | Update für {count} Container gestartet"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "Erneute Prüfung für {name} fehlgeschlagen"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} Eintrag",
+      "entryCountPlural": "{count} Einträge",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -561,14 +664,16 @@
         "setAll": "Reife-Policy erlaubt jetzt alle Updates",
         "skipped": "Aktuelles Update für {name} übersprungen",
         "removeSkip": "Übersprungenen {kind} {value} entfernt",
-        "revertField": "{field} auf deklarative Policy zurückgesetzt",
-        "revertAll": "Alle Überschreibungen auf deklarative Policy zurückgesetzt",
+        "revertField": "{field} auf geerbte Policy zurückgesetzt",
+        "revertAll": "Alle Überschreibungen auf geerbte Policy zurückgesetzt",
         "failedTitle": "Policy-Update fehlgeschlagen: {name}",
         "failedDetail": "Policy konnte nicht aktualisiert werden"
       },
       "validation": {
         "snoozeDate": "Wählen Sie ein gültiges Pausierungsdatum",
-        "maturityAge": "Geben Sie ein Reifealter zwischen {min} und {max} Tagen ein"
+        "maturityAge": "Geben Sie ein Reifealter zwischen {min} und {max} Tagen ein",
+        "maturityReleases": "Eine ganze Release-Anzahl von 0 bis 100 eingeben.",
+        "maturityFallback": "Ganze Tage von 0 bis 365 für die Altersausnahme eingeben."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "In Warteschlange",
+        "pulling": "Image wird heruntergeladen",
+        "scanning": "Image wird geprüft",
+        "sbom-generating": "SBOM wird erstellt",
+        "pull-failed": "Image-Download fehlgeschlagen",
+        "prepare": "Update wird vorbereitet",
+        "dryrun": "Probelauf",
+        "renamed": "Container umbenannt",
+        "new-created": "Neuer Container erstellt",
+        "old-stopped": "Alter Container gestoppt",
+        "new-started": "Neuer Container gestartet",
+        "health-gate": "Zustandsprüfung",
+        "health-gate-passed": "Zustandsprüfung bestanden",
+        "succeeded": "Erfolgreich",
+        "failed": "Fehlgeschlagen",
+        "recovered-cleanup-temp": "Wiederhergestellt: temporäre Container bereinigt",
+        "recovered-rollback": "Wiederhergestellt: Rollback abgeschlossen",
+        "recovered-active": "Wiederhergestellt: aktiver Container beibehalten",
+        "recovery-failed": "Wiederherstellung fehlgeschlagen",
+        "recovery-missing-containers": "Wiederherstellung: Container fehlen",
+        "rollback-started": "Rollback gestartet",
+        "rolled-back": "Zurückgesetzt",
+        "rollback-deferred": "Rollback aufgeschoben",
+        "rollback-failed": "Rollback fehlgeschlagen",
+        "expired": "Abgelaufen",
+        "skipped-dependency": "Wegen Abhängigkeit übersprungen",
+        "in-progress": "In Bearbeitung",
+        "update-runtime-failed": "Update-Ausführung fehlgeschlagen",
+        "create-new-failed": "Neuer Container konnte nicht erstellt werden",
+        "stop-old-failed": "Alter Container konnte nicht gestoppt werden",
+        "start-new-failed": "Neuer Container konnte nicht gestartet werden",
+        "health-gate-failed": "Zustandsprüfung fehlgeschlagen",
+        "cancelled": "Abgebrochen",
+        "compose-runtime-refresh-failed": "Aktualisierung des Compose-Laufzeitzustands fehlgeschlagen"
+      },
       "timestampUnknown": "Unbekannt",
       "loadFailed": "Backups konnten nicht geladen werden",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Explizit",
+        "inherited": "Geerbt",
+        "unknown": "Unbekannt"
       },
       "timeoutDefault": "60000ms (Standard)",
       "preAbortYes": "Update bei Pre-Hook-Fehler abbrechen",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
+        "overview": "Übersicht",
+        "stats": "Statistiken",
         "logs": "Logs",
-        "environment": "Environment",
+        "environment": "Umgebung",
         "labels": "Labels",
-        "actions": "Actions"
+        "actions": "Aktionen"
       }
     },
     "logViewer": {
       "invalidRegex": "Ungültiger regulärer Ausdruck"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Abhängig von",
+      "requiredBy": "Benötigt von",
+      "cycle": "Teil eines Abhängigkeitszyklus",
+      "toggle": "Abhängigkeiten anzeigen",
+      "updateGroup": "Abhängigkeitsgruppe aktualisieren ({count})",
+      "staleParentsWarning": "{name} hängt von {parents} ab, das ebenfalls ein ausstehendes Update hat. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen ein veraltetes übergeordnetes Element. | {name} hängt von {parents} ab, die ebenfalls ausstehende Updates haben. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen veraltete übergeordnete Elemente.",
+      "staleParentsOverflow": "und {count} weitere",
+      "staleParentsAccept": "Trotzdem aktualisieren"
+    },
+    "selection": {
+      "selectRow": "{name} auswählen",
+      "selectAll": "Alle sichtbaren Container auswählen",
+      "barLabel": "Ausgewählte Container",
+      "count": "1 Container ausgewählt | {count} Container ausgewählt",
+      "updateSelected": "Auswahl aktualisieren",
+      "clear": "Leeren",
+      "reasons": {
+        "stale": "nicht mehr in der Liste",
+        "inFlight": "wird bereits aktualisiert",
+        "noUpdate": "kein Update verfügbar"
+      }
     }
   }
 }

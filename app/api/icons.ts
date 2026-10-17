@@ -31,6 +31,7 @@ import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
+import { scoped } from './route-scopes.js';
 
 const router = express.Router();
 const log = logger.child({ component: 'icons' });
@@ -139,7 +140,7 @@ export function init() {
       ? { keyGenerator: identityAwareRateLimitKeyGenerator }
       : {}),
   });
-  router.get(ICON_PROXY_ROUTE_PATH, iconProxyRateLimiter, getIcon);
-  router.delete('/cache', clearCache);
+  router.get(ICON_PROXY_ROUTE_PATH, iconProxyRateLimiter, scoped('read', getIcon));
+  router.delete('/cache', scoped('admin', clearCache));
   return router;
 }

@@ -171,6 +171,18 @@ describe('Group Router', () => {
       expect(groups[0].containerCount).toBe(2);
     });
 
+    test('keeps a literal __ungrouped__ group separate from unlabeled containers', () => {
+      mockGetContainers.mockReturnValue([
+        makeContainer('c1', 'named', { 'dd.group': '__ungrouped__' }),
+        makeContainer('c2', 'unnamed', {}),
+      ]);
+      const res = createMockResponse();
+      getHandler('get', '/groups')(createMockRequest(), res);
+      const { data, total } = getGroupsPayload(res);
+      expect(total).toBe(2);
+      expect(data.map((group) => group.name)).toEqual(['__ungrouped__', null]);
+    });
+
     test('should count updates available correctly', () => {
       mockGetContainers.mockReturnValue([
         makeContainer('c1', 'nginx', { 'dd.group': 'web' }, true),

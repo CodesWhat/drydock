@@ -1,4 +1,5 @@
 import type { ContainerReport } from '../../../model/container.js';
+import { resolveMaintenanceWindowScope } from '../../../model/watcher-maintenance-window.js';
 import { getMaintenanceSkipCounter } from '../../../prometheus/watcher.js';
 
 export interface CronWatchOptions {
@@ -36,9 +37,40 @@ export interface CronWatchOrchestrationWatcher {
   configuration: {
     cron: string;
     maintenancewindow?: string;
+    /**
+     * `'scan'` gates this scan on the maintenance window; anything else (including the
+     * `'install'` default, and an unset value on a watcher configured before the option
+     * existed) leaves the scan on its own cron and defers only the install.
+     */
+    maintenancewindowscope?: string;
   };
   isCronWatchInProgress: boolean;
   isWatcherDeregistered: boolean;
+  /**
+   * Bumped ONLY on deregister; see its declaration on Docker for the full
+   * contract (DR-72). Read (not written) here, before and after watch(), so
+   * a scan this function orchestrated can tell whether the watcher was torn
+   * down while it ran - deliberately not used alone to gate the
+   * isCronWatchInProgress reset below, since a concurrent watch() call
+   * elsewhere on the same instance (an AgentWatcher's direct
+   * delegate.watch(), a manual single-container scan) never touches it and
+   * so can't be mistaken for this scan going stale.
+   */
+  scanGeneration: number;
+  /**
+   * This function's own per-call identity (see its declaration on Docker),
+   * separate from scanGeneration above: it is what lets the
+   * isCronWatchInProgress reset below tell "am I still the outstanding cron
+   * run" apart from "was the watcher torn down", and the two conditions are
+   * combined at the reset site.
+   */
+  cronRunGeneration: number;
+  /**
+   * Whether a maintenance-window catch-up is armed. Read before the clear below so the scan
+   * that consumes the arm can announce the opening; the arming site is outside watch()
+   * (a digest flush, a webhook, a manual single-container scan), so nothing else knows.
+   */
+  maintenanceWindowWatchQueued: boolean;
   cronWatchInFlight?: Promise<ContainerReport[]>;
   cronWatchRescanRequested: boolean;
   cronWatchRescanReason?: string;
@@ -48,6 +80,7 @@ export interface CronWatchOrchestrationWatcher {
   isMaintenanceWindowOpen: () => boolean;
   queueMaintenanceWindowWatch: () => void;
   clearMaintenanceWindowQueue: () => void;
+  announceMaintenanceWindowOpened: () => Promise<void>;
   watch: () => Promise<ContainerReport[]>;
   getNextScheduledRunDate: (fromDate?: Date) => Date | undefined;
 }
@@ -339,9 +372,14 @@ async function runCronWatch(
     return [];
   }
 
-  // Check maintenance window before proceeding
+  // Check maintenance window before proceeding. Only the `scan` scope gates the scan
+  // itself; under the default `install` scope the scan runs on its own cron whatever the
+  // window says, so discovery, registry checks, container-state refresh and update
+  // notifications are never held back, and only the automatic install is deferred (see
+  // Trigger.deferAutoUpdateForMaintenanceWindow, which also queues the catch-up below).
   if (
     !ignoreMaintenanceWindow &&
+    resolveMaintenanceWindowScope(watcher.configuration.maintenancewindowscope) === 'scan' &&
     watcher.configuration.maintenancewindow &&
     !watcher.isMaintenanceWindowOpen()
   ) {
@@ -353,17 +391,63 @@ async function runCronWatch(
     }
     return [];
   }
-  watcher.clearMaintenanceWindowQueue();
+
+  // Only a scan that can actually deliver what the queue is holding may clear it: the
+  // catch-up scan itself, or a scan that runs while the window is open. Under the scan
+  // scope this is the whole reachable set anyway, so nothing changes there. Under the
+  // install scope the arm is taken outside watch() - a digest flush, a webhook, a manual
+  // single-container scan - and clearing it on every ordinary tick threw away the only
+  // thing that was going to apply the deferred install once the window opened.
+  const catchUpWasArmed = watcher.maintenanceWindowWatchQueued;
+  const consumesQueuedCatchUp =
+    ignoreMaintenanceWindow ||
+    !watcher.configuration.maintenancewindow ||
+    watcher.isMaintenanceWindowOpen();
+  if (consumesQueuedCatchUp) {
+    watcher.clearMaintenanceWindowQueue();
+  }
 
   watcher.log.info(`Cron started (${watcher.configuration.cron}, reason: ${reason})`);
 
   // Get container reports
   watcher.isCronWatchInProgress = true;
+  // Read (not minted) before the await below, so the check after it can
+  // tell whether deregisterComponent() bumped it while watch() was still
+  // running (DR-72). This function's own identity, cronRunGeneration, is
+  // minted separately below: sharing one counter for both concerns let an
+  // unrelated concurrent watch() call (e.g. an AgentWatcher's direct
+  // delegate.watch(), which never touches either counter) leave
+  // isCronWatchInProgress stuck true forever, since nothing else ever
+  // cleared it (review finding #3).
+  const scanGeneration = watcher.scanGeneration;
+  const cronRunGeneration = ++watcher.cronRunGeneration;
   let containerReports: ContainerReport[] = [];
   try {
     containerReports = await watcher.watch();
   } finally {
-    watcher.isCronWatchInProgress = false;
+    // Reset only when this is still the outstanding cron run (a newer one
+    // hasn't superseded it - not expected under the single-flight guard
+    // above, but this is what protects a re-registered watcher reusing the
+    // same instance from an old run's finally clearing its state) and the
+    // watcher hasn't been deregistered meanwhile.
+    if (cronRunGeneration === watcher.cronRunGeneration && !watcher.isWatcherDeregistered) {
+      watcher.isCronWatchInProgress = false;
+    }
+  }
+
+  // The scan itself already discarded its own reports, the snapshot, and its
+  // store writes (DR-72's watch()/getContainers() guards); stop here too so
+  // a stale scan doesn't also log a finished summary or flush a
+  // maintenance-window catch-up on a watcher that was deregistered mid-scan
+  // (review finding #1).
+  if (scanGeneration !== watcher.scanGeneration) {
+    watcher.ensureLogger();
+    if (watcher.log && typeof watcher.log.debug === 'function') {
+      watcher.log.debug(
+        'Discarding this cron run - the watcher was deregistered while watch() was still running',
+      );
+    }
+    return [];
   }
 
   // Count container reports
@@ -384,5 +468,16 @@ async function runCronWatch(
   if (watcher.log && typeof watcher.log.info === 'function') {
     watcher.log.info(`Cron finished (${stats})`);
   }
+
+  // Whichever scan clears an armed queue is the one that has to announce the opening, not
+  // just the once-a-minute poll: clearing also cancels that poll, so an ordinary cron tick
+  // landing inside the open window used to consume the arm in silence and a digest-mode
+  // action trigger sat on its deferred install until the next digest cron. Announced here,
+  // after watch() has awaited its report emit, so every deferred container is back in the
+  // store with fresh state before any trigger flushes on it.
+  if (catchUpWasArmed && consumesQueuedCatchUp) {
+    await watcher.announceMaintenanceWindowOpened();
+  }
+
   return containerReports;
 }

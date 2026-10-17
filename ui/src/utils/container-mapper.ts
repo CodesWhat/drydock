@@ -17,14 +17,18 @@
 import { getEffectiveDisplayIcon } from '../services/image-icon';
 import type { ApiContainerUpdateOperation } from '../types/api';
 import type {
+  ActionPolicy,
   Container,
   ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
   ContainerUpdateOperation,
+  LabelOwnedField,
+  LabelOwnedSource,
   UpdateBlocker,
   UpdateBlockerReason,
   UpdateEligibility,
+  UpdateEligibilityUpdateMode,
 } from '../types/container';
 import type { TranslateFn } from '../types/i18n';
 import {
@@ -136,6 +140,8 @@ interface ApiContainerUpdateEligibility {
   eligible?: unknown;
   blockers?: unknown;
   evaluatedAt?: unknown;
+  updateMode?: unknown;
+  actionPolicy?: unknown;
 }
 
 type SecurityScanType = 'scan' | 'updateScan';
@@ -173,6 +179,7 @@ export interface ApiContainerInput {
   updateOperation?: ApiContainerUpdateOperation | null;
   updatePolicy?: ApiContainerUpdatePolicy | null;
   updateEligibility?: ApiContainerUpdateEligibility | null;
+  labelOwnedSources?: unknown;
   details?: ApiContainerDetails | null;
   tagFamily?: unknown;
   includeTags?: unknown;
@@ -232,6 +239,44 @@ function asNonNegativeInteger(value: unknown): number | undefined {
   const parsed = Number.parseInt(value, 10);
   // The \d+ match above already guarantees a non-negative parse.
   return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+const LABEL_OWNED_FIELDS: readonly LabelOwnedField[] = [
+  'displayName',
+  'displayIcon',
+  'dependsOn',
+  'dependsOnAction',
+  'notificationTriggerInclude',
+  'notificationTriggerExclude',
+  'actionTriggerInclude',
+  'actionTriggerExclude',
+  'actionTriggerAuto',
+];
+const LABEL_OWNED_SOURCES: readonly string[] = [
+  'override',
+  'label',
+  'compose',
+  'watcher',
+  'default',
+  'unset',
+];
+
+/** Keep only the known label-owned fields whose source is a value the server can send. */
+function deriveLabelOwnedSources(
+  value: unknown,
+): Partial<Record<LabelOwnedField, LabelOwnedSource>> | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const raw = value as Record<string, unknown>;
+  return Object.fromEntries(
+    LABEL_OWNED_FIELDS.flatMap((field) => {
+      const source = raw[field];
+      return typeof source === 'string' && LABEL_OWNED_SOURCES.includes(source)
+        ? [[field, source as LabelOwnedSource]]
+        : [];
+    }),
+  );
 }
 
 /** Derive a human-readable server/host name from watcher + agent fields. */
@@ -794,12 +839,14 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'skip-tag',
   'skip-digest',
   'maturity-not-reached',
+  'maturity-releases-not-reached',
   'threshold-not-reached',
   'trigger-excluded',
   'trigger-not-included',
   'agent-mismatch',
   'no-update-trigger-configured',
   'maintenance-window-closed',
+  'group-notify-only',
 ]);
 
 function isUpdateBlockerReason(value: unknown): value is UpdateBlockerReason {
@@ -827,6 +874,37 @@ function deriveUpdateBlocker(blocker: unknown): UpdateBlocker | null {
   return result;
 }
 
+const UPDATE_MODE_VALUES: ReadonlySet<unknown> = new Set(['notify', 'manual', 'auto']);
+
+function deriveEligibilityUpdateMode(value: unknown): UpdateEligibilityUpdateMode | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as { value?: unknown; source?: unknown; group?: unknown };
+  if (!UPDATE_MODE_VALUES.has(raw.value)) return undefined;
+  if (raw.source !== 'global' && raw.source !== 'group') return undefined;
+  const result: UpdateEligibilityUpdateMode = {
+    value: raw.value as UpdateEligibilityUpdateMode['value'],
+    source: raw.source,
+  };
+  if (raw.group !== undefined) {
+    if (typeof raw.group !== 'string') return undefined;
+    result.group = raw.group;
+  }
+  return result;
+}
+
+const ACTION_POLICY_STATES: ReadonlySet<unknown> = new Set(['blocked', 'manual', 'auto']);
+const ACTION_POLICY_REASONS: ReadonlySet<unknown> = new Set(['excluded', 'not-included']);
+
+function deriveActionPolicy(value: unknown): ActionPolicy | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const raw = value as { state?: unknown; triggerId?: unknown; reason?: unknown };
+  if (!ACTION_POLICY_STATES.has(raw.state)) return undefined;
+  const result: ActionPolicy = { state: raw.state as ActionPolicy['state'] };
+  if (typeof raw.triggerId === 'string') result.triggerId = raw.triggerId;
+  if (ACTION_POLICY_REASONS.has(raw.reason)) result.reason = raw.reason as ActionPolicy['reason'];
+  return result;
+}
+
 function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibility | undefined {
   const eligibility = apiContainer.updateEligibility;
   if (!eligibility || typeof eligibility !== 'object') return undefined;
@@ -837,7 +915,15 @@ function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibi
   const blockers = rawBlockers
     .map(deriveUpdateBlocker)
     .filter((b): b is UpdateBlocker => b !== null);
-  return { eligible: eligibility.eligible, blockers, evaluatedAt };
+  const updateMode = deriveEligibilityUpdateMode(eligibility.updateMode);
+  const actionPolicy = deriveActionPolicy(eligibility.actionPolicy);
+  return {
+    eligible: eligibility.eligible,
+    blockers,
+    evaluatedAt,
+    ...(actionPolicy ? { actionPolicy } : {}),
+    ...(updateMode ? { updateMode } : {}),
+  };
 }
 
 function deriveUpdateOperation(
@@ -928,6 +1014,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturityTooltip: formatUpdateAge(updateAgeMs, !!apiContainer.updateAvailable, t),
     updateEligibility: deriveUpdateEligibility(apiContainer),
+    labelOwnedSources: deriveLabelOwnedSources(apiContainer.labelOwnedSources),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
     status: apiContainer.status === 'running' ? 'running' : 'stopped',
@@ -950,6 +1037,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
     agent: asNonEmptyString(apiContainer.agent),
+    labels: { ...apiContainer.labels },
     portLabel: asNonEmptyString(apiContainer.portLabel),
     includeTags: asNonEmptyString(apiContainer.includeTags),
     excludeTags: asNonEmptyString(apiContainer.excludeTags),

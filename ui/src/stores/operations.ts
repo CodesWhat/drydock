@@ -37,6 +37,14 @@ export interface UiBatchProgress {
   succeeded: number;
   failed: number;
   active: number;
+  /**
+   * Names of the containers currently queued or in-progress for this batch,
+   * in operation order. Only populated by getBatchProgress()'s per-operation
+   * path (a live batch derived from byId) — the display-batch and
+   * batch-summary paths don't track individual containers, so they report
+   * an empty array rather than a fabricated one.
+   */
+  activeContainerNames: string[];
 }
 
 export interface FrozenBatch {
@@ -334,6 +342,7 @@ export const useOperationStore = defineStore('operations', () => {
         succeeded: payload.succeeded,
         failed: payload.failed,
         active: 0,
+        activeContainerNames: [],
       },
     };
 
@@ -367,6 +376,7 @@ export const useOperationStore = defineStore('operations', () => {
           0,
           displayBatch.frozenTotal - displayBatch.succeededCount - displayBatch.failedCount,
         ),
+        activeContainerNames: [],
       };
     }
 
@@ -389,7 +399,38 @@ export const useOperationStore = defineStore('operations', () => {
         (operation) => operation.status === 'failed' || operation.status === 'rolled-back',
       ).length,
       active: operations.filter(isActiveOperation).length,
+      activeContainerNames: operations
+        .filter((operation) => operation.status === 'in-progress')
+        .map((operation) => operation.containerName)
+        .filter((name): name is string => Boolean(name)),
     };
+  }
+
+  /**
+   * Batches with at least one queued/in-progress operation right now,
+   * derived purely from byId — the same SSE-fed operation state
+   * getBatchProgress() already reads, no new event payload needed. Single-
+   * container "batches" (total < 2) are excluded: a lone update already has
+   * its own row-level indicator, so surfacing it here would just be noise.
+   * Self-cleaning: a batch drops out once its last operation leaves the
+   * active statuses, no separate teardown call required.
+   */
+  function getActiveBatchProgress(): UiBatchProgress[] {
+    const batchIds = new Set<string>();
+    for (const operation of Object.values(byId.value)) {
+      if (operation.batchId) {
+        batchIds.add(operation.batchId);
+      }
+    }
+
+    const progress: UiBatchProgress[] = [];
+    for (const batchId of [...batchIds].sort()) {
+      const summary = getBatchProgress(batchId);
+      if (summary && summary.active > 0 && summary.total >= 2) {
+        progress.push(summary);
+      }
+    }
+    return progress;
   }
 
   function replaceDisplayBatches(next: Map<string, FrozenBatch>): void {
@@ -492,5 +533,6 @@ export const useOperationStore = defineStore('operations', () => {
     replaceDisplayBatches,
     getOperationByContainerId,
     getBatchProgress,
+    getActiveBatchProgress,
   };
 });

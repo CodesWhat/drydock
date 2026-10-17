@@ -48,6 +48,7 @@ import {
   getWidgetBoundsForBreakpoint,
   GRID_BREAKPOINTS,
   GRID_COLS,
+  WIDGET_CONSTRAINTS,
 } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
@@ -193,6 +194,7 @@ const {
   registries,
   serverInfo,
   watchers,
+  approvalPendingCount,
 } = useDashboardData();
 
 const {
@@ -217,6 +219,7 @@ const {
   vulnerabilities,
 } = useDashboardComputed({
   agents,
+  approvalPendingCount,
   containerSummary,
   containers,
   hidePinned: computed(() => preferences.containers.filters.hidePinned),
@@ -388,7 +391,9 @@ function pruneDashboardPendingUpdateRows(now: number = Date.now()) {
   }
 }
 
-function pruneGhostsForOperation(operation: OperationChangedPayload) {
+function pruneGhostsForOperation(
+  operation: Pick<OperationChangedPayload, 'containerId' | 'newContainerId' | 'containerName'>,
+) {
   // Build a set of all identifiers from the operation payload for matching
   const operationIdentifiers = new Set<string>(
     [operation.containerId, operation.newContainerId, operation.containerName].filter(
@@ -607,13 +612,14 @@ function widgetSizes(id: DashboardWidgetId): string[] {
   const meta = DASHBOARD_WIDGET_META.find((w) => w.id === id);
   if (!meta) return ['M'];
   if (meta.category === 'stat') return ['S'];
+  const bounds = WIDGET_CONSTRAINTS[id];
   const sizes: string[] = [];
   // Can it shrink to compact/stat-card size?
-  if (meta.minW <= 3 && meta.minH <= 4) sizes.push('S');
+  if (bounds.minW <= 3 && bounds.minH <= 4) sizes.push('S');
   // Standard widget
   sizes.push('M');
   // Can it stretch wide?
-  if (meta.canStretch || meta.maxW >= 8) sizes.push('L');
+  if (meta.canStretch || bounds.maxW >= 8) sizes.push('L');
   return sizes;
 }
 
@@ -707,10 +713,8 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         const next = new Map(dashboardUpdatingById.value);
         next.delete(row.id);
         dashboardUpdatingById.value = next;
-        dashboardUpdateError.value = errorMessage(
-          e,
-          t('dashboardView.toast.updateError', { name: row.name }),
-        );
+        dashboardUpdateError.value =
+          errorMessage(e, '') || t('dashboardView.toast.updateError', { name: row.name });
       } finally {
         dashboardUpdateInProgress.value = null;
       }
@@ -740,8 +744,8 @@ function confirmDashboardUpdateAll() {
       const snapshotRowKeys = pendingRowsSnapshot.map((row) =>
         getDashboardRecentUpdateSequenceKey(row),
       );
-      let acceptedRowKeys = [...snapshotRowKeys];
-      syncDashboardUpdateSequenceValue(snapshotRowKeys, acceptedRowKeys);
+      let acceptedRowKeys: string[] = [];
+      syncDashboardUpdateSequenceValue(snapshotRowKeys, snapshotRowKeys);
       startDashboardPendingUpdateTracking();
       try {
         const response = await updateContainers(pendingRowsSnapshot.map((row) => row.id));
@@ -789,10 +793,13 @@ function confirmDashboardUpdateAll() {
             t('dashboardView.toast.updateAllError'),
           );
         }
+      } catch (e: unknown) {
+        dashboardUpdateError.value = errorMessage(e, '') || t('dashboardView.toast.updateAllError');
       } finally {
         if (acceptedRowKeys.length === 0) {
           syncDashboardUpdateSequenceValue(snapshotRowKeys, []);
           pruneDashboardUpdateSequence();
+          if (!hasDashboardTrackedUpdates()) stopDashboardPendingUpdatePolling();
         }
         dashboardUpdateAllInProgress.value = false;
       }

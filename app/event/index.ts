@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import log from '../log/index.js';
+import type { ApprovalDecision } from '../model/approval.js';
 import type { Container, ContainerReport } from '../model/container.js';
 import {
   clearAuditSubscriptionCachesForTests,
@@ -118,6 +119,7 @@ export interface ContainerUpdateFailedEventPayload {
 export interface UpdateOperationChangedEventPayload {
   operationId: string;
   containerName: string;
+  triggerName?: string;
   containerId?: string;
   newContainerId?: string;
   batchId?: string;
@@ -212,6 +214,40 @@ export interface MaturityGateClearedEventPayload {
   clockSource?: string;
 }
 
+/**
+ * A watcher's maintenance window has opened and its catch-up scan has finished, so the
+ * containers whose automatic install was deferred are back in the store with fresh state.
+ *
+ * `watcherId` is the component-registry key of the watcher (`docker.local`,
+ * `my-agent.docker.remote`), which is what a trigger recorded when it deferred, so it can
+ * tell its own window opening from an unrelated watcher's.
+ */
+export interface MaintenanceWindowOpenedEventPayload {
+  watcherId: string;
+}
+
+/**
+ * A row entering the approval queue, being decided by an operator, or leaving without
+ * one. Emitted only by the controller side — the reconciler and the decision API; the SSE
+ * layer turns it into `dd:approval-created` / `dd:approval-decided` /
+ * `dd:approval-resolved`.
+ *
+ * Five scalars and nothing else, by design. DR-4 is the standing lesson: the SSE ring
+ * buffer caps a client at 256 KB of pending bytes, and a lifecycle payload carrying a
+ * container snapshot (per-CVE arrays, SBOM, signatures) disconnects every listener. The
+ * queue's rich data is fetched from `/api/v1/approvals` on demand instead.
+ */
+export interface ApprovalEventPayload {
+  kind: ApprovalEventKind;
+  id: string;
+  containerId: string;
+  containerName: string;
+  decision: ApprovalDecision;
+  pendingCount: number;
+}
+
+export type ApprovalEventKind = 'created' | 'decided' | 'resolved';
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -241,6 +277,12 @@ export type ContainerLifecycleEventPayload = Partial<Omit<Container, 'image'>> &
   replacementExpected?: boolean;
 };
 
+export interface ContainerLifecycleEventContext {
+  origin: 'inventory';
+  operationId: string;
+  source: { type: 'docker'; name: string; agent?: string };
+}
+
 const containerReportHandlers = new Map<number, OrderedEventHandler<ContainerReport>>();
 const containerReportsHandlers = new Map<number, OrderedEventHandler<ContainerReport[]>>();
 const watcherSnapshotHandlers = new Map<number, OrderedEventHandler<WatcherSnapshotEventPayload>>();
@@ -269,6 +311,10 @@ const securityScanCycleCompleteHandlers = new Map<
   number,
   OrderedEventHandler<SecurityScanCycleCompleteEventPayload>
 >();
+const maintenanceWindowOpenedHandlers = new Map<
+  number,
+  OrderedEventHandler<MaintenanceWindowOpenedEventPayload>
+>();
 const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnectedEventPayload>>();
 const agentDisconnectedHandlers = new Map<
   number,
@@ -286,6 +332,7 @@ const batchUpdateCompletedHandlers = new Map<
   number,
   OrderedEventHandler<BatchUpdateCompletedEventPayload>
 >();
+const approvalEventHandlers = new Map<number, OrderedEventHandler<ApprovalEventPayload>>();
 let handlerRegistrationSequence = 0;
 
 function registerOrderedEventHandler<TPayload>(
@@ -569,6 +616,31 @@ export function registerSecurityScanCycleComplete(
 }
 
 /**
+ * Emit MaintenanceWindowOpened event. Fired by whichever scan consumed the watcher's armed
+ * catch-up queue, once that scan has finished: the queued catch-up itself when the 60s poll
+ * gets there first, an ordinary cron tick when the cron matches inside the open window. A
+ * digest-mode action trigger holding installs deferred for that watcher can then flush them
+ * into the window instead of waiting for its next digest cron.
+ * @param payload
+ */
+export async function emitMaintenanceWindowOpened(
+  payload: MaintenanceWindowOpenedEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(maintenanceWindowOpenedHandlers, payload);
+}
+
+/**
+ * Register to MaintenanceWindowOpened event.
+ * @param handler
+ */
+export function registerMaintenanceWindowOpened(
+  handler: OrderedEventHandlerFn<MaintenanceWindowOpenedEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(maintenanceWindowOpenedHandlers, handler, options);
+}
+
+/**
  * Emit AgentConnected event.
  * @param payload
  */
@@ -638,8 +710,11 @@ export function registerAgentStatsChanged(
  * Emit container added.
  * @param containerAdded
  */
-export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_ADDED, containerAdded);
+export function emitContainerAdded(
+  containerAdded: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_ADDED, containerAdded, ...(context ? [context] : []));
 }
 
 /**
@@ -647,7 +722,10 @@ export function emitContainerAdded(containerAdded: ContainerLifecycleEventPayloa
  * @param handler
  */
 export function registerContainerAdded(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_ADDED, handler as (payload: unknown) => void);
   return () => {
@@ -659,8 +737,11 @@ export function registerContainerAdded(
  * Emit container added.
  * @param containerUpdated
  */
-export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_UPDATED, containerUpdated);
+export function emitContainerUpdated(
+  containerUpdated: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_UPDATED, containerUpdated, ...(context ? [context] : []));
 }
 
 /**
@@ -668,7 +749,10 @@ export function emitContainerUpdated(containerUpdated: ContainerLifecycleEventPa
  * @param handler
  */
 export function registerContainerUpdated(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_UPDATED, handler as (payload: unknown) => void);
   return () => {
@@ -680,8 +764,11 @@ export function registerContainerUpdated(
  * Emit container removed.
  * @param containerRemoved
  */
-export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPayload): void {
-  eventEmitter.emit(DD_CONTAINER_REMOVED, containerRemoved);
+export function emitContainerRemoved(
+  containerRemoved: ContainerLifecycleEventPayload,
+  context?: ContainerLifecycleEventContext,
+): void {
+  eventEmitter.emit(DD_CONTAINER_REMOVED, containerRemoved, ...(context ? [context] : []));
 }
 
 /**
@@ -689,7 +776,10 @@ export function emitContainerRemoved(containerRemoved: ContainerLifecycleEventPa
  * @param handler
  */
 export function registerContainerRemoved(
-  handler: (payload: ContainerLifecycleEventPayload) => void,
+  handler: (
+    payload: ContainerLifecycleEventPayload,
+    context?: ContainerLifecycleEventContext,
+  ) => void,
 ): () => void {
   eventEmitter.on(DD_CONTAINER_REMOVED, handler as (payload: unknown) => void);
   return () => {
@@ -753,6 +843,26 @@ export function registerBatchUpdateCompleted(
   return registerOrderedEventHandler(batchUpdateCompletedHandlers, handler, options);
 }
 
+/**
+ * Emit ApprovalEvent. Fired when the reconciler adds a row to the approval queue or
+ * resolves one out of it.
+ * @param payload
+ */
+export async function emitApprovalEvent(payload: ApprovalEventPayload): Promise<void> {
+  await emitOrderedHandlers(approvalEventHandlers, payload);
+}
+
+/**
+ * Register to ApprovalEvent.
+ * @param handler
+ */
+export function registerApprovalEvent(
+  handler: OrderedEventHandlerFn<ApprovalEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(approvalEventHandlers, handler, options);
+}
+
 // Audit log integration
 registerAuditLogSubscriptions({
   registerContainerReport,
@@ -789,11 +899,13 @@ export function clearAllListenersForTests(): void {
   containerHealthTransitionHandlers.clear();
   maturityGateClearedHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
+  maintenanceWindowOpenedHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   agentStatsChangedHandlers.clear();
   selfUpdateStartingHandlers.clear();
   batchUpdateCompletedHandlers.clear();
+  approvalEventHandlers.clear();
   clearAuditSubscriptionCachesForTests();
   handlerRegistrationSequence = 0;
 }

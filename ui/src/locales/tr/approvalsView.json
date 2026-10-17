@@ -1,0 +1,84 @@
+{
+  "approvalsView": {
+    "httpErrors": {
+      "summaryLoadFailed": "Onay özeti yüklenemedi",
+      "detailLoadFailed": "Onay yüklenemedi",
+      "approveFailed": "Güncelleme onaylanamadı",
+      "rejectFailed": "Güncelleme reddedilemedi",
+      "deferFailed": "Güncelleme ertelenemedi"
+    },
+    "ofCount": "Gösterilen: {count}",
+    "refresh": "Yenile",
+    "loading": "Onaylar yükleniyor…",
+    "loadError": "Onaylar yüklenemedi",
+    "notifyModeBanner": "Güncelleme modu notify. Mod manual veya auto olarak ayarlanana kadar onaylama devre dışıdır.",
+    "tabs": {
+      "pending": "Bekleyen",
+      "deferred": "Ertelenen",
+      "decided": "Karara bağlanan"
+    },
+    "columns": {
+      "container": "Konteyner",
+      "image": "İmaj",
+      "version": "Sürüm",
+      "scan": "Tarama",
+      "age": "Geçen süre"
+    },
+    "semver": {
+      "major": "Ana sürüm",
+      "minor": "Alt sürüm",
+      "patch": "Yama",
+      "prerelease": "Ön sürüm",
+      "unknown": "Bilinmiyor"
+    },
+    "actions": {
+      "notesAriaLabel": "Sürüm notlarını ve bekletme nedenlerini göster",
+      "approve": "Onayla",
+      "approveAriaLabel": "Güncellemeyi onayla",
+      "approveDisabledNotify": "Güncelleme modu notify; onaylama devre dışı",
+      "reject": "Reddet",
+      "rejectAriaLabel": "Güncellemeyi reddet",
+      "defer": "Ertele",
+      "deferAriaLabel": "Güncellemeyi ertele"
+    },
+    "detail": {
+      "loading": "Ayrıntılar yükleniyor…",
+      "holdReasons": "Bekletme nedenleri",
+      "viewFullNotes": "Tüm notları görüntüle",
+      "empty": "Bu güncelleme için sürüm notu veya bekletme nedeni yok"
+    },
+    "empty": {
+      "pending": "Bekleyen onay yok",
+      "deferred": "Ertelenen onay yok",
+      "decided": "Henüz karara bağlanan onay yok",
+      "all": "Onay yok"
+    },
+    "confirm": {
+      "cancel": "İptal",
+      "approve": {
+        "header": "Güncellemeyi onayla",
+        "message": "{name} için {toRef} sürümüne güncelleme onaylansın mı?",
+        "softBlockerSuffix": "\n\nBu güncellemenin çözülmemiş bekletme nedenleri var:\n{list}",
+        "acceptLabel": "Onayla"
+      },
+      "reject": {
+        "header": "Güncellemeyi reddet",
+        "message": "{name} için {toRef} sürümüne güncelleme reddedilsin mi? Otomatik olarak uygulanmayacak.",
+        "acceptLabel": "Reddet"
+      },
+      "defer": {
+        "header": "Güncellemeyi ertele",
+        "message": "{name} güncellemesi {days} gün ertelensin mi?",
+        "acceptLabel": "Ertele"
+      }
+    },
+    "toast": {
+      "approved": "{name} için onay istendi",
+      "approveFailed": "{name} onaylanamadı",
+      "rejected": "{name} güncellemesi reddedildi",
+      "rejectFailed": "{name} reddedilemedi",
+      "deferred": "{name} güncellemesi ertelendi",
+      "deferFailed": "{name} ertelenemedi"
+    }
+  }
+}

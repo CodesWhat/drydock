@@ -1,11 +1,17 @@
 import { mount } from '@vue/test-utils';
 import { ref } from 'vue';
+import { i18n, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
 import ThemeToggle from '@/components/ThemeToggle.vue';
 
 const mockThemeVariant = ref<'light' | 'system' | 'dark'>('dark');
 const mockIsDark = ref(true);
+const mockWindowNarrow = ref(false);
 const mockSetThemeVariant = vi.fn();
 const mockTransitionTheme = vi.fn((cb: () => void) => cb());
+
+vi.mock('@/composables/useBreakpoints', () => ({
+  useBreakpoints: () => ({ windowNarrow: mockWindowNarrow }),
+}));
 
 vi.mock('@/theme/useTheme', () => ({
   useTheme: () => ({
@@ -20,6 +26,8 @@ const iconStub = { template: '<span />', props: ['name', 'size'] };
 
 describe('ThemeToggle', () => {
   beforeEach(() => {
+    setI18nLocale('en');
+    mockWindowNarrow.value = false;
     mockThemeVariant.value = 'dark';
     mockIsDark.value = true;
     mockSetThemeVariant.mockClear();
@@ -34,13 +42,66 @@ describe('ThemeToggle', () => {
     });
   }
 
+  it.each(SUPPORTED_LOCALES)(
+    'localizes desktop accessible names in %s without changing mode IDs',
+    async (locale) => {
+      setI18nLocale(locale);
+      const wrapper = factory();
+      try {
+        const buttons = wrapper.findAll('button');
+        expect(buttons.map((button) => button.attributes('aria-label'))).toEqual(
+          ['light', 'system', 'dark'].map((id) =>
+            i18n.global.t('appShell.themeToggle.switchTo', {
+              id: i18n.global.t(`appShell.themeToggle.variant.${id}`),
+            }),
+          ),
+        );
+        await buttons[0].trigger('click');
+        expect(mockSetThemeVariant).toHaveBeenCalledWith('light');
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
+
+  it.each(SUPPORTED_LOCALES)(
+    'localizes the compact accessible name and keeps cycling in %s',
+    async (locale) => {
+      setI18nLocale(locale);
+      mockWindowNarrow.value = true;
+      mockThemeVariant.value = 'light';
+      const wrapper = factory();
+      try {
+        const button = wrapper.find('button');
+        expect(button.attributes('aria-label')).toBe(
+          i18n.global.t('appShell.themeToggle.mobileLabel', {
+            id: i18n.global.t('appShell.themeToggle.variant.light'),
+          }),
+        );
+        await button.trigger('click');
+        expect(mockSetThemeVariant).toHaveBeenCalledWith('system');
+        setI18nLocale(locale === 'ar' ? 'fr' : 'ar');
+        await wrapper.vm.$nextTick();
+        expect(button.attributes('aria-label')).toBe(
+          i18n.global.t('appShell.themeToggle.mobileLabel', {
+            id: i18n.global.t('appShell.themeToggle.variant.light'),
+          }),
+        );
+      } finally {
+        wrapper.unmount();
+        setI18nLocale('en');
+      }
+    },
+  );
+
   it('always renders 3 buttons in fixed order: light, system, dark', () => {
     const wrapper = factory();
     const labels = wrapper.findAll('button').map((b) => b.attributes('aria-label'));
     expect(labels).toEqual([
-      'Switch to light theme',
-      'Switch to system theme',
-      'Switch to dark theme',
+      'Switch to Light theme',
+      'Switch to System theme',
+      'Switch to Dark theme',
     ]);
   });
 
@@ -55,9 +116,9 @@ describe('ThemeToggle', () => {
     const wrapper = factory();
     const labels = wrapper.findAll('button').map((b) => b.attributes('aria-label'));
     expect(labels).toEqual([
-      'Switch to light theme',
-      'Switch to system theme',
-      'Switch to dark theme',
+      'Switch to Light theme',
+      'Switch to System theme',
+      'Switch to Dark theme',
     ]);
   });
 
@@ -156,9 +217,9 @@ describe('ThemeToggle', () => {
     mockThemeVariant.value = 'system';
     const wrapper = factory();
     const buttons = wrapper.findAll('button');
-    expect(buttons[0].attributes('aria-label')).toBe('Switch to light theme');
-    expect(buttons[1].attributes('aria-label')).toBe('Switch to system theme');
-    expect(buttons[2].attributes('aria-label')).toBe('Switch to dark theme');
+    expect(buttons[0].attributes('aria-label')).toBe('Switch to Light theme');
+    expect(buttons[1].attributes('aria-label')).toBe('Switch to System theme');
+    expect(buttons[2].attributes('aria-label')).toBe('Switch to Dark theme');
     expect(buttons[0].attributes('aria-pressed')).toBe('false');
     expect(buttons[1].attributes('aria-pressed')).toBe('true');
     expect(buttons[2].attributes('aria-pressed')).toBe('false');

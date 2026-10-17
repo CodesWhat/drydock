@@ -5,6 +5,32 @@ vi.mock('@/services/image-icon', () => ({
 import { computeSecurityDelta, mapApiContainer, mapApiContainers } from '@/utils/container-mapper';
 import { daysToMs } from '@/utils/maturity-policy';
 
+it('retains release maturity blockers when mapping API containers', () => {
+  const c = mapApiContainer(
+    makeApiContainer({
+      updateAvailable: false,
+      result: { tag: '2.0.2' },
+      updateKind: { kind: 'tag', localValue: '1.25', remoteValue: '2.0.2', semverDiff: 'major' },
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5, maturitySkipReleases: 2 },
+      updateEligibility: {
+        eligible: true,
+        evaluatedAt: '2026-08-20T00:00:00.000Z',
+        blockers: [
+          {
+            reason: 'maturity-releases-not-reached',
+            severity: 'soft',
+            actionable: true,
+            message: 'Waiting for releases',
+            details: { requiredReleases: 2, evidenceAvailable: false },
+          },
+        ],
+      },
+    }),
+  );
+  expect(c.updateEligibility?.blockers[0]?.reason).toBe('maturity-releases-not-reached');
+  expect(c.updatePolicyState).toBe('maturity-blocked');
+});
+
 function makeApiContainer(overrides: Record<string, any> = {}) {
   return {
     id: 'c1',
@@ -29,6 +55,14 @@ function makeApiContainer(overrides: Record<string, any> = {}) {
 }
 
 describe('container-mapper', () => {
+  it('preserves lossless label values separately from display labels', () => {
+    const labels = { empty: '', disabled: false, zero: 0, expression: 'a=b', absent: null };
+    const mapped = mapApiContainer(makeApiContainer({ labels }));
+    expect(mapped.labels).toEqual(labels);
+    expect(mapped.labels).not.toBe(labels);
+    expect(mapApiContainer(makeApiContainer()).labels).toEqual({});
+  });
+
   describe('deriveServer', () => {
     it('returns agent name when agent is set', () => {
       const c = mapApiContainer(makeApiContainer({ agent: 'remote-agent-1' }));
@@ -1330,6 +1364,45 @@ describe('container-mapper', () => {
       expect(c.tagPinGated).toBeUndefined();
     });
 
+    it('maps the label-owned field sources and drops unknown fields and values', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          labelOwnedSources: {
+            displayName: 'override',
+            displayIcon: 'label',
+            dependsOn: 'compose',
+            dependsOnAction: 'default',
+            notificationTriggerInclude: 'watcher',
+            notificationTriggerExclude: 'unset',
+            actionTriggerInclude: 'nonsense',
+            actionTriggerExclude: 7,
+            mystery: 'label',
+          },
+        }),
+      );
+      expect(c.labelOwnedSources).toEqual({
+        displayName: 'override',
+        displayIcon: 'label',
+        dependsOn: 'compose',
+        dependsOnAction: 'default',
+        notificationTriggerInclude: 'watcher',
+        notificationTriggerExclude: 'unset',
+      });
+    });
+
+    it('leaves labelOwnedSources undefined when absent or not an object', () => {
+      expect(mapApiContainer(makeApiContainer()).labelOwnedSources).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: 'label' })).labelOwnedSources,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: ['label'] })).labelOwnedSources,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ labelOwnedSources: null })).labelOwnedSources,
+      ).toBeUndefined();
+    });
+
     it('maps dependencyCount and dependentCount when present in API response', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -2029,6 +2102,83 @@ describe('container-mapper', () => {
   });
 
   describe('mapApiContainer — updateEligibility', () => {
+    const baseEligibility = {
+      eligible: true,
+      evaluatedAt: '2026-04-25T12:00:00.000Z',
+      blockers: [],
+    };
+
+    it.each([
+      [{ value: 'manual', source: 'group', group: 'payments' }],
+      [{ value: 'notify', source: 'global' }],
+    ] as const)('passes the server updateMode through unchanged: %j', (updateMode) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, updateMode } }),
+      );
+      expect(c.updateEligibility?.updateMode).toEqual(updateMode);
+    });
+
+    it.each([
+      ['not an object', 'manual'],
+      ['unknown value', { value: 'weekly', source: 'global' }],
+      ['unknown source', { value: 'manual', source: 'label' }],
+      ['non-string group', { value: 'manual', source: 'group', group: 7 }],
+    ])('drops a malformed updateMode (%s)', (_label, updateMode) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, updateMode } }),
+      );
+      expect(c.updateEligibility).toBeDefined();
+      expect(c.updateEligibility).not.toHaveProperty('updateMode');
+    });
+
+    it.each([
+      [{ state: 'auto', triggerId: 'docker.local' }],
+      [{ state: 'manual', triggerId: 'docker.local' }],
+      [{ state: 'blocked', reason: 'excluded', triggerId: 'docker.local' }],
+      [{ state: 'blocked', reason: 'not-included' }],
+      [{ state: 'auto' }],
+    ] as const)('passes the server actionPolicy through unchanged: %j', (actionPolicy) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, actionPolicy } }),
+      );
+      expect(c.updateEligibility?.actionPolicy).toEqual(actionPolicy);
+    });
+
+    it.each([
+      ['not an object', 'auto'],
+      ['null', null],
+      ['unknown state', { state: 'weekly' }],
+      ['missing state', { triggerId: 'docker.local' }],
+    ])('drops a malformed actionPolicy (%s)', (_label, actionPolicy) => {
+      const c = mapApiContainer(
+        makeApiContainer({ updateEligibility: { ...baseEligibility, actionPolicy } }),
+      );
+      expect(c.updateEligibility).toBeDefined();
+      expect(c.updateEligibility).not.toHaveProperty('actionPolicy');
+    });
+
+    it('drops an invalid reason and a non-string triggerId but keeps the valid state', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateEligibility: {
+            ...baseEligibility,
+            actionPolicy: { state: 'blocked', reason: 'bogus', triggerId: 7 },
+          },
+        }),
+      );
+      expect(c.updateEligibility?.actionPolicy).toEqual({ state: 'blocked' });
+    });
+
+    it('omits actionPolicy when the server did not send one', () => {
+      const c = mapApiContainer(makeApiContainer({ updateEligibility: baseEligibility }));
+      expect(c.updateEligibility).not.toHaveProperty('actionPolicy');
+    });
+
+    it('omits updateMode when the server did not send one', () => {
+      const c = mapApiContainer(makeApiContainer({ updateEligibility: baseEligibility }));
+      expect(c.updateEligibility).not.toHaveProperty('updateMode');
+    });
+
     it('maps a complete eligibility object with all fields populated', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -2275,6 +2425,7 @@ describe('container-mapper', () => {
       'agent-mismatch',
       'no-update-trigger-configured',
       'maintenance-window-closed',
+      'group-notify-only',
     ] as const;
 
     for (const reason of ALL_VALID_REASONS) {

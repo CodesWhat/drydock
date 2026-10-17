@@ -1,5 +1,6 @@
 import joi from 'joi';
 import log from '../../../log/index.js';
+import { getUpdateLockSnapshot, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import {
   configurationValid,
@@ -37,6 +38,54 @@ test('validateConfiguration should throw error when invalid', async () => {
     docker.validateConfiguration(configuration);
   }).toThrowError(joi.ValidationError);
 });
+
+test('validateConfiguration should default the pull deadline to ten minutes', () => {
+  const validatedConfiguration = docker.validateConfiguration({
+    ...configurationValid,
+    pulltimeout: undefined,
+  });
+
+  expect(validatedConfiguration.pulltimeout).toBe(600_000);
+});
+
+test('validateConfiguration should reject a non-positive pull deadline', () => {
+  expect(() =>
+    docker.validateConfiguration({
+      ...configurationValid,
+      pulltimeout: 0,
+    }),
+  ).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should reject pull deadlines above the Node timer ceiling', () => {
+  expect(() =>
+    docker.validateConfiguration({
+      ...configurationValid,
+      pulltimeout: 2_147_483_648,
+    }),
+  ).toThrowError(joi.ValidationError);
+});
+
+test('validateConfiguration should default the helper completion deadline to ten minutes', () => {
+  const validatedConfiguration = docker.validateConfiguration({
+    ...configurationValid,
+    helpercompletiontimeout: undefined,
+  });
+
+  expect(validatedConfiguration.helpercompletiontimeout).toBe(600_000);
+});
+
+test.each([0, 2_147_483_648])(
+  'validateConfiguration should reject unsafe helper completion deadline %s',
+  (helpercompletiontimeout) => {
+    expect(() =>
+      docker.validateConfiguration({
+        ...configurationValid,
+        helpercompletiontimeout,
+      }),
+    ).toThrowError(joi.ValidationError);
+  },
+);
 
 // --- getWatcher ---
 
@@ -459,6 +508,228 @@ test('pull should throw error when followProgress reports an error', async () =>
   await expect(
     docker.pullImage(dockerApi, undefined, 'test/test:1.2.3', logContainer),
   ).rejects.toThrowError('Pull progress failed');
+});
+
+test('timed-out pull aborts and destroys the stream, then releases lifecycle access', async () => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  let finishProgress: ((error?: Error | null, output?: unknown[]) => void) | undefined;
+  let reportProgress: ((progress: unknown) => void) | undefined;
+  const pullStream = {
+    destroy: vi.fn(() => finishProgress?.(new Error('stream destroyed'))),
+  };
+  const dockerApi = {
+    pull: vi.fn().mockResolvedValue(pullStream),
+    modem: {
+      followProgress: vi.fn((_stream, done, onProgress) => {
+        finishProgress = done;
+        reportProgress = onProgress;
+      }),
+    },
+  };
+  const logContainer = createMockLog('info', 'warn', 'debug');
+  let pullError: unknown;
+  let exclusiveStarted = false;
+  docker.configuration = { ...configurationValid, pulltimeout: 25 };
+  const pullLifecycle = withContainerUpdateLocks(['container:test:never-ending-pull'], () =>
+    docker.pullImage(dockerApi, undefined, 'test/test:never-ending', logContainer),
+  ).catch((error) => {
+    pullError = error;
+  });
+  const exclusiveLifecycle = withContainerUpdateLocks(
+    ['container:test:exclusive-after-pull'],
+    async () => {
+      exclusiveStarted = true;
+    },
+    { bypassGlobalCap: true, exclusive: true },
+  );
+
+  try {
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(pullError).toEqual(new Error('Pull image test/test:never-ending timed out after 25ms'));
+    expect(pullStream.destroy).toHaveBeenCalledOnce();
+    const pullOptions = dockerApi.pull.mock.calls[0]?.[1];
+    expect(pullOptions.abortSignal).toBeInstanceOf(AbortSignal);
+    expect(pullOptions.abortSignal.aborted).toBe(true);
+    reportProgress?.({ status: 'late progress' });
+    expect(logContainer.debug).not.toHaveBeenCalled();
+    await exclusiveLifecycle;
+    expect(exclusiveStarted).toBe(true);
+    expect(getUpdateLockSnapshot().lifecycle).toBeUndefined();
+  } finally {
+    finishProgress?.(null, []);
+    await Promise.allSettled([pullLifecycle, exclusiveLifecycle]);
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
+});
+
+test.each([
+  ['without destroy support', {}, false],
+  [
+    'when destroy throws',
+    {
+      destroy: vi.fn(() => {
+        throw new Error('destroy failed');
+      }),
+    },
+    true,
+  ],
+])('pull deadline remains authoritative %s', async (_name, pullStream, expectDestroy) => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  const dockerApi = {
+    pull: vi.fn().mockResolvedValue(pullStream),
+    modem: { followProgress: vi.fn() },
+  };
+  docker.configuration = { ...configurationValid, pulltimeout: 25 };
+  const pull = docker.pullImage(dockerApi, undefined, 'test/test:cleanup-edge', log);
+
+  try {
+    const rejection = expect(pull).rejects.toThrow(
+      'Pull image test/test:cleanup-edge timed out after 25ms',
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
+    if (expectDestroy) {
+      expect((pullStream as { destroy: ReturnType<typeof vi.fn> }).destroy).toHaveBeenCalledOnce();
+    }
+  } finally {
+    await pull.catch(() => undefined);
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
+});
+
+test('destroys a pull stream that resolves after the deadline', async () => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  let resolvePull: ((stream: { destroy: ReturnType<typeof vi.fn> }) => void) | undefined;
+  const lateStream = { destroy: vi.fn() };
+  const dockerApi = {
+    pull: vi.fn(
+      () =>
+        new Promise<{ destroy: ReturnType<typeof vi.fn> }>((resolve) => {
+          resolvePull = resolve;
+        }),
+    ),
+    modem: { followProgress: vi.fn() },
+  };
+  docker.configuration = { ...configurationValid, pulltimeout: 25 };
+  const pull = docker.pullImage(dockerApi, undefined, 'test/test:late-stream', log);
+
+  try {
+    const rejection = expect(pull).rejects.toThrow(
+      'Pull image test/test:late-stream timed out after 25ms',
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
+
+    resolvePull?.(lateStream);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(lateStream.destroy).toHaveBeenCalledOnce();
+    expect(dockerApi.modem.followProgress).not.toHaveBeenCalled();
+  } finally {
+    resolvePull?.(lateStream);
+    await pull.catch(() => undefined);
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
+});
+
+test('keeps the deadline error when abort also rejects the pending Docker request', async () => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  const dockerApi = {
+    pull: vi.fn((_image, options) => {
+      return new Promise((_resolve, reject) => {
+        options.abortSignal.addEventListener('abort', () => {
+          reject(new Error('Docker request aborted'));
+        });
+      });
+    }),
+    modem: { followProgress: vi.fn() },
+  };
+  docker.configuration = { ...configurationValid, pulltimeout: 25 };
+  const pull = docker.pullImage(dockerApi, undefined, 'test/test:abort-race', log);
+
+  try {
+    const rejection = expect(pull).rejects.toThrow(
+      'Pull image test/test:abort-race timed out after 25ms',
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await rejection;
+    expect(dockerApi.modem.followProgress).not.toHaveBeenCalled();
+  } finally {
+    await pull.catch(() => undefined);
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
+});
+
+test('pull rejects when followProgress throws before registering callbacks', async () => {
+  const failure = new Error('followProgress setup failed');
+  const dockerApi = {
+    pull: vi.fn().mockResolvedValue({}),
+    modem: {
+      followProgress: vi.fn(() => {
+        throw failure;
+      }),
+    },
+  };
+
+  await expect(docker.pullImage(dockerApi, undefined, 'test/test:setup-failure', log)).rejects.toBe(
+    failure,
+  );
+});
+
+test('pull falls back to the ten-minute deadline for directly assigned legacy configuration', async () => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  const dockerApi = {
+    pull: vi.fn().mockResolvedValue({}),
+    modem: { followProgress: vi.fn((_stream, done) => done(null, [])) },
+  };
+  docker.configuration = { ...configurationValid, pulltimeout: undefined } as never;
+
+  try {
+    await expect(
+      docker.pullImage(dockerApi, undefined, 'test/test:legacy-config', log),
+    ).resolves.toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
+});
+
+test('successful pull clears its deadline without aborting or destroying the stream', async () => {
+  vi.useFakeTimers();
+  const originalConfiguration = docker.configuration;
+  const pullStream = { destroy: vi.fn() };
+  const dockerApi = {
+    pull: vi.fn().mockResolvedValue(pullStream),
+    modem: {
+      followProgress: vi.fn((_stream, done) => done(null, [])),
+    },
+  };
+  docker.configuration = { ...configurationValid, pulltimeout: 25 };
+
+  try {
+    await expect(
+      docker.pullImage(dockerApi, undefined, 'test/test:complete', log),
+    ).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(25);
+
+    expect(pullStream.destroy).not.toHaveBeenCalled();
+    const pullOptions = dockerApi.pull.mock.calls[0]?.[1];
+    expect(pullOptions.abortSignal.aborted).toBe(false);
+  } finally {
+    docker.configuration = originalConfiguration;
+    vi.useRealTimers();
+  }
 });
 
 // --- removeImage ---

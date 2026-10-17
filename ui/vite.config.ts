@@ -3,6 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { ROUTES } from './src/router/routes';
 
 // workbox-routing tests a RegExpRoute's urlPattern against the FULL url.href
 // (which always starts with "http://" or "https://"), never against the
@@ -11,44 +12,41 @@ import { VitePWA } from 'vite-plugin-pwa';
 // against url.pathname instead so this rule actually engages.
 export const isApiRequest = ({ url }: { url: URL }): boolean => url.pathname.startsWith('/api/');
 
-// Every path Express owns on the SPA's own origin. A top-level navigation to
-// one of these has to reach the server, so the precached app shell must never
-// answer it. Taken from the server's route table:
-//
-//   /api, /api/v1  REST API (app/api/index.ts), the SSE stream at
-//                  /api/v1/events/ui, the agent websocket at /api/portwing/ws
-//   /auth/...      login, logout, user and status (app/api/auth.ts), plus the
-//                  per-provider OIDC pair /auth/oidc/<name>/redirect and
-//                  /auth/oidc/<name>/cb (app/authentications/providers/oidc)
-//   /health        readiness probe (app/api/index.ts)
-//   /metrics       prometheus exposition (app/api/index.ts)
-//
-// Bare "/auth" is deliberately left out: app.use('/auth', router) in
-// app/api/auth.ts matches that exact mount path too, it just defines no
-// handler for it (only subpaths like /auth/login do), so an unauthenticated
-// GET falls through to requireAuthentication and returns 401. The SPA view
-// at that route (ui/src/router/routes.ts, ROUTES.AUTH) should answer
-// instead, so the pattern requires the trailing slash.
-//
-// Unlike a RegExpRoute urlPattern (see isApiRequest above), workbox tests a
-// NavigationRoute denylist against url.pathname + url.search, so anchoring on
-// the path is correct here. The [/?] alternative is what lets a bare
-// "/health?verbose=1" match without also matching "/healthcheck".
-export const SERVER_OWNED_NAVIGATION_PATTERNS: RegExp[] = [
-  /^\/api(?:[/?]|$)/,
-  /^\/auth\//,
-  /^\/health(?:[/?]|$)/,
-  /^\/metrics(?:[/?]|$)/,
-];
+// DR-102: the service worker's navigation fallback used to be a denylist
+// (navigateFallbackDenylist: [/^\/api\//]) — a hand-maintained list that has to be
+// updated by hand every time a new server-owned route is added, and gives the SPA
+// fallback to anything the list doesn't yet know about. That was already incomplete:
+// Express also owns /auth's OIDC subpaths, /health and /metrics (see #939, forward-ported
+// separately as #1016 — a document navigation to any of them, e.g. the identity
+// provider's /auth/oidc/<name>/cb redirect, was served index.html instead of reaching
+// the server). An allowlist built directly from the router's own route table inverts
+// the failure mode: only a path the SPA actually routes gets served index.html, so a
+// new *server* route needs no change here at all, and a new *SPA* route is covered
+// automatically because this is generated from ROUTES rather than a separate list
+// someone has to remember to update in step. A route path segment starting with `:`
+// (e.g. `:id` in CONTAINER_LOGS) becomes a `[^/?]+` wildcard; every other segment is
+// escaped and matched literally. The wildcard excludes `?` as well as `/`: a plain
+// `[^/]+` would happily consume a literal `?` and everything before the next `/`,
+// so a request like /containers/abc?x/logs (pathname /containers/abc, the rest is
+// query text) would satisfy a `/containers/:id/logs` pattern even though the actual
+// path segment is just "abc". Matched against `pathname + search` (see
+// NavigationRoute's own doc comment), so the trailing slash and any query string used
+// by the views (see the query param conventions documented in routes.ts) are both
+// optional.
+export function buildSpaNavigateFallbackPattern(routePath: string): RegExp {
+  const segments = routePath.split('/').filter((segment) => segment.length > 0);
+  const body = segments
+    .map((segment) =>
+      segment.startsWith(':') ? '[^/?]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('\\/');
+  const pathPattern = segments.length > 0 ? `\\/${body}\\/?` : '\\/';
+  return new RegExp(`^${pathPattern}(?:\\?.*)?$`);
+}
 
-// Mirrors workbox NavigationRoute's own denylist loop — including its
-// url.pathname + url.search join (see
-// node_modules/workbox-routing/NavigationRoute.js) — so the patterns can be
-// asserted against real navigation URLs in tests.
-export const isServerOwnedNavigation = (url: URL): boolean => {
-  const pathnameAndSearch = url.pathname + url.search;
-  return SERVER_OWNED_NAVIGATION_PATTERNS.some((pattern) => pattern.test(pathnameAndSearch));
-};
+export const navigateFallbackAllowlist: RegExp[] = Object.values(ROUTES).map(
+  buildSpaNavigateFallbackPattern,
+);
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -104,18 +102,12 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Drydock is a live dashboard — stale API data is worse than a
-        // request failing outright, so /api is never handled by the SW,
-        // neither for navigations nor for runtime fetches.
-        //
-        // The navigation fallback skips every other server-owned route too.
-        // Answering /auth/oidc/<name>/cb with index.html meant the OIDC code
-        // exchange never reached Express, so login bounced back to the login
-        // page (#939). Those routes get no runtimeCaching rule on purpose:
-        // with nothing matching, workbox never calls respondWith and the
-        // browser performs the request itself, which keeps the callback's
-        // redirect out of the service worker entirely.
-        navigateFallbackDenylist: SERVER_OWNED_NAVIGATION_PATTERNS,
+        // DR-102: only a path the SPA router itself owns gets the offline app-shell
+        // fallback; everything else (the REST API, /auth's OIDC subpaths, /health,
+        // /metrics, and any future server route) reaches Express, matching what the
+        // controller's own route table actually serves. See buildSpaNavigateFallbackPattern
+        // above for how this is derived from routes.ts.
+        navigateFallbackAllowlist,
         runtimeCaching: [
           {
             urlPattern: isApiRequest,

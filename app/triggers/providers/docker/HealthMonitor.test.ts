@@ -119,7 +119,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance: createMockTriggerInstance(),
@@ -145,7 +145,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 30000,
       interval: 10000,
       triggerInstance: createMockTriggerInstance(),
@@ -199,7 +199,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -251,7 +251,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -315,7 +315,6 @@ describe('HealthMonitor', () => {
       backupScope: {
         containerName: 'test-container',
         containerIdentityKey: '::watcher-a::test-container',
-        includeLegacy: false,
       },
       window: 300000,
       interval: 5000,
@@ -328,13 +327,12 @@ describe('HealthMonitor', () => {
     expect(mockGetBackupsByName).toHaveBeenCalledWith({
       containerName: 'test-container',
       containerIdentityKey: '::watcher-a::test-container',
-      includeLegacy: false,
     });
     // Should use the most recent backup (first in array) pinned to its stored digest.
     expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
       dockerApi,
       expect.anything(),
-      'myregistry/myapp@sha256:old',
+      'myregistry/myapp:v3.2.1@sha256:old',
       expect.anything(),
       log,
     );
@@ -371,7 +369,6 @@ describe('HealthMonitor', () => {
       backupScope: {
         containerName: 'test-container',
         containerIdentityKey: '::watcher-a::test-container',
-        includeLegacy: true,
       },
       window: 300000,
       interval: 5000,
@@ -384,9 +381,178 @@ describe('HealthMonitor', () => {
     expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
       dockerApi,
       expect.anything(),
-      'myregistry/myapp@sha256:old',
+      'myregistry/myapp:latest@sha256:old',
       expect.anything(),
       log,
+    );
+
+    abortController.abort();
+  });
+
+  // Auto-rollback used to fall back to the mutable tag on any legacy backup
+  // regardless of policy. It now resolves through resolveRollbackImageReference,
+  // the same helper the manual rollback API uses, so it inherits the
+  // required/optional/disabled identity-binding policy (DR-59).
+  test('should refuse auto-rollback under a required identity policy when no digest can be established', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi
+      .fn()
+      .mockRejectedValue(
+        new Error(
+          'Unable to bind security gate to the pulled image for test-container: no matching digest',
+        ),
+      );
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('required');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container' },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    // A required policy that cannot establish a digest refuses the rollback
+    // rather than deploying the mutable tag; nothing destructive runs.
+    expect(triggerInstance.pullRollbackImage).not.toHaveBeenCalled();
+    expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+    expect(log.error).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-rollback failed for container test-container'),
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'auto-rollback',
+        status: 'error',
+        details: expect.stringContaining('Cannot roll back'),
+      }),
+    );
+
+    abortController.abort();
+  });
+
+  test('should pin auto-rollback to the digest the identity binder resolves', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi
+      .fn()
+      .mockResolvedValue({ imageIdentity: 'myregistry/myapp:v3.1.0@sha256:resolved' });
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('required');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container' },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+      dockerApi,
+      expect.anything(),
+      'myregistry/myapp:v3.1.0@sha256:resolved',
+      expect.anything(),
+      log,
+    );
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'auto-rollback', status: 'success' }),
+    );
+
+    abortController.abort();
+  });
+
+  test('should fall back to the mutable tag when the identity binder cannot bind under a non-required policy', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    triggerInstance.bindPulledImageIdentity = vi.fn().mockResolvedValue({ skipSecurityGate: true });
+    triggerInstance.getRollbackIdentityBindingPolicy = vi.fn().mockReturnValue('optional');
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'myregistry/myapp',
+        imageTag: 'v3.1.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: 'v3.3.0',
+      backupScope: { containerName: 'test-container' },
+      window: 300000,
+      interval: 5000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+      dockerApi,
+      expect.anything(),
+      'myregistry/myapp:v3.1.0',
+      expect.anything(),
+      log,
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'No digest could be established for the rollback of myregistry/myapp:v3.1.0',
+      ),
     );
 
     abortController.abort();
@@ -404,7 +570,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 20000,
       interval: 5000,
       triggerInstance: createMockTriggerInstance(),
@@ -442,7 +608,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance: createMockTriggerInstance(),
@@ -489,7 +655,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -526,7 +692,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -567,7 +733,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -599,7 +765,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance: createMockTriggerInstance(),
@@ -640,7 +806,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -687,7 +853,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -734,7 +900,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -787,7 +953,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -835,7 +1001,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -891,7 +1057,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -965,7 +1131,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance: composeTrigger,
@@ -983,7 +1149,7 @@ describe('HealthMonitor', () => {
     expect(pullImageSpy).toHaveBeenCalledWith(
       dockerApi,
       { username: 'u', password: 'p' },
-      'library/nginx@sha256:kept',
+      'library/nginx:1.0.0@sha256:kept',
       log,
     );
     expect(mutateComposeFileSpy).toHaveBeenCalledWith(
@@ -996,7 +1162,14 @@ describe('HealthMonitor', () => {
       'web',
       expect.objectContaining({ id: 'container-123', name: 'test-container' }),
       expect.objectContaining({
-        runtimeContext: { newImage: 'library/nginx@sha256:kept' },
+        runtimeContext: {
+          newImage: 'library/nginx:1.0.0@sha256:kept',
+          // The rollback is caller-pinned regardless of whether the backup
+          // reference carries a digest: selectPulledRepoDigest matches a
+          // digest-pinned pull off the reference itself, so nothing here
+          // needs to re-parse and hand back the digest (DR-64).
+          preferredDigest: null,
+        },
       }),
     );
     expect(mockInsertAudit).toHaveBeenCalledWith(
@@ -1031,6 +1204,7 @@ describe('HealthMonitor', () => {
         containerName: 'test-container',
         imageName: 'library/nginx',
         imageTag: '1.0.0',
+        imageDigest: 'sha256:kept',
         timestamp: new Date().toISOString(),
         triggerName: 'dockercompose.default',
       },
@@ -1060,7 +1234,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance: composeTrigger,
@@ -1073,18 +1247,23 @@ describe('HealthMonitor', () => {
     // redundant in exactly the case where it fails. Skipping it keeps the
     // offline rollback working, and the credential lookup has to sit behind
     // the same check because it is a network call of its own.
-    expect(dockerApi.getImage).toHaveBeenCalledWith('library/nginx:1.0.0');
+    expect(dockerApi.getImage).toHaveBeenCalledWith('library/nginx:1.0.0@sha256:kept');
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(getAuthPull).not.toHaveBeenCalled();
     expect(log.info).toHaveBeenCalledWith(
-      expect.stringContaining('Backup image library/nginx:1.0.0 is already on the host'),
+      expect.stringContaining(
+        'Backup image library/nginx:1.0.0@sha256:kept is already on the host',
+      ),
     );
     expect(refreshSpy).toHaveBeenCalledWith(
       '/opt/drydock/stack.yml',
       'web',
       expect.objectContaining({ id: 'container-123', name: 'test-container' }),
       expect.objectContaining({
-        runtimeContext: { newImage: 'library/nginx:1.0.0' },
+        runtimeContext: {
+          newImage: 'library/nginx:1.0.0@sha256:kept',
+          preferredDigest: null,
+        },
       }),
     );
     expect(log.error).not.toHaveBeenCalled();
@@ -1148,7 +1327,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -1161,7 +1340,7 @@ describe('HealthMonitor', () => {
     // could have moved since the backup was written.
     expect(triggerInstance.pullRollbackImage).toHaveBeenCalledWith(
       dockerApi,
-      'library/nginx@sha256:kept',
+      'library/nginx:1.0.0@sha256:kept',
       expect.objectContaining({ id: 'container-123', name: 'test-container' }),
       log,
     );
@@ -1206,7 +1385,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '2.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 10000,
       triggerInstance,
@@ -1262,7 +1441,7 @@ describe('HealthMonitor', () => {
       containerId: 'container-123',
       containerName: 'test-container',
       backupImageTag: '1.0.0',
-      backupScope: { containerName: 'test-container', includeLegacy: true },
+      backupScope: { containerName: 'test-container' },
       window: 300000,
       interval: 5000,
       triggerInstance: createMockTriggerInstance(),

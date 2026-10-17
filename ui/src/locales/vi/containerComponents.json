@@ -1,5 +1,72 @@
 {
   "containerComponents": {
+    "fleetHealth": {
+      "rosterUnavailable": "Danh sách tác nhân không khả dụng. Một số tác nhân đã cấu hình có thể bị thiếu.",
+      "title": "Trạng thái cụm",
+      "description": "Trạng thái toàn cụm. Làm mới danh mục phát hiện container mà không kiểm tra kho ảnh hay thực hiện cập nhật.",
+      "reload": "Tải lại trạng thái",
+      "refresh": "Làm mới danh mục",
+      "configured": "Đã cấu hình",
+      "connected": "Đã kết nối",
+      "disconnected": "Mất kết nối",
+      "unavailable": "Không khả dụng",
+      "agentUnavailable": "Trạng thái tác nhân không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "watcherUnavailable": "Siêu dữ liệu trình theo dõi không khả dụng. Dữ liệu được giữ lại có thể đã cũ.",
+      "total": "{count} container",
+      "lastKnown": "Thông tin gần nhất",
+      "lastSeen": "Lần cuối hoạt động: {value}",
+      "unsupported": "Mọi đích đều cần trình theo dõi Docker hỗ trợ làm mới danh mục.",
+      "complete": "Danh mục đầy đủ",
+      "partial": "Danh mục chưa đầy đủ",
+      "reloadFailed": "Không thể tải lại danh sách container. Kết quả danh mục vẫn được hiển thị."
+    },
+    "fleetBulk": {
+      "label": "Thao tác cho nhóm đã lọc",
+      "updateAll": "Cập nhật tất cả ({count})",
+      "snoozePatch": "Hoãn tất cả bản vá",
+      "patchCount": "{count} ứng viên bản vá",
+      "duration": "Thời gian hoãn",
+      "days": "{count} ngày",
+      "untilDate": "Đến ngày",
+      "date": "Hoãn đến hết ngày",
+      "snoozeConfirm": "Hoãn {count} ứng viên bản vá?",
+      "snoozeScope": "Các container này hiện có bản vá. Hoãn tất cả cập nhật của chúng trong {duration}, không chỉ bản vá. Áp dụng cho danh sách hiện tại đã lọc, không phải các ô đã chọn. Ngày bao gồm hết ngày theo giờ địa phương.",
+      "snoozeResult": "Đã hoãn: {succeeded}. Thất bại: {failed}.",
+      "refreshFailed": "Đã lưu chính sách nhưng không làm mới được danh sách. Hãy tải lại.",
+      "disabled": "Thao tác container bị tắt. Không đổi chính sách.",
+      "invalid": "Thời gian không hợp lệ. Không đổi chính sách.",
+      "busy": "Một thao tác khác đang chạy. Không đổi thêm chính sách."
+    },
+    "fleetDimensions": {
+      "groupBy": "Nhóm theo",
+      "none": "Không nhóm",
+      "agent": "Tác nhân",
+      "registry": "Kho ảnh",
+      "status": "Trạng thái",
+      "tagType": "Loại thẻ",
+      "label": "Nhãn",
+      "groupLabel": "Nhóm theo khóa nhãn",
+      "allAgents": "Tất cả tác nhân",
+      "allRegistries": "Tất cả địa chỉ kho ảnh",
+      "all": "Tất cả loại thẻ",
+      "specific": "Thẻ cụ thể",
+      "floating": "Thẻ thay đổi",
+      "digest": "Ghim mã băm",
+      "semver": "Thẻ phiên bản",
+      "tag": "Thẻ không phải phiên bản",
+      "unknown": "Không rõ",
+      "local": "Trình theo dõi cục bộ",
+      "running": "Đang chạy",
+      "stopped": "Đã dừng",
+      "labelKey": "Khóa nhãn",
+      "labelMatch": "Điều kiện nhãn",
+      "labelValue": "Giá trị nhãn",
+      "exists": "Có nhãn",
+      "equals": "Bằng",
+      "missing": "Thiếu nhãn",
+      "missingLabel": "Không có nhãn",
+      "emptyValue": "Giá trị trống"
+    },
     "fullPageActions": {
       "updateWorkflow": "Quy trình cập nhật",
       "actionsGroup": "Thao tác",
@@ -28,8 +95,9 @@
       "clearSkips": "Xóa danh sách bỏ qua",
       "clearPolicy": "Xóa chính sách",
       "overridden": "Đã ghi đè",
+      "groupSource": "Nhóm: {group}",
       "revert": "Hoàn tác",
-      "revertAll": "Khôi phục về khai báo",
+      "revertAll": "Khôi phục về chính sách kế thừa",
       "snoozedUntil": "Hoãn đến:",
       "maturityMode": "Chế độ độ chín:",
       "matureOnlyMinimum": "Chỉ chín ({days} ngày tối thiểu)",
@@ -58,6 +126,12 @@
       "runningButton": "Đang chạy...",
       "runButton": "Chạy",
       "noTriggersAssociated": "Không có trigger nào liên kết với container này",
+      "unavailableTriggers": "Trigger không khả dụng",
+      "unavailableTriggerReason": {
+        "agentOwnership": "Thuộc về một agent khác với container này.",
+        "structuralIncompatibility": "Dự án, dịch vụ hoặc tệp Compose không khớp với container này.",
+        "labelScope": "Bị loại trừ bởi nhãn include hoặc exclude dd.action/dd.notification của container này."
+      },
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",
@@ -71,7 +145,13 @@
       "versionLabel": "Phiên bản:",
       "rollbackReasonLabel": "Lý do khôi phục:",
       "lastErrorLabel": "Lỗi cuối:",
-      "noUpdateOperations": "Chưa có thao tác cập nhật nào được ghi lại"
+      "noUpdateOperations": "Chưa có thao tác cập nhật nào được ghi lại",
+      "skipReleases": "Số bản phát hành đầu cần bỏ qua",
+      "skipReleasesHint": "Bỏ qua N bản phát hành ổn định khác nhau đầu tiên trong mỗi họ: phiên bản chính SemVer hoặc tháng CalVer. 0 tắt điều kiện này.",
+      "releaseFallbackDays": "Ngoại lệ theo tuổi (ngày)",
+      "releaseFallbackHint": "Cho phép sau số ngày này nếu thiếu dữ liệu phát hành hoặc chưa đủ số lượng. 0 tắt ngoại lệ. Tuổi tối thiểu vẫn được áp dụng.",
+      "releasePolicySummary": "Bỏ qua {count} bản phát hành đầu tiên trong mỗi họ.",
+      "releaseFallbackSummary": "Miễn điều kiện số bản phát hành sau {days} ngày."
     },
     "fullPageDetail": {
       "statusUpdating": "Đang cập nhật",
@@ -111,7 +191,7 @@
       "volumes": "Volume",
       "composeFiles": "Tệp Compose",
       "version": "Phiên bản",
-      "softwareVersion": "Software Version",
+      "softwareVersion": "Phiên bản phần mềm",
       "currentLabel": "Hiện tại:",
       "latestLabel": "Mới nhất:",
       "digestLabel": "Digest:",
@@ -155,19 +235,19 @@
       "noPortsExposed": "Không có cổng nào được mở",
       "notConfigured": "Chưa cấu hình",
       "noVolumesMounted": "Không có volume nào được gắn kết",
-      "uptime": "Uptime",
-      "uptimeAriaLabel": "Container uptime"
+      "uptime": "Thời gian hoạt động",
+      "uptimeAriaLabel": "Thời gian hoạt động của vùng chứa"
     },
     "containerLogs": {
       "title": "Nhật ký Container",
       "download": "Tải xuống",
       "allLevels": "Tất cả mức độ",
       "downloadError": "Không thể tải xuống nhật ký",
-      "tailCount": "Tail {count}",
-      "tailAll": "Tail All",
-      "statusPaused": "Paused",
-      "statusLive": "Live",
-      "statusOffline": "Offline",
+      "tailCount": "{count} dòng cuối",
+      "tailAll": "Tất cả các dòng",
+      "statusPaused": "Đã tạm dừng",
+      "statusLive": "Trực tiếp",
+      "statusOffline": "Mất kết nối",
       "stdout": "stdout",
       "stderr": "stderr"
     },
@@ -273,6 +353,9 @@
     },
     "listContent": {
       "loadingContainers": "Đang tải container...",
+      "fleetUpdateProgress": "Cập nhật container: {done} trên {total}",
+      "fleetUpdateProgressRunning": "Đang cập nhật: {names}",
+      "fleetUpdateProgressRunningMore": "Đang cập nhật: {names} và {more} container khác",
       "searchPlaceholder": "Tìm theo tên hoặc image...",
       "allStatuses": "Tất cả trạng thái",
       "running": "Đang chạy",
@@ -327,13 +410,13 @@
     },
     "updateDialog": {
       "title": "Cập nhật Container",
-      "thisContainer": "this container",
+      "thisContainer": "vùng chứa này",
       "confirmTagChange": "Cập nhật {name}? Thao tác này sẽ thay đổi tag image từ :{currentTag} thành :{newTag}{kind}.",
       "confirmDigestChange": "Cập nhật {name}? Bản build mới hơn của :{currentTag} có sẵn (digest thay đổi).",
       "confirmLatest": "Cập nhật {name} ngay bây giờ? Thao tác này sẽ áp dụng image mới nhất đã phát hiện.",
       "updating": "Đang cập nhật...",
       "update": "Cập nhật",
-      "updateFailed": "Update failed"
+      "updateFailed": "Cập nhật thất bại"
     },
     "floatingTag": {
       "badgeText": "floating tag",
@@ -385,6 +468,7 @@
       "liftCountdown": "{countdown} · mở khóa vào {date}",
       "maturityClockPublished": "Bản ứng viên được phát hành {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
       "maturityClockDetected": "Bản ứng viên được phát hiện {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
+      "groupManualOnly": "Chính sách nhóm '{group}' chỉ cho phép cập nhật thủ công. Drydock sẽ không tự động áp dụng bản cập nhật này.",
       "updateButton": "Cập nhật ngay",
       "blockedButton": "Cập nhật bị chặn",
       "notificationsOnlyButton": "Chỉ thông báo",
@@ -427,7 +511,10 @@
         "no-update-trigger-configured": "Chưa cấu hình trigger cập nhật",
         "self-update-unavailable": "Không thể tự cập nhật",
         "maintenance-window-closed": "Cửa sổ bảo trì đã đóng",
-        "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run"
+        "group-notify-only": "Nhóm chỉ cho phép thông báo",
+        "group-manual-only": "Nhóm yêu cầu cập nhật thủ công",
+        "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run",
+        "maturity-releases-not-reached": "Chính sách độ chín đang chờ"
       },
       "actions": {
         "editPolicy": "Chỉnh sửa chính sách cập nhật",
@@ -439,25 +526,28 @@
         "configureTriggers": "Cấu hình trigger cập nhật",
         "configureThreshold": "Cấu hình ngưỡng trigger",
         "configureSelfUpdate": "Cấu hình tự cập nhật",
-        "configureMaintenance": "Cấu hình cửa sổ bảo trì"
-      }
+        "configureMaintenance": "Cấu hình cửa sổ bảo trì",
+        "editGroupPolicy": "Chỉnh sửa chính sách nhóm"
+      },
+      "releaseMaturityCount": "Đang chờ bản phát hành ổn định trong họ {family}: có {count} trong số {required} bản phát hành trước đó.",
+      "releaseMaturityUnavailable": "Không có dữ liệu phát hành cho bản ứng viên. Các cập nhật tự động vẫn bị giữ lại."
     },
     "maturityBadge": {
       "new": "Phát hiện {duration} trước"
     },
     "confirmDialogs": {
-      "cancel": "Cancel",
+      "cancel": "Hủy",
       "stop": {
-        "header": "Stop Container",
-        "message": "Stop {name}?",
-        "acceptLabel": "Stop",
-        "successMessage": "Stopped: {name}"
+        "header": "Dừng vùng chứa",
+        "message": "Dừng {name}?",
+        "acceptLabel": "Dừng",
+        "successMessage": "Đã dừng: {name}"
       },
       "restart": {
-        "header": "Restart Container",
-        "message": "Restart {name}?",
-        "acceptLabel": "Restart",
-        "successMessage": "Restarted: {name}"
+        "header": "Khởi động lại vùng chứa",
+        "message": "Khởi động lại {name}?",
+        "acceptLabel": "Khởi động lại",
+        "successMessage": "Đã khởi động lại: {name}"
       },
       "forceUpdate": {
         "header": "Cập nhật bắt buộc",
@@ -505,6 +595,19 @@
         "failedDetail": "Không thể cập nhật chuỗi phụ thuộc cho {name}.",
         "staleChainTitle": "Chuỗi phụ thuộc đã thay đổi",
         "staleChainDetail": "Chuỗi phụ thuộc cho {name} đã thay đổi kể từ lần xem trước gần nhất. Hãy mở lại hộp thoại cập nhật để xem lại chuỗi hiện tại trước khi xác nhận."
+      },
+      "bulkUpdate": {
+        "header": "Cập nhật 1 container | Cập nhật {count} container",
+        "accept": "Cập nhật 1 container | Cập nhật {count} container",
+        "acceptWithParents": "Thêm 1 container cha và cập nhật | Thêm {count} container cha và cập nhật",
+        "dispatchHeading": "Sẽ được cập nhật",
+        "blockedHeading": "Bị chặn, sẽ được giữ nguyên",
+        "softOverridesHeading": "Đang cập nhật bất chấp cảnh báo",
+        "skippedHeading": "Đã bỏ qua",
+        "staleParentsHeading": "Container cha có cập nhật đang chờ, được thêm khi bạn chấp nhận",
+        "agentCountInfo": "Trải rộng trên {count} agent; mỗi agent tự chạy các bản cập nhật của mình.",
+        "stackCountInfo": "Trải rộng trên {count} stack.",
+        "successMessage": "Đã bắt đầu cập nhật cho 1 container | Đã bắt đầu cập nhật cho {count} container"
       }
     },
     "actionToasts": {
@@ -530,8 +633,8 @@
       "recheckFailedDetail": "Kiểm tra lại thất bại cho {name}"
     },
     "policy": {
-      "entryCountSingular": "{count} entry",
-      "entryCountPlural": "{count} entries",
+      "entryCountSingular": "{count} mục",
+      "entryCountPlural": "{count} mục",
       "kindLabels": {
         "tag": "tag",
         "digest": "digest"
@@ -561,14 +664,16 @@
         "setAll": "Đã đặt chính sách độ chín thành cho phép tất cả cập nhật",
         "skipped": "Đã bỏ qua cập nhật hiện tại cho {name}",
         "removeSkip": "Đã xóa {kind} đã bỏ qua {value}",
-        "revertField": "Đã khôi phục {field} về chính sách khai báo",
-        "revertAll": "Đã khôi phục tất cả các ghi đè về chính sách khai báo",
+        "revertField": "Đã khôi phục {field} về chính sách kế thừa",
+        "revertAll": "Đã khôi phục tất cả các ghi đè về chính sách kế thừa",
         "failedTitle": "Cập nhật chính sách thất bại: {name}",
         "failedDetail": "Không thể cập nhật chính sách"
       },
       "validation": {
         "snoozeDate": "Chọn ngày hoãn hợp lệ",
-        "maturityAge": "Nhập số ngày độ chín trong khoảng từ {min} đến {max} ngày"
+        "maturityAge": "Nhập số ngày độ chín trong khoảng từ {min} đến {max} ngày",
+        "maturityReleases": "Nhập số bản phát hành nguyên từ 0 đến 100.",
+        "maturityFallback": "Nhập số ngày nguyên từ 0 đến 365 cho ngoại lệ."
       }
     },
     "triggers": {
@@ -588,6 +693,42 @@
       }
     },
     "backups": {
+      "operationValues": {
+        "queued": "Đang xếp hàng",
+        "pulling": "Đang tải ảnh",
+        "scanning": "Đang quét ảnh",
+        "sbom-generating": "Đang tạo SBOM",
+        "pull-failed": "Tải ảnh thất bại",
+        "prepare": "Đang chuẩn bị cập nhật",
+        "dryrun": "Chạy thử",
+        "renamed": "Đã đổi tên container",
+        "new-created": "Đã tạo container mới",
+        "old-stopped": "Đã dừng container cũ",
+        "new-started": "Đã khởi động container mới",
+        "health-gate": "Kiểm tra tình trạng",
+        "health-gate-passed": "Đã vượt qua kiểm tra tình trạng",
+        "succeeded": "Thành công",
+        "failed": "Thất bại",
+        "recovered-cleanup-temp": "Đã khôi phục: đã dọn container tạm",
+        "recovered-rollback": "Đã khôi phục: hoàn tất hoàn tác",
+        "recovered-active": "Đã khôi phục: giữ lại container đang chạy",
+        "recovery-failed": "Khôi phục thất bại",
+        "recovery-missing-containers": "Khôi phục: thiếu container",
+        "rollback-started": "Đã bắt đầu hoàn tác",
+        "rolled-back": "Đã hoàn tác",
+        "rollback-deferred": "Đã hoãn hoàn tác",
+        "rollback-failed": "Hoàn tác thất bại",
+        "expired": "Đã hết hạn",
+        "skipped-dependency": "Đã bỏ qua do phụ thuộc",
+        "in-progress": "Đang thực hiện",
+        "update-runtime-failed": "Thực thi cập nhật thất bại",
+        "create-new-failed": "Không thể tạo container mới",
+        "stop-old-failed": "Không thể dừng container cũ",
+        "start-new-failed": "Không thể khởi động container mới",
+        "health-gate-failed": "Kiểm tra tình trạng thất bại",
+        "cancelled": "Đã hủy",
+        "compose-runtime-refresh-failed": "Làm mới trạng thái thực thi Compose thất bại"
+      },
       "timestampUnknown": "Không xác định",
       "loadFailed": "Không thể tải bản sao lưu",
       "rollback": {
@@ -619,9 +760,9 @@
     },
     "security": {
       "originLabels": {
-        "explicit": "Explicit",
-        "inherited": "Inherited",
-        "unknown": "Unknown"
+        "explicit": "Chỉ định rõ",
+        "inherited": "Kế thừa",
+        "unknown": "Không xác định"
       },
       "timeoutDefault": "60000ms (mặc định)",
       "preAbortYes": "Hủy cập nhật khi hook trước thất bại",
@@ -660,16 +801,39 @@
     },
     "detailPanel": {
       "tabs": {
-        "overview": "Overview",
-        "stats": "Stats",
-        "logs": "Logs",
-        "environment": "Environment",
-        "labels": "Labels",
-        "actions": "Actions"
+        "overview": "Tổng quan",
+        "stats": "Thống kê",
+        "logs": "Nhật ký",
+        "environment": "Môi trường",
+        "labels": "Nhãn",
+        "actions": "Thao tác"
       }
     },
     "logViewer": {
       "invalidRegex": "Biểu thức chính quy không hợp lệ"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Phụ thuộc vào",
+      "requiredBy": "Được yêu cầu bởi",
+      "cycle": "Là một phần của chu trình phụ thuộc",
+      "toggle": "Hiển thị phụ thuộc",
+      "updateGroup": "Cập nhật nhóm phụ thuộc ({count})",
+      "staleParentsWarning": "{name} phụ thuộc vào {parents}, hiện cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên container cha đã lỗi thời. | {name} phụ thuộc vào {parents}, các mục này cũng đang có bản cập nhật đang chờ xử lý. Cập nhật container phụ thuộc trước có thể khiến nó chạy dựa trên các container cha đã lỗi thời.",
+      "staleParentsOverflow": "và {count} mục khác",
+      "staleParentsAccept": "Vẫn cập nhật"
+    },
+    "selection": {
+      "selectRow": "Chọn {name}",
+      "selectAll": "Chọn tất cả container hiển thị",
+      "barLabel": "Container đã chọn",
+      "count": "Đã chọn 1 container | Đã chọn {count} container",
+      "updateSelected": "Cập nhật mục đã chọn",
+      "clear": "Xóa",
+      "reasons": {
+        "stale": "không còn trong danh sách",
+        "inFlight": "đang được cập nhật",
+        "noUpdate": "không có bản cập nhật"
+      }
     }
   }
 }

@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type {
+  ApprovalEventKind,
+  ApprovalEventPayload,
   BatchUpdateCompletedEventPayload,
   ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
@@ -15,6 +17,7 @@ import {
   registerAgentConnected,
   registerAgentDisconnected,
   registerAgentStatsChanged,
+  registerApprovalEvent,
   registerBatchUpdateCompleted,
   registerContainerAdded,
   registerContainerHealthTransition,
@@ -26,10 +29,18 @@ import {
   registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { findApiKeyById, isApiKeyExpired } from '../store/api-key.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { stripContainerDetailOnlySecurityFields } from './container/container-projection.js';
+import { projectLabelOwnedForApi } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
+import { scoped } from './route-scopes.js';
+import {
+  createSessionStreamRecheck,
+  registerSessionStreamCloser,
+  trackBasicHeaderStream,
+} from './session-streams.js';
 import {
   type ActiveSseClient,
   ActiveSseClientRegistry,
@@ -76,7 +87,23 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:update-applied',
   'dd:update-failed',
   'dd:batch-update-completed',
+  'dd:approval-created',
+  'dd:approval-decided',
+  'dd:approval-resolved',
 ]);
+
+/**
+ * Wire names for the approval queue's three lifecycle transitions. The bus carries one
+ * event with a `kind`; the browser gets three distinct event names, so a client can listen
+ * for the one it cares about without parsing a payload. A decision and a resolution are
+ * separate names because they mean different things to a queue view: `decided` is an
+ * operator answering, `resolved` is a row leaving without one.
+ */
+const APPROVAL_SSE_EVENT_NAMES: Record<ApprovalEventKind, string> = {
+  created: 'dd:approval-created',
+  decided: 'dd:approval-decided',
+  resolved: 'dd:approval-resolved',
+};
 
 // Events that carry no id: line because they are ephemeral (not cross-client
 // durable state). Heartbeats and per-client handshakes must not be buffered.
@@ -183,7 +210,7 @@ function clearResponsePressureState(response: FlushableResponse): void {
   responsePressureStates.delete(response);
 }
 
-function disconnectBackpressuredResponse(response: FlushableResponse): void {
+function forceDisconnectResponse(response: FlushableResponse): void {
   const cleanup = responsePressureStates.get(response)?.cleanup;
   if (cleanup) {
     cleanup();
@@ -215,6 +242,15 @@ function installDrainHandler(response: FlushableResponse, state: SseResponsePres
     if (responsePressureStates.get(response) !== state) {
       return;
     }
+    if (isSseClientApiKeyDead(response, new Date())) {
+      // Drop the queue rather than deliver it. These frames were authorised by
+      // a credential that has since died, and the writes below go straight to
+      // the socket without passing through `writeSseChunk`.
+      state.pendingRetainedChunks.length = 0;
+      state.pendingBytes = 0;
+      forceDisconnectResponse(response);
+      return;
+    }
     state.drainHandler = undefined;
     state.blocked = false;
     while (state.pendingRetainedChunks.length > 0) {
@@ -235,12 +271,94 @@ function installDrainHandler(response: FlushableResponse, state: SseResponsePres
   response.once?.('drain', drainHandler);
 }
 
+/**
+ * Read a stream's key expiry off the store once, at connect.
+ *
+ * Nothing edits an existing key — the API mints and revokes, it never extends —
+ * so the expiry a stream is born with is the expiry it dies on, and re-reading
+ * the store on every broadcast would buy nothing for a lookup per event.
+ * Revocation and a record that disappears later are still caught by the
+ * heartbeat sweep, which does re-read.
+ * @param principal
+ */
+function apiKeyClientFields(
+  principal: Request['principal'],
+): Pick<ActiveSseClient, 'apiKeyId' | 'apiKeyExpiresAtMs'> {
+  if (principal?.kind !== 'api-key') {
+    return {};
+  }
+  const record = findApiKeyById(principal.keyId);
+  if (record === null) {
+    return { apiKeyId: principal.keyId, apiKeyExpiresAtMs: 0 };
+  }
+  if (record.expiresAt === null) {
+    return { apiKeyId: principal.keyId };
+  }
+  const expiresAtMs = Date.parse(record.expiresAt);
+  return {
+    apiKeyId: principal.keyId,
+    apiKeyExpiresAtMs: Number.isNaN(expiresAtMs) ? 0 : expiresAtMs,
+  };
+}
+
+/**
+ * The session a stream authenticated with, so revoking the session can close
+ * it and the heartbeat can ask again whether that session is still good.
+ */
+function sessionClientFields(req: Request): Pick<ActiveSseClient, 'sessionId'> {
+  const sessionId = (req as Request & { sessionID?: unknown }).sessionID;
+  if (req.principal?.kind !== 'session' || typeof sessionId !== 'string' || sessionId === '') {
+    return {};
+  }
+  return { sessionId };
+}
+
+function isClientApiKeyExpired(response: FlushableResponse, nowMs: number): boolean {
+  const expiresAtMs = sseClientRegistry.getByResponse(response)?.apiKeyExpiresAtMs;
+  return expiresAtMs !== undefined && nowMs >= expiresAtMs;
+}
+
+/**
+ * Is the key that opened this stream dead right now?
+ *
+ * The per-frame check in `writeSseChunk` reads the expiry captured at connect
+ * and touches no store, because it runs once per client per broadcast. This one
+ * runs once per backpressure episode, so it can afford the store read that also
+ * catches revocation and a record that disappeared: a stream stays blocked for
+ * as long as its client is slow, which is long enough for the key to die while
+ * frames sit in the queue.
+ * @param response
+ * @param now
+ */
+function isSseClientApiKeyDead(response: FlushableResponse, now: Date): boolean {
+  const activeClient = sseClientRegistry.getByResponse(response);
+  if (activeClient === undefined || activeClient.apiKeyId === undefined) {
+    return false;
+  }
+  if (
+    activeClient.apiKeyExpiresAtMs !== undefined &&
+    now.getTime() >= activeClient.apiKeyExpiresAtMs
+  ) {
+    return true;
+  }
+  const record = findApiKeyById(activeClient.apiKeyId);
+  return record === null || record.revokedAt !== null || isApiKeyExpired(record, now);
+}
+
 function writeSseChunk(
   response: FlushableResponse,
   chunk: string,
   retainWhileBlocked: boolean,
   flush = true,
 ): void {
+  // Every byte this router sends goes through here, so checking expiry at the
+  // write is what stops a broadcast, a replayed event or the handshake itself
+  // from reaching a key that died since the last heartbeat. The sweep on the
+  // 15-second heartbeat is a floor, not the guarantee.
+  if (isClientApiKeyExpired(response, Date.now())) {
+    forceDisconnectResponse(response);
+    return;
+  }
   const state = getResponsePressureState(response);
   if (state.blocked) {
     if (!retainWhileBlocked) {
@@ -248,7 +366,7 @@ function writeSseChunk(
     }
     const chunkBytes = Buffer.byteLength(chunk);
     if (state.pendingBytes + chunkBytes > SSE_MAX_PENDING_BYTES_PER_CLIENT) {
-      disconnectBackpressuredResponse(response);
+      forceDisconnectResponse(response);
       return;
     }
     state.pendingRetainedChunks.push({ chunk, flush });
@@ -276,11 +394,117 @@ function writeHeartbeat(response: FlushableResponse): void {
   writeSseChunk(response, 'event: dd:heartbeat\ndata: {}\n\n', false, false);
 }
 
+/**
+ * Close every open stream that authenticated with one of these keys.
+ *
+ * Called with the full cascade a revocation produced, so revoking a parent
+ * takes down the streams its children opened as well. A stream authenticates
+ * once at connect and then stays open indefinitely, so without this a revoked
+ * key kept receiving container, agent and update events for as long as the
+ * client held the socket — the one credential state change that a long-lived
+ * connection cannot notice on its own.
+ * @param revokedKeyIds
+ * @returns how many streams were closed
+ */
+export function closeSseClientsForRevokedApiKeys(revokedKeyIds: readonly string[]): number {
+  if (revokedKeyIds.length === 0) {
+    return 0;
+  }
+  const revoked = new Set(revokedKeyIds);
+  let closed = 0;
+  // Snapshotted because the teardown removes entries from the map being walked.
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    if (activeClient.apiKeyId !== undefined && revoked.has(activeClient.apiKeyId)) {
+      forceDisconnectResponse(activeClient.response);
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
+/**
+ * Close every open stream that authenticated with one of these sessions. A
+ * session revoked after the stream connected (a recovery login, an eviction)
+ * would otherwise keep receiving events for as long as the client held the
+ * socket.
+ * @param revokedSessionIds
+ * @returns how many streams were closed
+ */
+export function closeSseClientsForRevokedSessions(revokedSessionIds: ReadonlySet<string>): number {
+  let closed = 0;
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    if (activeClient.sessionId !== undefined && revokedSessionIds.has(activeClient.sessionId)) {
+      forceDisconnectResponse(activeClient.response);
+      closed += 1;
+    }
+  }
+  return closed;
+}
+
+registerSessionStreamCloser(closeSseClientsForRevokedSessions);
+
+/**
+ * Drop any stream whose key stopped being valid since it connected.
+ *
+ * Expiry has no event to hook — a key simply stops authenticating at a
+ * timestamp — so it has to be swept for, and the heartbeat is already the
+ * clock that visits every client. Revocation is closed synchronously by
+ * `closeSseClientsForRevokedApiKeys`; re-checking `revokedAt` here means the
+ * store stays the single source of truth even if a future revocation path
+ * forgets to call it. A key missing from the store fails closed for the same
+ * reason the authenticator does: no record is not permission to keep reading.
+ * @param now
+ */
+function disconnectClientsWithInvalidApiKeys(now: Date): void {
+  for (const activeClient of [...sseClientRegistry.listClients()]) {
+    const apiKeyId = activeClient.apiKeyId;
+    if (apiKeyId === undefined) {
+      continue;
+    }
+    const record = findApiKeyById(apiKeyId);
+    if (record === null || record.revokedAt !== null || isApiKeyExpired(record, now)) {
+      forceDisconnectResponse(activeClient.response);
+    }
+  }
+}
+
+/**
+ * Close the streams of any session that has ended since it opened one here.
+ *
+ * Destroying a session closes its streams at once, through the session store.
+ * This is the floor under that, the same one keys get: a session can stop
+ * being valid with its row still there (a factor change whose cleanup failed
+ * part-way, a revocation the delete never followed), or lose its row with
+ * nothing saying so, and a stream never makes the next read that would notice.
+ * The question is the shared one every session-backed stream is asked, and the
+ * verdict goes through the shared hook, so the session's log sockets and stats
+ * streams close with its event streams. A store that cannot answer is waited
+ * out for a few heartbeats there before the stream is closed anyway.
+ */
+function closeStreamsOfInvalidSessions(
+  recheckSessions: ReturnType<typeof createSessionStreamRecheck>,
+): void {
+  const sessionIds: string[] = [];
+  for (const { sessionId } of sseClientRegistry.listClients()) {
+    if (sessionId !== undefined) {
+      sessionIds.push(sessionId);
+    }
+  }
+  recheckSessions(sessionIds);
+}
+
 function startSharedHeartbeatIntervalIfNeeded(): void {
   if (sharedHeartbeatIntervalHandle || clients.size === 0) {
     return;
   }
+  // Made with the interval: nothing was asked while it was stopped, so no
+  // count of unanswered re-checks is carried into its next run.
+  const recheckSessions = createSessionStreamRecheck();
   sharedHeartbeatIntervalHandle = globalThis.setInterval(() => {
+    // Before the writes, so a stream whose key or session just died gets
+    // closed rather than sent one more heartbeat.
+    disconnectClientsWithInvalidApiKeys(new Date());
+    closeStreamsOfInvalidSessions(recheckSessions);
     for (const client of clients) {
       writeHeartbeat(client);
     }
@@ -386,6 +610,7 @@ function eventsHandler(req: Request, res: Response): void {
 
   const clientToken = issueServerClientId('sse-token');
   const clientTokenHash = hashToken(clientToken);
+  const principal = req.principal;
   const activeClient: ActiveSseClient = {
     clientId: issueServerClientId('sse-client'),
     clientToken,
@@ -393,8 +618,15 @@ function eventsHandler(req: Request, res: Response): void {
     clientTokenHashHex: clientTokenHash.toString('hex'),
     response: client,
     connectedAtMs: Date.now(),
+    ...apiKeyClientFields(principal),
+    ...sessionClientFields(req),
   };
   sseClientRegistry.add(activeClient);
+  // A Basic header has no session to end with, so the stream is tracked under
+  // the account it proved and closed when a password stops letting it in.
+  const forgetBasicHeaderStream = trackBasicHeaderStream(principal, () =>
+    forceDisconnectResponse(client),
+  );
 
   let disconnected = false;
   const cleanup = () => {
@@ -402,6 +634,7 @@ function eventsHandler(req: Request, res: Response): void {
       return;
     }
     disconnected = true;
+    forgetBasicHeaderStream();
     const disconnectedClient = sseClientRegistry.getByResponse(client);
     if (disconnectedClient) {
       dropActiveClient(disconnectedClient);
@@ -686,7 +919,7 @@ function projectContainerLifecyclePayload(
   if (!payload || typeof payload !== 'object') {
     return payload;
   }
-  const projected = stripContainerDetailOnlySecurityFields(payload);
+  const projected = projectLabelOwnedForApi(stripContainerDetailOnlySecurityFields(payload));
   if (!projected.security) {
     return { ...projected };
   }
@@ -698,6 +931,36 @@ function projectContainerLifecyclePayload(
       ...(scan ? { scan: { ...scan } } : {}),
       ...(updateScan ? { updateScan: { ...updateScan } } : {}),
     },
+  };
+}
+
+/**
+ * Longest container id or name this event will put on the wire. Comfortably past a Docker
+ * id (64 hex) or any name a person types, and short enough that the whole frame stays a
+ * rounding error against the per-client budget.
+ */
+const APPROVAL_SSE_TEXT_MAX_LENGTH = 256;
+
+/**
+ * Five scalars, built by naming each field rather than by stripping a container. There is
+ * no projection to keep in step with the container schema and no way for a vulnerability
+ * array, an SBOM or a release-notes body to reach a client through this event: everything
+ * the queue view needs beyond the count is fetched from `/api/v1/approvals`.
+ *
+ * The two container-supplied strings are bounded as well as named. Neither `id` nor `name`
+ * carries a maximum length in the container schema, and an agent supplies both, so naming
+ * the fields alone still leaves a frame that can exceed the 256 KB pending-byte cap and
+ * disconnect a backpressured client — then do it again when the ring buffer replays. The
+ * row's own `id` is not bounded: it is a generated UUID, and it is the key a client uses
+ * to fetch the row, so truncating it would break the lookup it exists for.
+ */
+function buildApprovalSsePayload(payload: ApprovalEventPayload): Record<string, unknown> {
+  return {
+    id: payload.id,
+    containerId: payload.containerId.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
+    containerName: payload.containerName.slice(0, APPROVAL_SSE_TEXT_MAX_LENGTH),
+    decision: payload.decision,
+    pendingCount: payload.pendingCount,
   };
 }
 
@@ -796,6 +1059,17 @@ export function init(): express.Router {
     ),
   );
   trackEventListenerDeregistration(
+    registerApprovalEvent(
+      (payload: ApprovalEventPayload) => {
+        broadcastContainerEvent(
+          APPROVAL_SSE_EVENT_NAMES[payload.kind],
+          buildApprovalSsePayload(payload),
+        );
+      },
+      { order: 1000 },
+    ),
+  );
+  trackEventListenerDeregistration(
     registerBatchUpdateCompleted(
       (payload: BatchUpdateCompletedEventPayload) => {
         broadcastContainerEvent('dd:batch-update-completed', payload);
@@ -804,8 +1078,8 @@ export function init(): express.Router {
     ),
   );
 
-  router.get('/', eventsHandler);
-  router.post('/self-update/:operationId/ack', acknowledgeSelfUpdate);
+  router.get('/', scoped('read', eventsHandler));
+  router.post('/self-update/:operationId/ack', scoped('admin', acknowledgeSelfUpdate));
   return router;
 }
 

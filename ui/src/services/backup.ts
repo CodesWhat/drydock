@@ -1,14 +1,27 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { ApiError, errorMessage } from '../utils/error';
+
+export interface ContainerBackup {
+  id: string;
+  containerId: string;
+  containerName: string;
+  containerIdentityKey?: string;
+  imageName: string;
+  imageTag: string;
+  imageDigest?: string;
+  timestamp: string;
+  triggerName: string;
+}
 
 async function getBackups(containerId: string) {
   const response = await fetch(`/api/v1/containers/${containerId}/backups`, {
     credentials: 'include',
   });
   if (!response.ok) {
-    throw new Error(`Failed to get backups for container ${containerId}: ${response.statusText}`);
+    throw new ApiError(response.statusText, response.status);
   }
   const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return extractCollectionData<ContainerBackup>(payload);
 }
 
 async function rollback(containerId: string, backupId?: string) {
@@ -28,12 +41,12 @@ async function rollback(containerId: string, backupId?: string) {
     let details = '';
     try {
       const body = await response.json();
-      details = body?.error ? ` (${body.error})` : '';
+      details = typeof body?.error === 'string' && body.error.trim() ? ` (${body.error})` : '';
     } catch (e: unknown) {
-      const parseErrorMessage = e instanceof Error ? e.message : 'Unknown parsing error';
-      details = ` (unable to parse error response: ${parseErrorMessage})`;
+      const parseErrorMessage = errorMessage(e, '');
+      details = parseErrorMessage ? ` (${parseErrorMessage})` : '';
     }
-    throw new Error(`Rollback failed: ${response.statusText}${details}`);
+    throw new ApiError(`${response.statusText}${details}`, response.status);
   }
   return readJsonResponse(response);
 }
