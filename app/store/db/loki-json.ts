@@ -29,12 +29,6 @@ export const LEGACY_STORE_UNREADABLE_CODE = 'STORE_LEGACY_STORE_UNREADABLE';
 
 /** The collection the pre-1.8 session store wrote into the shared store file. */
 export const LEGACY_SESSIONS_COLLECTION = 'Sessions';
-/**
- * DR-121 moves express-session records out of `dd.json` into their own LokiJS
- * file next to it. A store upgraded from a build that already has that change
- * keeps its sessions there; anything older still has them in `dd.json`.
- */
-export const LEGACY_SESSIONS_FILE = 'dd-sessions.json';
 
 const LOKI_INJECTED_FIELDS = new Set(['$loki', 'meta']);
 
@@ -127,16 +121,19 @@ export function readLokiDatabase(filePath: string): LokiDatabaseSnapshot {
 /**
  * Find the express-session documents to import.
  *
- * Prefers the dedicated sessions file DR-121 introduces, and falls back to the
+ * Derives the dedicated sibling filename from the legacy store path, matching
+ * released getSessionStorePath(), and falls back to the
  * `Sessions` collection the pre-1.8 session store used to write into the
  * shared store file. Neither existing is normal and returns an empty list:
  * sessions are disposable, so a store with none imports none.
  */
 export function resolveLegacySessionDocuments(
-  storeDirectory: string,
+  legacyStorePath: string,
   snapshot: LokiDatabaseSnapshot,
 ): LokiDocument[] {
-  const sessionsPath = path.join(storeDirectory, LEGACY_SESSIONS_FILE);
+  const extension = path.extname(legacyStorePath);
+  const basePath = extension ? legacyStorePath.slice(0, -extension.length) : legacyStorePath;
+  const sessionsPath = `${basePath}-sessions.json`;
   if (fs.existsSync(sessionsPath)) {
     return readLokiDatabase(sessionsPath).documents(LEGACY_SESSIONS_COLLECTION);
   }
