@@ -82,7 +82,7 @@ If your Docker config has:
 {
   "auths": {
     "registry.digitalocean.com": {
-      "auth": "ZG9jdGw6ZG9wX3YxX3h4eHh4eHh4eHh4"
+      "auth": "YOUR_BASE64_AUTH"
     }
   }
 }
@@ -92,7 +92,7 @@ use:
 
 ```bash
 docker run \
-  -e "DD_REGISTRY_DOCR_PRIVATE_AUTH=ZG9jdGw6ZG9wX3YxX3h4eHh4eHh4eHh4" \
+  -e "DD_REGISTRY_DOCR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
   codeswhat/drydock
 ```

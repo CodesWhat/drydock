@@ -65,14 +65,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_DHI_PUBLIC_AUTH=bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==
+      - DD_REGISTRY_DHI_PUBLIC_AUTH=YOUR_BASE64_AUTH
 ```
 
 </Tab>
 <Tab value="Docker (Base64 Auth)">
 ```bash
 docker run \
-  -e DD_REGISTRY_DHI_PUBLIC_AUTH="bXlkb2NrZXJpZDpteS10b2tlbi1vci1wYXNzd29yZA==" \
+  -e DD_REGISTRY_DHI_PUBLIC_AUTH="YOUR_BASE64_AUTH" \
   ...
   codeswhat/drydock
 ```

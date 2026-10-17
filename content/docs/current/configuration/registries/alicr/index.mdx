@@ -57,14 +57,14 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_REGISTRY_ALICR_PRIVATE_AUTH=dXNlckBleGFtcGxlLmNvbTp4eHh4eA==
+      - DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH
 ```
 
 </Tab>
 <Tab value="Docker">
 ```bash
 docker run \
-  -e "DD_REGISTRY_ALICR_PRIVATE_AUTH=dXNlckBleGFtcGxlLmNvbTp4eHh4eA==" \
+  -e "DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
   codeswhat/drydock
 ```

@@ -1,3 +1,4 @@
 # Suppress whitespace-error checks for versioned source snapshots during Git validation.
+content/docs/v1.7/** -whitespace
 content/docs/v1.6/** -whitespace
 content/docs/v1.5/** -whitespace

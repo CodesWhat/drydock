@@ -19,10 +19,10 @@ test("coverage FAQ distinguishes TypeScript gates, Vue component floors, and typ
   assert.match(answer, /does not.*runtime coverage/);
 });
 
-test("v1.8 roadmap distinguishes landed development work from an available release", () => {
-  const milestone = siteContent.match(/version: "v1\.8\.0",([\s\S]*?)(?=\n {2}\},)/)?.[1];
+test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
+  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.1",([\s\S]*?)(?=\n {2}\},)/)?.[1];
   assert.ok(milestone, "v1.8 must have a roadmap entry");
-  assert.match(milestone, /title: "[^"]*development[^"]*unreleased/i);
+  assert.match(milestone, /title: "[^"]*RC[^"]*testing only/i);
   assert.match(milestone, /Landed:.*drydock\.yml/);
   assert.match(milestone, /Landed:.*revision-checked.*editors/);
   assert.match(milestone, /Landed:.*fleet.*bulk/i);

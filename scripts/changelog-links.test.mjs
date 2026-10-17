@@ -56,7 +56,8 @@ test('every linked changelog heading has exactly one link definition', () => {
 test('v1.7 RC and prior releases have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.7.0-rc.10...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.8.0-rc.1...HEAD`],
+    ['1.8.0-rc.1', `${repositoryUrl}/compare/v1.7.0-rc.24...v1.8.0-rc.1`],
     ['1.7.0-rc.10', `${repositoryUrl}/compare/v1.7.0-rc.9...v1.7.0-rc.10`],
     ['1.7.0-rc.9', `${repositoryUrl}/compare/v1.7.0-rc.8...v1.7.0-rc.9`],
     ['1.7.0-rc.8', `${repositoryUrl}/compare/v1.7.0-rc.7...v1.7.0-rc.8`],
@@ -95,6 +96,21 @@ test('v1.7 RC and prior releases have a complete chronological comparison-link c
     ['1.5.1-rc.2', `${repositoryUrl}/compare/v1.5.1-rc.1...v1.5.1-rc.2`],
     ['1.5.1-rc.1', `${repositoryUrl}/compare/v1.5.0...v1.5.1-rc.1`],
   ]);
+
+  for (let candidate = 11; candidate <= 24; candidate += 1) {
+    expected.set(
+      `1.7.0-rc.${candidate}`,
+      `${repositoryUrl}/compare/v1.7.0-rc.${candidate - 1}...v1.7.0-rc.${candidate}`,
+    );
+  }
+  expected.set('1.6.1', `${repositoryUrl}/compare/v1.6.0...v1.6.1`);
+  for (let candidate = 1; candidate <= 15; candidate += 1) {
+    const previous = candidate === 1 ? 'v1.6.0' : `v1.6.1-rc.${candidate - 1}`;
+    expected.set(
+      `1.6.1-rc.${candidate}`,
+      `${repositoryUrl}/compare/${previous}...v1.6.1-rc.${candidate}`,
+    );
+  }
 
   for (const [label, expectedUrl] of expected) {
     assert.equal(definitions.get(label), expectedUrl, `incorrect or missing [${label}] link`);

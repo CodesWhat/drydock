@@ -1,0 +1,309 @@
+---
+title: "Deprecation Schedule"
+description: "Deprecated and removed features in Drydock, with removal versions and migration guidance."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+This page lists every deprecated feature, the version it will be removed in, and how to migrate. Until removal, deprecated features continue to work. Detection methods and warning behavior vary by feature; check the applicable **Detection** row and the [detection summary](#detection-summary).
+
+<Callout type="warn">Features listed under a removal version will **stop working** in that release. Migrate before upgrading.</Callout>
+
+## Removal in v1.5.0
+
+### Legacy aggregate container stats endpoint {#legacy-container-stats}
+
+`GET /api/v1/containers/stats` was removed when fleet-level stats moved to the dedicated stats API. Current releases catch the old path and return `410 Gone` with migration targets instead of treating `stats` as a container id.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0-rc.17 |
+| **Removed since** | v1.5.0-rc.17 |
+| **Compatibility response since** | v1.5.0-rc.34 |
+| **Migration** | Use `GET /api/v1/stats/summary` or `GET /api/v1/stats/summary/stream` for aggregate stats; use `GET /api/v1/containers/:id/stats` for one container |
+
+### Implicit wildcard CORS origin {#implicit-wildcard-cors}
+
+Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` and treated it like `*` (all origins). Since v1.5.0-rc.9, drydock fails closed instead: startup throws an error and the server does not start.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.5.0-rc.9 |
+| **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
+
+## v1.6.0 removals and deferrals
+
+### Unversioned API paths (`/api/*`) {#unversioned-api-paths}
+
+The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. As of v1.6.0, `/api/*` requests return **`410 Gone`** with a JSON body pointing at the `/api/v1/` equivalent, except the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints — those keep working at `/api/*` when `DD_COMPAT_WUDCARD=true`, served by their own router rather than by falling through to the removed alias, so they're unaffected by this removal (three return WUD's bare-array response shape instead of drydock's envelope; the fourth passes through unmodified). `GET /api/auth/status` is unaffected for the same reason, unconditionally: it's registered directly on the app, a permanent compatibility alias for `GET /api/v1/auth/status` with no removal scheduled. [`GET /api/auth/methods`](#api-auth-methods) used to be unaffected the same way, but its own registration was removed in v1.7.0, so it now falls through to this same tombstone like the rest of the unversioned surface.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Replace `/api/` with `/api/v1/` in all integrations. If you depend on wud-card or Homepage's `whatsupdocker` widget and can't change their base path, set `DD_COMPAT_WUDCARD=true` |
+
+### Unversioned WebSocket alias (`WS /api/log/stream`) {#unversioned-ws-log-stream}
+
+The system log stream WebSocket accepted both the versioned `/api/v1/log/stream` path and the unversioned `/api/log/stream` alias, following the same transition-alias policy as the REST `/api/*` path above. As of v1.6.0, an upgrade request to the unversioned path is rejected with a 410-style upgrade failure instead of completing the WebSocket handshake.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Point WebSocket clients at `/api/v1/log/stream` |
+
+### Legacy `WUD_*` environment variables {#legacy-env-vars}
+
+`WUD_*` prefixed environment variables are ignored as of v1.6.0. Only `DD_*` variables are loaded at runtime; the migration CLI still recognizes old names so it can rewrite existing files.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `node dist/index.js config migrate --dry-run` to preview changes |
+
+### Legacy `wud.*` container labels {#legacy-labels}
+
+`wud.*` prefixed Docker labels are ignored as of v1.6.0. Only `dd.*` labels affect container discovery, display, grouping, hooks, rollback, webhooks, and trigger behavior.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `node dist/index.js config migrate --file /path/to/compose.yml` |
+
+### Legacy template variable aliases {#legacy-template-variables}
+
+Simple template aliases (`id`, `name`, `watcher`, `kind`, `semver`, `local`, `remote`, `link`) and the batch alias `count` are no longer supplied to templates.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Replace with `container.*` equivalents: `id` &rarr; `container.id`, `name` &rarr; `container.name`, `count` &rarr; `containers.length`, etc. See [Trigger templates](/docs/configuration/triggers#template-variable-reference) |
+
+### `PUT /api/v1/settings` {#put-api-settings}
+
+The `PUT` method on `/api/v1/settings` is a compatibility alias for `PATCH`. Responses include `Deprecation` and `Sunset` HTTP headers. The unversioned `/api/settings` path is not a working alias for this endpoint — like the rest of the unversioned surface, it returns `410 Gone` (see [Unversioned API paths](#unversioned-api-paths)); settings is not among the four wud-card compatibility endpoints exempted from that tombstone.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removal** | Deferred to API v2 — `/api/v1` is frozen, so the method cannot be dropped from the versioned surface; the `Sunset` header advertises the earliest retirement instant |
+| **Detection** | Log warning on each `PUT` request; `Deprecation` and `Sunset` response headers |
+| **Migration** | Change `PUT /api/v1/settings` to `PATCH /api/v1/settings` |
+
+### HTTP OIDC discovery URLs {#oidc-http-discovery}
+
+OIDC providers configured with `http://` discovery URLs are rejected. Identity Providers must serve discovery over HTTPS.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Update your IdP discovery URL to use `https://`. If your IdP uses a self-signed certificate, set `DD_AUTH_OIDC_{name}_INSECURE=true` |
+
+### Legacy password hash formats {#legacy-password-hashes}
+
+SHA-1, APR1/MD5 (Apache), crypt, and plain-text password hashes are rejected. Basic authentication accepts only the documented argon2id hash format.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Regenerate your password hash with argon2id. See [Basic authentication](/docs/configuration/authentications/basic) |
+
+### Kafka `clientId` configuration key {#kafka-clientid}
+
+The camelCase `clientId` key is rejected by Kafka trigger validation.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.5 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Rename `clientId` to `clientid` (lowercase) in your Kafka trigger configuration |
+
+### `DD_WATCHER_*_WATCHDIGEST` environment variable {#watchdigest}
+
+Per-watcher digest watching via environment variable has been removed.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Use the `dd.watch.digest=true` label on individual containers instead |
+
+### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
+
+Watching at startup is always scheduled. `WATCHATSTART` is no longer part of watcher configuration, including the former `false` suppression behavior.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Remove the variable from your configuration. If you need to delay the first scan, use `DD_WATCHER_{name}_CRON` to control the schedule instead |
+
+### Token-only Hub/DHI `PUBLIC_TOKEN` configuration {#registry-public-token}
+
+Hub/DHI public instances that provide `PUBLIC_TOKEN` without the matching `PUBLIC_LOGIN` are rejected instead of silently falling back to anonymous access. The `TOKEN` key itself remains supported as part of a complete `LOGIN`+`TOKEN` pair.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.6.0 |
+| **Migration** | Add the matching login and use `LOGIN`+`TOKEN`, use `LOGIN`+`PASSWORD`, use `AUTH`, or remove credentials for intentional anonymous access |
+
+### Agent-mode `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` fallback {#agent-wud-secret-fallback}
+
+Agent mode's secret lookup no longer falls back to `WUD_AGENT_SECRET` / `WUD_AGENT_SECRET_FILE` when `DD_AGENT_SECRET` / `DD_AGENT_SECRET_FILE` is unset.
+
+| | |
+| --- | --- |
+| **Deprecated since** | Never, removed directly with no deprecation period |
+| **Removed since** | v1.6.0-rc.1 |
+| **Migration** | Rename `WUD_AGENT_SECRET` to `DD_AGENT_SECRET` and `WUD_AGENT_SECRET_FILE` to `DD_AGENT_SECRET_FILE` |
+
+## v1.7.0 removals and deferrals
+
+### `DD_TRIGGER_*` environment variable prefix {#legacy-trigger-prefix}
+
+The `DD_TRIGGER_*` prefix has been replaced by semantic prefixes that distinguish action triggers from notification triggers. As of v1.7.0, any detected `DD_TRIGGER_*` environment variable fails startup outright — the error lists every offending variable next to its exact replacement, so a config can be fixed in one pass.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | Startup error listing every detected variable with its exact replacement; drydock does not start until all are renamed |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+
+### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
+
+These labels have been replaced by semantic equivalents. As of v1.7.0, `dd.trigger.include` / `dd.trigger.exclude` no longer resolve to anything — only the scoped `dd.action.*` / `dd.notification.*` labels are read for include/exclude filtering.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | Error-level log during container initialization (once per label key); Prometheus counter `dd_legacy_input_total{source="label"}` |
+| **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
+
+A container still carrying either legacy label is detected and logged (so an unmigrated fleet stays visible in monitoring), but the label itself is never consulted for filtering — only the scoped labels affect trigger routing.
+
+### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
+
+In v1.5.x–v1.6.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons were **soft** blockers: the UI showed a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queued the update after a confirmation step. As of v1.7.0, both reasons are **hard** blockers, shipping together with the per-action execution policy (`dd.action.auto` / `AUTO=onauto`) that separates action authorization from automatic promotion, so the manual-only escape hatch isn't removed on its own. The Update button is now locked when the labels filter out the action trigger, and the API rejects manual update requests with the blocker's message.
+
+This does not change `AUTO=oninclude`'s meaning — a matching `dd.action.include` label still grants both manual and automatic access under that mode, exactly as before. Only the *default-deny* and *explicit-exclude* outcomes (no matching include/auto label, or an explicit `dd.action.exclude` match) flip from soft to hard.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | UI eligibility pill on container row (now locked instead of clickable); API `409` response on manual update attempts |
+| **Migration** | If you relied on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` label, (b) add the trigger to the container's `dd.action.include` list (or `dd.action.auto` list under `AUTO=onauto`), or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
+
+### Agent-less Home Assistant MQTT topic layout (multi-agent) {#hass-agent-topic-layout}
+
+Through v1.6.x, the Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) had no agent segment. In a multi-agent deployment where the controller and one or more agents all used the default watcher name `local`, two containers with the same name on different agents published to — and overwrote — the same MQTT topic, and watcher-level sensor counts summed across all agents. As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `true`: an `agent/<name>` segment is inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged.
+
+Agent-owned container and watcher entities move to new topic paths (new entity IDs) the first time drydock starts under v1.7.0 without the opt-out set. **The old, pre-v1.7.0 discovery entities are not retroactively removed** — cleanup only clears topics drydock currently tracks, and that tracking starts empty on every process restart, so the pre-upgrade entities stay retained on the broker and appear in Home Assistant as orphaned, frozen-at-last-state duplicates until manually removed.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Default flipped since** | v1.7.0 |
+| **Detection** | Manual — affects multi-agent Home Assistant MQTT deployments where more than one node uses the default watcher name `local` |
+| **Migration** | Update Home Assistant automations/dashboards/templates that reference the old (agent-less) entity IDs for agent-owned containers, and manually remove the orphaned old-path discovery entities once the new ones are confirmed working. Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the pre-v1.7.0 layout temporarily. See [MQTT trigger](/docs/configuration/triggers/mqtt) |
+
+### `curl` in Docker image {#curl-healthcheck-override}
+
+The official Docker image kept `curl` available in v1.5.x and v1.6.x for backward compatibility with custom healthcheck overrides. The default built-in `HEALTHCHECK` has used the lightweight static binary (`/bin/healthcheck`) instead since v1.5.0. As of v1.7.0, `curl` is removed from the image entirely, so a container whose own `HEALTHCHECK` override still shells out to `curl` starts failing.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Removed since** | v1.7.0 |
+| **Detection** | UI deprecation banner when Drydock can inspect its own container via the local Docker socket; startup log warning naming the affected container when a curl-based override is detected |
+| **Migration** | Switch custom healthcheck overrides to `test: /bin/healthcheck $${DD_SERVER_PORT:-3000}` (doubled `$` defers expansion to the container shell instead of the host environment), or drop the override to use the built-in image healthcheck. See [Monitoring](/docs/monitoring) |
+
+### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
+
+`GET /api/auth/methods` was a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen could render before a session existed. It was registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 on its own separate v1.7.0 timeline. As of v1.7.0, that registration is gone: the route is no longer mounted, so requests to it now return **`410 Gone`** from the same unversioned `/api/*` tombstone.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.6.0 |
+| **Removed since** | v1.7.0 |
+| **Migration** | Replace `GET /api/auth/methods` with `GET /api/v1/auth/status` |
+
+## Removal in v1.8.0
+
+### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
+
+`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors. Its unversioned alias, `GET /api/auth/methods`, was removed outright in v1.7.0 (see above), ahead of this response-shape migration deadline.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.6.0 |
+| **Detection** | Log warning on each request plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
+| **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` |
+
+## Enforced security changes (no deprecation window)
+
+These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability. They're listed here for upgrade visibility, not because they're still active.
+
+### Implicit reverse-proxy header trust for CSRF origin checks {#csrf-proxy-trust}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.30 |
+| **Migration** | Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`) if you terminate TLS at a reverse proxy. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) |
+
+### Implicit reverse-proxy header trust for WebSocket origin checks {#websocket-proxy-trust}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`) if you terminate TLS at a reverse proxy and use the log-stream or container log-stream WebSocket endpoints. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) |
+
+### Command trigger process-environment inheritance {#command-trigger-env-inheritance}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.35 |
+| **Migration** | Scripts that need additional variables from the drydock process name them explicitly with `DD_ACTION_COMMAND_{name}_ENV` (comma-separated). See [Command trigger](/docs/configuration/triggers/command) |
+
+### HTTP trigger requests to cloud metadata endpoints {#http-metadata-ssrf}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.35 |
+| **Migration** | A deployment that genuinely needs a link-local target sets `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true` on that trigger. See [HTTP trigger](/docs/configuration/triggers/http) |
+
+### Anonymous-auth grandfather path for upgrades {#anonymous-auth-grandfather}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | Set `DD_AUTH_BASIC_{name}_USER`/`_HASH` (or configure OIDC) before upgrading, or set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly keep the instance anonymous. See [Authentication](/docs/configuration/authentications) |
+
+### Session cookie renamed `connect.sid` to `drydock.sid` {#session-cookie-rename}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.6.0-rc.3 |
+| **Migration** | None required. Existing `connect.sid` cookies are no longer recognized, so every user is signed out once on upgrade and needs to log back in |
+
+## Detection summary
+
+Drydock provides multiple channels for discovering deprecated feature usage:
+
+| Channel | Covers |
+| --- | --- |
+| **Startup log warnings** | All runtime-detectable deprecations |
+| **UI deprecation banners** | Active `dd.trigger.*` container-label usage (the `DD_TRIGGER_*` env var prefix now fails startup instead, so there is no running instance left to surface a banner for) |
+| **Prometheus counters** | `dd_legacy_input_total{source,key}` for active `dd.trigger.*` label usage, API tombstones, and historical observations |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` and `GET /auth/strategies` |
+| **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |
