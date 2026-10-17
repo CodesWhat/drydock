@@ -666,6 +666,11 @@ jobs:
             exit 1
           fi
 
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" --format release >/dev/null; then
+            echo "::error::Release notes summary is invalid or exceeds its publication budget. Keep the leading upgrade warnings and add a compact summary in CHANGELOG."
+            exit 1
+          fi
+
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
       - name: Set up QEMU
@@ -1486,7 +1491,7 @@ jobs:
           # Same TARGET_SHA snapshots as the validation step above — the GA
           # heading (and the parser that reads it) live on main, never in the
           # detached SOURCE_SHA checkout.
-          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" > "${entry_path}"; then
+          if ! node "${EXTRACT_SCRIPT}" --version "${RELEASE_TAG}" --file "${CHANGELOG_PATH}" --format release > "${entry_path}"; then
             rm -f "${entry_path}" "${notes_path}"
             echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
             {
@@ -1569,6 +1574,15 @@ jobs:
               echo "- The container image and release artifact are cosign-signed (identity \`release-cut.yml@refs/heads/main\`, since the workflow run itself always executes at that ref), but carry **no SLSA build-provenance attestation** — this workflow's own OIDC token always claims \`main\` HEAD as the build source, which would be false for this artifact, so attestation is skipped rather than publish a false claim."
             } >> "${notes_path}"
           fi
+
+          RELEASE_NOTES_PATH="${notes_path}" node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const length = readFileSync(process.env.RELEASE_NOTES_PATH, "utf8").length;
+            if (length > 125000) {
+              console.error("Release body exceeds GitHub publication capacity after appended disclosures (125000 characters)");
+              process.exit(1);
+            }
+          '
 
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 

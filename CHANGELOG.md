@@ -18,6 +18,22 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 This is the first public v1.8 candidate; v1.8 GA is not released. Some fixes listed here were already published on the v1.7 candidate train; their original release records are preserved below.
 
+<!-- release-summary:start -->
+
+### Release highlights
+
+- **SQLite store and legacy import.** All live collections and sessions now use one SQLite database. First startup imports a legacy JSON store, including the matching sibling session file for a custom `DD_STORE_FILE`. Existing backups are never overwritten, unreadable imports stop startup, and fresh installs create SQLite directly. Keep the complete pre-upgrade store snapshot, including its separate session file, for a downgrade.
+- **Configuration and policy.** `drydock.yml` loads beneath environment overrides, with revision-checked editors for selected local file-owned settings. Persistent group policies, the effective-policy inspector and container label overrides expose the source and limits of each setting. Database-owned settings and container labels remain separate.
+- **Authentication.** Local Basic accounts gain TOTP enrollment and recovery-code management, backed by a persisted encryption key ring. Scoped API keys and the first-party authentication chain are included. Recovery-code sessions cannot create long-lived credentials or write configuration; two-factor management over plain HTTP stays off unless explicitly enabled. Keep the key ring with your deployment backups.
+- **Fleet and update controls.** Selective bulk actions, bounded update concurrency and the approval queue are included. Actions can allow manual updates by default with label-selected automatic exceptions. `DD_DEFAULTS_WATCH_DIGEST` configures each process's watcher default; remote agents retain their own configuration.
+- **Release-family maturity.** Skip the first configured number of stable versions in a SemVer major or CalVer year/month, alongside the existing age minimum. Missing evidence holds automatic updates; bounded alias digest proof and an explicit age fallback are available. Historical counting of unversioned digest-only channels remains deferred.
+- **Portwing rotation compatibility.** The Drydock controller side is available in this RC for compatible development agents. Published Portwing v1.0.0-rc.1 does not contain the companion feature. Standard `200` means completion; Edge `202` means waiting for reconnect. No compatible published Portwing release is claimed.
+- **Upgrade boundaries.** The v1.7 removal of curl and legacy trigger inputs still applies. v1.8 changes MQTT entity identity and removes the old `/auth/strategies` response with a `410` tombstone. `PUT /api/v1/settings` remains available until API v2, with deprecation headers, and `/api/auth/status` remains supported. The detailed notes include the security and container-recreation guidance carried forward from the v1.7 candidates.
+
+[Full changelog](https://github.com/CodesWhat/drydock/blob/v1.8.0-rc.1/CHANGELOG.md), including all detailed changes and fixes. Read the [deprecation and migration guidance](https://github.com/CodesWhat/drydock/blob/v1.8.0-rc.1/DEPRECATIONS.md) before upgrading an existing deployment.
+
+<!-- release-summary:end -->
+
 ### Added
 
 - **Controller-assisted Portwing key rotation.** Drydock v1.8.0-rc.1 adds opt-in staged rotation for compatible Portwing development builds. Published Portwing v1.0.0-rc.1 does not implement the companion feature, so no compatible published Portwing version is claimed. Standard completion returns `200`; Edge `202` means waiting for reconnect, not completed rotation. Deployment-owned bootstrap credentials remain separate.

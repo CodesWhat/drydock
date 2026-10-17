@@ -46,6 +46,7 @@ function runNotes(
   releaseTag: string,
   releases: ReturnType<typeof release>[],
   lookupFail: boolean | 'after-first-page' = false,
+  options: { entry?: string; soakReason?: string } = {},
 ) {
   const step = loadWorkflow(workflowPath).jobs?.release?.steps?.find(
     (candidate) => candidate.id === 'release_notes',
@@ -61,12 +62,15 @@ function runNotes(
     const changelogPath = join(workdir, 'changelog.md');
     writeFileSync(
       changelogPath,
-      `## [${releaseTag.slice(1)}] - 2026-09-09\n\n### Fixed\n\n- Preserved release entry.\n`,
+      options.entry ??
+        `## [${releaseTag.slice(1)}] - 2026-09-09\n\n### Fixed\n\n- Preserved release entry.\n`,
     );
     const releasesPath = join(workdir, 'releases.json');
     writeFileSync(releasesPath, JSON.stringify(releases));
     const argsPath = join(workdir, 'gh-args');
     const outputPath = join(workdir, 'output');
+    const reasonPath = join(workdir, 'reason');
+    writeFileSync(reasonPath, options.soakReason ?? '');
     execFileSync('bash', ['-c', step.run], {
       cwd: workdir,
       encoding: 'utf8',
@@ -78,7 +82,10 @@ function runNotes(
         EXTRACT_SCRIPT: join(repoRoot, 'scripts/extract-changelog-entry.mjs'),
         IS_MAINTENANCE_CUT: 'false',
         IS_RETAINED_GA: 'false',
-        SOAK_OVERRIDE_USED: 'false',
+        SOAK_OVERRIDE_USED: options.soakReason ? 'true' : 'false',
+        SOAK_OVERRIDE_REASON_PATH: reasonPath,
+        SOAK_OVERRIDE_AGE_SECONDS: '1',
+        SOAK_OVERRIDE_AGE_DAYS: '0.0',
         GITHUB_OUTPUT: outputPath,
         GITHUB_STEP_SUMMARY: join(workdir, 'summary'),
         RELEASES_PATH: releasesPath,
@@ -218,4 +225,31 @@ test('still appends standing upgrade notes through the real script', () => {
   const notes = runNotes('v1.5.2', [release('v1.5.1', '2026-09-08T00:00:00Z')]);
   expect(notes).toContain('/compare/v1.5.1...v1.5.2');
   expect(notes).toContain('<!-- upgrade-notes-marker -->');
+});
+
+test('publishes the marked summary while preserving the leading warning and standing notes', () => {
+  const entry = `## [1.8.0-rc.1] - 2026-10-17
+
+> [!WARNING]
+> Back up the complete store before SQLite import.
+
+<!-- release-summary:start -->
+- Preserved release entry.
+- Full changelog: https://github.com/CodesWhat/drydock/blob/v1.8.0-rc.1/CHANGELOG.md
+<!-- release-summary:end -->
+
+### Added
+${'Detailed development entry.\n'.repeat(6000)}`;
+  const notes = runNotes('v1.8.0-rc.1', [], false, { entry });
+  expect(notes).toContain('Back up the complete store before SQLite import.');
+  expect(notes).not.toContain('Detailed development entry.');
+  expect(notes.length).toBeLessThan(125000);
+});
+
+test('rejects final notes exceeding GitHub capacity after appended disclosures', () => {
+  expect(() => runNotes('v1.8.0', [], false, { soakReason: 'r'.repeat(125001) })).toThrow();
+});
+
+test('keeps standing upgrade disclosures for historical lines that require them', () => {
+  expect(runNotes('v1.5.0-rc.36', [])).toContain('upgrade-notes-marker');
 });
