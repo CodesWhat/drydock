@@ -1193,6 +1193,28 @@ jobs:
             echo "- Artifact: [${artifact_name}](${artifact_url})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      - name: Create Nuclei report directory
+        if: always()
+        run: mkdir -p artifacts/dast
+
+      - name: Run unauthenticated metrics exposure scan
+        # This template checks public exposure. Run it without the admin
+        # session that the remaining vulnerability templates use below.
+        id: nuclei_exposure_scan
+        if: always()
+        continue-on-error: true
+        uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538  # v3.1.1
+        with:
+          version: v3.8.0
+          args: >-
+            -u http://localhost:3333
+            -severity medium,high,critical
+            -type http
+            -id prometheus-metrics
+            -json-export artifacts/dast/nuclei-exposure-report.json
+            -sarif-export artifacts/dast/nuclei-exposure-report.sarif
+            -silent
+
       - name: Create Nuclei authenticated session
         id: nuclei_auth
         if: always()
@@ -1232,10 +1254,6 @@ jobs:
           echo "::add-mask::${cookie_header}"
           printf 'cookie_header=%s\n' "${cookie_header}" >> "${GITHUB_OUTPUT}"
 
-      - name: Create Nuclei report directory
-        if: always()
-        run: mkdir -p artifacts/dast
-
       - name: Run Nuclei scan
         id: nuclei_scan
         if: always()
@@ -1247,15 +1265,55 @@ jobs:
             -u http://localhost:3333
             -severity medium,high,critical
             -type http
+            -exclude-id prometheus-metrics
             -H "Cookie: ${{ steps.nuclei_auth.outputs.cookie_header }}"
-            -json-export artifacts/dast/nuclei-report.json
-            -sarif-export artifacts/dast/nuclei-report.sarif
+            -json-export artifacts/dast/nuclei-authenticated-report.json
+            -sarif-export artifacts/dast/nuclei-authenticated-report.sarif
             -silent
+
+      - name: Merge Nuclei scan reports
+        id: nuclei_reports
+        if: always()
+        env:
+          SCAN_OUTCOME: >-
+            ${{ steps.nuclei_auth.outcome == 'success' && steps.nuclei_exposure_scan.outcome == 'success' &&
+                steps.nuclei_scan.outcome == 'success' && 'success' || 'failure' }}
+        run: |
+          set -euo pipefail
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei scans did not complete successfully; keeping raw reports without publishing analyses."
+            exit 1
+          fi
+
+          json_reports=()
+          for context in authenticated exposure; do
+            report="artifacts/dast/nuclei-${context}-report.json"
+            if [ -s "${report}" ]; then
+              json_reports+=("${report}")
+            fi
+            sarif="artifacts/dast/nuclei-${context}-report.sarif"
+            if [ -s "${sarif}" ]; then
+              jq -e '.version == "2.1.0" and (.runs | type == "array")' "${sarif}" >/dev/null
+            else
+              jq -n '{"$schema": "https://json.schemastore.org/sarif-2.1.0.json", version: "2.1.0", runs: [{tool: {driver: {name: "Nuclei", rules: []}}, results: []}]}' > "${sarif}"
+            fi
+          done
+
+          if [ "${#json_reports[@]}" -gt 0 ]; then
+            jq -s '[.[] | if type == "array" then .[] else . end]' "${json_reports[@]}" > artifacts/dast/nuclei-report.json
+          else
+            printf '[]\n' > artifacts/dast/nuclei-report.json
+          fi
+
+          cp artifacts/dast/nuclei-authenticated-report.sarif artifacts/dast/nuclei-report.sarif
 
       - name: Enforce Nuclei severity gate (medium+)
         if: always()
         env:
-          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+          SCAN_OUTCOME: >-
+            ${{ steps.nuclei_auth.outcome == 'success' && steps.nuclei_exposure_scan.outcome == 'success' &&
+                steps.nuclei_scan.outcome == 'success' && steps.nuclei_reports.outcome == 'success' && 'success' || 'failure' }}
         run: |
           set -euo pipefail
 
@@ -1296,11 +1354,19 @@ jobs:
         id: nuclei_sarif
         if: always()
         env:
-          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+          SCAN_OUTCOME: >-
+            ${{ steps.nuclei_auth.outcome == 'success' && steps.nuclei_exposure_scan.outcome == 'success' &&
+                steps.nuclei_scan.outcome == 'success' && steps.nuclei_reports.outcome == 'success' && 'success' || 'failure' }}
         run: |
           set -euo pipefail
 
           sarif="artifacts/dast/nuclei-report.sarif"
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei did not complete successfully; skipping Code Scanning upload."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
 
           if [ -s "${sarif}" ]; then
             if jq -e '.version == "2.1.0" and (.runs | type == "array")' "${sarif}" >/dev/null; then
@@ -1309,12 +1375,6 @@ jobs:
             fi
 
             echo "::warning::Nuclei SARIF output is not valid SARIF 2.1.0; skipping Code Scanning upload."
-            echo "upload=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          if [ "${SCAN_OUTCOME}" != "success" ]; then
-            echo "Nuclei did not produce SARIF because the scan failed."
             echo "upload=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi
@@ -1348,6 +1408,13 @@ jobs:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei
 
+      - name: Upload unauthenticated metrics SARIF
+        if: always() && steps.nuclei_reports.outcome == 'success' && hashFiles('artifacts/dast/nuclei-exposure-report.sarif') != ''
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        with:
+          sarif_file: artifacts/dast/nuclei-exposure-report.sarif
+          category: nuclei-metrics-unauthenticated
+
       - name: Upload Nuclei reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -1356,6 +1423,10 @@ jobs:
           path: |
             artifacts/dast/nuclei-report.json
             artifacts/dast/nuclei-report.sarif
+            artifacts/dast/nuclei-authenticated-report.json
+            artifacts/dast/nuclei-authenticated-report.sarif
+            artifacts/dast/nuclei-exposure-report.json
+            artifacts/dast/nuclei-exposure-report.sarif
           if-no-files-found: warn
           retention-days: 30
 
@@ -1401,7 +1472,7 @@ jobs:
             fi
             echo "- Findings: **${total}**"
             echo "- Severity breakdown: critical=${critical}, high=${high}, medium=${medium}, low=${low}, info=${info}"
-            echo "- Auth: Basic session cookie"
+            echo "- Auth: Basic session cookie; metrics exposure probe without credentials"
             echo "- Templates: HTTP templates at medium+ severity"
             if [ -s "${sarif}" ]; then
               echo "- SARIF: \`${sarif}\`"

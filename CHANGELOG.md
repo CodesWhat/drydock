@@ -173,6 +173,8 @@ This is the first public v1.8 candidate; v1.8 GA is not released. Some fixes lis
 
 ### Fixed
 
+- **Authenticated DAST scans** run the Prometheus public-exposure template without session credentials, while other vulnerability templates retain authenticated coverage. Findings from either context still fail the medium+ severity gate, with separate SARIF categories preserving both reports.
+
 - **Release promotion secret scans** use the protected development policy when the complete promotion tree matches that development commit on the same or a newer release base. Ordinary PRs retain base policy, and policy fetches preserve the full history needed by the configured scan.
 
 - **Custom legacy session-file imports.** SQLite upgrades derive the matching sibling session filename from `DD_STORE_FILE`, preserving custom-name sessions, their payloads and expiry. Unrelated default session files are ignored, shared-file fallback is retained, and an unreadable matching session file stops the import without publishing a partial database.
