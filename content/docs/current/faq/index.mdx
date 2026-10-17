@@ -110,7 +110,7 @@ On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `pe
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - /run/podman/podman.sock:/var/run/docker.sock:Z
 ```
@@ -207,7 +207,7 @@ The same missing configuration also breaks the dashboard's log viewer (`WS /api/
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_SERVER_TRUSTPROXY=1  # Trust one proxy hop (Traefik, Nginx, etc.)
 ```
@@ -223,7 +223,7 @@ Most reverse proxies (Traefik, Nginx, NGINX Proxy Manager, Caddy) set `X-Forward
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_SERVER_TRUSTPROXY=1
       # ... other DD_ variables ...
@@ -254,7 +254,7 @@ NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_SERVER_TRUSTPROXY=1
       # ... other DD_ variables ...
