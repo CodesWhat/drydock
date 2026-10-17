@@ -1,0 +1,58 @@
+---
+title: "Authentication API"
+description: "This API allows querying configured authentication providers."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">[Need to configure authentication?](/docs/configuration/authentications)</Callout>
+
+## Get all Authentications
+
+This operation returns the configured authentication providers.
+
+```bash
+curl http://drydock:3000/api/v1/authentications
+
+{
+  "data": [
+    {
+      "id": "basic.local",
+      "type": "basic",
+      "name": "local",
+      "configuration": {
+        "enabled": true
+      }
+    }
+  ],
+  "total": 1,
+  "limit": 0,
+  "offset": 0,
+  "hasMore": false
+}
+```
+
+## Get an Authentication by id
+
+This operation returns one configured authentication provider.
+
+```bash
+curl http://drydock:3000/api/v1/authentications/basic/local
+
+{
+  "id": "basic.local",
+  "type": "basic",
+  "name": "local",
+  "configuration": {
+    "enabled": true
+  }
+}
+```
+
+### Agent-scoped lookup
+
+To fetch an authentication provider registered on a specific agent, append the agent name:
+
+```bash
+curl http://drydock:3000/api/v1/authentications/basic/local/agent1
+```
