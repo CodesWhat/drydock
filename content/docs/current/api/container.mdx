@@ -82,7 +82,7 @@ When the gate blocks an update the blocker reason is `maturity-not-reached`. The
 
 The UI's Update Status panel renders these two fields (alongside `details.minAgeDays` and `details.remainingMs`) as a single clock-sourced sentence — e.g. "Candidate published Jul 12 — 3 more days until the 7-day minimum" — instead of re-deriving its own countdown.
 
-#### Release-count maturity (v1.8.0-rc.1)
+#### Release-count maturity (v1.8.0-rc.1) {#release-count-maturity-unreleased-v18}
 
 With `maturityMode: mature`, `maturitySkipReleases` adds a second gate to the day minimum. Its default is `0` (disabled), and it accepts integers from `0` to `100`. Setting it to `2` holds the first two observed stable versions in each family: `2.0.0` has zero earlier releases, `2.0.1` has one, and `2.0.2` has two. The candidate must also satisfy `maturityMinAgeDays`.
 
