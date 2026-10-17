@@ -134,7 +134,7 @@ services:
       - VOLUMES=1
 
   drydock:
-    image: codeswhat/drydock:latest
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
       - DD_WATCHER_LOCAL_PORT=2375
@@ -172,7 +172,7 @@ For ordinary container updates, restart recovery depends on which phase was inte
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:latest
+    image: codeswhat/drydock:1.8.0-rc.1
     container_name: drydock
     labels:
       - dd.watch=true
@@ -196,7 +196,7 @@ Plain TCP deployment — Drydock connects to the Docker daemon over TCP (no bind
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:latest
+    image: codeswhat/drydock:1.8.0-rc.1
     container_name: drydock
     labels:
       - dd.watch=true

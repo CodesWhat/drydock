@@ -38,7 +38,7 @@ The `rocketchat` trigger lets you post image update notifications to a Rocket.Ch
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_NOTIFICATION_ROCKETCHAT_LOCAL_URL=https://example.com
@@ -56,7 +56,7 @@ docker run \
     -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_AUTH_TOKEN="your-rocketchat-auth-token" \
     -e DD_NOTIFICATION_ROCKETCHAT_LOCAL_CHANNEL="#drydock" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>

@@ -27,7 +27,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_AUTH_BASIC_JOHN_USER=john
@@ -49,7 +49,7 @@ docker run \
   -e DD_AUTH_BASIC_BOB_USER="bob" \
   -e 'DD_AUTH_BASIC_BOB_HASH=argon2id$65536$3$4$shoWJqA1qg1Zen08/XIocsJUEFKgox8Glw0/EAkY5SY=$toyn5NwytBXDTqQN94wJzjUT0tocDzhvvYii4YK279pDTbMDGoyqOhxxDi7lS0xEJAC7fRKfMAaZFfxmzD4GNw==' \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
