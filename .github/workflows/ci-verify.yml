@@ -1274,8 +1274,17 @@ jobs:
       - name: Merge Nuclei scan reports
         id: nuclei_reports
         if: always()
+        env:
+          SCAN_OUTCOME: >-
+            ${{ steps.nuclei_auth.outcome == 'success' && steps.nuclei_exposure_scan.outcome == 'success' &&
+                steps.nuclei_scan.outcome == 'success' && 'success' || 'failure' }}
         run: |
           set -euo pipefail
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei scans did not complete successfully; keeping raw reports without publishing analyses."
+            exit 1
+          fi
 
           json_reports=()
           for context in authenticated exposure; do
@@ -1353,6 +1362,12 @@ jobs:
 
           sarif="artifacts/dast/nuclei-report.sarif"
 
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei did not complete successfully; skipping Code Scanning upload."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
           if [ -s "${sarif}" ]; then
             if jq -e '.version == "2.1.0" and (.runs | type == "array")' "${sarif}" >/dev/null; then
               echo "upload=true" >> "${GITHUB_OUTPUT}"
@@ -1360,12 +1375,6 @@ jobs:
             fi
 
             echo "::warning::Nuclei SARIF output is not valid SARIF 2.1.0; skipping Code Scanning upload."
-            echo "upload=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          if [ "${SCAN_OUTCOME}" != "success" ]; then
-            echo "Nuclei did not produce SARIF because the scan failed."
             echo "upload=false" >> "${GITHUB_OUTPUT}"
             exit 0
           fi

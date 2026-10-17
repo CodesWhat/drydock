@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,11 +22,12 @@ function withReports(run: (root: string, reports: string) => void) {
   }
 }
 
-function runMerge(root: string) {
+function runMerge(root: string, outcome = 'success') {
   const command = step('Merge Nuclei scan reports')?.run;
   expect(command).toBeTruthy();
   return spawnSync('bash', ['-e', '-o', 'pipefail', '-c', command ?? ''], {
     cwd: root,
+    env: { ...process.env, SCAN_OUTCOME: outcome },
     encoding: 'utf8',
     timeout: 5000,
   });
@@ -67,12 +68,54 @@ test('the metrics exposure template runs without credentials and remains covered
 });
 
 test('a failure of either scan or report merge fails the existing gate', () => {
-  for (const name of ['Enforce Nuclei severity gate (medium+)', 'Prepare Nuclei SARIF report']) {
+  for (const name of [
+    'Merge Nuclei scan reports',
+    'Enforce Nuclei severity gate (medium+)',
+    'Prepare Nuclei SARIF report',
+  ]) {
     const outcome = step(name)?.env?.SCAN_OUTCOME ?? '';
-    for (const id of ['nuclei_auth', 'nuclei_scan', 'nuclei_exposure_scan', 'nuclei_reports']) {
+    const ids = ['nuclei_auth', 'nuclei_scan', 'nuclei_exposure_scan'];
+    if (name !== 'Merge Nuclei scan reports') ids.push('nuclei_reports');
+    for (const id of ids) {
       expect(outcome).toContain(`steps.${id}.outcome == 'success'`);
     }
   }
+});
+
+test.each(['failure', 'cancelled', 'skipped'])(
+  'an incomplete %s scan keeps raw reports without manufacturing clean analyses',
+  (outcome) => {
+    withReports((root, reports) => {
+      const partial = '{"version":"2.1.0","runs":[]}';
+      writeFileSync(join(reports, 'nuclei-authenticated-report.sarif'), partial);
+      expect(runMerge(root, outcome).status).not.toBe(0);
+      expect(readFileSync(join(reports, 'nuclei-authenticated-report.sarif'), 'utf8')).toBe(
+        partial,
+      );
+      expect(existsSync(join(reports, 'nuclei-exposure-report.sarif'))).toBe(false);
+      expect(existsSync(join(reports, 'nuclei-report.sarif'))).toBe(false);
+      expect(runGate(root, 'failure').status).toBe(1);
+    });
+  },
+);
+
+test('a failed scan never uploads a partial or empty canonical SARIF analysis', () => {
+  withReports((root, reports) => {
+    writeFileSync(join(reports, 'nuclei-report.sarif'), '{"version":"2.1.0","runs":[]}');
+    const output = join(root, 'github-output');
+    const result = spawnSync(
+      'bash',
+      ['-e', '-o', 'pipefail', '-c', step('Prepare Nuclei SARIF report')?.run ?? ''],
+      {
+        cwd: root,
+        env: { ...process.env, SCAN_OUTCOME: 'failure', GITHUB_OUTPUT: output },
+        encoding: 'utf8',
+        timeout: 5000,
+      },
+    );
+    expect(result.status).toBe(0);
+    expect(readFileSync(output, 'utf8')).toBe('upload=false\n');
+  });
 });
 
 test.each(contexts)('a medium finding from %s remains blocking after merge', (context) => {
