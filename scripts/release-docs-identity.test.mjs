@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { parse as parseYaml } from 'yaml';
 
 const RC_VERSION = '1.8.0-rc.1';
 const PREV_RC_VERSION = '1.7.0-rc.24';
@@ -15,6 +16,40 @@ const DOC_ROOTS = [
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
+
+test('the current self-tracking example stays on the v1.8 release-candidate train', () => {
+  const configuration = read('content/docs/current/configuration/index.mdx');
+  const selfTracking = configuration.slice(configuration.indexOf('# drydock self tracking'));
+  const includePattern = selfTracking.match(/dd\.tag\.include=([^'\n]+)/u)?.[1];
+  assert.ok(includePattern, 'self-tracking must declare its candidate filter');
+  const filter = new RegExp(includePattern.replaceAll('$$', '$'), 'u');
+  for (const candidate of [RC_VERSION, '1.8.0-rc.2', '1.8.0-rc.10']) {
+    assert.ok(filter.test(candidate), `self-tracking must accept ${candidate}`);
+  }
+  for (const candidate of ['latest', '1.6.1', '1.7.0-rc.24', '1.8.0', '1.9.0-rc.1']) {
+    assert.ok(!filter.test(candidate), `self-tracking must stay off ${candidate}`);
+  }
+});
+
+test('self-update examples allow manual updates within the candidate train', () => {
+  const guide = read('content/docs/current/configuration/self-update/index.mdx');
+  const examples = [...guide.matchAll(/```yaml\n([\s\S]*?)\n```/gu)]
+    .map((match) => parseYaml(match[1]).services?.drydock)
+    .filter(Boolean);
+  assert.equal(examples.length, 3);
+  for (const example of examples) {
+    assert.equal(example.image, `codeswhat/drydock:${RC_VERSION}`);
+    assert.ok((example.labels ?? []).includes('dd.action.include=local'));
+    assert.ok(example.environment.includes('DD_ACTION_DOCKER_LOCAL_PRUNE=true'));
+    assert.ok(example.environment.includes('DD_ACTION_DOCKER_LOCAL_AUTO=onauto'));
+    const pattern = example.labels.find((label) => label.startsWith('dd.tag.include='));
+    assert.ok(pattern, 'self-update must opt into candidate tag discovery');
+    const filter = new RegExp(pattern.slice('dd.tag.include='.length).replaceAll('$$', '$'), 'u');
+    assert.ok(filter.test('1.8.0-rc.2'));
+    assert.ok(!filter.test('1.8.0'));
+    assert.ok(!filter.test('1.9.0-rc.1'));
+  }
+});
 
 function read(path) {
   return readFileSync(path, 'utf8');
@@ -371,7 +406,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.1|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }

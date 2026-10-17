@@ -41,7 +41,7 @@ If the GHCR token fails for trusted sources (e.g. scoped to `read:packages` only
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_REGISTRY_GHCR_PRIVATE_USERNAME=john@doe
@@ -55,7 +55,7 @@ docker run \
   -e DD_REGISTRY_GHCR_PRIVATE_USERNAME="john@doe" \
   -e DD_REGISTRY_GHCR_PRIVATE_TOKEN="xxxxx" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>

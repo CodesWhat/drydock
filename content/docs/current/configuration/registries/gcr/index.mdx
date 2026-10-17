@@ -33,7 +33,7 @@ Docker and Docker Compose action triggers use this same service-account configur
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=johndoe@mysuperproject.iam.gserviceaccount.com
@@ -47,7 +47,7 @@ docker run \
   -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="johndoe@mysuperproject.iam.gserviceaccount.com" \
   -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="YOUR_SERVICE_ACCOUNT_PRIVATE_KEY" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 
 </Tab>
