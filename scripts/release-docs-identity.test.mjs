@@ -371,7 +371,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.1|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }
