@@ -8,7 +8,6 @@ import {
 import { StoreError } from './driver.js';
 import {
   LEGACY_SESSIONS_COLLECTION,
-  LEGACY_SESSIONS_FILE,
   LEGACY_STORE_UNREADABLE_CODE,
   parseLokiDatabase,
   readLokiDatabase,
@@ -131,11 +130,11 @@ describe('store/db/loki-json', () => {
       writeLokiStoreFile(storePath, [
         { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'stale' }] },
       ]);
-      writeLokiStoreFile(path.join(storeDirectory, LEGACY_SESSIONS_FILE), [
+      writeLokiStoreFile(path.join(storeDirectory, 'dd-sessions.json'), [
         { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'current' }] },
       ]);
 
-      expect(resolveLegacySessionDocuments(storeDirectory, readLokiDatabase(storePath))).toEqual([
+      expect(resolveLegacySessionDocuments(storePath, readLokiDatabase(storePath))).toEqual([
         { sid: 'current' },
       ]);
     });
@@ -145,7 +144,7 @@ describe('store/db/loki-json', () => {
       writeLokiStoreFile(storePath, [
         { name: LEGACY_SESSIONS_COLLECTION, data: [{ sid: 'shared' }] },
       ]);
-      expect(resolveLegacySessionDocuments(storeDirectory, readLokiDatabase(storePath))).toEqual([
+      expect(resolveLegacySessionDocuments(storePath, readLokiDatabase(storePath))).toEqual([
         { sid: 'shared' },
       ]);
     });
@@ -153,10 +152,8 @@ describe('store/db/loki-json', () => {
     test('is empty when neither source has any sessions', () => {
       const storePath = path.join(storeDirectory, 'dd.json');
       writeLokiStoreFile(storePath, [{ name: 'secrets', data: [] }]);
-      expect(resolveLegacySessionDocuments(storeDirectory, readLokiDatabase(storePath))).toEqual(
-        [],
-      );
-      expect(fs.existsSync(path.join(storeDirectory, LEGACY_SESSIONS_FILE))).toBe(false);
+      expect(resolveLegacySessionDocuments(storePath, readLokiDatabase(storePath))).toEqual([]);
+      expect(fs.existsSync(path.join(storeDirectory, 'dd-sessions.json'))).toBe(false);
     });
   });
 });
