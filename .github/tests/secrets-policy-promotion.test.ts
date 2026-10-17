@@ -47,7 +47,10 @@ function commit(cwd: string, subject: string) {
   git(cwd, 'commit', '--allow-empty', '-m', `test(fixtures): ${subject}`);
 }
 
-function withRepository(run: (fixture: { seed: string; work: string }) => void) {
+function withRepository(
+  run: (fixture: { seed: string; work: string }) => void,
+  developmentPatch = '0',
+) {
   const root = mkdtempSync(join(tmpdir(), 'drydock-policy-'));
   const remote = join(root, 'remote.git');
   const seed = join(root, 'seed');
@@ -62,7 +65,10 @@ function withRepository(run: (fixture: { seed: string; work: string }) => void) 
     commit(seed, 'main policy');
     git(seed, 'tag', 'v1.7.0-rc.24');
     git(seed, 'switch', '-c', 'dev/v1.8');
-    writeFileSync(join(seed, 'package.json'), JSON.stringify({ version: '1.8.0' }));
+    writeFileSync(
+      join(seed, 'package.json'),
+      JSON.stringify({ version: ['1', '8', developmentPatch].join('.') }),
+    );
     writePolicy(seed, 'development');
     commit(seed, 'reviewed development policy');
     git(seed, 'push', 'origin', 'main', 'dev/v1.8', '--tags');
@@ -154,6 +160,7 @@ test.each([
   ['1.8.0', 'development'],
   ['1.8.1', 'main'],
   ['1.9.0', 'main'],
+  ['1.10.0', 'main'],
   ['2.0.0', 'main'],
 ])('an exact promotion against main %s selects %s policy', (version, policy) => {
   withRepository(({ seed, work }) => {
@@ -166,6 +173,25 @@ test.each([
 
     expectPolicy(work, policy);
   });
+});
+
+test.each([
+  ['9007199254740992', '9007199254740993', 'main'],
+  ['9007199254740993', '9007199254740992', 'development'],
+])('large patch components %s against %s select %s policy', (candidatePatch, mainPatch, policy) => {
+  withRepository(({ seed, work }) => {
+    git(seed, 'switch', 'main');
+    writeFileSync(
+      join(seed, 'package.json'),
+      JSON.stringify({ version: ['1', '8', mainPatch].join('.') }),
+    );
+    commit(seed, 'advance main large release base');
+    git(seed, 'push', 'origin', 'main');
+
+    restorePolicy(work, 'main');
+
+    expectPolicy(work, policy);
+  }, candidatePatch);
 });
 
 test('a main PR with unreviewed application changes keeps the main policy', () => {
