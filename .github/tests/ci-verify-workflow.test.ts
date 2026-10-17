@@ -286,7 +286,7 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
 
   const checkoutIndex = steps.findIndex((step) => step.name === 'Checkout');
   const restoreIndex = steps.findIndex(
-    (step) => step.name === 'Restore scanner policy from the base ref',
+    (step) => step.name === 'Restore scanner policy from a protected ref',
   );
   const installGitleaksIndex = steps.findIndex((step) => step.name === 'Install Gitleaks');
   const scanIndex = steps.findIndex((step) => step.name === 'Scan secrets');
@@ -299,7 +299,7 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
   expect(installGitleaksIndex).toBeGreaterThan(restoreIndex);
   expect(scanIndex).toBeGreaterThan(restoreIndex);
 
-  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from the base ref');
+  const restoreStep = getWorkflowStep('secrets', 'Restore scanner policy from a protected ref');
   expect(restoreStep).toMatchObject({
     if: "github.event_name == 'pull_request'",
     env: {
@@ -316,11 +316,12 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
 
   const run = restoreStep?.run ?? '';
   expect(run).toContain('set -euo pipefail');
-  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
-  // ever needs the current state of those three files on base, not history.
-  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
+  // Keep full history available for the subsequent scan. The real-Git
+  // promotion tests cover selection of the protected source commit.
+  expect(run).toContain('git fetch --no-tags origin "refs/heads/${BASE_REF}"');
+  expect(run).toContain('policy_commit="$(git rev-parse FETCH_HEAD)"');
   expect(run).toContain(
-    'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
+    'git checkout "${policy_commit}" -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
   );
 });
 

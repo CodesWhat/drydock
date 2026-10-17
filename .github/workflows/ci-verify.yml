@@ -114,10 +114,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Restore scanner policy from the base ref
+      - name: Restore scanner policy from a protected ref
         # A PR must not be able to alter the gate that scans it: restore the
-        # scanner script and ignore policy from the protected base ref, so
-        # policy changes only take effect after they merge.
+        # scanner script and ignore policy from protected, merged content.
+        # An exact dev-tree promotion on the same or newer release base can
+        # use that protected dev commit's policy. Ordinary PRs keep the base
+        # policy, including older lines or unreviewed changes. Capture the
+        # selected commit before checkout.
         #
         # pull_request only. push/schedule/workflow_dispatch/workflow_call all
         # run already-trusted content, where head and base are the same trust
@@ -131,8 +134,38 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
-          git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
+          git fetch --no-tags origin "refs/heads/${BASE_REF}"
+          policy_commit="$(git rev-parse FETCH_HEAD)"
+          policy_ref="${BASE_REF}"
+
+          if [ "${BASE_REF}" = "main" ]; then
+            if version="$(git show HEAD:package.json | jq -er '.version | select(type == "string")')" \
+              && [[ "${version}" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+              dev_ref="dev/v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+              if git fetch --no-tags origin "refs/heads/${dev_ref}"; then
+                dev_commit="$(git rev-parse FETCH_HEAD)"
+                if [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse "${dev_commit}^{tree}")" ]; then
+                  if base_version="$(git show "${policy_commit}:package.json" | jq -er '.version | select(type == "string")')" \
+                    && jq -en --arg candidate "${version}" --arg base "${base_version}" '
+                      # Compare integer components by decimal length and digits.
+                      def parts:
+                        split("-")[0] | split("+")[0] | split(".")
+                        | if length == 3 and all(.[]; test("^[0-9]+$"))
+                          then map(sub("^0+"; "") | [length, .])
+                          else error("Invalid release base version")
+                          end;
+                      ($candidate | parts) >= ($base | parts)
+                    ' >/dev/null; then
+                    policy_commit="${dev_commit}"
+                    policy_ref="${dev_ref}"
+                  fi
+                fi
+              fi
+            fi
+          fi
+
+          echo "Restoring secret scanner policy from ${policy_ref} (${policy_commit})"
+          git checkout "${policy_commit}" -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
 
       - name: Install Gitleaks
         env:

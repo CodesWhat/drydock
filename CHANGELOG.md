@@ -173,6 +173,8 @@ This is the first public v1.8 candidate; v1.8 GA is not released. Some fixes lis
 
 ### Fixed
 
+- **Release promotion secret scans** use the protected development policy when the complete promotion tree matches that development commit on the same or a newer release base. Ordinary PRs retain base policy, and policy fetches preserve the full history needed by the configured scan.
+
 - **Custom legacy session-file imports.** SQLite upgrades derive the matching sibling session filename from `DD_STORE_FILE`, preserving custom-name sessions, their payloads and expiry. Unrelated default session files are ignored, shared-file fallback is retained, and an unreadable matching session file stops the import without publishing a partial database.
 
 - Restore the development image build after Alpine replaced the x86_64 `cosign` package revision: both x86_64 and ARM64 now pin the available `3.0.6-r3`, with the per-architecture pinning retained.
