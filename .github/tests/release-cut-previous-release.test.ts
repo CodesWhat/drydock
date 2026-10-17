@@ -77,6 +77,7 @@ function runNotes(
         CHANGELOG_PATH: changelogPath,
         EXTRACT_SCRIPT: join(repoRoot, 'scripts/extract-changelog-entry.mjs'),
         IS_MAINTENANCE_CUT: 'false',
+        IS_RETAINED_GA: 'false',
         SOAK_OVERRIDE_USED: 'false',
         GITHUB_OUTPUT: outputPath,
         GITHUB_STEP_SUMMARY: join(workdir, 'summary'),
