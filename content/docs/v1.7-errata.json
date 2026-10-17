@@ -1,0 +1,110 @@
+{
+  "reason": "Replace published sample credentials with explicit placeholders, preserve both Google registry examples and spacing, and move the Google service-account link outside its heading to prevent nested-anchor hydration failure. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
+  "changes": [
+    {
+      "path": "configuration/authentications/oidc/index.mdx",
+      "startLine": 55,
+      "endLine": 57,
+      "beforeSha256": "798b04e1d39bb431ab752155cffc025c26a9111ca0673aa91a324d8eebbb63ce",
+      "replacement": "      YOUR_OIDC_SIGNING_PRIVATE_KEY\n"
+    },
+    {
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 40,
+      "endLine": 51,
+      "beforeSha256": "c64d48df4365c1366948bd244952e07c200f5ea0abc3efb86efe221cbcf859c5",
+      "replacement": "      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY \n```\n\n</Tab>\n<Tab value=\"Docker\">\n```bash\ndocker run \\\n  -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=\"johndoe@mysuperproject.iam.gserviceaccount.com\" \\\n  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=\"YOUR_SERVICE_ACCOUNT_PRIVATE_KEY\" \\\n  ...\n  codeswhat/drydock\n```\n\n"
+    },
+    {
+      "path": "configuration/registries/docr/index.mdx",
+      "startLine": 85,
+      "endLine": 85,
+      "beforeSha256": "5577c8f627c3c70153396e544e4c8312d482a8391b5feabfa7b3f0477132956f",
+      "replacement": "      \"auth\": \"YOUR_BASE64_AUTH\"\n"
+    },
+    {
+      "path": "configuration/registries/docr/index.mdx",
+      "startLine": 95,
+      "endLine": 95,
+      "beforeSha256": "b51348b3c69e02170f57e2bd24d393ef881224e44a9101f866bdefe83d405d77",
+      "replacement": "  -e \"DD_REGISTRY_DOCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/alicr/index.mdx",
+      "startLine": 60,
+      "endLine": 60,
+      "beforeSha256": "87c5e4f69e078337624a3cd3606000315643b6421a8d392d5632e1c7a047af92",
+      "replacement": "      - DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
+    },
+    {
+      "path": "configuration/registries/alicr/index.mdx",
+      "startLine": 67,
+      "endLine": 67,
+      "beforeSha256": "7a2953b3795345b6ff8d70a24bbdab7294d4e64a09ca6303d7d846b524b47672",
+      "replacement": "  -e \"DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/ibmcr/index.mdx",
+      "startLine": 86,
+      "endLine": 86,
+      "beforeSha256": "8551d908d6f4f407fb7228e39b0677770080dced9bebf1186c443a7c730e9956",
+      "replacement": "      - DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
+    },
+    {
+      "path": "configuration/registries/ibmcr/index.mdx",
+      "startLine": 93,
+      "endLine": 93,
+      "beforeSha256": "50422c469dccbe8633a96dcd287941e4e5eb2f1600c96fab878a4a13db1401df",
+      "replacement": "  -e \"DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/dhi/index.mdx",
+      "startLine": 68,
+      "endLine": 68,
+      "beforeSha256": "65cdd15216fd65befee838da15484ae3d35ab13085d97c2f59bb745be0d45011",
+      "replacement": "      - DD_REGISTRY_DHI_PUBLIC_AUTH=YOUR_BASE64_AUTH\n"
+    },
+    {
+      "path": "configuration/registries/dhi/index.mdx",
+      "startLine": 75,
+      "endLine": 75,
+      "beforeSha256": "29c60f2f09acf5ceb0517522f5a6173be7f7c21e66fb239c134432a126011b4e",
+      "replacement": "  -e DD_REGISTRY_DHI_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/ocir/index.mdx",
+      "startLine": 60,
+      "endLine": 60,
+      "beforeSha256": "9974d6c26098f0536d151c8c081b3786638f0f31c9d4e672c0165fd88640b2e1",
+      "replacement": "      - DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
+    },
+    {
+      "path": "configuration/registries/ocir/index.mdx",
+      "startLine": 67,
+      "endLine": 67,
+      "beforeSha256": "a0bcebc257d3071ae4e77748d1c6a2679bfac0cb9ed7ab513184ccc2050e4f92",
+      "replacement": "  -e \"DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/hub/index.mdx",
+      "startLine": 102,
+      "endLine": 102,
+      "beforeSha256": "1aa5f911810958ebc8bcc00b448789a502e64f473b3335c26613bbe15a603f56",
+      "replacement": "      - DD_REGISTRY_HUB_PUBLIC_AUTH=YOUR_BASE64_AUTH\n"
+    },
+    {
+      "path": "configuration/registries/hub/index.mdx",
+      "startLine": 109,
+      "endLine": 109,
+      "beforeSha256": "b6d96bd9757e6818edbd54913888b41df18cec024e31bf22f9575ab9c33c8b95",
+      "replacement": "  -e DD_REGISTRY_HUB_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n"
+    },
+    {
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 57,
+      "endLine": 57,
+      "beforeSha256": "6f1f22c795d86fd89b0b840ced35315b12cad45105b18d9bfeaf16bd4aa59cd9",
+      "replacement": "### 1. Go to the Service Account page {#1-go-to-theservice-account-page}\n\n[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).\n"
+    }
+  ]
+}

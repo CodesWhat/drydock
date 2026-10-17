@@ -537,10 +537,12 @@ The agent also exposes an unauthenticated `GET /health` on its port: it returns 
 
 Still stuck? Set `DD_LOG_LEVEL=debug` on the controller for the full `agent-client` handshake trace, and open a [Q&A discussion](https://github.com/CodesWhat/drydock/discussions) with those lines.
 
-## Controller-assisted key rotation (development)
+## Controller-assisted key rotation (Drydock RC, Portwing development) {#controller-assisted-key-rotation-development}
 
-Use matching Drydock and Portwing development builds for this feature. The
-published Portwing v1.0.0-rc.1 and Drydock v1.6.x releases do not include it.
+The controller side first ships in Drydock v1.8.0-rc.1. It requires a compatible
+Portwing development build; published Portwing v1.0.0-rc.1 does not include
+the companion feature. No compatible published Portwing version is assigned yet.
+Drydock v1.7 and earlier do not provide this controller API.
 Rotation is off by default and does not rewrite deployment-owned bootstrap
 credentials.
 

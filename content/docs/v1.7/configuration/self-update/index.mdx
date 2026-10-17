@@ -1,0 +1,219 @@
+---
+title: "Self-Update"
+description: "Drydock can gracefully update itself when a new version is available."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+Drydock can gracefully update itself when a new version is available, using a safe rollback-capable process.
+
+## How it works
+
+Drydock detects when its own container image has an update available, just like any other monitored container. When the Docker trigger runs for the Drydock container, it uses a rollback-capable replacement flow: it prepares the replacement and stops the old container before starting its replacement.
+
+## Requirements
+
+- Drydock must be able to reach the Docker daemon — either by bind-mounting the socket at `/var/run/docker.sock` **or** by pointing the watcher at a TCP Docker host (`host` / `port` / `protocol`)
+- The Docker trigger must be enabled
+- Drydock must be able to create temporary helper containers
+
+<Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
+
+<Callout type="info">When self-update cannot run (socket not bind-mounted and no TCP watcher configured), the per-container Update button is locked with a **Self-update unavailable** tooltip and `POST /api/v1/containers/:id/update` returns `409`.</Callout>
+
+## Update sequence
+
+1. **Notify UI** — A `dd:self-update` SSE event is broadcast to all connected browsers, displaying an animated full-screen overlay. The SSE connection is intentionally closed as the update begins; the UI then polls `GET /api/v1/self-update/{operationId}/status` every 5 seconds and reloads itself once the operation reaches a terminal status (see [Status polling](#status-polling) and [SSE acknowledgment](#sse-acknowledgment) below). The server waits for at least one browser to acknowledge receipt before proceeding.
+2. **Backup current image** — The running image is backed up before proceeding
+3. **Pull new image** — The updated image is pulled while the current container is still running
+4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
+5. **Create new container** — A new container is created with the original name and updated image (not started yet)
+6. **Helper container** — A temporary container (`drydock-self-update-<timestamp>`, `dd.watch=false`) is spawned with its own access to the Docker daemon. The helper's connection is resolved in this order: if the Drydock container has `/var/run/docker.sock` bind-mounted, the helper uses that direct socket path. Otherwise, if the watcher is configured with a TCP Docker host, the helper connects over TCP (receiving `DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and is attached to Drydock's Docker network so it can resolve the proxy by DNS. It:
+   - Stops the old container
+   - Starts the new container
+   - Deletes the old container on success
+   - If the new container fails to start, restarts the old container as a fallback
+7. **Finalize** — The helper calls back into the new container to record the outcome. The operation is then marked `succeeded` and the UI overlay clears on the next poll.
+
+## Error recovery
+
+If any step fails, drydock attempts to restore the previous state:
+
+- If new container creation fails, the old container is renamed back to its original name
+- If the helper container fails to spawn, the new container is removed and the old container is renamed back
+- If the new container fails to start, the helper restarts the old container
+
+## SSE acknowledgment
+
+When the self-update begins, the server needs to ensure that connected browsers have received the update notification and displayed the overlay before the container is replaced. This is handled by an ack flow:
+
+1. Each SSE client receives a `clientId` and `clientToken` when it connects to the `/api/v1/events/ui` endpoint (via a `dd:connected` event).
+2. When the `dd:self-update` event is broadcast, the server records which client tokens were connected at that moment.
+3. Browsers acknowledge the event by sending `POST /api/v1/events/ui/self-update/:operationId/ack` with their `clientId` and `clientToken`.
+4. Once at least one acknowledgment is received (or the timeout expires), the update proceeds.
+
+The ack timeout defaults to 3 seconds. If no browsers are connected, the update proceeds immediately without waiting.
+
+## Status polling
+
+Once the self-update begins, the UI closes its SSE connection and polls the following endpoint every 5 seconds until the operation reaches a terminal status:
+
+```text
+GET /api/v1/self-update/{operationId}/status
+```
+
+This endpoint is **unauthenticated** — the operation UUID itself acts as the access capability, allowing the UI to check progress even while the session may be unavailable during the container swap. Returns `404` when the operation ID is unknown.
+
+Example response:
+
+```json
+{
+  "operationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "in-progress",
+  "phase": "prepare"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `operationId` | string | UUID of the self-update operation |
+| `status` | string | Current status: `queued`, `in-progress`, `succeeded`, `rolled-back`, `failed`, or `expired` |
+| `phase` | string | Current phase within the operation |
+| `completedAt` | string | ISO 8601 timestamp when the operation reached a terminal status — omitted while the operation is still active |
+
+When `status` is one of the terminal values — `succeeded`, `rolled-back`, `failed`, or `expired` — the UI performs a one-time hard reload to reconnect to the new (or restored) container. No manual refresh is needed.
+
+## Dry-run mode
+
+When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs. The full-screen overlay is not shown in dry-run mode.
+
+## TCP deployments (socket proxy)
+
+Self-update works for both socket-mounted and TCP-based deployments.
+
+When Drydock reaches the Docker daemon through a TCP host (e.g. a socket proxy), the helper container is connected over TCP. Drydock automatically derives the connection parameters from the watcher's Dockerode configuration and injects them into the helper container as environment variables:
+
+| Env var (injected into helper) | Description |
+| --- | --- |
+| `DD_SELF_UPDATE_DOCKER_HOST` | TCP hostname or IP — derived from the watcher's configured host (bare hostname, no `http://` prefix) |
+| `DD_SELF_UPDATE_DOCKER_PORT` | TCP port — derived from the watcher's port (default `2375`) |
+| `DD_SELF_UPDATE_DOCKER_PROTOCOL` | Protocol — derived from the watcher's protocol (`http` or `https`) |
+
+These variables are injected by Drydock — you do not set them manually. The host value is validated before use: URL scheme prefixes, userinfo segments (`@`), whitespace, and path separators are rejected with a descriptive error.
+
+The helper's network mode is cloned from the Drydock container so it can resolve the proxy by its service name.
+
+<Callout type="warn">
+A *filtering* socket proxy must be configured to permit the self-update helper.
+
+- **Container ownership** — proxies that scope operations by an ownership label (for example sockguard's `com.sockguard.owner`) reject the helper's attempt to stop and replace the Drydock container unless the Drydock container itself carries that label. Add the label to the Drydock container so the helper is allowed to act on it.
+- **Finalize `exec`** — after the swap the helper runs `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` inside the new container via `docker exec`. A proxy with an exec allowlist must include that command. This step is non-fatal: if it is blocked the update still completes, but the operation cannot reach `succeeded` — the UI overlay will remain visible until the grace window (~10 minutes from when the helper was spawned) expires the operation. To avoid this, allowlist `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` in the proxy exec allowlist.
+</Callout>
+
+## Infrastructure update mode
+
+When the container being updated **is** the socket proxy itself, add the `dd.update.mode=infrastructure` label. The self-update helper then uses the bind-mounted socket from that infrastructure container's own specification instead of routing through the proxy, preventing a situation where the helper loses its own connection because it stopped the proxy mid-update.
+
+```yaml
+services:
+  drydock-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure   # helper bypasses the proxy for the swap
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - POST=1
+      - DELETE=1
+      - NETWORKS=1
+      - VOLUMES=1
+
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    volumes:
+      - drydock-data:/store
+```
+
+<Callout type="info">`dd.update.mode=infrastructure` is only needed for the socket proxy container (or another infrastructure container that Drydock routes through). Regular application containers do not need this label.</Callout>
+
+During an infrastructure update, the helper container runs Drydock's own currently-running image, resolved to the same name the Docker daemon has locally (for example `codeswhat/drydock:1.6.0` on Docker Hub installs). No extra image pull happens for the helper — the image is already present on the host running Drydock.
+
+## Restart recovery
+
+For ordinary container updates, restart recovery depends on which phase was interrupted:
+
+| Phase at restart | Recovery action |
+| --- | --- |
+| `queued` | Remains queued and resumes automatically after startup |
+| `pulling` | Reset to `queued` and resumed (pull is idempotent) |
+| `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `rollback-*` | Marked `expired` — requires operator review |
+
+<Callout type="info">Self-update operations are never resumed automatically. The `queued` and `pulling` self-update phases expire at startup. Fresh in-progress self-updates outside `pulling` receive a 10-minute grace window so an already-running helper can finalize them; otherwise they expire. After the prior operation becomes terminal, the self-update must be re-triggered manually.</Callout>
+
+### Boot-time recovery concurrency
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_RECOVERY_BOOT_CONCURRENCY` | ⚪ | Maximum number of queued update operations that are resumed in parallel when Drydock starts. Increasing this value speeds up recovery when many containers have pending updates after a crash. Must be a positive integer (`≥ 1`); a value of `0` or a non-integer causes a startup error. | `4` |
+
+## Example
+
+<Tabs items={["Docker Compose (socket)", "Docker Compose (TCP)"]}>
+<Tab value="Docker Compose (socket)">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    container_name: drydock
+    labels:
+      - dd.watch=true
+    environment:
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - drydock-data:/store
+    ports:
+      - "3000:3000"
+
+volumes:
+  drydock-data:
+```
+
+</Tab>
+<Tab value="Docker Compose (TCP)">
+
+Plain TCP deployment — Drydock connects to the Docker daemon over TCP (no bind-mounted socket required). On self-update, Drydock automatically attaches a TCP helper container to its own Docker network so the helper can reach the daemon by hostname.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    container_name: drydock
+    labels:
+      - dd.watch=true
+    environment:
+      - DD_WATCHER_LOCAL_HOST=my-docker-host
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+    volumes:
+      - drydock-data:/store
+    ports:
+      - "3000:3000"
+
+volumes:
+  drydock-data:
+```
+
+<Callout type="info">On a TCP deployment, Drydock does **not** need the Docker socket bind-mounted for regular container updates. During self-update it spawns a helper container on its own Docker network; the helper receives the TCP connection parameters automatically (`DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and uses them to perform the container swap.</Callout>
+
+</Tab>
+</Tabs>

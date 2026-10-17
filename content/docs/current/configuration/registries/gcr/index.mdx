@@ -37,7 +37,7 @@ services:
     ...
     environment:
       - DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=johndoe@mysuperproject.iam.gserviceaccount.com
-      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n 
+      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY 
 ```
 
 </Tab>
@@ -45,16 +45,19 @@ services:
 ```bash
 docker run \
   -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL="johndoe@mysuperproject.iam.gserviceaccount.com" \
-  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="-----BEGIN PRIVATE KEY-----xxxxxxxxxxx\n-----END PRIVATE KEY-----\n" \
+  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY="YOUR_SERVICE_ACCOUNT_PRIVATE_KEY" \
   ...
   codeswhat/drydock
 ```
+
 </Tab>
 </Tabs>
 
 ## How to create a Service Account on Google Cloud Platform
 
-### 1. Go to the&nbsp;[Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts)
+### 1. Go to the Service Account page {#1-go-to-theservice-account-page}
+
+[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).
 
 ### 2. Create a new Service Account
 

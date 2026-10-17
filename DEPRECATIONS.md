@@ -2,7 +2,7 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
-Entries marked v1.8.0 describe the unreleased development line, not the current stable release.
+Entries marked v1.8.0 first appear in v1.8.0-rc.1. This is a test candidate; v1.8.0 GA is not released and the latest stable remains v1.6.1.
 
 **API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
@@ -111,7 +111,7 @@ As of v1.7.0, `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT` defaults to `
 
 | | |
 | --- | --- |
-| **Changed in** | v1.8.0 (unreleased) |
+| **Changed in** | v1.8.0 (first in v1.8.0-rc.1) |
 | **Affects** | Hand-written MQTT subscriptions to drydock's container state topics, and the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) |
 
 Through v1.7.x, a container's MQTT state topic (`<topic>/<watcher>/<container>`) and its Home Assistant discovery `unique_id` were both derived from the container's current name. A `docker rename`, or a Compose recreate that regenerates the container name from the project, service and an ordinal, changed both: the state topic moved, and because `unique_id` was derived from that topic, Home Assistant treated the renamed container as a brand-new entity. The old entity's history stayed behind under the abandoned `unique_id`, and a fresh "Unknown" entity appeared next to it.
@@ -229,7 +229,7 @@ Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unc
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
-| **Removed in** | v1.8.0 (unreleased) |
+| **Removed in** | v1.8.0 (first in v1.8.0-rc.1) |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
 `GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. It logged a deprecation warning on each request and returned RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers pointing callers at `GET /api/v1/auth/status`. As of v1.8.0 the route is no longer mounted for the old shape. Unlike the unversioned `/api/*` aliases above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead, `GET /auth/strategies` now has its own explicit **410 Gone** tombstone registered ahead of the authentication guard, so a request gets the same 410 response whether or not it carries credentials, rather than falling through to the SPA's catch-all route. `GET /api/auth/status` (and its versioned form `GET /api/v1/auth/status`) is unaffected and remains available.
@@ -256,8 +256,8 @@ The system log stream WebSocket (`app/api/log-stream.ts`) accepted both the vers
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.8.0 (unreleased) |
-| **Removed in** | v1.8.0 (unreleased, the same release) |
+| **Deprecated in** | v1.8.0 (first in v1.8.0-rc.1) |
+| **Removed in** | v1.8.0 (first in v1.8.0-rc.1, the same release) |
 | **Affects** | Anything reading or backing up `/store/dd.json` directly instead of through the API |
 
 On the v1.8 development line, SQLite replaces LokiJS as the live store. Every collection, including containers, settings, secrets, agent keys, API keys, audit history, notification history and outbox, backups, notification rules, the approval queue, update-lifecycle and retention caches, update operations, and sessions, now lives in `dd.sqlite`, one SQLite database opened by one connection. When `dd.sqlite` is absent and a legacy `dd.json` exists, startup imports the collections through a temporary database before moving the completed database into place. If `dd.sqlite` already exists, startup uses it without importing `dd.json` again. After a successful import, `dd.json` is renamed to `dd.json.pre-1.8.bak` for rollback to v1.7, unless that backup already exists. An existing backup is never overwritten; Drydock logs a warning and leaves `dd.json` in place. An import failure stops startup instead of starting with an empty store. A fresh v1.8 install never creates `dd.json`. The `lokijs` and `connect-loki` npm packages are removed from `app/package.json`.

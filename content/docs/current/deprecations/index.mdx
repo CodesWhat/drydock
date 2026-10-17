@@ -242,11 +242,11 @@ The official Docker image kept `curl` available in v1.5.x and v1.6.x for backwar
 
 ## Removal in v1.8.0
 
-These changes describe the unreleased v1.8 development line, not the published v1.7 candidate.
+These changes first appear in the v1.8.0-rc.1 test candidate. v1.8.0 GA is not yet released.
 
 ### SQLite replaces the live JSON store
 
-Unreleased v1.8 builds persist store records and sessions in `dd.sqlite`. The legacy `dd.json` is imported only when it exists and the SQLite database does not. A completed import renames it to `dd.json.pre-1.8.bak`, unless that backup already exists; in that case both legacy files are preserved and a warning is logged. Import failure stops startup. An existing SQLite database is never re-imported from JSON.
+v1.8.0-rc.1 builds persist store records and sessions in `dd.sqlite`. The legacy `dd.json` is imported only when it exists and the SQLite database does not. A completed import renames it to `dd.json.pre-1.8.bak`, unless that backup already exists; in that case both legacy files are preserved and a warning is logged. Import failure stops startup. An existing SQLite database is never re-imported from JSON.
 
 Published v1.6.1 and v1.7.0-rc.24 builds already store sessions separately from the main JSON store (`dd-sessions.json` by default). The v1.8 import prefers the session file derived from `DD_STORE_FILE` (`dd.json` → `dd-sessions.json`, `tenant.json` → `tenant-sessions.json`), falling back to the older `Sessions` collection in the main JSON store, and leaves the session JSON file in place. Keep any pre-upgrade session JSON file with the main JSON snapshot for a downgrade.
 

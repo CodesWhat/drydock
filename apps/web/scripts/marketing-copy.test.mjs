@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import * as marketing from "../src/lib/site-content.ts";
 
 const heroSource = readFileSync(new URL("../src/components/hero.tsx", import.meta.url), "utf8");
 const siteContent = readFileSync(new URL("../src/lib/site-content.ts", import.meta.url), "utf8");
@@ -19,13 +20,25 @@ test("coverage FAQ distinguishes TypeScript gates, Vue component floors, and typ
   assert.match(answer, /does not.*runtime coverage/);
 });
 
-test("v1.8 roadmap distinguishes landed development work from an available release", () => {
-  const milestone = siteContent.match(/version: "v1\.8\.0",([\s\S]*?)(?=\n {2}\},)/)?.[1];
+test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
+  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.1",([\s\S]*?)(?=\n {2}\},)/)?.[1];
   assert.ok(milestone, "v1.8 must have a roadmap entry");
-  assert.match(milestone, /title: "[^"]*development[^"]*unreleased/i);
+  assert.match(milestone, /title: "[^"]*RC[^"]*testing only/i);
   assert.match(milestone, /Landed:.*drydock\.yml/);
   assert.match(milestone, /Landed:.*revision-checked.*editors/);
   assert.match(milestone, /Landed:.*fleet.*bulk/i);
   assert.match(milestone, /Landed:.*SQLite/);
   assert.doesNotMatch(milestone, /status: "released"|Config file and API foundation/);
+});
+
+test("roadmap HEAD follows the active RC while retaining older candidates", () => {
+  assert.equal(typeof marketing.getRoadmapHead, "function");
+  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.1");
+  assert.equal(marketing.roadmap.find((item) => item.version === "v1.7.0-rc.24").status, "next");
+  assert.equal(
+    marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))
+      .version,
+    "v1.6.1",
+  );
+  assert.equal(marketing.getRoadmapHead([]), undefined);
 });

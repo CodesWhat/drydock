@@ -35,6 +35,8 @@ Two shapes of release come out of the same workflow:
 
 4. **Green CI on the target SHA.** The workflow polls for a successful `ci-verify.yml` run, then separately for a successful `e2e-playwright.yml` run, both on the SHA it's about to release — each poll allows up to 18 attempts, 300s apart (up to 90 minutes per workflow) before failing the run. Don't dispatch against a commit that hasn't finished CI; you'll just be waiting out the polling budget for something that was never going to turn green.
 
+For a long release entry, keep the complete details in `CHANGELOG.md` and add one `<!-- release-summary:start -->` / `<!-- release-summary:end -->` pair around a compact publishable summary. Keep the version heading and upgrade warnings before the start marker; release mode preserves that prefix. The summary should link to the full versioned changelog. `--format release` selects this explicit summary, while the default extractor and website retain the full entry. With the current extractor, malformed, empty or oversized summaries fail validation before the image build. The entry budget is 100,000 characters, and the final assembled body is checked against [GitHub's 125,000-character capacity](https://github.com/cli/cli/issues/7815) after standing and promotion disclosures are appended. Retained older extractors accept the extra valued argument and keep their existing full-entry output; their final assembled body is still checked.
+
 ## Cutting an RC
 
 Dispatch with just `release_tag` set, e.g. `v1.6.0-rc.14`. Leave `candidate_tag`, `candidate_digest`, and `soak_override_reason` empty — they're GA-only and the workflow hard-fails if any of them are set on a prerelease.
