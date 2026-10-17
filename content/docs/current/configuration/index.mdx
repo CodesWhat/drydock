@@ -106,7 +106,7 @@ services:
       retries: 3
       start_period: 10s
     labels:
-      - 'dd.tag.include=^latest$$'
+      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
       - 'dd.link.template=https://github.com/orgs/CodesWhat/packages/container/package/drydock'
 ```
 

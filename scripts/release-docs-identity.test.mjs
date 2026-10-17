@@ -16,6 +16,20 @@ const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
+test('the current self-tracking example stays on the v1.8 release-candidate train', () => {
+  const configuration = read('content/docs/current/configuration/index.mdx');
+  const selfTracking = configuration.slice(configuration.indexOf('# drydock self tracking'));
+  const includePattern = selfTracking.match(/dd\.tag\.include=([^'\n]+)/u)?.[1];
+  assert.ok(includePattern, 'self-tracking must declare its candidate filter');
+  const filter = new RegExp(includePattern.replaceAll('$$', '$'), 'u');
+  for (const candidate of [RC_VERSION, '1.8.0-rc.2', '1.8.0-rc.10']) {
+    assert.ok(filter.test(candidate), `self-tracking must accept ${candidate}`);
+  }
+  for (const candidate of ['latest', '1.6.1', '1.7.0-rc.24', '1.8.0', '1.9.0-rc.1']) {
+    assert.ok(!filter.test(candidate), `self-tracking must stay off ${candidate}`);
+  }
+});
+
 function read(path) {
   return readFileSync(path, 'utf8');
 }
