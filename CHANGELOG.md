@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Changed
+
+- Pin v1.8 documentation deployment examples to `1.8.0-rc.1` and add the SQLite upgrade warning to the introduction, so configuration guides do not install the stable v1.6 image for candidate-only features.
+
 ## [1.8.0-rc.1] - 2026-10-17
 
 > [!WARNING]

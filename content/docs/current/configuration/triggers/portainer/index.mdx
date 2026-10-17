@@ -72,7 +72,7 @@ The env var keys for `ALLOWHTTP`, `UPDATEMODE`, `VERSIONVARLABEL`, `UPDATEMODELA
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_ACTION_PORTAINER_LOCAL_URL=https://portainer.lan
       - DD_ACTION_PORTAINER_LOCAL_APIKEY__FILE=/run/secrets/portainer_api_key

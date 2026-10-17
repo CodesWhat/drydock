@@ -93,7 +93,7 @@ the pre-v1.8.0 layout, where every entity sits on the single `drydock` device.
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -105,7 +105,7 @@ services:
 docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -118,7 +118,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
@@ -140,7 +140,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTCERT="/drydock/mqtt/client-cert.pem" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CACHAIN="/drydock/mqtt/ca.pem" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -153,7 +153,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
@@ -171,7 +171,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_TOPIC="john@doe.com/drydock/image" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -212,7 +212,7 @@ Drydock integrates with [Home Assistant](https://www.home-assistant.io/) via [MQ
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -228,7 +228,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_ENABLED="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -273,7 +273,7 @@ Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_COMMANDS=true` to let Home Assista
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -291,7 +291,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_COMMANDS="true" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>

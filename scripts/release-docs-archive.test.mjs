@@ -164,7 +164,9 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
       assert.equal(createHash('sha256').update(before).digest('hex'), change.beforeSha256, path);
       lines.splice(change.startLine - 1, change.endLine - change.startLine + 1, change.replacement);
       assert.ok(
-        readFileSync(join('content/docs/current', path), 'utf8').includes(change.replacement),
+        readFileSync(join('content/docs/current', path), 'utf8').includes(
+          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.1\n'),
+        ),
         path,
       );
     }

@@ -139,7 +139,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_LOCAL_CRON=0 1 * * *
@@ -151,7 +151,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_CRON="0 1 * * *" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -164,7 +164,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_LOCAL_WATCHALL=true
@@ -176,7 +176,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHALL="true" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -207,7 +207,7 @@ These two variables are **orthogonal** — they filter at different stages of th
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -219,7 +219,7 @@ services:
 docker run \
     -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -232,7 +232,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -252,7 +252,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="BEARER" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_BEARER="my-secret-token" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -265,7 +265,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -289,7 +289,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTID="my-client-id" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTSECRET="my-client-secret" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -304,7 +304,7 @@ Drydock requests a `client_credentials` token from `AUTH_OIDC_TOKENURL` and refr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -331,7 +331,7 @@ docker run \
     -v /my-host/my-certs/cert.pem:/certs/cert.pem:ro \
     -v /my-host/my-certs/key.pem:/certs/key.pem:ro \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -354,7 +354,7 @@ Then configure Drydock to connect to the forwarded port:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
@@ -390,7 +390,7 @@ This is the **recommended approach** for all deployments. It provides a strict s
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -472,7 +472,7 @@ Configure Drydock with the client certificates:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_WATCHER_REMOTE_HOST=docker-host.example.com
       - DD_WATCHER_REMOTE_PORT=2376
@@ -509,7 +509,7 @@ echo $XDG_RUNTIME_DIR/docker.sock
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - /run/user/1000/docker.sock:/var/run/docker.sock
     ports:
@@ -529,7 +529,7 @@ The simplest approach — mount the Docker socket directly. Drydock runs as a no
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -545,7 +545,7 @@ If the non-root user cannot connect to the socket (common with `:ro` mounts), yo
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -625,7 +625,7 @@ Use Podman's host socket path, but mount it inside the Drydock container at `/va
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - /run/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -641,7 +641,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     volumes:
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -657,7 +657,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -730,7 +730,7 @@ For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-bl
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
         -  DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
@@ -746,7 +746,7 @@ docker run \
     -e  DD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
     -e  DD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -780,7 +780,7 @@ Only allow automatic updates between 2 AM and 4 AM in Europe/Berlin:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_WATCHER_LOCAL_CRON=0 * * * *
@@ -796,7 +796,7 @@ docker run \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW="* 2-3 * * *" \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ="Europe/Berlin" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -859,7 +859,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     environment:
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_IMAGE=ghcr.io/home-assistant/home-assistant
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TAG_INCLUDE=^\\d+\\.\\d+\\.\\d+$$
@@ -1026,7 +1026,7 @@ Set `WATCHBYDEFAULT=false` so that only containers with an explicit `dd.watch=tr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock
+    image: codeswhat/drydock:1.8.0-rc.1
     ...
     environment:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
@@ -1038,7 +1038,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
   ...
-  codeswhat/drydock
+  codeswhat/drydock:1.8.0-rc.1
 ```
 </Tab>
 </Tabs>
