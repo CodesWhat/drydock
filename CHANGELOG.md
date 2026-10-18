@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
+
 ### Changed
 
 - Prepare retained v1.7 release-metadata CI with available exact Alpine libexpat/cosign pins and the reviewed scanner configuration from the active train. The published v1.7.0-rc.24 image, source, artifacts and soak are unchanged; these repairs are not a rebuilt candidate or a published GA.
