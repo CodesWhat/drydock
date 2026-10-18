@@ -26,7 +26,7 @@ This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/
 ### Changed
 
 - Pin v1.8 documentation deployment examples to `1.8.0-rc.2` and add the SQLite upgrade warning to the introduction, so configuration guides do not install the stable v1.6 image for candidate-only features.
-- Align the website, demo, support policy and translated README testing guidance with RC2. Deprecation introduction versions and the RC1 release record are preserved.
+- Align the website, demo, support policy and translated README testing guidance with RC2. Feature and deprecation introduction versions and the RC1 release record are preserved.
 
 ## [1.8.0-rc.1] - 2026-10-17
 

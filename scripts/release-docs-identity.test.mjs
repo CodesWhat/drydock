@@ -712,6 +712,7 @@ test('current and archived release examples use consistent tags, filenames, date
 });
 
 for (const [path, introduction] of [
+  ['api/agent.mdx', 'first shipped in Drydock v1.8.0-rc.1'],
   ['configuration/storage/index.mdx', 'first appears in v1.8.0-rc.1'],
   ['configuration/agents/index.mdx', 'first ships in Drydock v1.8.0-rc.1'],
   ['configuration/config-file/index.mdx', 'editors were introduced in v1.8.0-rc.1'],
