@@ -297,9 +297,9 @@ export const roadmap: Milestone[] = [
     version: "v1.7.0",
     title: "Smart Updates & UX",
     emoji: "\u{1F680}",
-    status: "next",
+    status: "released",
     dotColor:
-      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Dependency-aware update flows",
       "Image cleanup and static-image monitoring",

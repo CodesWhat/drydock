@@ -288,7 +288,7 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
   assert.match(
     siteContent,
     new RegExp(
-      `version: "v${escapeRegExp(RC_VERSION)}",[\\s\\S]{0,500}?status: "next",[\\s\\S]{0,100}?border-orange-400`,
+      `version: "v${escapeRegExp(RC_VERSION)}",[\\s\\S]{0,500}?status: "released",[\\s\\S]{0,100}?border-emerald-500`,
       'u',
     ),
   );
