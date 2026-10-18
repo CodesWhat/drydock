@@ -53,10 +53,11 @@ test('every linked changelog heading has exactly one link definition', () => {
   );
 });
 
-test('v1.7 RC and prior releases have a complete chronological comparison-link chain', () => {
+test('v1.7 GA and RC and prior releases have a complete chronological comparison-link chain', () => {
   const definitions = new Map(getLinkDefinitions(changelog).map(({ label, url }) => [label, url]));
   const expected = new Map([
-    ['Unreleased', `${repositoryUrl}/compare/v1.7.0-rc.24...HEAD`],
+    ['Unreleased', `${repositoryUrl}/compare/v1.7.0...HEAD`],
+    ['1.7.0', `${repositoryUrl}/compare/v1.6.0...v1.7.0`],
     ['1.7.0-rc.24', `${repositoryUrl}/compare/v1.7.0-rc.23...v1.7.0-rc.24`],
     ['1.7.0-rc.23', `${repositoryUrl}/compare/v1.7.0-rc.22...v1.7.0-rc.23`],
     ['1.7.0-rc.22', `${repositoryUrl}/compare/v1.7.0-rc.21...v1.7.0-rc.22`],
@@ -112,6 +113,31 @@ test('v1.7 RC and prior releases have a complete chronological comparison-link c
 
   for (const [label, expectedUrl] of expected) {
     assert.equal(definitions.get(label), expectedUrl, `incorrect or missing [${label}] link`);
+  }
+});
+
+test('real changelog exposes nonempty v1.7.0 GA release notes', () => {
+  const entry = extractChangelogEntry(changelog, 'v1.7.0');
+
+  assert.match(entry, /^## \[1\.7\.0\] [–—-] \d{4}-\d{2}-\d{2}$/mu);
+  assert.match(entry, /Consolidates the `1\.7\.0-rc\.1` … `1\.7\.0-rc\.24` prereleases\./u);
+  for (const heading of ['Added', 'Changed', 'Removed', 'Fixed', 'Security']) {
+    assert.match(entry, new RegExp(`^### ${heading}$`, 'mu'));
+  }
+  // The rc sections stay below the GA entry as history; the entry must stop before them.
+  assert.doesNotMatch(entry, /^## \[1\.7\.0-rc\.24\]/mu);
+  assert.match(changelog, /^## \[1\.7\.0-rc\.24\]/mu);
+
+  for (const marker of [
+    'Container dependency ordering',
+    'Update checks and registry lookups report their real result',
+    'Notifications fire once per update',
+    'Updates and rollbacks deploy what was verified',
+    'Agent ownership is enforced everywhere',
+    '`DD_TRIGGER_*` environment prefix',
+    'CVE-2026-85091',
+  ]) {
+    assert.ok(entry.includes(marker), `v1.7.0 GA notes must include: ${marker}`);
   }
 });
 

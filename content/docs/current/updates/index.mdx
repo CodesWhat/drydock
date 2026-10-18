@@ -5,6 +5,12 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.0 Highlights — October 19, 2026
+
+Consolidates the `1.7.0-rc.1` … `1.7.0-rc.24` prereleases into one GA release. The main themes: dependency-aware update ordering, per-action update policy, an installable PWA with keyboard shortcuts and uptime, agent ownership and policy handoff fixes, updates and rollbacks that deploy the image that was verified, a dark-theme contrast pass, and security patches across the image, dependencies and website. The `DD_TRIGGER_*` prefix, `curl` in the image and the unversioned `/api/auth/methods` alias are removed, and the Home Assistant MQTT topic layout now includes an agent segment by default. Users already on `1.7.0-rc.24` receive no additional runtime changes. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0/CHANGELOG.md#170--2026-10-19)
+for the full release notes.
+
 ## v1.7.0-rc.24 Highlights — October 12, 2026
 
 This candidate is rc.23 plus development and test dependency updates, and nothing else. The root and e2e workspaces pick up newer Biome, lefthook, Vite, `@types/node` and `@dotenvx/dotenvx`, with a handful of matching override bumps. None of it ships. The image is built from `app` and `ui`, so its runtime dependencies are the same as rc.23.
