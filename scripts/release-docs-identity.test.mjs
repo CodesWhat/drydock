@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-const RC_VERSION = '1.8.0-rc.1';
-const PREV_RC_VERSION = '1.7.0-rc.24';
-const RC_DATE = '2026-10-17';
-const RC_DISPLAY_DATE = 'October 17, 2026';
+const RC_VERSION = '1.8.0-rc.2';
+const PREV_RC_VERSION = '1.8.0-rc.1';
+const RC_DATE = '2026-10-18';
+const RC_DISPLAY_DATE = 'October 18, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
   'content/docs/v1.7',
@@ -406,7 +406,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.1|:v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.2|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }

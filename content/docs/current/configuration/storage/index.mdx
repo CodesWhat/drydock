@@ -5,7 +5,7 @@ description: "Persist drydock state by mounting /store as a volume."
 
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-The SQLite storage and import behavior below first appears in v1.8.0-rc.1, an opt-in test candidate. Stop Drydock and back up the complete store directory before upgrading. v1.7 and earlier releases persist their state in `dd.json`; do not apply the v1.8 downgrade procedure to an installation that has not been upgraded.
+The SQLite storage and import behavior below first appears in v1.8.0-rc.2, an opt-in test candidate. Stop Drydock and back up the complete store directory before upgrading. v1.7 and earlier releases persist their state in `dd.json`; do not apply the v1.8 downgrade procedure to an installation that has not been upgraded.
 
 If you want the state to persist after the container removal, you need to mount `/store` as a volume.
 
@@ -50,7 +50,7 @@ After import, the main JSON file is renamed to `<DD_STORE_FILE>.pre-1.8.bak` unl
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     volumes:
       - /path-on-my-host:/store
@@ -62,7 +62,7 @@ services:
 docker run \
   -v /path-on-my-host:/store \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
