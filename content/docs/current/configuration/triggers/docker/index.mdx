@@ -48,18 +48,18 @@ This trigger also supports the [common configuration variables](/docs/configurat
 
 ## Update Concurrency
 
-By default, drydock runs container updates concurrently. Two serialization layers apply automatically:
+By default, drydock updates one container at a time per action. Set `DD_UPDATE_CONCURRENCY` (or the per-trigger `DD_ACTION_DOCKER_{trigger_name}_CONCURRENCY` above) to allow more. Two serialization layers always apply regardless:
 
 - **Per-container lock** — prevents the same container from being updated twice in parallel.
 - **Per-compose-project lock** — serializes services within the same compose stack so `docker compose up` orchestration is safe (two unrelated containers can still update simultaneously).
 
-To limit the total number of simultaneous update lifecycles across your entire instance, set `DD_UPDATE_MAX_CONCURRENT`:
+For a separate instance-wide cap on simultaneous update lifecycles, set `DD_UPDATE_MAX_CONCURRENT`:
 
 | Env var | Default | Description |
 | --- | --- | --- |
 | `DD_UPDATE_MAX_CONCURRENT` | `0` (unlimited) | Max simultaneous update lifecycles across the entire controller instance. Self-update bypasses this cap. |
 
-See [Container Actions — Global Concurrency Cap](/docs/configuration/actions#global-concurrency-cap) for full semantics.
+See [Container Actions — Update Concurrency](/docs/configuration/actions#update-concurrency) and [Global Concurrency Cap](/docs/configuration/actions#global-concurrency-cap) for full semantics.
 
 ## Image defaults after an update
 
