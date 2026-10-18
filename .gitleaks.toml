@@ -29,4 +29,4 @@ description = "Documented placeholder Bearer token in content/docs curl examples
 targetRules = ["curl-auth-header"]
 condition = "and"
 paths = ['''^content/docs/.*''']
-regexes = ['''your-token-here''']
+regexes = ['''^your-token-here$''']

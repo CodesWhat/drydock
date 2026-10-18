@@ -35,7 +35,7 @@ On interactive terminals, Drydock prints a color startup banner with the version
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_LOG_LEVEL=debug
@@ -44,7 +44,7 @@ services:
 </Tab>
 <Tab value="Docker (Debug Level)">
 ```bash
-docker run -e DD_LOG_LEVEL=debug ... codeswhat/drydock:1.8.0-rc.1
+docker run -e DD_LOG_LEVEL=debug ... codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
@@ -55,7 +55,7 @@ docker run -e DD_LOG_LEVEL=debug ... codeswhat/drydock:1.8.0-rc.1
 <Tab value="Docker (JSON Format)">
 
 ```bash
-docker run -e DD_LOG_FORMAT=json ... codeswhat/drydock:1.8.0-rc.1
+docker run -e DD_LOG_FORMAT=json ... codeswhat/drydock:1.8.0-rc.2
 ```
 
 </Tab>
@@ -63,7 +63,7 @@ docker run -e DD_LOG_FORMAT=json ... codeswhat/drydock:1.8.0-rc.1
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_LOG_FORMAT=json
