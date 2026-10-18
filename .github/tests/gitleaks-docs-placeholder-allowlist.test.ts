@@ -51,7 +51,7 @@ function runGitleaks(scanDir: string): GitleaksFinding[] {
       '--exit-code',
       '0',
     ],
-    { cwd: scanDir, stdio: 'ignore' },
+    { cwd: scanDir, stdio: ['ignore', 'ignore', 'inherit'] },
   );
   const raw = readFileSync(reportPath, 'utf8').trim();
   return raw === '' || raw === 'null' ? [] : (JSON.parse(raw) as GitleaksFinding[]);
@@ -112,6 +112,29 @@ describe.skipIf(!hasGitleaks)('gitleaks content/docs placeholder allowlist', () 
 
       const findings = runGitleaks(workspace);
       expect(findings.map((finding) => finding.RuleID)).toContain('curl-auth-header');
+    } finally {
+      rmSync(workspace, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['prefixed', `real-secret-${['your', 'token', 'here'].join('-')}`],
+    ['suffixed', `${['your', 'token', 'here'].join('-')}-real-secret`],
+    ['different', 'real-secret-credential-value'],
+  ])('reports a %s credential inside the docs', (_label, credentialValue) => {
+    const workspace = mkdtempSync(join(tmpdir(), 'drydock-gitleaks-docs-secret-'));
+    try {
+      const path = join(workspace, 'content/docs/current/example.mdx');
+      mkdirSync(dirname(path), { recursive: true });
+      const curlCommand = 'curl';
+      const headerFlag = '-H';
+      const headerName = ['Authoriz', 'ation'].join('');
+      const authScheme = 'Bearer';
+      writeFileSync(
+        path,
+        `${curlCommand} https://example.com ${headerFlag} "${headerName}: ${authScheme} ${credentialValue}"\n`,
+      );
+      expect(runGitleaks(workspace).map((finding) => finding.RuleID)).toContain('curl-auth-header');
     } finally {
       rmSync(workspace, { recursive: true, force: true });
     }
