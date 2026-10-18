@@ -12,7 +12,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 ## Edit a watcher schedule in the UI
 
-This editor is new in v1.8.0-rc.2 builds and requires a writable [configuration file](/docs/configuration/config-file).
+This editor was introduced in v1.8.0-rc.1 and remains available in v1.8.0-rc.2 builds. It requires a writable [configuration file](/docs/configuration/config-file).
 
 Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
 panel. This editor changes four settings for existing controller-local watchers:
@@ -67,8 +67,8 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
 | `DD_WATCHER_{watcher_name}_MATURITY_MODE` | ⚪ | Default maturity policy for containers discovered by this watcher; a container label or UI/API override can replace it | `all`, `mature` | `all` (no gate) |
 | `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
-| `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | v1.8.0-rc.2: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
-| `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | v1.8.0-rc.2: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
+| `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | v1.8.0-rc.1: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
+| `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | v1.8.0-rc.1: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
@@ -891,8 +891,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
-| `dd.updatePolicy.maturitySkipReleases` | ⚪ | v1.8.0-rc.2: distinct earlier stable releases required in the candidate family | integer (`0` to `100`) | Watcher default → `0` |
-| `dd.updatePolicy.maturityReleaseFallbackDays` | ⚪ | v1.8.0-rc.2: explicit age fallback for the release-count gate | integer (`0` to `365`) | Watcher default → `0` |
+| `dd.updatePolicy.maturitySkipReleases` | ⚪ | v1.8.0-rc.1: distinct earlier stable releases required in the candidate family | integer (`0` to `100`) | Watcher default → `0` |
+| `dd.updatePolicy.maturityReleaseFallbackDays` | ⚪ | v1.8.0-rc.1: explicit age fallback for the release-count gate | integer (`0` to `365`) | Watcher default → `0` |
 | `dd.updatePolicy.skipTags` | ⚪ | Declarative comma-separated list of remote tags to suppress | CSV tags | Empty list |
 | `dd.updatePolicy.skipDigests` | ⚪ | Declarative comma-separated list of remote digests to suppress | CSV digests | Empty list |
 | `dd.action.exclude` | ⚪ | Exclude specific action triggers from this container. An explicit exclude match always wins, even against a more permissive trigger. | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |

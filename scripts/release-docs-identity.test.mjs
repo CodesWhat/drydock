@@ -710,3 +710,35 @@ test('current and archived release examples use consistent tags, filenames, date
   assert.match(read('.gitattributes'), /^content\/docs\/v1\.6\/\*\* -whitespace$/mu);
   assert.match(read('.gitattributes'), /^content\/docs\/v1\.5\/\*\* -whitespace$/mu);
 });
+
+for (const [path, introduction] of [
+  ['configuration/storage/index.mdx', 'first appears in v1.8.0-rc.1'],
+  ['configuration/agents/index.mdx', 'first ships in Drydock v1.8.0-rc.1'],
+  ['configuration/config-file/index.mdx', 'editors were introduced in v1.8.0-rc.1'],
+  ['configuration/watchers/index.mdx', 'editor was introduced in v1.8.0-rc.1'],
+  ['configuration/triggers/index.mdx', 'editors were introduced in v1.8.0-rc.1'],
+]) {
+  test(`${path} preserves the first v1.8 candidate introduction`, () => {
+    const document = read(`content/docs/current/${path}`);
+    assert.ok(document.includes(introduction));
+    assert.ok(document.includes(RC_VERSION), 'the current test candidate remains identified');
+  });
+}
+
+test('release-family option version markers preserve their RC1 introduction', () => {
+  const watchers = read('content/docs/current/configuration/watchers/index.mdx');
+  const eligibility = read('content/docs/current/configuration/actions/update-eligibility.mdx');
+  for (const key of [
+    'DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES',
+    'DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS',
+    'dd.updatePolicy.maturitySkipReleases',
+    'dd.updatePolicy.maturityReleaseFallbackDays',
+  ]) {
+    const row = watchers.split('\n').find((line) => line.includes(`\`${key}\``));
+    assert.ok(row?.includes('v1.8.0-rc.1:'), key);
+  }
+  const blocker = eligibility
+    .split('\n')
+    .find((line) => line.startsWith('| `maturity-releases-not-reached`'));
+  assert.ok(blocker?.includes('v1.8.0-rc.1:'));
+});

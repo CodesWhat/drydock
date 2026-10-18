@@ -43,7 +43,7 @@ Trigger references in an override are checked when you save: each must match a r
 
 ## Edit notification delivery policy in the UI
 
-This editor and the action policy editor below are new in v1.8.0-rc.2 builds and require a writable [configuration file](/docs/configuration/config-file).
+The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.2 builds. They require a writable [configuration file](/docs/configuration/config-file).
 
 Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
 
