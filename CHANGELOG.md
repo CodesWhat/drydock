@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Prepare retained v1.7 release-metadata CI with available exact Alpine libexpat/cosign pins and the reviewed scanner configuration from the active train. The published v1.7.0-rc.24 image, source, artifacts and soak are unchanged; these repairs are not a rebuilt candidate or a published GA.
+
 ## [1.7.0-rc.24] — 2026-10-12
 
 ### Changed

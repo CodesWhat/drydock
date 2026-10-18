@@ -131,8 +131,20 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"
+          git fetch --no-tags origin "refs/heads/${BASE_REF}"
           git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore
+
+      - name: Restore reviewed retained-line scanner configuration
+        # The retained line scans refs from the newer train too. Use its
+        # already-reviewed configuration, never configuration supplied by a PR.
+        # Keep the retained branch's scanner script, fixture baseline and full history.
+        if: github.event_name == 'pull_request' && github.base_ref == 'dev/v1.7'
+        env:
+          SCANNER_CONFIG_COMMIT: '05dc2417f2f89d3b5039f68982d1408abc81bc5e'
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${SCANNER_CONFIG_COMMIT}"
+          git checkout FETCH_HEAD -- .gitleaks.toml
 
       - name: Install Gitleaks
         env:
