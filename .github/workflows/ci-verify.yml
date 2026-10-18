@@ -140,7 +140,7 @@ jobs:
         # Keep the retained branch's scanner script, fixture baseline and full history.
         if: github.event_name == 'pull_request' && github.base_ref == 'dev/v1.7'
         env:
-          SCANNER_CONFIG_COMMIT: '05dc2417f2f89d3b5039f68982d1408abc81bc5e'
+          SCANNER_CONFIG_COMMIT: '208a923e5ffbca14937d753cf77d123cbc7cf3ed'
         run: |
           set -euo pipefail
           git fetch --no-tags origin "${SCANNER_CONFIG_COMMIT}"

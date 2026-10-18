@@ -193,7 +193,10 @@ test('secret scanning gates full history and the tracked working tree', () => {
   expect(scanScript).toContain('git -C "${repo_root}" ls-files -z');
   expect(scanScript).toContain('--redact');
 
-  const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8');
+  const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n');
   expect(gitleaksConfig).toContain('useDefault = true');
   const allowlistBlocks = gitleaksConfig.split('[[allowlists]]').slice(1);
   for (const block of allowlistBlocks.filter((candidate) => candidate.includes('paths ='))) {
@@ -541,7 +544,7 @@ test('retained PRs restore scanner configuration from an immutable reviewed main
   const step = getWorkflowStep('secrets', 'Restore reviewed retained-line scanner configuration');
   expect(step).toMatchObject({
     if: "github.event_name == 'pull_request' && github.base_ref == 'dev/v1.7'",
-    env: { SCANNER_CONFIG_COMMIT: '05dc2417f2f89d3b5039f68982d1408abc81bc5e' },
+    env: { SCANNER_CONFIG_COMMIT: '208a923e5ffbca14937d753cf77d123cbc7cf3ed' },
   });
   expect(step?.run).toContain('git fetch --no-tags origin "${SCANNER_CONFIG_COMMIT}"');
   expect(step?.run).toContain('git checkout FETCH_HEAD -- .gitleaks.toml');
