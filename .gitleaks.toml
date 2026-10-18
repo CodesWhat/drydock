@@ -2,3 +2,31 @@ title = "Drydock Gitleaks configuration"
 
 [extend]
 useDefault = true
+
+# Drydock's own scoped API keys (Phase 11.1). The `ddk_` prefix exists so a
+# secret scanner can match the credential shape, and this rule is the reason
+# it is fixed: Drydock's CI catches a leaked Drydock key the same way it
+# catches a leaked AWS key. Kept in sync with API_KEY_PATTERN in
+# app/store/api-key.ts by .github/tests/gitleaks-api-key-rule.test.ts.
+[[rules]]
+id = "drydock-api-key"
+description = "Drydock scoped API key (ddk_<keyId>_<secret>)"
+regex = '''ddk_[0-9a-f]{12}_[A-Za-z0-9_-]{43}'''
+keywords = ["ddk_"]
+
+# The webhooks doc's curl examples use the literal placeholder "your-token-here"
+# as the Bearer credential, which the default curl-auth-header rule flags on
+# every one of those lines. .gitleaksignore used to carry a fingerprint per
+# line, and a docs edit that shifts those lines (webhooks/index.mdx moved two
+# lines on 2026-09-06) re-triggers the finding on the new line number, failing
+# the Secrets job on the next promotion. This allowlist matches on the
+# placeholder text itself rather than a line number, so it survives any
+# reflow. condition = "and" requires both the path and the placeholder to
+# match, so a real credential anywhere else, including elsewhere in
+# content/docs/, still fires.
+[[allowlists]]
+description = "Documented placeholder Bearer token in content/docs curl examples"
+targetRules = ["curl-auth-header"]
+condition = "and"
+paths = ['''^content/docs/.*''']
+regexes = ['''^your-token-here$''']

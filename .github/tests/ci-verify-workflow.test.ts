@@ -193,12 +193,19 @@ test('secret scanning gates full history and the tracked working tree', () => {
   expect(scanScript).toContain('git -C "${repo_root}" ls-files -z');
   expect(scanScript).toContain('--redact');
 
-  const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8');
+  const gitleaksConfig = readFileSync(gitleaksConfigPath, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#'))
+    .join('\n');
   expect(gitleaksConfig).toContain('useDefault = true');
-  expect(gitleaksConfig).not.toContain('paths =');
+  const allowlistBlocks = gitleaksConfig.split('[[allowlists]]').slice(1);
+  for (const block of allowlistBlocks.filter((candidate) => candidate.includes('paths ='))) {
+    expect(block).toContain('condition = "and"');
+    expect(block).toContain('regexes =');
+  }
 
   const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
-  expect(baselineEntries.length).toBeGreaterThan(400);
+  expect(baselineEntries.length).toBeGreaterThan(350);
   expect(
     baselineEntries.every((entry) =>
       /^(?:[0-9a-f]{40}:)?[^:]+:(?:generic-api-key|private-key|curl-auth-header|telegram-bot-api-token):\d+$/u.test(
@@ -244,9 +251,8 @@ test('a pull request cannot weaken the secrets gate that scans it', () => {
 
   const run = restoreStep?.run ?? '';
   expect(run).toContain('set -euo pipefail');
-  // Depth-1 fetch of just the base branch tip -- cheap, and the restore only
-  // ever needs the current state of those three files on base, not history.
-  expect(run).toContain('git fetch --no-tags --depth=1 origin "refs/heads/${BASE_REF}"');
+  // Preserve complete history for the subsequent all-ref scan.
+  expect(run).toContain('git fetch --no-tags origin "refs/heads/${BASE_REF}"');
   expect(run).toContain(
     'git checkout FETCH_HEAD -- scripts/scan-secrets.sh .gitleaks.toml .gitleaksignore',
   );
@@ -530,5 +536,19 @@ test('build job checks base image pins before building, for the platforms it smo
   expect(smokePlatforms).toBe('linux/amd64,linux/arm64');
   expect(guard?.with?.command).toBe(
     `scripts/check-dockerfile-base-indexes.sh Dockerfile ${smokePlatforms}`,
+  );
+});
+
+// Retained release metadata must scan newer refs using reviewed configuration.
+test('retained PRs restore scanner configuration from an immutable reviewed main commit', () => {
+  const step = getWorkflowStep('secrets', 'Restore reviewed retained-line scanner configuration');
+  expect(step).toMatchObject({
+    if: "github.event_name == 'pull_request' && github.base_ref == 'dev/v1.7'",
+    env: { SCANNER_CONFIG_COMMIT: '208a923e5ffbca14937d753cf77d123cbc7cf3ed' },
+  });
+  expect(step?.run).toContain('git fetch --no-tags origin "${SCANNER_CONFIG_COMMIT}"');
+  expect(step?.run).toContain('git checkout FETCH_HEAD -- .gitleaks.toml');
+  expect(getWorkflowStep('secrets', 'Restore scanner policy from the base ref')?.run).not.toContain(
+    '--depth=1',
   );
 });
