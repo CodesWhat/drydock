@@ -30,7 +30,7 @@ The `matrix` trigger posts container update notifications to a Matrix room using
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_MATRIX_LOCAL_URL=https://matrix.example.com
@@ -46,7 +46,7 @@ docker run \
   -e DD_NOTIFICATION_MATRIX_LOCAL_ROOMID="!abc123:matrix.example.com" \
   -e DD_NOTIFICATION_MATRIX_LOCAL_ACCESSTOKEN="syt_xxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>

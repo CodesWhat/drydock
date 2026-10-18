@@ -43,7 +43,7 @@ The `http` trigger lets you send container update notifications via HTTP.
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_HTTP_MYREMOTEHOST_URL=https://my-remote-host/new-version
@@ -55,7 +55,7 @@ services:
 docker run \
   -e DD_NOTIFICATION_HTTP_MYREMOTEHOST_URL="https://my-remote-host/new-version" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>

@@ -41,7 +41,7 @@ The `ntfy` trigger lets you send container update notifications via [Ntfy](https
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_NTFY_THRESHOLD=minor
@@ -55,7 +55,7 @@ docker run \
   -e DD_NOTIFICATION_NTFY_THRESHOLD="minor" \
   -e DD_NOTIFICATION_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
@@ -68,7 +68,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_NTFY_PRIVATE_URL=http://ntfy.local
@@ -86,7 +86,7 @@ docker run \
   -e DD_NOTIFICATION_NTFY_PRIVATE_AUTH_USER="john" \
   -e DD_NOTIFICATION_NTFY_PRIVATE_AUTH_PASSWORD="doe" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
@@ -99,7 +99,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
@@ -113,7 +113,7 @@ docker run \
   -e DD_NOTIFICATION_NTFY_SH_TOPIC="xxxxyyyyzzzz" \
   -e DD_NOTIFICATION_NTFY_SH_TOPICS_UPDATEFAILED="xxxxyyyyzzzz-alerts" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
@@ -128,7 +128,7 @@ An update that succeeds still publishes to `xxxxyyyyzzzz`; only `update-failed` 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
@@ -144,7 +144,7 @@ docker run \
   -e DD_NOTIFICATION_NTFY_SH_PRIORITY="2" \
   -e DD_NOTIFICATION_NTFY_SH_PRIORITIES_SECURITYALERT="5" \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
@@ -157,7 +157,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     ...
     environment:
       - DD_NOTIFICATION_NTFY_SH_TOPIC=xxxxyyyyzzzz
@@ -175,7 +175,7 @@ docker run \
   -e 'DD_NOTIFICATION_NTFY_SH_ACTIONS_0_LABEL=Open ${container.name}' \
   -e 'DD_NOTIFICATION_NTFY_SH_ACTIONS_0_URL=https://drydock.example.com/containers/${container.name}' \
   ...
-  codeswhat/drydock:1.8.0-rc.1
+  codeswhat/drydock:1.8.0-rc.2
 ```
 </Tab>
 </Tabs>
