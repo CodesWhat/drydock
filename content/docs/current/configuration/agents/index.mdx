@@ -257,6 +257,7 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
 | `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
+| `DD_AGENT_{name}_ROTATIONDIR` | ⚪ | Persistent controller-side directory (mode `0700`) where Drydock stores managed Ed25519 rotation keys. Only valid with `AUTHMODE=ed25519`; rejected otherwise. See [key rotation](#controller-assisted-key-rotation-development). | |
 | `DD_AGENT_ALLOW_INSECURE_SECRET` | ⚪ | **Insecure.** When `true`, allows configuring agents with a `secret` over plain HTTP. Drydock will log a warning on every startup but won't refuse to boot. Only enable on trusted private networks where you accept that the agent secret is sent in cleartext. | `false` |
 
 ¹ Required only when `AUTHMODE=ed25519`; ignored otherwise.

@@ -62,6 +62,16 @@ curl http://drydock:3000/api/v1/agents
 | `data[].containers` | object | Container count summary (`total`, `running`, `stopped`) |
 | `data[].images` | integer | Number of distinct images across agent containers |
 
+### Get agent roster
+
+Returns the names of the configured agents. Available with the `read` API-key scope or a normal session.
+
+```bash
+curl http://drydock:3000/api/v1/agents/roster
+
+{ "data": [{ "name": "agent1" }], "total": 1 }
+```
+
 ### Rotate a Portwing signing key (Drydock RC, Portwing development) {#rotate-a-portwing-signing-key-development}
 
 Controller-assisted Ed25519 rotation first shipped in Drydock v1.8.0-rc.1
@@ -137,6 +147,24 @@ curl -X POST \
 curl -X POST \
   -H "X-Dd-Agent-Secret: <SECRET>" \
   http://agent:3000/api/watchers/:type/:name/container/:id
+```
+
+### Get Watcher
+
+Returns a single watcher hosted by the Agent.
+
+```bash
+curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/watchers/:type/:name
+```
+
+### Refresh Watcher Inventory
+
+Refresh the image inventory for a specific watcher hosted by the Agent.
+
+```bash
+curl -X POST \
+  -H "X-Dd-Agent-Secret: <SECRET>" \
+  http://agent:3000/api/watchers/:type/:name/inventory
 ```
 
 ### Delete a Container

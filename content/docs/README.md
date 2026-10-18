@@ -5,7 +5,7 @@
 - `v1.6/`: latest-stable 1.6 documentation, initialized from the published v1.6.0 docs and corrected only for version-compatible errata; latest stable is v1.6.1
 - `v1.5/`, `v1.4/`, `v1.3/`: archived documentation
 
-v1.8.0-rc.1 is an opt-in test candidate, not a GA release. Its SQLite migration guidance does not describe v1.7 storage. Keeping an archived docs directory is separate from promising security support; see the root SECURITY.md.
+v1.8.0-rc.2 is an opt-in test candidate, not a GA release. Its SQLite migration guidance does not describe v1.7 storage. Keeping an archived docs directory is separate from promising security support; see the root SECURITY.md.
 
 Each directory contains `meta.json` files that define navigation titles and page ordering.
 
