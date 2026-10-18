@@ -98,7 +98,7 @@ This gate is per action, not per whole update lifecycle: it bounds how many cont
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     environment:
       # Update up to 4 containers at once through the docker action.
       - DD_UPDATE_CONCURRENCY=4
@@ -145,7 +145,7 @@ Operations waiting on the global cap remain in `queued` status, which the UI alr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     environment:
       # Allow at most 3 container updates to run simultaneously.
       - DD_UPDATE_MAX_CONCURRENT=3
@@ -171,7 +171,7 @@ Heartbeats re-emit `phase: 'health-gate'` (the same phase already displayed by t
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     environment:
       # Emit a health-gate heartbeat every 5 seconds.
       - DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS=5000
@@ -197,7 +197,7 @@ The check is conservative: inspect failures are warned-and-tolerated (Drydock ca
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     environment:
       # Extend grace period to 5 seconds for slow-starting containers.
       - DD_UPDATE_POST_START_LIVENESS_GRACE_MS=5000
@@ -224,7 +224,7 @@ All container actions are tracked via Prometheus counters. See [Monitoring](/doc
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.2
     environment:
       - DD_SERVER_FEATURE_CONTAINERACTIONS=false
       - DD_SERVER_FEATURE_DELETE=false

@@ -4,7 +4,7 @@
 
 | Version | Supported |
 | --- | --- |
-| Latest v1.8 release candidate (v1.8.0-rc.1, opt-in testing) | :white_check_mark: |
+| Latest v1.8 release candidate (v1.8.0-rc.2, opt-in testing) | :white_check_mark: |
 | Latest stable release (v1.6.1 until superseded by a GA) | :white_check_mark: |
 | Latest v1.7 release candidate (rc.24, pending GA) | :white_check_mark: |
 | Older stable or prerelease versions | :x: |

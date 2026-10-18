@@ -5,6 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.2 Highlights - October 18, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Docker builds work with the current Alpine packages.** The exact libexpat pin is now `2.9.0-r0` on amd64 and arm64.
+- **Deployment examples and release surfaces match RC2.** The current docs pin the opt-in candidate and retain the SQLite warning; the website, demo and translated READMEs use the same candidate identity.
+- RC2 includes the RC1 features below and starts its own soak when published. v1.6.1 remains stable and v1.7.0-rc.24 remains the separate pending GA candidate.
+
 ## v1.8.0-rc.1 Highlights - October 17, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading. First startup migrates JSON into SQLite. Downgrading restores the pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

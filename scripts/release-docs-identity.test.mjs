@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-const RC_VERSION = '1.8.0-rc.1';
-const PREV_RC_VERSION = '1.7.0-rc.24';
-const RC_DATE = '2026-10-17';
-const RC_DISPLAY_DATE = 'October 17, 2026';
+const RC_VERSION = '1.8.0-rc.2';
+const PREV_RC_VERSION = '1.8.0-rc.1';
+const RC_DATE = '2026-10-18';
+const RC_DISPLAY_DATE = 'October 18, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
   'content/docs/v1.7',
@@ -406,7 +406,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.1|:v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.2|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }
@@ -709,4 +709,37 @@ test('current and archived release examples use consistent tags, filenames, date
   );
   assert.match(read('.gitattributes'), /^content\/docs\/v1\.6\/\*\* -whitespace$/mu);
   assert.match(read('.gitattributes'), /^content\/docs\/v1\.5\/\*\* -whitespace$/mu);
+});
+
+for (const [path, introduction] of [
+  ['api/agent.mdx', 'first shipped in Drydock v1.8.0-rc.1'],
+  ['configuration/storage/index.mdx', 'first appears in v1.8.0-rc.1'],
+  ['configuration/agents/index.mdx', 'first ships in Drydock v1.8.0-rc.1'],
+  ['configuration/config-file/index.mdx', 'editors were introduced in v1.8.0-rc.1'],
+  ['configuration/watchers/index.mdx', 'editor was introduced in v1.8.0-rc.1'],
+  ['configuration/triggers/index.mdx', 'editors were introduced in v1.8.0-rc.1'],
+]) {
+  test(`${path} preserves the first v1.8 candidate introduction`, () => {
+    const document = read(`content/docs/current/${path}`);
+    assert.ok(document.includes(introduction));
+    assert.ok(document.includes(RC_VERSION), 'the current test candidate remains identified');
+  });
+}
+
+test('release-family option version markers preserve their RC1 introduction', () => {
+  const watchers = read('content/docs/current/configuration/watchers/index.mdx');
+  const eligibility = read('content/docs/current/configuration/actions/update-eligibility.mdx');
+  for (const key of [
+    'DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES',
+    'DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS',
+    'dd.updatePolicy.maturitySkipReleases',
+    'dd.updatePolicy.maturityReleaseFallbackDays',
+  ]) {
+    const row = watchers.split('\n').find((line) => line.includes(`\`${key}\``));
+    assert.ok(row?.includes('v1.8.0-rc.1:'), key);
+  }
+  const blocker = eligibility
+    .split('\n')
+    .find((line) => line.startsWith('| `maturity-releases-not-reached`'));
+  assert.ok(blocker?.includes('v1.8.0-rc.1:'));
 });

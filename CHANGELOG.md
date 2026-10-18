@@ -11,13 +11,22 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.2] - 2026-10-18
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1) and retains its upgrade warnings. v1.8 GA is not released; v1.6.1 remains the latest stable release and v1.7.0-rc.24 remains the separate pending 1.7 GA candidate. RC2 has its own publication-based soak.
+
 ### Fixed
 
 - Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.9.0-r0`, replacing the package revision no longer available from the repository.
+- Limit the CI scanner's documentation exception to the exact placeholder credential, so longer credentials containing that text are still reported.
 
 ### Changed
 
-- Pin v1.8 documentation deployment examples to `1.8.0-rc.1` and add the SQLite upgrade warning to the introduction, so configuration guides do not install the stable v1.6 image for candidate-only features.
+- Pin v1.8 documentation deployment examples to `1.8.0-rc.2` and add the SQLite upgrade warning to the introduction, so configuration guides do not install the stable v1.6 image for candidate-only features.
+- Align the website, demo, support policy and translated README testing guidance with RC2. Feature and deprecation introduction versions and the RC1 release record are preserved.
 
 ## [1.8.0-rc.1] - 2026-10-17
 
@@ -3375,7 +3384,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...HEAD
+[1.8.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.1...v1.8.0-rc.2
 [1.8.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.24...v1.8.0-rc.1
 [1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24
 [1.7.0-rc.23]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...v1.7.0-rc.23
