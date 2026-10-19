@@ -1,3 +1,4 @@
+import { getErrorMessage } from '../util/error.js';
 /**
  * A watcher, as far as this module cares: something with a registry id and an
  * optional owning agent. Structural on purpose, so the agent client never has
@@ -150,7 +151,7 @@ export async function seedControllerLocalEnumeration(
       result.map((container) => container.Id),
     );
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     logger?.warn(`Unable to seed controller-local container ids at startup (${message})`);
   } finally {
     clearTimeout(timeoutHandle);

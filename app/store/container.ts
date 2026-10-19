@@ -50,6 +50,7 @@ import {
   applyUpdatePolicyOverrides,
   getUpdatePolicyOverrides,
 } from '../model/update-policy.js';
+import { getErrorMessage } from '../util/error.js';
 import { ddActionAuto } from '../watchers/providers/docker/label.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import type { Database, Row } from './db/driver.js';
@@ -2464,7 +2465,7 @@ export function reResolveGroupPolicyMembers(group: string): GroupPolicyReResolve
       updateContainer(getContainerRaw(row.id));
       reResolved += 1;
     } catch (error: unknown) {
-      failed.push({ id: row.id, error: error instanceof Error ? error.message : String(error) });
+      failed.push({ id: row.id, error: getErrorMessage(error) });
     }
   }
   return { reResolved, failed };

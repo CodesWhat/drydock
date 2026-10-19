@@ -5,6 +5,8 @@
  * within a cron cycle. Single Map — no cleanup needed in a long-running process.
  */
 
+import { sleep } from '../util/sleep.js';
+
 export interface BucketConfig {
   /** Unique key identifying the bucket (typically the hostname). */
   key: string;
@@ -47,11 +49,6 @@ function refill(bucket: Bucket): void {
   bucket.tokens = Math.min(bucket.burst, bucket.tokens + added);
   bucket.lastRefillAt = now;
 }
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /**
  * Acquire one token for the given bucket, waiting if necessary.
  */

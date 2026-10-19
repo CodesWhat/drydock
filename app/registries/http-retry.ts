@@ -6,6 +6,8 @@
  * network errors (timeouts, connection resets) using exponential backoff.
  */
 
+import { sleep } from '../util/sleep.js';
+
 export interface HttpEnvelope<T> {
   status: number;
   headers: Record<string, string | undefined>;
@@ -85,11 +87,6 @@ function parseRetryAfterMs(headerValue: string | undefined): number | undefined 
 
   return undefined;
 }
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function getNetworkErrorCode(err: unknown): string | undefined {
   if (typeof err === 'object' && err !== null && 'code' in err) {
     const code = (err as Record<string, unknown>).code;

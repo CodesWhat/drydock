@@ -6,6 +6,7 @@ import {
   markOutboxEntryDelivered,
   purgeTerminalOutboxEntriesOlderThan,
 } from '../store/notification-outbox.js';
+import { getErrorMessage } from '../util/error.js';
 
 type OutboxDeliveryHandler = (entry: NotificationOutboxEntry) => Promise<void>;
 
@@ -178,7 +179,7 @@ export class OutboxWorker {
       if (this.stopped) {
         return;
       }
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage = getErrorMessage(err);
       const nextAttempt = entry.attempts + 1;
       const nextAttemptAt = this.computeNextAttemptAt(nextAttempt);
       const result = markOutboxEntryAttempted(entry.id, {

@@ -531,7 +531,7 @@ describe('debug dump utilities', () => {
         watcherName: 'beta',
         authInitializationError: 'beta auth failed',
         versionError: 'beta version failed',
-        infoError: '[object Object]',
+        infoError: 'unknown error',
       },
       {
         watcherId: 'docker.delta',

@@ -137,6 +137,10 @@ test('match should accept protocol-less public ECR gallery host', async () => {
   ).toBeTruthy();
 });
 
+test('match should accept public ECR gallery hosts regardless of case', async () => {
+  expect(ecr.match({ registry: { url: 'https://Public.ECR.aws/v2' } })).toBeTruthy();
+});
+
 test('match should accept nested public ECR gallery paths', async () => {
   expect(
     ecr.match({

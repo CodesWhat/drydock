@@ -1,6 +1,7 @@
 import type Dockerode from 'dockerode';
 import type { Container } from '../../../model/container.js';
 import * as storeContainer from '../../../store/container.js';
+import { getErrorMessageProperty } from '../../../util/error.js';
 import { processDockerEvent as processDockerEventState } from './container-event-update.js';
 import {
   getDockerEventsOptions,
@@ -17,14 +18,6 @@ interface DockerEventsStream {
   pause?: () => void;
   resume?: () => void;
   destroy?: () => void;
-}
-
-function getErrorMessage(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) {
-    return undefined;
-  }
-  const message = (error as { message?: unknown }).message;
-  return typeof message === 'string' ? message : undefined;
 }
 
 interface DockerEventOrchestrationWatcher {
@@ -130,7 +123,9 @@ function isDockerEventsListenerStale(
 }
 
 function logChunkProcessingFailure(watcher: DockerEventOrchestrationWatcher, error: unknown): void {
-  watcher.log.debug(`Unable to process Docker event stream chunk (${getErrorMessage(error)})`);
+  watcher.log.debug(
+    `Unable to process Docker event stream chunk (${getErrorMessageProperty(error)})`,
+  );
 }
 
 function enqueueDockerEventChunk(
@@ -198,7 +193,7 @@ export async function listenDockerEventsOrchestration(
       if (isDockerEventsListenerStale(watcher, entryStreamGeneration)) {
         return;
       }
-      const errorMessage = getErrorMessage(e);
+      const errorMessage = getErrorMessageProperty(e);
       watcher.log.warn(`Unable to recreate Docker client during reconnect (${errorMessage})`);
       watcher.scheduleDockerEventsReconnect('client recreation failure', e);
       return;
@@ -211,7 +206,7 @@ export async function listenDockerEventsOrchestration(
     if (isDockerEventsListenerStale(watcher, entryStreamGeneration)) {
       return;
     }
-    const errorMessage = getErrorMessage(e);
+    const errorMessage = getErrorMessageProperty(e);
     watcher.log.warn(
       `Unable to initialize remote watcher auth for docker events (${errorMessage})`,
     );
@@ -233,7 +228,7 @@ export async function listenDockerEventsOrchestration(
       if (!isCurrentStreamGeneration(watcher, requestedStreamGeneration)) {
         return;
       }
-      const errorMessage = getErrorMessage(err);
+      const errorMessage = getErrorMessageProperty(err);
       if (watcher.log && typeof watcher.log.warn === 'function') {
         watcher.log.warn(`Unable to listen to Docker events [${errorMessage}]`);
         watcher.log.debug(err);
@@ -289,7 +284,7 @@ export async function processDockerEventPayloadOrchestration(
     if (shouldTreatRecoverableErrorsAsPartial && watcher.isRecoverableDockerEventParseError(e)) {
       return false;
     }
-    const errorMessage = getErrorMessage(e);
+    const errorMessage = getErrorMessageProperty(e);
     watcher.log.debug(`Unable to process Docker event (${errorMessage})`);
     return true;
   }
