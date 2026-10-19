@@ -956,7 +956,7 @@ function removeStaleContainerEntriesWithSameName(
     .forEach((staleContainer) =>
       storeContainer.deleteContainer(staleContainer.id, {
         replacementExpected: true,
-        replacementId: containerToReturn.id,
+        excludedContainerId: staleContainer.id,
       }),
     );
 }

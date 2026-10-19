@@ -5685,7 +5685,7 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(inserted.updatePolicy).toBeUndefined();
     });
 
-    describe('DR-147: a stash named for its replacement', () => {
+    describe('DR-147: a stash that excludes its predecessor', () => {
       async function discoverReplacement(replacementId: string) {
         const watcher = {
           name: 'docker',
@@ -5783,7 +5783,78 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
         expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
       });
 
-      test('a plain recreate without a replacement id is still taken by any same-name insert', () => {
+      test('a replacement skipped by a later recreate: the next container still gets the policy', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'chain-a',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        // A is deleted for B, but B is never inserted; C replaces B and finds no row to retarget.
+        await discoverReplacement('chain-b');
+        const replacementC = await discoverReplacement('chain-c');
+
+        mapContainerToContainerReport(replacementC, reportDependencies);
+
+        expect(container.getContainer('chain-c')?.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('the old container re-reported after the stash was consumed is a no-op', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+        mapContainerToContainerReport(replacement, reportDependencies);
+
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container.getContainer('old-container')?.updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test('the excluded id lives on the entry and leaves nothing behind once it is evicted', () => {
+        const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+        const fixtures = [];
+        for (let i = 0; i <= maxEntries; i++) {
+          fixtures.push({
+            data: makePolicyFixture({
+              id: `excl-old-${i}`,
+              name: `excl-app-${i}`,
+              updatePolicy: MATURITY_POLICY,
+            }),
+          });
+        }
+        mountWith(fixtures);
+
+        for (let i = 0; i <= maxEntries; i++) {
+          container.deleteContainer(`excl-old-${i}`, {
+            replacementExpected: true,
+            excludedContainerId: `excl-old-${i}`,
+          });
+        }
+
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        expect(cache.size).toBeLessThanOrEqual(maxEntries);
+        expect(cache.has('::local::excl-app-0')).toBe(false);
+        expect(cache.get(`::local::excl-app-${maxEntries}`)?.excludedContainerId).toBe(
+          `excl-old-${maxEntries}`,
+        );
+      });
+
+      test('a plain recreate without an excluded id is still taken by any same-name insert', () => {
         mountWith([
           {
             data: makePolicyFixture({ id: 'plain-old', updatePolicy: MATURITY_POLICY }),
@@ -5796,55 +5867,48 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
         expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
       });
 
-      test('a later stash without a replacement id clears the earlier target', () => {
-        mountWith([
-          { data: makePolicyFixture({ id: 'target-old-1', updatePolicy: MATURITY_POLICY }) },
-        ]);
-        container.deleteContainer('target-old-1', {
-          replacementExpected: true,
-          replacementId: 'target-expected',
-        });
-        container.insertContainer(makePolicyFixture({ id: 'target-other' }));
-        container.deleteContainer('target-other');
+      test('an excluded id on a delete that is not a replacement is ignored', () => {
         mountWith([
           {
             data: makePolicyFixture({
-              id: 'target-old-2',
-              name: 'myapp',
+              id: 'ignored-old',
               updatePolicy: MATURITY_POLICY,
             }),
           },
         ]);
-        container.deleteContainer('target-old-2', { replacementExpected: true });
+        container.deleteContainer('ignored-old', {
+          retainUpdatePolicy: true,
+          excludedContainerId: 'ignored-old',
+        });
 
-        const inserted = container.insertContainer(makePolicyFixture({ id: 'target-next' }));
+        const inserted = container.insertContainer(makePolicyFixture({ id: 'ignored-old' }));
 
         expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
       });
 
-      test('an agent-owned replacement named by id takes its own stash', () => {
+      test('an agent-owned insert of the excluded id leaves the stash for another id', () => {
         mountWith([
           {
             data: makePolicyFixture({
-              id: 'agent-target-old',
+              id: 'agent-excl-old',
               agent: 'agent1',
               updatePolicy: MATURITY_POLICY,
             }),
           },
         ]);
-        container.deleteContainer('agent-target-old', {
+        container.deleteContainer('agent-excl-old', {
           replacementExpected: true,
-          replacementId: 'agent-target-new',
+          excludedContainerId: 'agent-excl-old',
         });
 
-        const other = container.insertContainer(
-          makePolicyFixture({ id: 'agent-target-other', agent: 'agent1' }),
+        const excluded = container.insertContainer(
+          makePolicyFixture({ id: 'agent-excl-old', agent: 'agent1', name: 'myapp' }),
         );
         const inserted = container.insertContainer(
-          makePolicyFixture({ id: 'agent-target-new', agent: 'agent1', name: 'myapp' }),
+          makePolicyFixture({ id: 'agent-excl-new', agent: 'agent1', name: 'myapp' }),
         );
 
-        expect(other.updatePolicy).toBeUndefined();
+        expect(excluded.updatePolicy).toBeUndefined();
         expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
       });
     });

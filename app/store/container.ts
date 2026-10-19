@@ -137,21 +137,20 @@ type UpdatePolicyRetentionCacheEntry = {
    * recorded.
    */
   containerName?: string;
+  /**
+   * DR-147: Docker id of the container whose row the delete removed, when the delete
+   * named it (the watcher drops a same-name stale row because it just discovered the
+   * replacement). A re-insert of that very id under the same canonical name is the
+   * renamed predecessor a still-running old container presents as, and must not
+   * consume the stash meant for its replacement. Any other id may. Memory only, so a
+   * restart falls back to the name-based match, and it lives on the entry so the TTL
+   * and capacity pruning that remove the entry remove it too. Ids are the full Docker
+   * ids the watcher reports, compared as-is.
+   */
+  excludedContainerId?: string;
 };
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
-
-/**
- * DR-147: identity key -> Docker id of the container the stash under that key is meant
- * for. Set when a delete names its replacement (the watcher removes a same-name stale
- * row because it just discovered the replacement), so a re-insert of some other Docker
- * id under the same canonical name cannot consume the stash first. That is the renamed
- * predecessor a still-running old container presents as, after the discovery settle
- * has elapsed. Memory only: the window is a single scan, and a restart falls back to
- * the name-based match. Written on every replacement stash, so a stale value never
- * outlives the entry it described.
- */
-const updatePolicyRetentionTargetIds = new Map<string, string>();
 
 interface ContainerListPaginationOptions {
   limit?: number;
@@ -1447,7 +1446,11 @@ function normalizeContainerTriggerLabelFields<T extends Partial<container.Contai
  * that cannot merge from a predecessor) can inherit it. Which key that is depends on
  * what the caller expects to change — see the two wrappers below.
  */
-function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
+function stashUpdatePolicyUnderKey(
+  containerRaw,
+  cacheKey: string | undefined,
+  excludedContainerId?: string,
+) {
   const updatePolicyOverrides = getUpdatePolicyOverrides(containerRaw);
   if (Object.keys(updatePolicyOverrides).length === 0) {
     return;
@@ -1466,6 +1469,7 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
     // Already canonical: a rollback-renamed record returned above.
     containerName: containerRaw.name,
+    ...(excludedContainerId === undefined ? {} : { excludedContainerId }),
   };
   updatePolicyRetentionCache.set(cacheKey, entry);
   // #565: write-through to the durable store so this stash survives the
@@ -1473,7 +1477,12 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
   // action -> SIGTERM -> shutdown()'s store.save() -> new process ->
   // rehydrateUpdatePolicyRetentionCacheFromStore()) — the same failure mode
   // #556 already fixed for the lifecycle/clock cache.
-  updatePolicyRetentionCacheStore.upsertRecord({ cacheKey, ...entry });
+  updatePolicyRetentionCacheStore.upsertRecord({
+    cacheKey,
+    updatePolicyOverrides: entry.updatePolicyOverrides,
+    expiresAt: entry.expiresAt,
+    containerName: entry.containerName,
+  });
   if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
     const nowMs = Date.now();
     for (const [expiredKey, expiredEntry] of updatePolicyRetentionCache.entries()) {
@@ -1498,8 +1507,12 @@ function stashUpdatePolicyUnderKey(containerRaw, cacheKey: string | undefined) {
  * #496: a recreate. The replacement keeps agent, watcher and name and arrives under a
  * fresh Docker id, so the identity key is what carries the policy across.
  */
-function stashUpdatePolicyForReplacement(containerRaw) {
-  stashUpdatePolicyUnderKey(containerRaw, deriveContainerIdentityKey(containerRaw));
+function stashUpdatePolicyForReplacement(containerRaw, excludedContainerId?: string) {
+  stashUpdatePolicyUnderKey(
+    containerRaw,
+    deriveContainerIdentityKey(containerRaw),
+    excludedContainerId,
+  );
 }
 
 /**
@@ -1668,12 +1681,8 @@ function takeIdentityRetainedUpdatePolicyEntry(incoming) {
   if (!entry) {
     return undefined;
   }
-  const targetId = updatePolicyRetentionTargetIds.get(cacheKey as string);
-  if (targetId !== undefined) {
-    if (targetId !== incoming.id) {
-      return undefined;
-    }
-    updatePolicyRetentionTargetIds.delete(cacheKey as string);
+  if (entry.excludedContainerId !== undefined && entry.excludedContainerId === incoming.id) {
+    return undefined;
   }
   if (isAgentOwnedContainer(incoming)) {
     if (entry.containerName !== undefined && entry.containerName !== incoming.name) {
@@ -2678,11 +2687,11 @@ interface DeleteContainerOptions {
    */
   identityChangeExpected?: boolean;
   /**
-   * DR-147: Docker id of the replacement that caused this removal. The stash is then
-   * meant for that id alone, and an insert of any other id under the same name leaves
-   * it in place (see updatePolicyRetentionTargetIds). Only read with `replacementExpected`.
+   * DR-147: Docker id of the removed row, recorded on the stash. A re-insert of that id
+   * leaves the stash in place for the replacement, and any other id may still take it
+   * (see UpdatePolicyRetentionCacheEntry). Only read with `replacementExpected`.
    */
-  replacementId?: string;
+  excludedContainerId?: string;
   /**
    * #1280: a removal that may or may not be a recreate, reported by a source that
    * cannot say which (an agent's `dd:container-removed` carries only the id, and a
@@ -2744,13 +2753,10 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
     if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
-      stashUpdatePolicyForReplacement(containerRaw);
-      const identityKey = deriveContainerIdentityKey(containerRaw) as string;
-      if (options.replacementExpected === true && typeof options.replacementId === 'string') {
-        updatePolicyRetentionTargetIds.set(identityKey, options.replacementId);
-      } else {
-        updatePolicyRetentionTargetIds.delete(identityKey);
-      }
+      stashUpdatePolicyForReplacement(
+        containerRaw,
+        options.replacementExpected === true ? options.excludedContainerId : undefined,
+      );
     }
     if (options.identityChangeExpected === true) {
       stashUpdatePolicyForIdentityChange(containerRaw);
@@ -2902,7 +2908,6 @@ export function _resetContainerStoreStateForTests() {
   securityStateCache.clear();
   updateLifecycleCache.clear();
   updatePolicyRetentionCache.clear();
-  updatePolicyRetentionTargetIds.clear();
   pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();
