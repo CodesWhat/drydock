@@ -64,7 +64,7 @@ function copyResponseHeaders(res: ServerResponse, headers: Record<string, string
   }
 }
 
-export type PortwingTransportFailureReason =
+type PortwingTransportFailureReason =
   | 'timeout'
   | 'agent-unreachable'
   | 'bad-upstream-response'
