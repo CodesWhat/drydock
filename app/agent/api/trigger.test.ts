@@ -157,6 +157,79 @@ describe('agent API trigger', () => {
       expect(mockTrigger.triggerBatch).not.toHaveBeenCalled();
     });
 
+    describe('notification triggers', () => {
+      const mockSlack = () => {
+        const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+        registry.getState.mockReturnValue({ trigger: { 'slack.ops': mockTrigger } });
+        return mockTrigger;
+      };
+
+      beforeEach(() => {
+        req.params = { type: 'slack', name: 'ops' };
+      });
+
+      test('should pass body containers as sent, keeping transient fields, and strip agent', async () => {
+        const notificationEvent = { kind: 'update-failed', error: 'boom' };
+        req.body = [
+          { id: 'c1', agent: 'remote', notificationEvent, labels: { a: 'b' } },
+          { id: 'c2', name: 'nginx' },
+        ];
+        const mockTrigger = mockSlack();
+        await triggerApi.runTriggerBatch(req, res);
+        expect(storeContainer.getContainer).not.toHaveBeenCalled();
+        expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+          [
+            { id: 'c1', notificationEvent, labels: { a: 'b' } },
+            { id: 'c2', name: 'nginx' },
+          ],
+          undefined,
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      test('should deliver containers the agent store lacks', async () => {
+        storeContainer.getContainer.mockReturnValue(undefined);
+        req.body = [{ id: 'pruned', name: 'gone' }];
+        const mockTrigger = mockSlack();
+        await triggerApi.runTriggerBatch(req, res);
+        expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+          [{ id: 'pruned', name: 'gone' }],
+          undefined,
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      test('should deliver security digest summary rows without ids', async () => {
+        const rows = [{ name: 'summary', security: { critical: 2 } }];
+        req.body = rows;
+        const mockTrigger = mockSlack();
+        await triggerApi.runTriggerBatch(req, res);
+        expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(rows, undefined);
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      test('should map operationIds from valid ids only and strip the field', async () => {
+        req.body = [
+          { id: 42, operationId: 'op-numeric-id' },
+          { id: '', operationId: 'op-empty-id' },
+          { id: 'c-good', operationId: 'op-good' },
+          { id: 'c-empty', operationId: '' },
+        ];
+        const mockTrigger = mockSlack();
+        await triggerApi.runTriggerBatch(req, res);
+        expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+          [
+            { id: 42, operationId: 'op-numeric-id' },
+            { id: '', operationId: 'op-empty-id' },
+            { id: 'c-good' },
+            { id: 'c-empty', operationId: '' },
+          ],
+          { operationIds: new Map([['c-good', 'op-good']]) },
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+    });
+
     test('should extract operationId fields and pass as runtimeContext (#289)', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [
