@@ -63,6 +63,27 @@ describe('replaceSessionAfterFactorChange', () => {
     });
   });
 
+  test('carries a pending API key review over to the new session', async () => {
+    const req = request({
+      session: {
+        apiKeyReviewPending: true,
+        regenerate(this: Record<string, unknown>, done: () => void) {
+          // express-session replaces the session object wholesale.
+          (req as unknown as { session: unknown }).session = { regenerate: this.regenerate };
+          done();
+        },
+      },
+    });
+    await replaceSessionAfterFactorChange(req, principal);
+    expect((req.session as { apiKeyReviewPending?: boolean }).apiKeyReviewPending).toBe(true);
+  });
+
+  test('does not invent a key review the old session did not owe', async () => {
+    const req = request();
+    await replaceSessionAfterFactorChange(req, principal);
+    expect(req.session as object).not.toHaveProperty('apiKeyReviewPending');
+  });
+
   test('a session that did not ask to be remembered is not', async () => {
     const req = request({
       session: { regenerate: (done: () => void) => done() },

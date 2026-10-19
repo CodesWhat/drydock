@@ -13,6 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- A two-factor recovery-code sign-in now makes the user review their API keys. When any active key exists, the session is flagged (`apiKeyReviewPending` on `GET /auth/user`) and the UI holds it on the API Keys view, with a banner and each key's creator, creation time and last use, until the user chooses Done reviewing (`POST /auth/api-key-review/acknowledge`, session-only). Keys are not revoked automatically, and revoking one does not release the review. Previously a key minted from a stolen session survived the recovery login's session sweep without any prompt.
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 
 ### Changed
