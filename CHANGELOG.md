@@ -15,6 +15,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 
+### Fixed
+
+- Restore the weekly public-site DAST scan, which crashed on the `90004-1` and `90004-2` entries in `.zap/rules-public-site.tsv` because the ZAP scan scripts only accept integer plugin IDs. The file now ignores the whole 90004 plugin for the public sites, and a workflow test requires plain integer IDs in every `.zap` rules file and confirms both sites still send `Cross-Origin-Opener-Policy`.
+
 ### Changed
 
 - Removed the README upgrade alert for the 1.4.6 security-hardening changes; UPGRADE-NOTES.md still covers them for anyone updating from an older release.

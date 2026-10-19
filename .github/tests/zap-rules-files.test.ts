@@ -4,7 +4,7 @@
 // .zap/rules.tsv must stay the only file the app scan reads, and every shared
 // rule must carry over to the public-site file, or the two silently diverge.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
@@ -51,8 +51,7 @@ const PUBLIC_SITE_ONLY_IGNORES = [
   '90022',
   '40025',
   '10104',
-  '90004-1',
-  '90004-2',
+  '90004',
 ];
 
 test('the shared rules file does not ignore the public-site-only rules', () => {
@@ -80,12 +79,39 @@ test('the public-site rules file adds exactly the expected IGNORE rules', () => 
   }
 });
 
-test('COOP (90004-3) and the whole 90004 plugin stay un-ignored on the public sites', () => {
-  const ids = publicSite.map((rule) => rule.id);
+// zap-baseline.py and zap-full-scan.py cast every rule ID with int(), so an
+// alert ref such as 90004-1 crashes the scan with a ValueError before any
+// finding is reported (weekly DAST runs failed on this for weeks).
+test.each(['rules.tsv', 'rules-public-site.tsv'])(
+  '.zap/%s only uses plain integer plugin IDs',
+  (file) => {
+    for (const rule of rules(read(`../../.zap/${file}`))) {
+      expect(rule.id).toMatch(/^\d+$/);
+    }
+  },
+);
 
-  expect(ids).not.toContain('90004');
-  expect(ids).not.toContain('90004-3');
+test('every .zap rules file is covered by the integer ID check', () => {
+  const files = readdirSync(fileURLToPath(new URL('../../.zap', import.meta.url))).filter((name) =>
+    /^rules.*\.tsv$/.test(name),
+  );
+
+  expect(files.sort()).toEqual(['rules-public-site.tsv', 'rules.tsv']);
 });
+
+// Ignoring the whole 90004 plugin on the public sites also hides COOP, so both
+// sites must keep sending it.
+test.each(['apps/web/vercel.json', 'apps/demo/vercel.json'])(
+  '%s sends Cross-Origin-Opener-Policy same-origin',
+  (file) => {
+    const config = JSON.parse(read(`../../${file}`)) as {
+      headers: { headers: { key: string; value: string }[] }[];
+    };
+    const sent = config.headers.flatMap((entry) => entry.headers);
+
+    expect(sent).toContainEqual({ key: 'Cross-Origin-Opener-Policy', value: 'same-origin' });
+  },
+);
 
 test('both public-site ZAP scans use the public-site rules file', () => {
   const steps = zapSteps('security-dast-web.yml');
