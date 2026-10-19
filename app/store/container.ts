@@ -141,6 +141,18 @@ type UpdatePolicyRetentionCacheEntry = {
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
 
+/**
+ * DR-147: identity key -> Docker id of the container the stash under that key is meant
+ * for. Set when a delete names its replacement (the watcher removes a same-name stale
+ * row because it just discovered the replacement), so a re-insert of some other Docker
+ * id under the same canonical name cannot consume the stash first. That is the renamed
+ * predecessor a still-running old container presents as, after the discovery settle
+ * has elapsed. Memory only: the window is a single scan, and a restart falls back to
+ * the name-based match. Written on every replacement stash, so a stale value never
+ * outlives the entry it described.
+ */
+const updatePolicyRetentionTargetIds = new Map<string, string>();
+
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
@@ -1656,6 +1668,13 @@ function takeIdentityRetainedUpdatePolicyEntry(incoming) {
   if (!entry) {
     return undefined;
   }
+  const targetId = updatePolicyRetentionTargetIds.get(cacheKey as string);
+  if (targetId !== undefined) {
+    if (targetId !== incoming.id) {
+      return undefined;
+    }
+    updatePolicyRetentionTargetIds.delete(cacheKey as string);
+  }
   if (isAgentOwnedContainer(incoming)) {
     if (entry.containerName !== undefined && entry.containerName !== incoming.name) {
       return undefined;
@@ -2659,6 +2678,12 @@ interface DeleteContainerOptions {
    */
   identityChangeExpected?: boolean;
   /**
+   * DR-147: Docker id of the replacement that caused this removal. The stash is then
+   * meant for that id alone, and an insert of any other id under the same name leaves
+   * it in place (see updatePolicyRetentionTargetIds). Only read with `replacementExpected`.
+   */
+  replacementId?: string;
+  /**
    * #1280: a removal that may or may not be a recreate, reported by a source that
    * cannot say which (an agent's `dd:container-removed` carries only the id, and a
    * snapshot or inventory pass can drop a container before its replacement is listed).
@@ -2720,6 +2745,12 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     containerSecurityStateHashCache.delete(id);
     if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
       stashUpdatePolicyForReplacement(containerRaw);
+      const identityKey = deriveContainerIdentityKey(containerRaw) as string;
+      if (options.replacementExpected === true && typeof options.replacementId === 'string') {
+        updatePolicyRetentionTargetIds.set(identityKey, options.replacementId);
+      } else {
+        updatePolicyRetentionTargetIds.delete(identityKey);
+      }
     }
     if (options.identityChangeExpected === true) {
       stashUpdatePolicyForIdentityChange(containerRaw);
@@ -2871,6 +2902,7 @@ export function _resetContainerStoreStateForTests() {
   securityStateCache.clear();
   updateLifecycleCache.clear();
   updatePolicyRetentionCache.clear();
+  updatePolicyRetentionTargetIds.clear();
   pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();

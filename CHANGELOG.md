@@ -19,6 +19,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Send the website's Content-Security-Policy on paths that merely start with `/api` (such as `/api,` or `/apiary`). The proxy matcher skipped every `api`-prefixed path, but the static CSP in `vercel.json` only covers `/api/*`, so those 404 pages went out with no CSP. The matcher now skips only `/api` and `/api/...`, and a test pins the boundary. The public-site ZAP rules also ignore 10051 (Relative Path Confusion) and 40038 (Bypassing 403), which only hit Vercel firewall 403 responses during the active scan.
 - Restore the weekly public-site DAST scan, which crashed on the `90004-1` and `90004-2` entries in `.zap/rules-public-site.tsv` because the ZAP scan scripts only accept integer plugin IDs. The file now ignores the whole 90004 plugin for the public sites, and a workflow test requires plain integer IDs in every `.zap` rules file and confirms both sites still send `Cross-Origin-Opener-Policy`.
+- Keep a retained update policy (maturity, overrides) with the replacement when a container is recreated and the renamed old container is still listed after the discovery settle. With `watchall` on, the old container could be re-reported first and take the policy meant for the replacement, leaving a duplicate row. The stash is now named for the replacement's Docker id, so only that container consumes it (DR-147).
 
 ### Changed
 

@@ -5685,6 +5685,170 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(inserted.updatePolicy).toBeUndefined();
     });
 
+    describe('DR-147: a stash named for its replacement', () => {
+      async function discoverReplacement(replacementId: string) {
+        const watcher = {
+          name: 'docker',
+          configuration: { watchevents: false },
+          dockerApi: {
+            getContainer: vi.fn().mockReturnValue({ inspect: vi.fn().mockResolvedValue({}) }),
+            getImage: vi.fn().mockReturnValue({
+              inspect: vi.fn().mockResolvedValue({
+                Id: 'image-1',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Created: '2026-01-01T00:00:00.000Z',
+              }),
+            }),
+          },
+          log: { warn: vi.fn(), debug: vi.fn() },
+          ensureLogger: vi.fn(),
+          ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        };
+        const helpers = {
+          resolveLabelsFromContainer: vi.fn(() => ({})),
+          mergeConfigWithImgset: vi.fn(() => ({})),
+          normalizeContainer: vi.fn((c) => c),
+          resolveImageName: vi.fn().mockReturnValue({ domain: 'ghcr.io', path: 'acme/app' }),
+          resolveTagName: vi.fn().mockReturnValue('1.2.3'),
+          getMatchingImgsetConfiguration: vi.fn().mockReturnValue(undefined),
+        };
+        const discovered = await addImageDetailsToContainerOrchestration(
+          watcher as any,
+          {
+            Id: replacementId,
+            Image: 'ghcr.io/acme/app:1.2.3',
+            State: 'running',
+            Labels: {},
+            Names: ['/myapp'],
+            Ports: [],
+            Mounts: [],
+          } as any,
+          {},
+          helpers as any,
+        );
+        return discovered as any;
+      }
+
+      const reportDependencies = {
+        ensureLogger: vi.fn(),
+        log: { child: () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }) },
+      } as any;
+
+      // A long health gate or a failed cleanup leaves the renamed old container listed
+      // after the discovery settle. Discovery of the replacement deletes the old row and
+      // stashes its policy; the old container is then reported again under the kept name
+      // ahead of the replacement in the same scan.
+      test('the replacement takes the policy when the old container is re-reported first', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+        expect(container.getContainer('old-container')).toBeUndefined();
+
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+        mapContainerToContainerReport(replacement, reportDependencies);
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container.getContainer('old-container')?.updatePolicy).toBeUndefined();
+      });
+
+      test('the replacement still takes the policy when it is reported first', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+
+        mapContainerToContainerReport(replacement, reportDependencies);
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('a plain recreate without a replacement id is still taken by any same-name insert', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({ id: 'plain-old', updatePolicy: MATURITY_POLICY }),
+          },
+        ]);
+        container.deleteContainer('plain-old', { replacementExpected: true });
+
+        const inserted = container.insertContainer(makePolicyFixture({ id: 'plain-new' }));
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('a later stash without a replacement id clears the earlier target', () => {
+        mountWith([
+          { data: makePolicyFixture({ id: 'target-old-1', updatePolicy: MATURITY_POLICY }) },
+        ]);
+        container.deleteContainer('target-old-1', {
+          replacementExpected: true,
+          replacementId: 'target-expected',
+        });
+        container.insertContainer(makePolicyFixture({ id: 'target-other' }));
+        container.deleteContainer('target-other');
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'target-old-2',
+              name: 'myapp',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('target-old-2', { replacementExpected: true });
+
+        const inserted = container.insertContainer(makePolicyFixture({ id: 'target-next' }));
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('an agent-owned replacement named by id takes its own stash', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'agent-target-old',
+              agent: 'agent1',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('agent-target-old', {
+          replacementExpected: true,
+          replacementId: 'agent-target-new',
+        });
+
+        const other = container.insertContainer(
+          makePolicyFixture({ id: 'agent-target-other', agent: 'agent1' }),
+        );
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'agent-target-new', agent: 'agent1', name: 'myapp' }),
+        );
+
+        expect(other.updatePolicy).toBeUndefined();
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+    });
+
     test('an agent-owned insert without a derivable identity looks nothing up', () => {
       mountWith([
         {
