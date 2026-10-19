@@ -44,6 +44,19 @@ function makeContainer() {
   return validate(createContainerFixture({ result: { tag: '1.3.0' } }));
 }
 
+// Every lookup still pending at the end of a test is settled so the module-level
+// reservation count starts at zero for the next one.
+const outstanding: Array<() => void> = [];
+
+function trackedHangingEnrichment() {
+  vi.mocked(enrichContainerWithReleaseNotes).mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        outstanding.push(resolve);
+      }),
+  );
+}
+
 function pendingEnrichment() {
   let finish!: (apply?: (draft: any) => void) => void;
   let fail!: (error: Error) => void;
@@ -54,6 +67,7 @@ function pendingEnrichment() {
           apply?.(draft);
           resolve();
         };
+        outstanding.push(resolve);
         fail = reject;
       }),
   );
@@ -64,7 +78,9 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
-afterEach(() => {
+afterEach(async () => {
+  outstanding.splice(0).forEach((resolve) => resolve());
+  await vi.advanceTimersByTimeAsync(0);
   vi.useRealTimers();
   vi.clearAllMocks();
   vi.mocked(enrichContainerWithReleaseNotes).mockReset();
@@ -315,5 +331,62 @@ describe('watchContainer release-notes budget', () => {
     vi.mocked(enrichContainerWithReleaseNotes).mockResolvedValue(undefined);
     await watchContainer(validate(createContainerFixture({ id: 'after' })), deps());
     expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(1);
+  });
+
+  test('reserves capacity at admission so concurrent watches cannot overshoot the cap', async () => {
+    const settlers: Array<{ finish: () => void; fail: (e: Error) => void }> = [];
+    const watchAll = (prefix: string, size: number) =>
+      Array.from({ length: size }, (_, index) =>
+        watchContainer(validate(createContainerFixture({ id: `${prefix}-${index}` })), deps()),
+      );
+
+    // Reserve 9 detached slots.
+    const first = Array.from({ length: 9 }, (_, index) => {
+      settlers.push(pendingEnrichment());
+      return watchContainer(validate(createContainerFixture({ id: `r-${index}` })), deps());
+    });
+    await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    await Promise.all(first);
+
+    // Ten watches start in the same tick: only one slot is left.
+    vi.mocked(enrichContainerWithReleaseNotes).mockReset();
+    trackedHangingEnrichment();
+    const burst = watchAll('b', 10);
+    await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    const reports = await Promise.all(burst);
+    expect(reports).toHaveLength(10);
+    expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(1);
+
+    // Settle everything: 9 by success/failure, the burst's detached lookup never settles,
+    // so exactly one slot stays held and 9 of the next 10 are admitted.
+    settlers.slice(0, 5).forEach((s) => s.finish());
+    settlers.slice(5).forEach((s) => s.fail(new Error('HTTP 403')));
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(enrichContainerWithReleaseNotes).mockReset();
+    vi.mocked(enrichContainerWithReleaseNotes).mockResolvedValue(undefined);
+    await Promise.all(watchAll('after', 10));
+    expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(9);
+  });
+
+  test('in-budget completions and failures release their slot', async () => {
+    vi.mocked(enrichContainerWithReleaseNotes).mockResolvedValue(undefined);
+    for (let round = 0; round < 3; round += 1) {
+      await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          watchContainer(validate(createContainerFixture({ id: `ok-${round}-${index}` })), deps()),
+        ),
+      );
+    }
+    expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(30);
+
+    vi.mocked(enrichContainerWithReleaseNotes).mockRejectedValue(new Error('boom'));
+    for (let round = 0; round < 3; round += 1) {
+      await Promise.all(
+        Array.from({ length: 10 }, (_, index) =>
+          watchContainer(validate(createContainerFixture({ id: `bad-${round}-${index}` })), deps()),
+        ),
+      );
+    }
+    expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(60);
   });
 });

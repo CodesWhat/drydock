@@ -73,13 +73,14 @@ interface MapContainerToReportDependencies {
 export const RELEASE_NOTES_ENRICHMENT_BUDGET_MS = 5_000;
 
 /**
- * Overrun lookups keep running after their watch slot is freed, so they are
- * capped. At the cap a watch persists without notes and retries next cycle
- * instead of starting another request against a provider that is already slow.
+ * Lookups are capped. A slot is reserved at admission and held until the
+ * lookup finishes inside its budget or, once detached, until it settles. At
+ * the cap a watch persists without notes and retries next cycle instead of
+ * starting another request against a provider that is already slow.
  */
 export const MAX_PENDING_RELEASE_NOTES_LOOKUPS = 10;
 
-let pendingDetachedLookups = 0;
+let reservedLookups = 0;
 
 /**
  * Per-container watch bookkeeping. `seq` orders watches of the same container
@@ -167,25 +168,29 @@ async function enrichWithinBudget(
   watchSeq: number,
   isScanStale?: () => boolean,
 ) {
-  if (pendingDetachedLookups >= MAX_PENDING_RELEASE_NOTES_LOOKUPS) {
+  if (reservedLookups >= MAX_PENDING_RELEASE_NOTES_LOOKUPS) {
     logContainer.debug(
       'Too many release notes lookups still pending; persisting the result without notes',
     );
     return;
   }
+  // Reserve in the same tick as the check so concurrent watches can't all pass it.
+  reservedLookups += 1;
+  let reservationHeld = true;
   const draft = createEnrichmentDraft(container);
-  const enrichment = enrichContainerWithReleaseNotes(draft, logContainer);
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const budget = new Promise<typeof BUDGET_EXCEEDED>((resolve) => {
-    timer = setTimeout(() => resolve(BUDGET_EXCEEDED), RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
-  });
   try {
+    const enrichment = enrichContainerWithReleaseNotes(draft, logContainer);
+    const budget = new Promise<typeof BUDGET_EXCEEDED>((resolve) => {
+      timer = setTimeout(() => resolve(BUDGET_EXCEEDED), RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    });
     const outcome = await Promise.race([enrichment, budget]);
     if (outcome === BUDGET_EXCEEDED) {
       logContainer.debug(
         `Release notes lookup exceeded ${RELEASE_NOTES_ENRICHMENT_BUDGET_MS}ms; persisting the result without notes`,
       );
-      pendingDetachedLookups += 1;
+      // The reservation transfers to the detached lookup and is released when it settles.
+      reservationHeld = false;
       getWatchSequenceEntry(container.id).detached += 1;
       enrichment
         .then(() => applyLateReleaseNotes(draft, container, logContainer, watchSeq, isScanStale))
@@ -193,13 +198,16 @@ async function enrichWithinBudget(
           logContainer.debug(`Unable to fetch release notes (${getErrorMessage(error)})`),
         )
         .finally(() => {
-          pendingDetachedLookups -= 1;
+          reservedLookups -= 1;
           releaseWatchSequence(container.id, 'detached');
         });
       return;
     }
   } finally {
     clearTimeout(timer);
+    if (reservationHeld) {
+      reservedLookups -= 1;
+    }
   }
   if (draft.sourceRepo !== undefined) {
     container.sourceRepo = draft.sourceRepo;
