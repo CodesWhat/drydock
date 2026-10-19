@@ -391,4 +391,10 @@ e612c2b72e5e0eb5129240db5cde9135bc5e078e:app/registries/providers/shared/basicAu
 e612c2b72e5e0eb5129240db5cde9135bc5e078e:app/registries/providers/shared/basicAuthConfigurationSchema.test.ts:generic-api-key:59
 f0cdfcb80ec1b7a8f721721fb2d1c628d7a859b5:test/qa-proxy-certs/key.pem:private-key:1
 scripts/start-drydock.sh:private-key:102
+# Throwaway TLS test keys removed from the tree in #1424; still present in history, which the --all scan reads.
+test/migration/tls.key:private-key:1
+test/mosquitto/config/minica-key.pem:private-key:1
+test/mosquitto/config/mosquitto.dev/key.pem:private-key:1
 test/qa-agent-test.yml:generic-api-key:54
+test/qa-proxy-certs/key.pem:private-key:1
+test/server.key:private-key:1
