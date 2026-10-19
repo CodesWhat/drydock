@@ -24,7 +24,7 @@ Multi-language (i18n)|Yes (29 languages)|Yes (17 languages)|tie
 Container start/stop/restart|Yes|Yes|tie
 Container grouping / stacks|Yes|Yes (auto-detected)|tie
 Dark/light theme|Yes|Yes|tie
-License|MIT|AGPL-3.0|tie
+License|MIT|MIT|tie
 `,
   highlightsTable: `
 eye|Image Update Detection|Dockge manages compose stacks but doesn't check for image updates. Drydock continuously monitors 23 registries and notifies you when new versions are available.
