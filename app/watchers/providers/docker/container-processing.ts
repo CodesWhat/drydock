@@ -63,6 +63,99 @@ interface MapContainerToReportDependencies {
 }
 
 /**
+ * Release notes are optional enrichment. Update detection must not wait on a
+ * slow or rate-limited provider (the GitHub provider can sit in 60 s retry
+ * intervals on a 403), so the lookup gets a short budget. Past it, the result
+ * is persisted without notes and the lookup keeps running on a detached copy;
+ * whatever it finds is patched onto the stored record when it settles. The
+ * provider's own retry and cooldown contract is untouched.
+ */
+export const RELEASE_NOTES_ENRICHMENT_BUDGET_MS = 5_000;
+
+const BUDGET_EXCEEDED = Symbol('release-notes-budget-exceeded');
+
+function createEnrichmentDraft(container: Container): Container {
+  const draft = { ...container } as Container;
+  draft.updateAvailable = container.updateAvailable;
+  if (container.result) {
+    draft.result = { ...container.result };
+  }
+  return draft;
+}
+
+function applyLateReleaseNotes(
+  draft: Container,
+  scanned: Container,
+  logContainer: ContainerWatchLogger,
+  isScanStale?: () => boolean,
+) {
+  if (isScanStale?.()) {
+    return;
+  }
+  const stored = storeContainer.getContainer(scanned.id);
+  if (
+    !stored ||
+    stored.result?.tag !== scanned.result?.tag ||
+    stored.image?.tag?.value !== scanned.image?.tag?.value
+  ) {
+    return;
+  }
+  const patch: Partial<Container> = {};
+  if (draft.sourceRepo !== undefined) {
+    patch.sourceRepo = draft.sourceRepo;
+  }
+  if (draft.currentReleaseNotes) {
+    patch.currentReleaseNotes = draft.currentReleaseNotes;
+  }
+  if (draft.result?.releaseNotes && stored.result) {
+    patch.result = { ...stored.result, releaseNotes: draft.result.releaseNotes };
+  }
+  if (Object.keys(patch).length === 0) {
+    return;
+  }
+  storeContainer.updateContainerFields(scanned.id, patch);
+  logContainer.debug('Attached release notes after the watch cycle persisted the result');
+}
+
+async function enrichWithinBudget(
+  container: Container,
+  logContainer: ContainerWatchLogger,
+  isScanStale?: () => boolean,
+) {
+  const draft = createEnrichmentDraft(container);
+  const enrichment = enrichContainerWithReleaseNotes(draft, logContainer);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budget = new Promise<typeof BUDGET_EXCEEDED>((resolve) => {
+    timer = setTimeout(() => resolve(BUDGET_EXCEEDED), RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+  });
+  try {
+    const outcome = await Promise.race([enrichment, budget]);
+    if (outcome === BUDGET_EXCEEDED) {
+      logContainer.debug(
+        `Release notes lookup exceeded ${RELEASE_NOTES_ENRICHMENT_BUDGET_MS}ms; persisting the result without notes`,
+      );
+      enrichment
+        .then(() => applyLateReleaseNotes(draft, container, logContainer, isScanStale))
+        .catch((error: unknown) =>
+          logContainer.debug(`Unable to fetch release notes (${getErrorMessage(error)})`),
+        );
+      return;
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+  if (draft.sourceRepo !== undefined) {
+    container.sourceRepo = draft.sourceRepo;
+  }
+  if (draft.currentReleaseNotes) {
+    container.currentReleaseNotes = draft.currentReleaseNotes;
+  }
+  if (draft.result?.releaseNotes && container.result) {
+    container.result.releaseNotes = draft.result.releaseNotes;
+  }
+}
+
+/**
  * Watch a Container.
  * @param container
  * @returns {Promise<*>}
@@ -94,7 +187,7 @@ export async function watchContainer(
 
   try {
     containerWithResult.result = await findNewVersion(container, logContainer);
-    await enrichContainerWithReleaseNotes(containerWithResult, logContainer);
+    await enrichWithinBudget(containerWithResult, logContainer, isScanStale);
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
     logContainer.warn(`Error when processing (${errorMessage})`);
