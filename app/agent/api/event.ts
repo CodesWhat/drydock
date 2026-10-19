@@ -350,7 +350,7 @@ function sanitizeUpdateFailedPayloadForAgentSse(
 }
 
 function computeContainerSummary(): ContainerSummary {
-  const containers = storeContainer.getContainers();
+  const containers = storeContainer.getContainersForStats();
   const containerStatus = getContainerStatusSummary(containers);
   const images = new Set(
     containers.map(

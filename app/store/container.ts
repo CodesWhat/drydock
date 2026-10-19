@@ -2270,6 +2270,7 @@ export function getContainersRaw(
  */
 export interface ContainerStatProjection {
   id: string;
+  name: string;
   watcher: string;
   agent: string | undefined;
   status: string;
@@ -2292,6 +2293,7 @@ export interface ContainerStatProjection {
 function projectContainerForStats(c: container.Container): ContainerStatProjection {
   return {
     id: c.id,
+    name: c.name,
     watcher: c.watcher,
     agent: c.agent,
     status: c.status,
