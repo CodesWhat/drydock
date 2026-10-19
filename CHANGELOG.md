@@ -18,6 +18,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Changed
 
 - Removed the README upgrade alert for the 1.4.6 security-hardening changes; UPGRADE-NOTES.md still covers them for anyone updating from an older release.
+- Refreshed the docs for the 1.7.0 GA. Stable is now v1.7.0 across the docs site, README, deprecations page and quickstart tag table (`1`, `latest` and the new `1.7.0` and `1.7` rows resolve to it), and the Updates page gains the v1.7.0 and v1.6.1 entries. Added the image-baked lifecycle hook label entry to `DEPRECATIONS.md` and the deprecations page. Reworded the README upgrade alert to target updates from 1.5.x or earlier, marked the approval queue as v1.8 (RC) in the comparison tables, and synced the translated READMEs with the English roadmap status. Fixed the dead sockguard preset link and the stale CONTRIBUTING notification example, and covered the registry init failure when trigger configuration throws.
 
 ## [1.8.0-rc.2] - 2026-10-18
 

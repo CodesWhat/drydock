@@ -272,7 +272,7 @@ test('stable 1.6 and retained 1.7 docs remain available when current advances to
   assert.match(docsReadme, /`v1\.5\/`, `v1\.4\/`, `v1\.3\/`: archived documentation/u);
   assert.match(
     docsReadme,
-    /`v1\.6\/`: latest-stable 1\.6 documentation, initialized from the published v1\.6\.0 docs/u,
+    /`v1\.6\/`: frozen 1\.6 documentation, initialized from the published v1\.6\.0 docs/u,
   );
   assert.match(docsReadme, /## Versioned-doc correction policy/u);
   assert.match(
