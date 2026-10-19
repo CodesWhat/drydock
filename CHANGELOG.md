@@ -13,6 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- Run the agent's batch trigger route on the agent's own container records. It used the containers in the request body as sent, so a caller holding the agent secret could inject a `dd.hook.pre` label that the hook provenance check then treated as operator-set. The route now looks each container up by id in the agent's store, as the single trigger route does, and takes only the id and operationId from the body. If any id is unknown the whole batch is rejected with 404 and nothing runs. The controller payload is unchanged, so older controllers keep working, but there is no agent version gate: a newer controller talking to an older agent still gets the old behavior.
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 
 ### Fixed
