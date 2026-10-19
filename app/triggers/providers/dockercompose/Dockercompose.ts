@@ -2803,13 +2803,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   /**
    * Terminalize every operation caught up in a compose-file-once preflight
-   * failure. An API-requested update already has an operation row —
-   * request-update.ts pre-creates it, with an id this can look up via
-   * `getRequestedOperationId` — but a scheduled (cron-driven) auto-update
-   * never went through that path, so it has neither a row nor an id to find
-   * one with. Without inserting a row for it here, `markOperationTerminal`
-   * has nothing to terminalize and the failed lifecycle event never fires
-   * for it, leaving only the audit record the preflight itself wrote (DR-36).
+   * failure. Every normal flow already has an operation row —
+   * request-update.ts inserts it at admission and passes its id down, which
+   * this looks up via `getRequestedOperationId`. That covers API requests and
+   * scheduled single auto-updates and cron/digest batches, which Trigger.ts
+   * enqueues through the same admission. Only a direct compose invocation
+   * with no id (no normal flow) has no row to find. Without inserting one for
+   * it here, `markOperationTerminal` has nothing to terminalize and the
+   * failed lifecycle event never fires for it, leaving only the audit record
+   * the preflight itself wrote (DR-36).
    *
    * Only the service whose preflight step actually threw (tagged via
    * `tagComposeFileOncePreflightError`) is genuinely at fault, so it alone
