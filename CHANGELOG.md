@@ -13,6 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- Only accept OIDC bearer tokens issued for this drydock client. The bearer path used to accept any access token the IdP would answer a userinfo call for, so a token minted for another application on the same IdP authenticated against the API. JWT access tokens are now verified against the IdP's JWKS (issuer, expiry, and `aud` containing the client ID or `azp`/`client_id` equal to it), opaque tokens go through RFC 7662 introspection, and a token that can be checked neither way is rejected. `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` adds extra accepted audiences. The browser login flow is unchanged. See DEPRECATIONS.md.
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 
 ### Fixed

@@ -50,6 +50,7 @@
     "nocache": "4.0.0",
     "node-cron": "4.6.0",
     "nodemailer": "10.0.9",
+    "jose": "6.2.8",
     "openid-client": "6.8.7",
     "p-limit": "7.3.2",
     "parse-docker-image-name": "3.0.0",
