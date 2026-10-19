@@ -14,6 +14,7 @@ import {
   withContainerUpdateLocks,
 } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
+import { buildContainerUpdateVersionFields } from '../docker/ContainerUpdateExecutor.js';
 import {
   attachCreatedContainerCandidate,
   cleanupCreatedContainerCandidate,
@@ -2218,6 +2219,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
+    this.recordComposeOperationDetails(container, context, runtimeContext);
     const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
       requiredComposeCtx,
       runtimeContext,
@@ -2240,6 +2242,30 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     );
 
     return !this.configuration.dryrun;
+  }
+
+  /**
+   * The compose path never goes through the docker executor, which is what
+   * stamps the trigger name, versions and target image on an operation row.
+   * Stamp the same values here so the record matches the docker action's.
+   */
+  private recordComposeOperationDetails(
+    container,
+    context,
+    runtimeContext: ComposeRuntimeContext,
+  ): void {
+    const operationId = getRequestedOperationId(container, runtimeContext);
+    if (!operationId || typeof context?.newImage !== 'string') {
+      return;
+    }
+    const operation = updateOperationStore.getOperationById(operationId);
+    if (operation?.status !== 'queued' && operation?.status !== 'in-progress') {
+      return;
+    }
+    updateOperationStore.updateOperation(operationId, {
+      triggerName: this.getId(),
+      ...buildContainerUpdateVersionFields(container, context.newImage),
+    });
   }
 
   buildPerformContainerUpdateOptions(
