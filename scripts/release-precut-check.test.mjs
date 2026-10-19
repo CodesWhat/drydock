@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -145,6 +145,23 @@ function makeReleaseFixture(overrides = {}) {
     writeFileSync(path, contents, 'utf8');
   }
   return root;
+}
+
+function runPrecheckInFixture(args) {
+  // realpath so the script's import.meta.url self-check matches argv[1] under symlinked tmpdirs.
+  const root = realpathSync(makeReleaseFixture());
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  for (const file of ['release-precut-check.mjs', 'release-tag.mjs']) {
+    writeFileSync(
+      join(root, 'scripts', file),
+      readFileSync(new URL(`./${file}`, import.meta.url), 'utf8'),
+      'utf8',
+    );
+  }
+  return spawnSync(process.execPath, [join(root, 'scripts', 'release-precut-check.mjs'), ...args], {
+    cwd: root,
+    encoding: 'utf8',
+  });
 }
 
 test('release metadata validation accepts an exact RC identity', () => {
@@ -337,7 +354,7 @@ test('cli exits 1 and reports pending discussion when strict RC check has an unc
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.24'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -354,7 +371,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0-rc.24'],
+    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.0'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -367,14 +384,10 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 test('cli exits 0 with warning when tracker file does not exist', () => {
   const trackerPath = join(tmpDir, 'missing.md');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.24'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.7.0'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
 
   assert.equal(result.status, 0);
   assert.match(result.stderr, /Tracker not found at/u);
@@ -384,14 +397,7 @@ test('cli exits 0 for prerelease tags with pending replies (informational only)'
   const trackerPath = join(tmpDir, 'pending-rc.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.24'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = runPrecheckInFixture(['--tracker', trackerPath, 'v1.7.0-rc.1']);
 
   assert.equal(result.status, 0);
 });
@@ -400,14 +406,7 @@ test('cli exits 1 for prerelease tags with --strict and pending replies', () => 
   const trackerPath = join(tmpDir, 'pending-rc-strict.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.0-rc.24'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = runPrecheckInFixture(['--tracker', trackerPath, '--strict', 'v1.7.0-rc.1']);
 
   assert.equal(result.status, 1);
 });
@@ -416,14 +415,10 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
   const trackerPath = join(tmpDir, 'clear.md');
   writeFileSync(trackerPath, TRACKER_ALL_CLEAR, 'utf8');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.0-rc.24'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.7.0'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /No pending discussion replies/u);
