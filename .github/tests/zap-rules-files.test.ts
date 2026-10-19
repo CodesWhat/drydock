@@ -52,6 +52,7 @@ const PUBLIC_SITE_ONLY_IGNORES = [
   '40025',
   '10104',
   '90004',
+  '10051',
 ];
 
 test('the shared rules file does not ignore the public-site-only rules', () => {
