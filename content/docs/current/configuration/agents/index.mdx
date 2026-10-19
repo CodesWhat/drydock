@@ -51,7 +51,7 @@ inventory result are separate signals.
 
 ## Architecture
 
-The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
+The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE). The Agent sends a heartbeat every 15 seconds, and the Controller drops the connection and reconnects after 45 seconds of silence, so a dead connection is detected within a minute instead of staying marked connected. This needs the Agent on 1.8.1 or later; older Agents keep working but aren't monitored this way.
 
 <Callout type="info">**The controller dials out to each agent — the agent does not need to know where the controller is.** Only the controller side gets `DD_AGENT_{name}_HOST`. The agent just needs its port reachable from the controller. (Both ends share the same secret so they trust each other.)</Callout>
 

@@ -113,6 +113,52 @@ describe('agent API event', () => {
     };
   });
 
+  describe('heartbeat', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    test('writes an SSE comment heartbeat every 15 seconds', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS - 1);
+      expect(res.write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(res.write).toHaveBeenCalledWith(': heartbeat\n\n');
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledTimes(2);
+      expect(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS).toBe(15_000);
+    });
+
+    test('stops heartbeating once the stream closes', () => {
+      eventApi.subscribeEvents(req, res);
+      const closeHandler = req.on.mock.calls.find(([name]) => name === 'close')[1];
+      res.write.mockClear();
+
+      closeHandler();
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS * 4);
+
+      expect(res.write).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    test('skips the heartbeat while the client is backpressured', () => {
+      const slowResponse = createPressureResponse();
+      slowResponse.write.mockReturnValue(false);
+      eventApi.subscribeEvents(req, slowResponse);
+      slowResponse.write.mockClear();
+
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS * 2);
+
+      expect(slowResponse.write).not.toHaveBeenCalled();
+    });
+  });
+
   describe('subscribeEvents', () => {
     test('should reject excess streams before retaining or writing the response', () => {
       for (let index = 0; index < eventApi.AGENT_SSE_CONNECTION_LIMIT; index += 1) {

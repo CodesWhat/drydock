@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- A controller-to-agent event stream that silently died (half-open connection) left the agent shown as connected until something else failed. Agents now send an SSE comment heartbeat every 15 seconds, and the controller destroys the stream and reconnects after 45 seconds of silence, marking the agent disconnected meanwhile. The watchdog only arms once an agent has sent a heartbeat, so agents older than 1.8.1 are unaffected. (DR-86)
+
 ### Security
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.

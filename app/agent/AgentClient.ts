@@ -269,6 +269,11 @@ const AGENT_STATS_CHANGED_DEBOUNCE_MS = 250;
 // on response-received alone lets a stream that returns HTTP 200 then ends
 // immediately defeat the backoff, producing a flat 1s reconnect loop (#362).
 const SSE_STABLE_CONNECTION_MS = 30_000;
+// The agent sends an SSE comment heartbeat every 15 s (AGENT_SSE_HEARTBEAT_INTERVAL_MS
+// in agent/api/event.ts). Once a stream has delivered one, 3 missed intervals of
+// silence means the connection is half-open and gets torn down.
+export const AGENT_SSE_IDLE_TIMEOUT_MS = 45_000;
+const SSE_HEARTBEAT_PATTERN = /(?:^|\n): heartbeat(?:\n|$)/;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -330,6 +335,7 @@ export class AgentClient {
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
   private stableConnectionTimer: NodeJS.Timeout | null;
+  private sseIdleTimer: NodeJS.Timeout | null = null;
   private activeSseStream: (NodeJS.EventEmitter & { destroy?: () => void }) | undefined;
   private stopped: boolean;
   private hasConnectedOnce: boolean;
@@ -1399,8 +1405,16 @@ export class AgentClient {
     }
   }
 
+  private clearSseIdleTimer() {
+    if (this.sseIdleTimer) {
+      clearTimeout(this.sseIdleTimer);
+      this.sseIdleTimer = null;
+    }
+  }
+
   stop() {
     this.inventory.invalidate();
+    this.clearSseIdleTimer();
     this.stopped = true;
     const activeSseStream = this.activeSseStream;
     this.activeSseStream = undefined;
@@ -1442,6 +1456,7 @@ export class AgentClient {
 
   scheduleReconnect(delay?: number) {
     this.clearStableConnectionTimer();
+    this.clearSseIdleTimer();
     if (this.stopped || this.reconnectTimer) {
       return;
     }
@@ -1505,9 +1520,30 @@ export class AgentClient {
     let buffer = '';
     let queuedBytes = 0;
     let sseProcessing = Promise.resolve();
+    // Armed by the first heartbeat on this stream, so agents that predate the
+    // heartbeat (and never send one) are never torn down for being quiet.
+    let watchdogArmed = false;
+
+    const resetIdleTimer = () => {
+      this.clearSseIdleTimer();
+      const timer = setTimeout(() => {
+        this.sseIdleTimer = null;
+        // Every path that retires this stream clears the timer first, so a
+        // firing timer always belongs to the active stream.
+        this.activeSseStream = undefined;
+        this.log.warn(
+          `No SSE data from agent ${sanitizeLogParam(this.name)} for ${AGENT_SSE_IDLE_TIMEOUT_MS / 1000}s; treating the connection as dead. Reconnecting...`,
+        );
+        stream.destroy?.();
+        this.scheduleReconnect();
+      }, AGENT_SSE_IDLE_TIMEOUT_MS);
+      timer.unref();
+      this.sseIdleTimer = timer;
+    };
 
     const failForBufferOverflow = () => {
       this.activeSseStream = undefined;
+      this.clearSseIdleTimer();
       stream.destroy?.();
       this.log.error(
         `SSE event buffer exceeded the ${MAX_SSE_EVENT_BUFFER_BYTES}-byte limit. Reconnecting...`,
@@ -1522,6 +1558,12 @@ export class AgentClient {
       const decodedChunk = decoder.write(chunk);
       if (!decodedChunk) {
         return;
+      }
+      if (!watchdogArmed && SSE_HEARTBEAT_PATTERN.test(decodedChunk)) {
+        watchdogArmed = true;
+      }
+      if (watchdogArmed) {
+        resetIdleTimer();
       }
       const decodedBytes = Buffer.byteLength(decodedChunk, 'utf8');
       if (

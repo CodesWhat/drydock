@@ -101,7 +101,7 @@ import {
   _resetControllerLocalContainerIdsForTests,
   recordControllerLocalEnumeration,
 } from '../watchers/controller-local-container-ids.js';
-import { AgentClient } from './AgentClient.js';
+import { AGENT_SSE_IDLE_TIMEOUT_MS, AgentClient } from './AgentClient.js';
 import { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { bodySha256Hex, buildCanonicalMessage, EMPTY_BODY_SHA256_HEX } from './ed25519-signer.js';
 
@@ -1832,6 +1832,127 @@ describe('AgentClient', () => {
       stream.emit('data', Buffer.from('data: {"type":"dd:ack","data":{"version":"1.0"}}\n\n'));
 
       await vi.waitFor(() => expect(handleSpy).toHaveBeenCalledWith('dd:ack', { version: '1.0' }));
+    });
+
+    describe('dead-connection watchdog', () => {
+      const HEARTBEAT = Buffer.from(': heartbeat\n\n');
+
+      async function openStream() {
+        const stream = Object.assign(new EventEmitter(), { destroy: vi.fn() });
+        axios.mockResolvedValue({ data: stream });
+        client.startSse();
+        await vi.advanceTimersByTimeAsync(0);
+        client.isConnected = true;
+        return stream;
+      }
+
+      test('ignores heartbeat comment lines in the parser', async () => {
+        const stream = await openStream();
+        const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+        const warnSpy = vi.spyOn(client.log, 'warn');
+
+        stream.emit('data', HEARTBEAT);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(handleSpy).not.toHaveBeenCalled();
+        expect(warnSpy).not.toHaveBeenCalled();
+      });
+
+      test('does not tear down a stream that never sent a heartbeat', async () => {
+        const stream = await openStream();
+        const scheduleSpy = vi.spyOn(client, 'scheduleReconnect');
+
+        await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+        expect(stream.destroy).not.toHaveBeenCalled();
+        expect(scheduleSpy).not.toHaveBeenCalled();
+        expect(client.isConnected).toBe(true);
+      });
+
+      test('destroys a silent stream 45s after the first heartbeat and reconnects', async () => {
+        const stream = await openStream();
+        const warnSpy = vi.spyOn(client.log, 'warn');
+        const scheduleSpy = vi.spyOn(client, 'scheduleReconnect');
+        stream.emit('data', HEARTBEAT);
+
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS - 1);
+        expect(stream.destroy).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+
+        expect(stream.destroy).toHaveBeenCalledTimes(1);
+        expect(scheduleSpy).toHaveBeenCalledTimes(1);
+        expect(client.isConnected).toBe(false);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('test-agent'));
+        expect(AGENT_SSE_IDLE_TIMEOUT_MS).toBe(45_000);
+      });
+
+      test('tears down without destroy() on the stream', async () => {
+        const stream = new EventEmitter();
+        axios.mockResolvedValue({ data: stream });
+        client.startSse();
+        await vi.advanceTimersByTimeAsync(0);
+        client.isConnected = true;
+        stream.emit('data', HEARTBEAT);
+
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS);
+
+        expect(client.isConnected).toBe(false);
+      });
+
+      test('any received bytes reset the idle timer', async () => {
+        const stream = await openStream();
+        stream.emit('data', HEARTBEAT);
+
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS - 1_000);
+        stream.emit('data', Buffer.from('data: {"type":"x"}'));
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS - 1_000);
+        expect(stream.destroy).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1_000);
+        expect(stream.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      test('a late stream error after the watchdog fires does not reconnect twice', async () => {
+        const stream = await openStream();
+        const scheduleSpy = vi.spyOn(client, 'scheduleReconnect');
+        stream.emit('data', HEARTBEAT);
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS);
+
+        stream.emit('error', new Error('socket hang up'));
+        stream.emit('end');
+
+        expect(scheduleSpy).toHaveBeenCalledTimes(1);
+      });
+
+      test('clears the timer on stream error, end, stop and buffer overflow', async () => {
+        for (const teardown of ['error', 'end', 'stop'] as const) {
+          const stream = await openStream();
+          stream.emit('data', HEARTBEAT);
+          expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+          if (teardown === 'error') {
+            stream.emit('error', new Error('boom'));
+          } else if (teardown === 'end') {
+            stream.emit('end');
+          } else {
+            client.stop();
+          }
+
+          expect((client as any).sseIdleTimer).toBeNull();
+          client.stop();
+          client.stopped = false;
+          vi.clearAllTimers();
+        }
+      });
+
+      test('clears the timer when the buffer overflows', async () => {
+        const stream = await openStream();
+        stream.emit('data', HEARTBEAT);
+        stream.emit('data', Buffer.alloc(17 * 1024 * 1024, 'a'));
+
+        expect((client as any).sseIdleTimer).toBeNull();
+        expect(stream.destroy).toHaveBeenCalled();
+      });
     });
 
     test('should ignore empty SSE data chunks', async () => {
