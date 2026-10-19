@@ -496,7 +496,7 @@ Zobacz plik [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/
 
 ---
 
-**[Licencja AGPL-3.0](LICENSE)**
+**[Licencja MIT](LICENSE)**
 
 <a href="https://github.com/CodesWhat">
   <picture>

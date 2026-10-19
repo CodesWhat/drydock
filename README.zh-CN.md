@@ -496,7 +496,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 ---
 
-**[AGPL-3.0 许可证](LICENSE)**
+**[MIT 许可证](LICENSE)**
 
 <a href="https://github.com/CodesWhat">
   <picture>
