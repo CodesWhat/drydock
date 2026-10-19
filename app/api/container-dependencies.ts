@@ -15,12 +15,14 @@ import { scoped } from './route-scopes.js';
 const router = express.Router();
 
 /**
- * GET /dependencies — full resolved dependency graph over every known
+ * GET /dependencies — full resolved dependency graph over every listed
  * container (design §4). Thin serializer over the pure graph engine
  * (dependency-graph.ts) — no duplicate resolution logic lives here.
  */
 function getContainerDependencies(_req: Request, res: Response) {
-  const containers = storeContainer.getContainers();
+  // Same container set as the list handler (rollback containers hidden), so
+  // dependencyCount on list rows always agrees with this graph's edges.
+  const containers = storeContainer.getContainers({ excludeRollbackContainers: true });
   const { nodes, edges, unresolved, crossHostIgnored } = buildDependencyGraph(containers);
   const { cycles } = topologicalSort(nodes, edges);
   const containerById = new Map<string, Container>(
