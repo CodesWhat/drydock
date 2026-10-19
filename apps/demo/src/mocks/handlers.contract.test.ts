@@ -1,9 +1,10 @@
 import { setupServer } from 'msw/node';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { fontHandlers } from './handlers/fonts';
 import { notificationHandlers } from './handlers/notifications';
 import { settingsHandlers } from './handlers/settings';
 
-const server = setupServer(...settingsHandlers, ...notificationHandlers);
+const server = setupServer(...settingsHandlers, ...notificationHandlers, ...fontHandlers);
 
 beforeAll(() => {
   Object.defineProperty(globalThis, 'location', {
@@ -134,5 +135,16 @@ describe('demo mock contracts', () => {
       simpleBody: expect.any(String),
       batchTitle: expect.any(String),
     });
+  });
+
+  test('serves font CSS for ibm-plex-mono and 404s unknown fonts', async () => {
+    const response = await fetch('http://localhost/fonts/ibm-plex-mono/400.css');
+    expect(response.status).toBe(200);
+    const css = await response.text();
+    expect(css).toContain("font-family: 'IBM Plex Mono'");
+    expect(css).toContain('ibm-plex-mono@latest/latin-400-normal.woff2');
+
+    const missing = await fetch('http://localhost/fonts/not-a-font/400.css');
+    expect(missing.status).toBe(404);
   });
 });
