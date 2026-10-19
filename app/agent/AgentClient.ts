@@ -273,7 +273,9 @@ const SSE_STABLE_CONNECTION_MS = 30_000;
 // in agent/api/event.ts). Once a stream has delivered one, 3 missed intervals of
 // silence means the connection is half-open and gets torn down.
 export const AGENT_SSE_IDLE_TIMEOUT_MS = 45_000;
-const SSE_HEARTBEAT_PATTERN = /(?:^|\n): heartbeat(?:\n|$)/;
+const SSE_HEARTBEAT_LINE = ': heartbeat';
+// Longer than any heartbeat line, so a trailing partial line never needs more.
+const SSE_PARTIAL_LINE_KEEP_CHARS = SSE_HEARTBEAT_LINE.length + 4;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -1523,6 +1525,16 @@ export class AgentClient {
     // Armed by the first heartbeat on this stream, so agents that predate the
     // heartbeat (and never send one) are never torn down for being quiet.
     let watchdogArmed = false;
+    // Trailing partial line of the previous chunks, so a heartbeat split across
+    // chunks is still seen as one whole line.
+    let partialLine = '';
+
+    const containsHeartbeatLine = (decoded: string): boolean => {
+      const lines = (partialLine + decoded).split('\n');
+      const lastLine = lines.pop() as string;
+      partialLine = lastLine.slice(0, SSE_PARTIAL_LINE_KEEP_CHARS);
+      return lines.some((line) => line.replace(/\r$/, '') === SSE_HEARTBEAT_LINE);
+    };
 
     const resetIdleTimer = () => {
       this.clearSseIdleTimer();
@@ -1559,7 +1571,7 @@ export class AgentClient {
       if (!decodedChunk) {
         return;
       }
-      if (!watchdogArmed && SSE_HEARTBEAT_PATTERN.test(decodedChunk)) {
+      if (!watchdogArmed && containsHeartbeatLine(decodedChunk)) {
         watchdogArmed = true;
       }
       if (watchdogArmed) {

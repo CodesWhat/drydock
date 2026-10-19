@@ -1886,6 +1886,45 @@ describe('AgentClient', () => {
         expect(AGENT_SSE_IDLE_TIMEOUT_MS).toBe(45_000);
       });
 
+      test('arms the watchdog on a heartbeat split across two chunks', async () => {
+        const stream = await openStream();
+        stream.emit('data', Buffer.from(': heart'));
+        stream.emit('data', Buffer.from('beat\n\n'));
+
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS - 1);
+        expect(stream.destroy).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+
+        expect(stream.destroy).toHaveBeenCalledTimes(1);
+        expect(client.isConnected).toBe(false);
+      });
+
+      test('arms the watchdog on a CRLF heartbeat split across three chunks', async () => {
+        const stream = await openStream();
+        stream.emit('data', Buffer.from(': hea'));
+        stream.emit('data', Buffer.from('rtbeat\r'));
+        stream.emit('data', Buffer.from('\n\r\n'));
+
+        await vi.advanceTimersByTimeAsync(AGENT_SSE_IDLE_TIMEOUT_MS);
+
+        expect(stream.destroy).toHaveBeenCalledTimes(1);
+      });
+
+      test('does not arm on heartbeat text inside a data payload', async () => {
+        const stream = await openStream();
+        vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+        stream.emit(
+          'data',
+          Buffer.from('data: {"type":"x","data":{"note":"\\n: heartbeat\\n"}}\n\n'),
+        );
+        stream.emit('data', Buffer.from('data: : heartbeat\n\n'));
+
+        await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+        expect(stream.destroy).not.toHaveBeenCalled();
+        expect(client.isConnected).toBe(true);
+      });
+
       test('tears down without destroy() on the stream', async () => {
         const stream = new EventEmitter();
         axios.mockResolvedValue({ data: stream });
