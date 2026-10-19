@@ -59,7 +59,7 @@ test('match should return true when registry url is from gitlab.com', async () =
   expect(
     gitlab.match({
       registry: {
-        url: 'gitlab.com',
+        url: 'registry.gitlab.com',
       },
     }),
   ).toBeTruthy();
@@ -75,10 +75,70 @@ test('match should return true when registry url is from custom gitlab', async (
   expect(
     gitlabCustom.match({
       registry: {
-        url: 'custom.com',
+        url: 'registry.custom.com',
       },
     }),
   ).toBeTruthy();
+});
+
+describe('match host equality', () => {
+  const matchWith = (configuredUrl: string, imageUrl: any) => {
+    const g = new Gitlab();
+    g.configuration = { url: configuredUrl, authurl: 'https://gitlab.com', token: TEST_TOKEN };
+    return g.match({ registry: { url: imageUrl } });
+  };
+
+  test.each([
+    ['https://registry.gitlab.example.com', 'registry.gitlab.example.com'],
+    ['registry.gitlab.example.com', 'https://registry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com/', 'registry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com/some/path', 'registry.gitlab.example.com'],
+    ['https://Registry.GitLab.Example.com', 'registry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com', 'REGISTRY.GITLAB.EXAMPLE.COM'],
+    ['https://registry.gitlab.example.com:5050', 'registry.gitlab.example.com:5050'],
+    ['https://registry.gitlab.example.com:443', 'registry.gitlab.example.com'],
+  ])('matches %s against %s', (configuredUrl, imageUrl) => {
+    expect(matchWith(configuredUrl, imageUrl)).toBe(true);
+  });
+
+  test.each([
+    ['https://registry.gitlab.example.com', 'gitlab.example.com'],
+    ['https://registry.gitlab.example.com', 'example.com'],
+    ['https://gitlab.example.com', 'registry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com:5050', 'registry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com', 'registry.gitlab.example.com:5050'],
+    ['https://registry.gitlab.example.com:5050', 'registry.gitlab.example.com:5051'],
+    ['https://registry.gitlab.example.com', 'registry.gitlab.example.com.evil.com'],
+    ['https://registry.gitlab.example.com', 'evilregistry.gitlab.example.com'],
+    ['https://registry.gitlab.example.com', 'http://'],
+    ['https://registry.gitlab.example.com', ''],
+    ['https://registry.gitlab.example.com', 'bad host'],
+    ['not a url ::', 'registry.gitlab.example.com'],
+  ])('does not match %s against %s', (configuredUrl, imageUrl) => {
+    expect(matchWith(configuredUrl, imageUrl)).toBe(false);
+  });
+
+  test('does not match when the image has no registry url', () => {
+    expect(matchWith('https://registry.gitlab.com', undefined)).toBe(false);
+    const g = new Gitlab();
+    g.configuration = {
+      url: 'https://registry.gitlab.com',
+      authurl: 'https://gitlab.com',
+      token: TEST_TOKEN,
+    };
+    expect(g.match({})).toBe(false);
+  });
+
+  test('does not match when no url is configured', () => {
+    const g = new Gitlab();
+    g.configuration = { authurl: 'https://gitlab.com', token: TEST_TOKEN };
+    expect(g.match({ registry: { url: 'registry.gitlab.com' } })).toBe(false);
+  });
+
+  test('default registry still matches registry.gitlab.com', () => {
+    expect(matchWith('https://registry.gitlab.com', 'registry.gitlab.com')).toBe(true);
+    expect(matchWith('https://registry.gitlab.com', 'gitlab.com')).toBe(false);
+  });
 });
 
 test('authenticate should perform authenticate request', async () => {
