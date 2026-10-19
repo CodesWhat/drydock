@@ -22,7 +22,7 @@ Drydock moves fast — open issues tend to get fixed quickly. The best way to fi
 
 - **Open a [Discussion](https://github.com/CodesWhat/drydock/discussions)** and say what you're interested in. We'll scope something that fits your experience level.
 - **Browse the [Ideas category](https://github.com/CodesWhat/drydock/discussions/categories/ideas)** — feature requests from users that haven't been built yet.
-- **Add a new trigger provider** — the `app/triggers/providers/` directory has many examples to follow. Adding support for a new notification service (Pushbullet, Gotify, etc.) is self-contained and well-patterned.
+- **Add a new trigger provider** — the `app/triggers/providers/` directory has many examples to follow. Adding support for a new notification service (Pushbullet, Zulip, Signal, etc.) is self-contained and well-patterned.
 - **Documentation** — improvements to `content/docs/` are always welcome and need zero backend knowledge.
 - **Check for [`good first issue`](https://github.com/CodesWhat/drydock/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** labels when they exist, but don't wait for them.
 

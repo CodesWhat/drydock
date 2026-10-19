@@ -295,7 +295,7 @@ export const roadmap: Milestone[] = [
   },
   {
     version: "v1.6.1",
-    title: "Latest stable release",
+    title: "Previous stable release (final 1.6 line)",
     emoji: "\u{1F512}",
     status: "released",
     dotColor:
@@ -304,7 +304,7 @@ export const roadmap: Milestone[] = [
   },
   {
     version: "v1.7.0",
-    title: "Smart Updates & UX (GA 2026-10-19)",
+    title: "Latest stable release: Smart Updates & UX (GA 2026-10-19)",
     emoji: "\u{1F680}",
     status: "released",
     dotColor:

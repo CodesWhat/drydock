@@ -6,7 +6,7 @@ description: "Deploy Drydock with Docker using a socket proxy or direct mount."
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-<Callout type="warn">**v1.8.0-rc.2 is an opt-in test build.** These versioned examples pin that RC. For production, use the latest stable release and its v1.6 docs. Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
+<Callout type="warn">**v1.8.0-rc.2 is an opt-in test build.** These versioned examples pin that RC. For production, use the latest stable release (v1.7.0) and its [v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
 
 ## Run the Docker image
 
@@ -114,10 +114,12 @@ Release tags use the same channel names in every registry:
 | `1.8-rc` | Rolling release-candidate channel; moves to the newest `1.8.0-rc.N` |
 | `1.7.0-rc.24` | Final 1.7 candidate, promoted to the 1.7.0 GA on 2026-10-19 |
 | `1.7-rc` | Separate rolling 1.7 candidate channel |
-| `1.6.1` | Immutable exact GA release; best for reproducible deployments |
-| `1.6` | Rolling stable minor channel; published only for GA releases |
-| `1` | Rolling stable major channel; published only for GA releases |
-| `latest` | Newest GA release; never points at a prerelease |
+| `1.7.0` | Immutable exact GA release, promoted unchanged from `1.7.0-rc.24`; best for reproducible deployments |
+| `1.7` | Rolling stable minor channel for the current stable line; published only for GA releases |
+| `1.6.1` | Immutable exact GA release; final release of the frozen previous stable line |
+| `1.6` | Rolling channel for the frozen previous stable line; it no longer moves |
+| `1` | Rolling stable major channel; resolves to `1.7.0`; published only for GA releases |
+| `latest` | Newest GA release; resolves to `1.7.0` and never points at a prerelease |
 
 Use the exact RC tag when reporting a regression. Use `1.8-rc` only when you intentionally want each candidate cut without editing your Compose file.
 
@@ -127,7 +129,7 @@ Use the exact RC tag when reporting a regression. Use `1.8-rc` only when you int
 
 ## Migrating from WUD
 
-If you are coming from What's Up Docker, migrate `WUD_*` environment variables and `wud.*` labels before starting v1.6; those runtime aliases have been removed.
+If you are coming from What's Up Docker, migrate `WUD_*` environment variables and `wud.*` labels before starting v1.6 or later; those runtime aliases have been removed.
 
 To rewrite your local config to drydock naming (`DD_*` and `dd.*`), run:
 
