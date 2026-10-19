@@ -651,7 +651,6 @@ test('security policy distinguishes stable and prerelease support', () => {
 
   assert.match(security, /Latest stable release/u);
   assert.match(security, /Latest v1\.8 release candidate/u);
-  assert.match(security, /Latest v1\.7 release candidate/u);
   assert.match(security, /Older release candidates are not patched/u);
   assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });

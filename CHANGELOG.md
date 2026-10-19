@@ -379,6 +379,73 @@ This is the first public v1.8 candidate; v1.8 GA is not released. Some fixes lis
 - **The watchers page said manual updates bypass the maintenance window but didn't say a manual recheck does too.** A manual recheck, the recheck-all action on the containers view, or calling `POST /api/v1/containers/watch` (all watchers) or `POST /api/v1/containers/{id}/watch` (a single container), calls the watcher's `watch()` method directly, the same as a manual update, so it runs immediately regardless of the window; only the scheduled cron tick and the catch-up it leaves behind are gated. Discussed in [#946](https://github.com/CodesWhat/drydock/discussions/946).
 - **The watchers page now spells out the variant suffix rule: suffixes must match letter for letter, digit runs inside a suffix count as precision, and punctuation-only differences never match (#1133, #1136).**
 
+## [1.7.0] — 2026-10-19
+
+Consolidates the `1.7.0-rc.1` … `1.7.0-rc.24` prereleases. Users upgrading from
+`1.6.x` get everything below; users already on `1.7.0-rc.24` receive no additional
+runtime changes.
+
+### Added
+
+- **Container dependency ordering** ([discussion #219](https://github.com/CodesWhat/drydock/discussions/219)). `dd.depends_on` and `dd.depends_on.action` labels, plus Compose-derived `depends_on` detection (including when drydock runs in a container), feed a dependency graph. Accepted bulk updates run wave by wave, restart-only dependents are marked, and a dependency-group bulk update needs destructive-action confirmation and binds to its own preview. The container list carries `dependencyCount` and `dependentCount` for the UI badges.
+- **Action-policy resolution on the API and UI.** `GET /api/v1/containers` and the SSE container payloads include an `actionPolicy` object (`blocked`, `manual` or `auto`), shown as a localized badge with tooltips.
+- **Installable PWA, clickable port links, container uptime and keyboard shortcuts.** `/` focuses search, `Escape` closes it and `?` opens a shortcut reference.
+- **Debounced container discovery.** Docker's transient rename aliases during a recreate are no longer registered as containers ([#156](https://github.com/CodesWhat/drydock/issues/156)).
+- **Portwing improvements.** `DD_PORTWING_POLL_INTERVAL` sets the Edge refresh interval ([#688](https://github.com/CodesWhat/drydock/issues/688)), edge tunnels carry non-JSON Docker response bodies, and edge exec completion reasons reach the controller ([#635](https://github.com/CodesWhat/drydock/issues/635)).
+- **`release-cut.yml` can cut a maintenance patch from a retired dev branch** through the optional `source_ref` input, without touching the cosign signing identity.
+
+### Changed
+
+- **BREAKING: Home Assistant MQTT topics include an `agent/<name>` segment by default for agent-owned containers.** Announced in v1.5.x. Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the old layout temporarily. Old retained discovery entities are not cleaned up and need removing by hand.
+- **BREAKING: `trigger-excluded` and `trigger-not-included` are hard blockers.** This ends the v1.5.0 to v1.6.x soft-severity grace period (see `DEPRECATIONS.md`).
+- **A stable release shows its own version.** A GA image is the last release candidate promoted unchanged, so it now reports the base version in the UI, the API and Home Assistant, and keeps the full build identity in `build`. Release-gated store migrations compare against the base version.
+- **Faster login screen.** The oversized logo asset is no longer inlined into the entry chunk.
+- **Turning on security scanning no longer disconnects open browser tabs each scan cycle.** The container SSE events no longer carry the per-CVE arrays.
+- **Release and CI hardening.** The cut checks base image pins and published image architecture before signing, DAST and workflow-lint gates fail closed, ZAP alerts are keyed per scanned site, the weekly DAST scans can finish, and README badges read live. None of this changes the shipped image.
+- **Dropped the trivy qlty plugin in favor of Grype**, and documented the container SBOM attestation in the release-verification guide.
+
+### Removed
+
+- **BREAKING: the `DD_TRIGGER_*` environment prefix and the `dd.trigger.include` and `dd.trigger.exclude` labels.** Deprecated in v1.5.0, they now fail startup. Use `DD_ACTION_*`, `DD_NOTIFICATION_*` and the `dd.action.*` and `dd.notification.*` labels.
+- **`curl` is gone from the image.** The image healthcheck has used the compiled `/bin/healthcheck` binary since v1.5.0, so only user-defined HEALTHCHECK overrides that call `curl` are affected.
+- **The unversioned `GET /api/auth/methods` alias.** It returns 410 like the rest of the unversioned `/api/*` surface. Use `GET /api/v1/auth/status`.
+
+### Fixed
+
+- **Update checks and registry lookups report their real result.** A failed digest check surfaces as unknown instead of "Up to date", nested OCI image indexes resolve to the real manifest, bare build-number tags no longer outrank real versions, and digest watching is re-derived every scan so older rows stop sitting at Current. Tag family matching requires the variant suffix to match, older LinuxServer builds are no longer offered, and repositories with more than 1000 tags page correctly, including on AWS ECR Public.
+- **Notifications fire once per update.** Cron scans are single-flight, a `once=true` trigger no longer re-fires when a rate-limited digest lookup changes the history hash, a manual check during a scan can't double-notify, and an unsettled reservation no longer holds its key for the life of the process ([#972](https://github.com/CodesWhat/drydock/issues/972)). Monthly and longer schedules no longer expire scans after 1 ms.
+- **Updates and rollbacks deploy what was verified.** Docker and Compose updates pin the pulled image by digest for verification, scanning and the replacement create. Compose runs its security gate before it stops anything, rollbacks restore the recorded digest or backup image, and a rolled-back container no longer picks up an entrypoint or command from the newer image.
+- **A same-tag update no longer leaves the old image's defaults on the new container,** and an entrypoint or command the image left unchanged is no longer pinned as explicit ([#1351](https://github.com/CodesWhat/drydock/issues/1351)). A disabled healthcheck no longer health-gates an update ([#1284](https://github.com/CodesWhat/drydock/issues/1284)).
+- **Update policy survives agent and controller handoffs, recreation and self-update.** Pruning clears policy only when it should, policy is stashed by Docker id when a container moves to an agent, and one failing local watcher no longer deletes another's records ([#1280](https://github.com/CodesWhat/drydock/issues/1280), [#565](https://github.com/CodesWhat/drydock/issues/565)).
+- **Agents and Portwing.** A healthy agent with a large inventory can reconnect, one malformed container no longer zeroes an inventory sync, a disconnected agent's in-flight setup can't replace its reconnected owner, and duplicate agent keys return 409 instead of a server error.
+- **Store and startup.** The session store no longer shares `/store/dd.json` with the main store and erases its data, startup no longer crashes with `EPERM` when the volume forbids `chmod`, and `DD_AGENT_ALLOW_INSECURE_SECRET` is no longer parsed as an agent named `allow`.
+- **Self-update and recovery.** A self-update no longer restarts the controller mid-update of another container, a health-verified replacement is no longer rolled back or destroyed, and startup recovery no longer marks an untouched container as updated.
+- **Bulk vulnerability scans finish and report accurately,** including large fleets, a failing notification, and a large Trivy report (`DD_SECURITY_TRIVY_MAXOUTPUTBYTES`, default 64 MB) ([#1356](https://github.com/CodesWhat/drydock/discussions/1356)).
+- **WebSocket and proxy.** Log-stream upgrades behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent, and `ws` or `wss` is accepted. OIDC login no longer bounces back to the login page.
+- **Home Assistant.** Agent entities receive state when MQTT agent topic segmentation is on ([#1139](https://github.com/CodesWhat/drydock/pull/1139)).
+- **Images.** The arm64 image published for rc.4 through rc.10 was an x86-64 image with an arm64 label. The base pins now name multi-platform indexes and the cut checks each platform's binaries ([#1021](https://github.com/CodesWhat/drydock/issues/1021)). The shipped image carries the correct source revision.
+- **UI.** Row selection highlights in seven views, status indicators have accessible names, the notification outbox shows the selected tab, removing a container from its full-page view no longer blanks the screen, the dashboard no longer shows a Local Docker host when none is configured, and the 16 non-English locales are properly translated.
+- **Input validation.** Non-numeric or empty `tail` and `since` on the log endpoints and numeric-prefix `limit` and `offset` on the audit endpoint are rejected instead of misread.
+- **Website and demo.** Docs pages that returned 500 render again, docs search no longer returns every archived version at once, and the Get Started snippets deploy an instance that becomes healthy.
+
+### Security
+
+- **Agent ownership is enforced everywhere.** Bulk and incremental ingestion, the prune ahead of it, update and removal all verify that the reporting agent owns the container id it names ([#922](https://github.com/CodesWhat/drydock/pull/922), [#904](https://github.com/CodesWhat/drydock/pull/904)).
+- **Image lifecycle hook labels are not run or carried over.** `dd.hook.*` labels only take effect when set on the container itself, and a recreated container leaves out hook labels that match its image.
+- **Credential exposure closed.** The debug dump, container action responses, error responses, the HTTP trigger log and preview errors redact secrets, including `*_PAT` values and credentials in URLs. The dump requires audit and a rate limit and no longer serves raw environment variables. Registries no longer match lookalike hostnames, thirteen registries use their configured `auth` for pulls, and the compose action can't be pointed at another repository's `image:`.
+- **Login and sessions.** Lockout keys on the credentials presented, concurrent password verification is capped, and basic-auth requests without a cookie no longer persist unreaped 30-day session rows.
+- **Command trigger and input limits.** The env sanitizer blocks argument injection, bulk scan requests are capped, and a slow SSE client can't make drydock retain unbounded bytes.
+- **Image and package patches.** Alpine zlib is patched for CVE-2026-85091, libexpat is 2.8.5-r0 for CVE-2026-93990, OpenSSL is 3.5.9-r0, and the base images are rolled to clear six HIGH OpenSSL CVEs.
+- **Dependency and website updates.** Undici, Nodemailer 10, gRPC, Moment, Joi, compression, fast-uri, ip-address, brace-expansion, DOMPurify and `fflate` are updated for published advisories, and the website moves to Next.js 16.3.8. The demo site sends a full Content-Security-Policy and security-header set.
+
+### Accessibility
+
+- **Dark themes meet the WCAG 2.2 contrast minimum for normal text.** Secondary text, tone colors, accents, toasts, update-status rows and primary button labels were raised to at least 4.5:1 ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865)).
+
+### Documentation
+
+- **Docs audited against the code.** README, `DEPRECATIONS.md`, configuration, API, monitoring and agents pages were corrected, the feature comparison was refreshed, and the agents page now covers per-agent registry configuration and TLS examples.
+
 ## [1.7.0-rc.24] — 2026-10-12
 
 ### Changed
@@ -3395,6 +3462,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 [Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...HEAD
 [1.8.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.1...v1.8.0-rc.2
 [1.8.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.24...v1.8.0-rc.1
+[1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0
 [1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24
 [1.7.0-rc.23]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...v1.7.0-rc.23
 [1.7.0-rc.22]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...v1.7.0-rc.22
