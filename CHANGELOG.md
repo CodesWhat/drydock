@@ -17,6 +17,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- The removed-API-path banner now names the resource that was hit (`/api/containers/*`, never an id) and a coarse client class (`homepage`, `curl`, `python`, ...) with a last-seen time, and the first hit per resource and client each hour is logged with the method, path, `User-Agent` and remote address so you can find the caller (#1370).
 - Removed the README upgrade alert for the 1.4.6 security-hardening changes; UPGRADE-NOTES.md still covers them for anyone updating from an older release.
 
 ## [1.8.0-rc.2] - 2026-10-18
