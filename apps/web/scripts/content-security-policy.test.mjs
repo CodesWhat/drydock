@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "node:test";
 
 import { buildContentSecurityPolicy } from "../src/lib/content-security-policy.mjs";
+
+// Next compiles matcher sources with its bundled path-to-regexp.
+const { pathToRegexp } = createRequire(import.meta.url)("next/dist/compiled/path-to-regexp");
 
 const proxySource = readFileSync(new URL("../src/proxy.ts", import.meta.url), "utf8");
 const layoutSource = readFileSync(new URL("../src/app/layout.tsx", import.meta.url), "utf8");
@@ -105,6 +109,18 @@ test("proxy propagates a fresh nonce and CSP through request and response header
   );
   assert.match(proxySource, /_next\/static/u);
   assert.match(proxySource, /next-router-prefetch/u);
+});
+
+test("proxy matcher skips only /api and /api/*, so /api-prefixed lookalikes still get the CSP", () => {
+  const source = proxySource.match(/source:\s*"([^"]+)"/u)?.[1];
+  assert.ok(source, "proxy matcher source not found");
+  const matcher = pathToRegexp(source);
+  for (const path of ["/api,", "/apiary", "/api-docs", "/", "/docs"]) {
+    assert.ok(matcher.test(path), `${path} should be matched by the proxy`);
+  }
+  for (const path of ["/api", "/api/x", "/api/", "/_next/static/a.js", "/favicon.ico"]) {
+    assert.ok(!matcher.test(path), `${path} should not be matched by the proxy`);
+  }
 });
 
 test("custom inline scripts receive the request nonce", () => {
