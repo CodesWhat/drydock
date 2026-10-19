@@ -40,11 +40,6 @@
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
-> **¿Actualizando desde una versión anterior? Lea primero las notas de actualización.** Tres correcciones de refuerzo de seguridad se enviaron por primera vez en **1.4.6** y se ejecutan en toda la línea **1.5**, por lo que cualquiera que actualice desde una versión anterior a 1.4.6 se verá afectado independientemente de la versión a la que acceda (1.4.6, cualquier 1.5.x o posterior). No están en desuso y no tienen período de gracia: OIDC ahora requiere `authorization_endpoint` en los metadatos de descubrimiento de su proveedor, claves de limitación de velocidad no autenticadas en la dirección del par TCP (depósito compartido detrás de un proxy inverso) y las URL del proxy de activación HTTP deben usar `http(s)://`. Consulte **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)** antes de actualizar.
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
-> [!WARNING]
 > **¿Actualizando a 1.6.0-rc.3 o posterior?** Se aplican más refuerzos de seguridad sin período de gracia. Una instancia sin autenticación configurada, o con autenticación anónima habilitada pero no confirmada, ahora se cierra de forma segura al actualizar, igual que una instalación nueva: el contenedor sigue ejecutándose; las solicitudes protegidas de la API devuelven `401`; las rutas públicas de descubrimiento y estado de autenticación siguen disponibles; y `/health` devuelve `503`. La interfaz SPA puede cargar, pero no puede leer datos protegidos. Configure `DD_ANONYMOUS_AUTH_CONFIRM=true` o `DD_AUTH_BASIC_*`/OIDC antes de actualizar. La cookie de sesión cambia de `connect.sid` a `drydock.sid`, cerrando una vez todas las sesiones existentes. Los activadores HTTP, el webhook de Hass y las descargas de iconos de registros ahora resuelven nombres mediante una consulta DNS protegida que bloquea destinos de metadatos de nube y link-local, y nunca sigue redirecciones. Use `allowmetadata=true` solo en un activador `DD_NOTIFICATION_HTTP_*` que realmente lo necesite. Consulte **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** para ver la guía completa.
 
 <h2 align="center">Contenidos</h2>
