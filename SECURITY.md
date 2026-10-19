@@ -5,11 +5,10 @@
 | Version | Supported |
 | --- | --- |
 | Latest v1.8 release candidate (v1.8.0-rc.2, opt-in testing) | :white_check_mark: |
-| Latest stable release (v1.6.1 until superseded by a GA) | :white_check_mark: |
-| Latest v1.7 release candidate (rc.24, pending GA) | :white_check_mark: |
+| Latest stable release (v1.7.0, GA 2026-10-19) | :white_check_mark: |
 | Older stable or prerelease versions | :x: |
 
-The v1.7 and v1.8 candidate trains are both supported during the overlap. A v1.8 RC does not replace the stable release or the pending v1.7 GA candidate.
+The v1.7 stable line and the v1.8 candidate train are both supported during the overlap. A v1.8 RC does not replace the stable release.
 
 Security fixes for an active prerelease train are delivered in its next release candidate and carried into the next stable release. Older release candidates are not patched; upgrade to the newest candidate before reporting or validating a fix. Release candidates are pre-GA test builds and are not recommended as a substitute for the latest stable release in production.
 

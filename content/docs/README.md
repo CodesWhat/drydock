@@ -1,7 +1,7 @@
 # Versioned docs content
 
 - `current/`: active/default v1.8 RC docs, served as `v1.8`
-- `v1.7/`: retained candidate docs from published v1.7.0-rc.24; v1.7 GA is pending
+- `v1.7/`: retained docs for the v1.7 line, released as v1.7.0 on 2026-10-19
 - `v1.6/`: latest-stable 1.6 documentation, initialized from the published v1.6.0 docs and corrected only for version-compatible errata; latest stable is v1.6.1
 - `v1.5/`, `v1.4/`, `v1.3/`: archived documentation
 
