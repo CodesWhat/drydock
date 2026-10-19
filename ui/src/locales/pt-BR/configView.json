@@ -42,6 +42,8 @@
         "name": "Nome",
         "key": "Chave",
         "scopes": "Escopos",
+        "createdBy": "Criada por",
+        "created": "Criada",
         "lastUsed": "Último uso",
         "expires": "Expira",
         "status": "Status"
@@ -55,6 +57,11 @@
         "header": "Revogar chave de API",
         "message": "Revogar {name} também revoga toda chave criada com ela. Tudo o que as usa para de funcionar imediatamente.",
         "accept": "Revogar"
+      },
+      "review": {
+        "banner": "Você entrou com um código de recuperação. Revise suas chaves de API e revogue as que não reconhecer.",
+        "done": "Revisão concluída",
+        "doneError": "Não foi possível concluir a revisão. Tente novamente."
       },
       "cascade": "{count} chaves revogadas, incluindo toda chave que esta criou.",
       "errors": {

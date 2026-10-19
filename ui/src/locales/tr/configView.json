@@ -42,6 +42,8 @@
         "name": "Ad",
         "key": "Anahtar",
         "scopes": "Kapsamlar",
+        "createdBy": "Oluşturan",
+        "created": "Oluşturulma",
         "lastUsed": "Son kullanım",
         "expires": "Son kullanma",
         "status": "Durum"
@@ -55,6 +57,11 @@
         "header": "API anahtarını iptal et",
         "message": "{name} anahtarını iptal etmek, onunla oluşturulan her anahtarı da iptal eder. Bunları kullanan her şey hemen çalışmayı durdurur.",
         "accept": "İptal Et"
+      },
+      "review": {
+        "banner": "Bir kurtarma koduyla oturum açtınız. API anahtarlarınızı gözden geçirin ve tanımadıklarınızı iptal edin.",
+        "done": "İncelemeyi bitir",
+        "doneError": "İnceleme tamamlanamadı. Yeniden deneyin."
       },
       "cascade": "{count} anahtar iptal edildi; bu anahtarın oluşturduğu her anahtar dahil.",
       "errors": {

@@ -42,6 +42,8 @@
         "name": "Name",
         "key": "Key",
         "scopes": "Scopes",
+        "createdBy": "Created by",
+        "created": "Created",
         "lastUsed": "Last used",
         "expires": "Expires",
         "status": "Status"
@@ -55,6 +57,11 @@
         "header": "Revoke API key",
         "message": "Revoking {name} also revokes every key created with it. Anything using them stops working immediately.",
         "accept": "Revoke"
+      },
+      "review": {
+        "banner": "You signed in with a recovery code. Review your API keys and revoke any you don't recognise.",
+        "done": "Done reviewing",
+        "doneError": "Unable to finish the review. Try again."
       },
       "cascade": "Revoked {count} keys, including every key this one created.",
       "errors": {

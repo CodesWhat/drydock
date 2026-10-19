@@ -38,6 +38,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/auth', () => ({
   getUser: mocks.getUser,
+  acknowledgeApiKeyReview: vi.fn(),
 }));
 vi.mock('@/preferences/sync', () => ({ hydrateFromServer: mocks.hydrateFromServer }));
 vi.mock('@/bootstrap/stale-chunk-recovery', () => ({
@@ -45,6 +46,7 @@ vi.mock('@/bootstrap/stale-chunk-recovery', () => ({
   clearStaleChunkReloadGuard: mocks.clearStaleChunkReloadGuard,
 }));
 
+import { useApiKeyReview } from '@/composables/useApiKeyReview';
 import router from '@/router';
 
 describe('router auth guard', () => {
@@ -190,5 +192,57 @@ describe('router auth guard', () => {
 
     await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
     expect(mocks.hydrateFromServer).toHaveBeenCalledWith('alice');
+  });
+  describe('API key review after a recovery-code sign-in', () => {
+    const reviewLocation = { path: '/config', query: { tab: 'apiKeys' } };
+
+    beforeEach(() => {
+      useApiKeyReview().setApiKeyReviewPending(false);
+    });
+
+    it('sends every other route to the API keys view', async () => {
+      const guard = mocks.getGuard();
+      if (!guard) throw new Error('Missing route guard');
+      mocks.getUser.mockResolvedValue({ username: 'alice', apiKeyReviewPending: true });
+
+      await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toEqual(
+        reviewLocation,
+      );
+      await expect(
+        guard({ name: 'config', query: { tab: 'profile' }, path: '/config' }),
+      ).resolves.toEqual(reviewLocation);
+      await expect(guard({ name: 'config', query: {}, path: '/config' })).resolves.toEqual(
+        reviewLocation,
+      );
+      expect(useApiKeyReview().pending.value).toBe(true);
+    });
+
+    it('lets the API keys view through and ignores a next path while pending', async () => {
+      const guard = mocks.getGuard();
+      if (!guard) throw new Error('Missing route guard');
+      mocks.getUser.mockResolvedValue({ username: 'alice', apiKeyReviewPending: true });
+
+      await expect(
+        guard({ name: 'config', query: { tab: 'apiKeys', next: '/security' }, path: '/config' }),
+      ).resolves.toBe(true);
+      expect(mocks.hydrateFromServer).toHaveBeenCalledWith('alice');
+    });
+
+    it('keeps the login route reachable', async () => {
+      const guard = mocks.getGuard();
+      if (!guard) throw new Error('Missing route guard');
+
+      await expect(guard({ name: 'login', query: {}, path: '/login' })).resolves.toBe(true);
+    });
+
+    it('releases the guard once the server stops reporting the flag', async () => {
+      const guard = mocks.getGuard();
+      if (!guard) throw new Error('Missing route guard');
+      useApiKeyReview().setApiKeyReviewPending(true);
+      mocks.getUser.mockResolvedValue({ username: 'alice' });
+
+      await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
+      expect(useApiKeyReview().pending.value).toBe(false);
+    });
   });
 });

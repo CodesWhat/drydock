@@ -42,6 +42,8 @@
         "name": "Nom",
         "key": "Clé",
         "scopes": "Portées",
+        "createdBy": "Créée par",
+        "created": "Créée",
         "lastUsed": "Dernière utilisation",
         "expires": "Expire",
         "status": "Statut"
@@ -55,6 +57,11 @@
         "header": "Révoquer la clé API",
         "message": "Révoquer {name} révoque aussi chaque clé créée avec elle. Tout ce qui les utilise cesse de fonctionner immédiatement.",
         "accept": "Révoquer"
+      },
+      "review": {
+        "banner": "Vous vous êtes connecté avec un code de récupération. Vérifiez vos clés d'API et révoquez celles que vous ne reconnaissez pas.",
+        "done": "Vérification terminée",
+        "doneError": "Impossible de terminer la vérification. Réessayez."
       },
       "cascade": "{count} clés révoquées, y compris chaque clé créée par celle-ci.",
       "errors": {

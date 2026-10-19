@@ -42,6 +42,8 @@
         "name": "名稱",
         "key": "金鑰",
         "scopes": "範圍",
+        "createdBy": "建立者",
+        "created": "建立時間",
         "lastUsed": "最後使用時間",
         "expires": "到期時間",
         "status": "狀態"
@@ -55,6 +57,11 @@
         "header": "撤銷 API 金鑰",
         "message": "撤銷 {name} 也會撤銷由它建立的每一支金鑰。任何使用這些金鑰的項目都會立即停止運作。",
         "accept": "撤銷"
+      },
+      "review": {
+        "banner": "你使用復原碼登入。請檢查你的 API 金鑰，並撤銷任何你不認得的金鑰。",
+        "done": "完成檢查",
+        "doneError": "無法完成檢查。請再試一次。"
       },
       "cascade": "已撤銷 {count} 支金鑰，包括此金鑰建立的每一支金鑰。",
       "errors": {
