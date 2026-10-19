@@ -1,6 +1,10 @@
 import { validate } from '../../../model/container.js';
 import { createContainerFixture } from '../../../test/helpers.js';
-import { RELEASE_NOTES_ENRICHMENT_BUDGET_MS, watchContainer } from './container-processing.js';
+import {
+  MAX_PENDING_RELEASE_NOTES_LOOKUPS,
+  RELEASE_NOTES_ENRICHMENT_BUDGET_MS,
+  watchContainer,
+} from './container-processing.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 
 const storeMocks = vi.hoisted(() => ({
@@ -227,5 +231,89 @@ describe('watchContainer release-notes budget', () => {
     pending.finish();
     await vi.advanceTimersByTimeAsync(0);
     expect(storeMocks.updateContainerFields).not.toHaveBeenCalled();
+  });
+
+  test('patches the store through updateContainerFields so the change emits once', async () => {
+    const pending = pendingEnrichment();
+    const container = makeContainer();
+    const watching = watchContainer(container, deps());
+    await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    await watching;
+    storeMocks.getContainer.mockReturnValue({
+      id: container.id,
+      image: container.image,
+      result: { tag: '1.4.0' },
+    });
+    pending.finish((draft) => {
+      draft.result.releaseNotes = notes;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeMocks.updateContainerFields).toHaveBeenCalledTimes(1);
+  });
+
+  test('drops late notes from an older watch once a newer watch of the same container ran', async () => {
+    const older = pendingEnrichment();
+    const container = makeContainer();
+    const watchingOlder = watchContainer(container, deps());
+    await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    await watchingOlder;
+
+    vi.mocked(enrichContainerWithReleaseNotes).mockImplementationOnce(async (draft: any) => {
+      draft.result.releaseNotes = { ...notes, body: 'newer' };
+    });
+    const newer = await watchContainer(container, deps());
+    expect(newer.container.result?.releaseNotes?.body).toBe('newer');
+
+    storeMocks.getContainer.mockReturnValue({
+      id: container.id,
+      image: container.image,
+      result: { tag: '1.4.0' },
+    });
+    older.finish((draft) => {
+      draft.result.releaseNotes = { ...notes, body: 'older' };
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storeMocks.updateContainerFields).not.toHaveBeenCalled();
+  });
+
+  test('caps overrun lookups across batches and releases the cap as lookups settle', async () => {
+    const settlers: Array<{ finish: () => void; fail: (e: Error) => void }> = [];
+    const runBatch = async (size: number) => {
+      const batch = Array.from({ length: size }, () => {
+        const pending = pendingEnrichment();
+        settlers.push(pending);
+        return watchContainer(
+          validate(
+            createContainerFixture({ id: `c-${settlers.length}`, result: { tag: '1.3.0' } }),
+          ),
+          deps(),
+        );
+      });
+      await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+      await Promise.all(batch);
+    };
+
+    await runBatch(10);
+    // mockImplementationOnce entries queued by later batches are never consumed while capped.
+    vi.mocked(enrichContainerWithReleaseNotes).mockReset();
+    vi.mocked(enrichContainerWithReleaseNotes).mockImplementation(() => new Promise(() => {}));
+    const second = Array.from({ length: 10 }, (_, index) =>
+      watchContainer(validate(createContainerFixture({ id: `d-${index}` })), deps()),
+    );
+    const third = Array.from({ length: 10 }, (_, index) =>
+      watchContainer(validate(createContainerFixture({ id: `e-${index}` })), deps()),
+    );
+    await vi.advanceTimersByTimeAsync(RELEASE_NOTES_ENRICHMENT_BUDGET_MS);
+    await Promise.all([...second, ...third]);
+    expect(MAX_PENDING_RELEASE_NOTES_LOOKUPS).toBe(10);
+    expect(enrichContainerWithReleaseNotes).not.toHaveBeenCalled();
+
+    // Settle half by success and half by failure: the cap frees up again.
+    settlers.slice(0, 5).forEach((s) => s.finish());
+    settlers.slice(5).forEach((s) => s.fail(new Error('HTTP 403')));
+    await vi.advanceTimersByTimeAsync(0);
+    vi.mocked(enrichContainerWithReleaseNotes).mockResolvedValue(undefined);
+    await watchContainer(validate(createContainerFixture({ id: 'after' })), deps());
+    expect(enrichContainerWithReleaseNotes).toHaveBeenCalledTimes(1);
   });
 });

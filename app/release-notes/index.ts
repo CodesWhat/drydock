@@ -37,6 +37,9 @@ type CacheLookup<T> =
     };
 
 const releaseNotesCache = new Map<string, CacheEntry<ReleaseNotes | null>>();
+// Lookups still running, keyed like the cache. The cache only holds finished results,
+// so without this a second watch of the same repo+tag starts its own request.
+const inFlightReleaseNotes = new Map<string, Promise<ReleaseNotes | undefined>>();
 const sourceRepoCache = new Map<string, CacheEntry<string | null>>();
 const intermediateReleaseNotesCache = new Map<string, CacheEntry<ReleaseNotes[]>>();
 const providers: ReleaseNotesProviderClient[] = [new GithubProvider()];
@@ -392,16 +395,29 @@ async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, tru
     return releaseNotesFromCache.value ?? undefined;
   }
 
-  const releaseNotes = await provider.fetchByTag(sourceRepo, tag, getGithubToken(), {
-    allowToken: trusted,
-  });
-  setCacheValue(
-    releaseNotesCache,
-    cacheKey,
-    releaseNotes || null,
-    releaseNotes ? RELEASE_NOTES_CACHE_TTL_MS : RELEASE_NOTES_CACHE_NOT_FOUND_TTL_MS,
-  );
-  return releaseNotes;
+  const pending = inFlightReleaseNotes.get(cacheKey);
+  if (pending) {
+    return pending;
+  }
+
+  const lookup = (async () => {
+    try {
+      const releaseNotes = await provider.fetchByTag(sourceRepo, tag, getGithubToken(), {
+        allowToken: trusted,
+      });
+      setCacheValue(
+        releaseNotesCache,
+        cacheKey,
+        releaseNotes || null,
+        releaseNotes ? RELEASE_NOTES_CACHE_TTL_MS : RELEASE_NOTES_CACHE_NOT_FOUND_TTL_MS,
+      );
+      return releaseNotes;
+    } finally {
+      inFlightReleaseNotes.delete(cacheKey);
+    }
+  })();
+  inFlightReleaseNotes.set(cacheKey, lookup);
+  return lookup;
 }
 
 export async function getReleaseNotesForTag(

@@ -72,6 +72,49 @@ interface MapContainerToReportDependencies {
  */
 export const RELEASE_NOTES_ENRICHMENT_BUDGET_MS = 5_000;
 
+/**
+ * Overrun lookups keep running after their watch slot is freed, so they are
+ * capped. At the cap a watch persists without notes and retries next cycle
+ * instead of starting another request against a provider that is already slow.
+ */
+export const MAX_PENDING_RELEASE_NOTES_LOOKUPS = 10;
+
+let pendingDetachedLookups = 0;
+
+/**
+ * Per-container watch bookkeeping. `seq` orders watches of the same container
+ * so an older overrun lookup can't overwrite notes a newer watch already
+ * persisted. An entry lives only while a watch or detached lookup for that
+ * container is outstanding, so the map stays bounded by in-flight work and
+ * drains on its own after a deregister or container removal.
+ */
+const watchSequences = new Map<string, { seq: number; active: number; detached: number }>();
+
+function getWatchSequenceEntry(containerId: string) {
+  const entry = watchSequences.get(containerId) ?? { seq: 0, active: 0, detached: 0 };
+  watchSequences.set(containerId, entry);
+  return entry;
+}
+
+function beginWatchSequence(containerId: string) {
+  const entry = getWatchSequenceEntry(containerId);
+  entry.seq += 1;
+  entry.active += 1;
+  return entry.seq;
+}
+
+function releaseWatchSequence(containerId: string, kind: 'active' | 'detached') {
+  const entry = getWatchSequenceEntry(containerId);
+  entry[kind] -= 1;
+  if (entry.active <= 0 && entry.detached <= 0) {
+    watchSequences.delete(containerId);
+  }
+}
+
+function isLatestWatchSequence(containerId: string, seq: number) {
+  return watchSequences.get(containerId)?.seq === seq;
+}
+
 const BUDGET_EXCEEDED = Symbol('release-notes-budget-exceeded');
 
 function createEnrichmentDraft(container: Container): Container {
@@ -87,9 +130,10 @@ function applyLateReleaseNotes(
   draft: Container,
   scanned: Container,
   logContainer: ContainerWatchLogger,
+  watchSeq: number,
   isScanStale?: () => boolean,
 ) {
-  if (isScanStale?.()) {
+  if (isScanStale?.() || !isLatestWatchSequence(scanned.id, watchSeq)) {
     return;
   }
   const stored = storeContainer.getContainer(scanned.id);
@@ -120,8 +164,15 @@ function applyLateReleaseNotes(
 async function enrichWithinBudget(
   container: Container,
   logContainer: ContainerWatchLogger,
+  watchSeq: number,
   isScanStale?: () => boolean,
 ) {
+  if (pendingDetachedLookups >= MAX_PENDING_RELEASE_NOTES_LOOKUPS) {
+    logContainer.debug(
+      'Too many release notes lookups still pending; persisting the result without notes',
+    );
+    return;
+  }
   const draft = createEnrichmentDraft(container);
   const enrichment = enrichContainerWithReleaseNotes(draft, logContainer);
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -134,11 +185,17 @@ async function enrichWithinBudget(
       logContainer.debug(
         `Release notes lookup exceeded ${RELEASE_NOTES_ENRICHMENT_BUDGET_MS}ms; persisting the result without notes`,
       );
+      pendingDetachedLookups += 1;
+      getWatchSequenceEntry(container.id).detached += 1;
       enrichment
-        .then(() => applyLateReleaseNotes(draft, container, logContainer, isScanStale))
+        .then(() => applyLateReleaseNotes(draft, container, logContainer, watchSeq, isScanStale))
         .catch((error: unknown) =>
           logContainer.debug(`Unable to fetch release notes (${getErrorMessage(error)})`),
-        );
+        )
+        .finally(() => {
+          pendingDetachedLookups -= 1;
+          releaseWatchSequence(container.id, 'detached');
+        });
       return;
     }
   } finally {
@@ -162,6 +219,18 @@ async function enrichWithinBudget(
  */
 export async function watchContainer(
   container: Container,
+  dependencies: WatchContainerDependencies,
+): Promise<ContainerReport> {
+  const watchSeq = beginWatchSequence(container.id);
+  try {
+    return await runContainerWatch(container, dependencies, watchSeq);
+  } finally {
+    releaseWatchSequence(container.id, 'active');
+  }
+}
+
+async function runContainerWatch(
+  container: Container,
   {
     ensureLogger,
     log,
@@ -170,6 +239,7 @@ export async function watchContainer(
     emitBatchEvent = false,
     isScanStale,
   }: WatchContainerDependencies,
+  watchSeq: number,
 ): Promise<ContainerReport> {
   ensureLogger();
   // Child logger for the container to process
@@ -187,7 +257,7 @@ export async function watchContainer(
 
   try {
     containerWithResult.result = await findNewVersion(container, logContainer);
-    await enrichWithinBudget(containerWithResult, logContainer, isScanStale);
+    await enrichWithinBudget(containerWithResult, logContainer, watchSeq, isScanStale);
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
     logContainer.warn(`Error when processing (${errorMessage})`);
