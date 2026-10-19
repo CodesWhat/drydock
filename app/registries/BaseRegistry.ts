@@ -886,19 +886,6 @@ class BaseRegistry<
         .toLowerCase();
     }
   }
-
-  /**
-   * Common mask configuration for sensitive fields
-   */
-  maskSensitiveFields(fields: string[]): Partial<TConfiguration> {
-    const masked = { ...this.configuration } as Record<string, unknown>;
-    fields.forEach((field) => {
-      if (masked[field]) {
-        masked[field] = BaseRegistry.mask(String(masked[field]));
-      }
-    });
-    return masked as Partial<TConfiguration>;
-  }
 }
 
 export default BaseRegistry;

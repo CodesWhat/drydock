@@ -327,21 +327,21 @@ test('matchRegistryHost should accept any of several base hosts', () => {
   ).toBe(false);
 });
 
-test('maskSensitiveFields should mask specified fields', () => {
+test('maskFields should mask specified fields', () => {
   baseRegistry.configuration = {
     login: 'user',
     password: 'supersecret',
     token: 'mytoken',
   };
-  const result = baseRegistry.maskSensitiveFields(['password', 'token']);
+  const result = baseRegistry.maskFields(['password', 'token']);
   expect(result.login).toBe('user');
   expect(result.password).toBe('[REDACTED]');
   expect(result.token).toBe('[REDACTED]');
 });
 
-test('maskSensitiveFields should skip fields not in configuration', () => {
+test('maskFields should skip fields not in configuration', () => {
   baseRegistry.configuration = { login: 'user' };
-  const result = baseRegistry.maskSensitiveFields(['password']);
+  const result = baseRegistry.maskFields(['password']);
   expect(result.login).toBe('user');
   expect(result.password).toBeUndefined();
 });

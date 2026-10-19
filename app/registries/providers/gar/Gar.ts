@@ -52,7 +52,7 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['privatekey']);
+    return this.maskFields(['privatekey']);
   }
 
   match(image) {

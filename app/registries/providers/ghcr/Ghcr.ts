@@ -92,7 +92,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['token']);
+    return this.maskFields(['token']);
   }
 
   match(image) {

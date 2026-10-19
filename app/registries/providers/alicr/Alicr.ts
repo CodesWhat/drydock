@@ -10,7 +10,7 @@ class Alicr extends BaseRegistry {
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['password', 'auth']);
+    return this.maskFields(['password', 'auth']);
   }
 
   match(image) {

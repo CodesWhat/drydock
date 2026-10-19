@@ -18,7 +18,7 @@ class Custom<
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['password', 'auth']);
+    return this.maskFields(['password', 'auth']);
   }
 
   /**
