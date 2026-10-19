@@ -23,6 +23,10 @@
         "os": "操作系统",
         "version": "版本",
         "lastSeen": "最后活跃"
+      },
+      "warnings": {
+        "outdated": "需更新代理",
+        "hookLabelsTrusted": "此代理运行的版本低于 1.7.0，仍会信任镜像中内置的生命周期钩子标签。请升级到 1.7.0 或更高版本。"
       }
     },
     "detail": {

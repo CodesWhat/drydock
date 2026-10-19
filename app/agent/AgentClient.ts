@@ -63,6 +63,7 @@ import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
+import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -1660,12 +1661,21 @@ export class AgentClient {
     };
   }
 
+  get warnings(): AgentWarning[] {
+    return getAgentWarnings(this.info);
+  }
+
   private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
     const ackData = data as AgentRuntimeAckPayload;
     const { build } = this.info;
     const buildSuffix = build && build !== ackData.version ? `, build: ${build}` : '';
     this.log.info(`Agent ${this.name} connected (version: ${ackData.version}${buildSuffix})`);
+    if (this.warnings.includes('hook-labels-trusted')) {
+      this.log.warn(
+        `Agent ${this.name} runs ${build ?? this.info.version}; image-baked lifecycle hook labels are still trusted there. Upgrade it to 1.7.0 or later.`,
+      );
+    }
     void this.handshake().catch((error: unknown) => {
       this.log.error(`Handshake failed after dd:ack: ${getErrorMessage(error)}`);
     });

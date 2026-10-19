@@ -15,6 +15,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 
+### Added
+
+- Warn when an agent older than 1.7.0 connects. Those agents still trust lifecycle hook labels baked into images, whatever the controller version. The controller logs one warning per connection, `GET /api/agents` returns `warnings: ["hook-labels-trusted"]` for the agent, and the Agents view shows an Update agent badge next to its version. Nothing about hooks or triggers changes.
+
 ### Fixed
 
 - Send the website's Content-Security-Policy on paths that merely start with `/api` (such as `/api,` or `/apiary`). The proxy matcher skipped every `api`-prefixed path, but the static CSP in `vercel.json` only covers `/api/*`, so those 404 pages went out with no CSP. The matcher now skips only `/api` and `/api/...`, and a test pins the boundary. The public-site ZAP rules also ignore 10051 (Relative Path Confusion) and 40038 (Bypassing 403), which only hit Vercel firewall 403 responses during the active scan.

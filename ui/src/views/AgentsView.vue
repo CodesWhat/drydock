@@ -38,6 +38,7 @@ interface Agent {
   lastSeen?: string;
   version?: string;
   build?: string;
+  hookLabelsTrusted: boolean;
   uptime?: string;
   logLevel?: string;
   pollInterval?: string;
@@ -169,6 +170,7 @@ async function fetchAgents() {
             : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
       build: distinctBuild(a.version, a.build),
+      hookLabelsTrusted: a.warnings?.includes('hook-labels-trusted') ?? false,
       uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
@@ -648,6 +650,9 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
                 v{{ row.version }}
               </span>
+              <AppBadge v-if="row.hookLabelsTrusted" tone="warning" size="xs" class="ml-1.5" v-tooltip.top="t('agentsView.list.warnings.hookLabelsTrusted')">
+                {{ t('agentsView.list.warnings.outdated') }}
+              </AppBadge>
             </template>
             <template #cell-lastSeen="{ row }">
               <span class="dd-text-muted">{{ row.lastSeen }}</span>
@@ -686,6 +691,9 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                     <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
                       v{{ row.version }}
                     </span>
+                    <AppBadge v-if="row.hookLabelsTrusted" tone="warning" size="xs" class="ml-1.5" v-tooltip.top="t('agentsView.list.warnings.hookLabelsTrusted')">
+                      {{ t('agentsView.list.warnings.outdated') }}
+                    </AppBadge>
                   </div>
                   <div class="field flex items-baseline justify-between gap-3">
                     <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.os') }}</span>

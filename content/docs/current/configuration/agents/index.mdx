@@ -519,6 +519,10 @@ The [Registry lookup image](/docs/configuration/registries#registry-lookup-image
   - A marked Portwing watcher automatically receives a controller-owned native `docker` action. Single/batch updates, start/stop/restart, update preview, and backup rollback work over Standard or Edge transport; Docker Compose is not part of this marker contract.
   - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.
 
+## Agent version
+
+Agents older than 1.7.0 still trust lifecycle hook labels baked into images, whatever version the controller runs. Upgrade them to 1.7.0 or later. While one is connected, the controller logs a warning, `GET /api/agents` returns `warnings: ["hook-labels-trusted"]` for it, and the Agents view shows an Update agent badge.
+
 ## Troubleshooting
 
 Agent connections are driven entirely from the controller, so the controller log (`docker logs <controller>`) is where you diagnose them. The controller retries with exponential backoff (up to 60s between attempts), so a failing connection repeats in the log until the agent is healthy.

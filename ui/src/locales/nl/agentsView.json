@@ -23,6 +23,10 @@
         "os": "Besturingssysteem",
         "version": "Versie",
         "lastSeen": "Laatst gezien"
+      },
+      "warnings": {
+        "outdated": "Agent bijwerken",
+        "hookLabelsTrusted": "Deze agent draait een versie ouder dan 1.7.0 en vertrouwt nog steeds lifecycle-hooklabels die in images zijn ingebakken. Werk hem bij naar 1.7.0 of nieuwer."
       }
     },
     "detail": {
