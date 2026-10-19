@@ -40,11 +40,6 @@
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
-> **Aktualizacja ze starszej wersji? Najpierw przeczytaj uwagi dotyczące aktualizacji.** Trzy poprawki zwiększające bezpieczeństwo zostały dostarczone po raz pierwszy w **1.4.6** i działają w całej linii **1.5**, więc każdy, kto dokonuje aktualizacji z wersji starszej niż 1.4.6, będzie miał wpływ na dowolną wersję, na której wyląduje (1.4.6, dowolna wersja 1.5.x lub nowsza). Nie są one wycofane i nie mają okresu karencji: OIDC wymaga teraz `authorization_endpoint` w metadanych wykrywania Twojego dostawcy, nieuwierzytelnionych kluczy ograniczających szybkość na adresie równorzędnym TCP (współdzielony zasobnik za odwrotnym proxy), a adresy URL proxy wyzwalacza HTTP muszą używać `http(s)://`. Przed aktualizacją zobacz **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**.
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
-> [!WARNING]
 > **Aktualizujesz do 1.6.0-rc.3 lub nowszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. Wyzwalacze powiadomień HTTP, webhook Hass i pobieranie ikon rejestrów rozwiązują teraz nazwy hostów za pomocą chronionego wyszukiwania DNS, które blokuje cele metadanych chmurowych i adresy link-local oraz nigdy nie podąża za przekierowaniami — ustaw `allowmetadata=true` dla konkretnego wyzwalacza `DD_NOTIFICATION_HTTP_*` tylko wtedy, gdy rzeczywiście jest to potrzebne. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
 <h2 align="center">Spis treści</h2>

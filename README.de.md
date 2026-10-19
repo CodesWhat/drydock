@@ -40,11 +40,6 @@
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
-> **Aktualisierung von einer älteren Version? Lesen Sie zuerst die Upgrade-Hinweise.** Drei Korrekturen zur Sicherheitsverstärkung wurden erstmals in **1.4.6** ausgeliefert und durchlaufen die gesamte **1.5**-Reihe, sodass jeder, der von einer Version älter als 1.4.6 aktualisiert, davon betroffen ist, unabhängig davon, auf welcher Version er landet (1.4.6, jede 1.5.x oder höher). Sie sind keine veralteten Versionen und haben keine Kulanzfrist: OIDC erfordert jetzt `authorization_endpoint` in den Erkennungsmetadaten Ihres Anbieters, nicht authentifizierte ratenbegrenzende Schlüssel auf der TCP-Peer-Adresse (gemeinsamer Bucket hinter einem Reverse-Proxy) und HTTP-Trigger-Proxy-URLs müssen `http(s)://` verwenden. Lesen Sie vor der Aktualisierung **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**.
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
-> [!WARNING]
 > **Aktualisierung auf 1.6.0-rc.3 oder neuer?** Weitere Sicherheitsverschärfungen gelten ohne Übergangsfrist. Eine Instanz ohne konfigurierte Authentifizierung oder mit aktivierter, aber unbestätigter anonymer Authentifizierung schlägt beim Upgrade jetzt genauso geschlossen fehl wie eine Neuinstallation: Der Container läuft, geschützte API-Anfragen geben `401` zurück, öffentliche Routen für Authentifizierungserkennung und -status bleiben erreichbar und `/health` gibt `503` zurück. Die SPA-Shell kann weiterhin laden, aber keine geschützten Anwendungsdaten lesen. Setzen Sie vor dem Upgrade `DD_ANONYMOUS_AUTH_CONFIRM=true` oder konfigurieren Sie `DD_AUTH_BASIC_*`/OIDC. Das Sitzungscookie wird von `connect.sid` in `drydock.sid` umbenannt, wodurch alle bestehenden Benutzer einmalig abgemeldet werden. HTTP-Benachrichtigungstrigger sowie der Hass-Webhook und Registry-Icon-Abrufe lösen Hostnamen jetzt über eine geschützte DNS-Suche auf, die Cloud-Metadaten- und Link-Local-Ziele blockiert und Weiterleitungen nie folgt. Setzen Sie `allowmetadata=true` nur für einen bestimmten `DD_NOTIFICATION_HTTP_*`-Trigger, wenn dies wirklich erforderlich ist. Vollständige Migrationshinweise finden Sie in **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
 <h2 align="center">Inhalt</h2>

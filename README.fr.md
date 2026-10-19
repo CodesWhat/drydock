@@ -40,11 +40,6 @@
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
-> **Vous effectuez une mise à jour à partir d'une ancienne version ? Lisez d'abord les notes de mise à niveau.** Trois correctifs de renforcement de la sécurité ont été livrés pour la première fois dans **1.4.6** et sont exécutés sur toute la ligne **1.5**, de sorte que toute mise à jour à partir d'une version antérieure à 1.4.6 est affectée quelle que soit la version sur laquelle elle atterrit (1.4.6, toute version 1.5.x ou ultérieure). Ce ne sont pas des dépréciations et n'ont pas de période de grâce : OIDC nécessite désormais `authorization_endpoint` dans les métadonnées de découverte de votre fournisseur, des clés de limitation de débit non authentifiées sur l'adresse homologue TCP (compartiment partagé derrière un proxy inverse) et les URL de proxy déclencheur HTTP doivent utiliser `http(s)://`. Voir **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)** avant la mise à jour.
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
-> [!WARNING]
 > **Mise à niveau vers 1.6.0-rc.3 ou une version ultérieure ?** Des renforcements de sécurité supplémentaires s'appliquent sans délai de grâce. Une instance sans authentification configurée, ou avec l'accès anonyme activé mais non confirmé, échoue désormais en mode fermé lors d'une mise à niveau comme lors d'une nouvelle installation : le conteneur fonctionne, les requêtes API protégées renvoient `401`, les routes publiques de découverte et d'état d'authentification restent disponibles et `/health` renvoie `503`. L'interface SPA peut se charger, mais ne peut pas lire les données protégées. Définissez `DD_ANONYMOUS_AUTH_CONFIRM=true` ou configurez `DD_AUTH_BASIC_*`/OIDC avant la mise à niveau. Le cookie de session passe de `connect.sid` à `drydock.sid`, ce qui déconnecte une fois tous les utilisateurs. Les déclencheurs HTTP, le webhook Hass et les téléchargements d'icônes de registre utilisent désormais une résolution DNS protégée qui bloque les cibles de métadonnées cloud et link-local et ne suit jamais les redirections. Réservez `allowmetadata=true` à un déclencheur `DD_NOTIFICATION_HTTP_*` qui en a réellement besoin. Consultez **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** pour la procédure complète.
 
 <h2 align="center">Contenu</h2>
