@@ -2936,6 +2936,36 @@ describe('additional docker trigger coverage', () => {
       expect(hookConfig.hookPost).toBe('echo operator');
     });
 
+    test('records a hook-label-ignored audit entry with keys only', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi
+            .fn()
+            .mockResolvedValue({ Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }),
+        })),
+      };
+      mockInsertAudit.mockClear();
+
+      await docker.buildHookConfig(
+        hookContainer({ 'dd.hook.pre': 'echo baked', 'dd.hook.post': 'echo operator' }),
+        { dockerApi, currentContainerSpec: { Image: 'sha256:image-id' } },
+      );
+
+      expect(mockAuditCounterInc).toHaveBeenCalledWith({ action: 'hook-label-ignored' });
+      const entry = mockInsertAudit.mock.calls
+        .map(([audit]) => audit)
+        .find((audit) => audit.action === 'hook-label-ignored');
+      expect(entry).toMatchObject({
+        containerName: expect.stringContaining('container-name'),
+        status: 'info',
+        details: expect.stringContaining('dd.hook.pre'),
+      });
+      expect(entry.details).toContain('container-id');
+      expect(entry.details).not.toContain('echo baked');
+      expect(entry.details).not.toContain('echo operator');
+    });
+
     test('inspects the live container when the context has no container spec', async () => {
       process.env.DD_HOOKS_ENABLED = 'true';
       const dockerApi = {

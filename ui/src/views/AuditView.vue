@@ -43,6 +43,7 @@ const actionTypes = [
   'hook-pre-failed',
   'hook-post-success',
   'hook-post-failed',
+  'hook-label-ignored',
   'auto-rollback',
   'update-policy-override-set',
   'update-policy-override-cleared',

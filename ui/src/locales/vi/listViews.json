@@ -87,6 +87,7 @@
       "hook-post-success": "Hook sau thành công",
       "hook-pre-failed": "Hook trước thất bại",
       "hook-post-failed": "Hook sau thất bại",
+      "hook-label-ignored": "Nhãn hook bị bỏ qua",
       "connected": "Đã kết nối",
       "closed": "Đã đóng",
       "update-available": "Có bản cập nhật",

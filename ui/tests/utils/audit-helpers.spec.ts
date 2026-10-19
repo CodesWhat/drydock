@@ -121,6 +121,7 @@ describe('audit-helpers', () => {
       ['webhook-update', 'bolt'],
       ['hook-pre-success', 'triggers'],
       ['hook-post-failed', 'triggers'],
+      ['hook-label-ignored', 'triggers'],
       ['preview', 'search'],
       ['unknown-action', 'info'],
     ] as const)('returns %s icon for "%s"', (action, expected) => {
