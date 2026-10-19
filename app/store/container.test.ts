@@ -2134,6 +2134,29 @@ test('deleteContainer should delete doc and emit an event', async () => {
   expect(container.getContainer(containerExample.id)).toBeUndefined();
 });
 
+test('deleteContainer should redact sensitive env values in the remove event payload', async () => {
+  const containerExample = createContainerFixture({
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'secret-pass' },
+        { key: 'NODE_ENV', value: 'production' },
+      ],
+    },
+  });
+  seedContainer(containerExample);
+  const spyEvent = vi.spyOn(event, 'emitContainerRemoved');
+  container.deleteContainer(containerExample.id);
+
+  const emittedPayload = spyEvent.mock.calls[0][0];
+  expect(JSON.stringify(emittedPayload)).not.toContain('secret-pass');
+  expect(emittedPayload.details.env).toEqual([
+    { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+    { key: 'NODE_ENV', value: 'production', sensitive: false },
+  ]);
+});
+
 test('deleteContainer should forward replacementExpected on the remove event payload', async () => {
   const containerExample = createContainerFixture();
   seedContainer(containerExample);
@@ -3291,6 +3314,24 @@ describe('container unhealthy transition emission', () => {
       health: 'unhealthy',
     });
     expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('unhealthy transition payload redacts sensitive env values', () => {
+    const env = [
+      { key: 'DB_PASSWORD', value: 'secret-pass' },
+      { key: 'NODE_ENV', value: 'production' },
+    ];
+    const existing = healthFixture({ health: 'healthy', details: { env } });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, health: 'unhealthy' });
+
+    const emittedPayload = emitted.mock.calls[0][0];
+    expect(JSON.stringify(emittedPayload)).not.toContain('secret-pass');
+    expect(emittedPayload.container?.details.env).toEqual([
+      { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+      { key: 'NODE_ENV', value: 'production', sensitive: false },
+    ]);
   });
 
   test('healthy to unhealthy emits even when health is the only changed field', () => {

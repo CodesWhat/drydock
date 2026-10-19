@@ -2657,6 +2657,31 @@ describe('additional docker trigger coverage', () => {
     });
   });
 
+  test('preview exposes only the named fields and never runtime env values', async () => {
+    const container = createTriggerContainer();
+    vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue({ id: container.id });
+    vi.spyOn(docker, 'inspectContainer').mockResolvedValue({
+      State: { Running: true },
+      NetworkSettings: { Networks: { bridge: {} } },
+      Config: { Env: ['DB_PASSWORD=secret-pass', 'NODE_ENV=production'] },
+    });
+
+    const preview = await docker.preview({
+      ...container,
+      details: { ports: [], volumes: [], env: [{ key: 'DB_PASSWORD', value: 'secret-pass' }] },
+    });
+
+    expect(Object.keys(preview).sort()).toEqual([
+      'containerName',
+      'currentImage',
+      'isRunning',
+      'networks',
+      'newImage',
+      'updateKind',
+    ]);
+    expect(JSON.stringify(preview)).not.toContain('secret-pass');
+  });
+
   test('preview should return an explicit error when container is not found', async () => {
     vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue(undefined);
     const preview = await docker.preview(createTriggerContainer());
