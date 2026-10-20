@@ -1904,6 +1904,9 @@ jobs:
     # the run summary and compares the branch's median run time week over week.
     name: "CI timing"
     if: always()
+    # release-cut waits on a successful CI Verify run, so a checkout or network
+    # blip here must not turn the whole run red.
+    continue-on-error: true
     needs: [security-actions, secrets, changes, codeql, fuzz, dependency-review, lint, test, web, build, grype-image, dast-zap-baseline, e2e, load-test-ci, load-test-behavior]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
