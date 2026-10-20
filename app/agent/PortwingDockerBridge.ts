@@ -64,6 +64,69 @@ function copyResponseHeaders(res: ServerResponse, headers: Record<string, string
   }
 }
 
+type PortwingTransportFailureReason =
+  | 'timeout'
+  | 'agent-unreachable'
+  | 'bad-upstream-response'
+  | 'transport-failed';
+
+const UNREACHABLE_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'ERR_NETWORK',
+]);
+
+const TIMEOUT_ERROR_CODES = new Set(['ECONNABORTED']);
+
+const BAD_RESPONSE_ERROR_CODES = new Set(['ERR_BAD_RESPONSE', 'ERR_FR_MAX_BODY_LENGTH_EXCEEDED']);
+
+function errorCodes(error: unknown): string[] {
+  const codes: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current && typeof current === 'object'; depth += 1) {
+    const { code, cause } = current as { code?: unknown; cause?: unknown };
+    if (typeof code === 'string') {
+      codes.push(code);
+    }
+    current = cause;
+  }
+  return codes;
+}
+
+function classifyTransportError(error: unknown): PortwingTransportFailureReason {
+  const message = error instanceof Error ? error.message : '';
+  const codes = errorCodes(error);
+  if (
+    /^Malformed Docker API response|^Invalid upstream status|maxContentLength/i.test(message) ||
+    codes.some((code) => BAD_RESPONSE_ERROR_CODES.has(code) || code.startsWith('HPE_'))
+  ) {
+    return 'bad-upstream-response';
+  }
+  if (codes.some((code) => UNREACHABLE_ERROR_CODES.has(code))) {
+    return 'agent-unreachable';
+  }
+  if (codes.some((code) => TIMEOUT_ERROR_CODES.has(code))) {
+    // AgentClient records whether the TCP connection was ever established. A
+    // timeout before that means the agent never answered, not a slow daemon.
+    return (error as { requestConnected?: unknown }).requestConnected === false
+      ? 'agent-unreachable'
+      : 'timeout';
+  }
+  if (/connection closed/i.test(message)) {
+    return 'agent-unreachable';
+  }
+  if (/timeout|timed out/i.test(message)) {
+    return 'timeout';
+  }
+  return 'transport-failed';
+}
+
 export class PortwingDockerBridge {
   private readonly authorization: string;
   private readonly maxRequestBodyBytes: number;
@@ -181,17 +244,20 @@ export class PortwingDockerBridge {
       res.statusCode = response.statusCode;
       res.setHeader('content-length', String(response.body.length));
       res.end(response.body);
-    } catch {
+    } catch (error: unknown) {
       if (res.headersSent) {
         res.destroy();
         return;
       }
-      const message = 'Portwing Docker transport failed';
-      res.writeHead(502, {
-        'content-type': 'text/plain; charset=utf-8',
-        'content-length': String(Buffer.byteLength(message)),
+      // The JSON body lets docker-modem surface `reason` on the thrown error
+      // (`error.json.reason`) so callers can tell a slow daemon from a dead agent.
+      const reason = classifyTransportError(error);
+      const payload = JSON.stringify({ message: 'Portwing Docker transport failed', reason });
+      res.writeHead(reason === 'timeout' ? 504 : 502, {
+        'content-type': 'application/json; charset=utf-8',
+        'content-length': String(Buffer.byteLength(payload)),
       });
-      res.end(message);
+      res.end(payload);
     }
   }
 }

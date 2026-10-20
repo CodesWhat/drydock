@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose 專案、服務或檔案與此容器不符。",
         "labelScope": "被此容器的 dd.action/dd.notification 包含或排除標籤排除。"
       },
+      "notificationSkips": "通知",
+      "notificationSkipReason": {
+        "rule-disabled": "已略過：此觸發器的通知規則已關閉。",
+        "threshold-not-met": "已略過：更新低於此觸發器的門檻。",
+        "trigger-excluded": "已略過：此容器的標籤排除了該觸發器。",
+        "once-already-sent": "已略過：此更新已通知過。",
+        "recently-applied": "已略過：更新剛套用，正在等待 watcher 確認。",
+        "digest-buffered": "已留待下一次摘要發送。"
+      },
       "backupsRollback": "備份與回滾",
       "rollingBack": "回滾中……",
       "rollbackLatest": "回滾到最新",

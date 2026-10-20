@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose 프로젝트, 서비스 또는 파일이 이 컨테이너와 일치하지 않습니다.",
         "labelScope": "이 컨테이너의 dd.action/dd.notification include 또는 exclude 라벨에 의해 제외되었습니다."
       },
+      "notificationSkips": "알림",
+      "notificationSkipReason": {
+        "rule-disabled": "건너뜀: 이 트리거는 알림 규칙이 꺼져 있습니다.",
+        "threshold-not-met": "건너뜀: 업데이트가 이 트리거의 임곗값보다 낮습니다.",
+        "trigger-excluded": "건너뜀: 이 컨테이너의 레이블이 이 트리거를 제외합니다.",
+        "once-already-sent": "건너뜀: 이 업데이트는 이미 알림을 보냈습니다.",
+        "recently-applied": "건너뜀: 업데이트가 방금 적용되어 워처의 확인을 기다리는 중입니다.",
+        "digest-buffered": "다음 다이제스트까지 보류 중입니다."
+      },
       "backupsRollback": "백업 및 롤백",
       "rollingBack": "롤백 중...",
       "rollbackLatest": "최신 버전으로 롤백",

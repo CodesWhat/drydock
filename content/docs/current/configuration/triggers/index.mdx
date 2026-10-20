@@ -322,6 +322,21 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 <Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Action triggers do not use the outbox. Docker and Docker Compose retries are handled by the update lifecycle; Command triggers run the configured command directly.</Callout>
 
+## Why didn't I get a notification?
+
+Drydock remembers the last reason each notification trigger skipped a container, so you can see it without turning on debug logging. Open the container's detail view and look at the **Notifications** list on the Actions tab, or read `notificationSkips` from `GET /api/v1/containers/{id}`. The debug dump (Config > Diagnostics) carries every recorded skip under `notificationSkips`.
+
+| Reason | What it means |
+| --- | --- |
+| `rule-disabled` | The notification rule is off, or this trigger isn't in the rule's trigger allow-list. |
+| `threshold-not-met` | The update is below the trigger's `THRESHOLD`. |
+| `trigger-excluded` | A `dd.notification.include` or `dd.notification.exclude` label (or an agent mismatch) keeps this trigger off the container. |
+| `once-already-sent` | `ONCE=true` and this exact result was already sent, or is being sent right now. |
+| `recently-applied` | The update was just applied and the watcher hasn't confirmed the new state yet. |
+| `digest-buffered` | Not a failure. The container is held for the next digest. |
+
+Only the last skip per trigger and container is kept. It clears when a notification for that pair is sent, when the watcher reports the update is gone, and on restart. The list holds at most 1000 entries, dropping the oldest. For the log-based causes behind each reason, see [Diagnosing a missed notification](#diagnosing-a-missed-notification).
+
 ## Diagnosing a missed notification
 
 If a container has an update but the expected notification never arrives, turn on debug logging and read the fields drydock attaches to each cause rather than guessing -- a trigger skip, a detection failure, a provider error, or an outbox delivery state each carry different fields.

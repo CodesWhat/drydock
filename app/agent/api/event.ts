@@ -19,6 +19,7 @@ interface SseClient {
   pendingPayloads: string[];
   drainHandler?: () => void;
   closeHandler: () => void;
+  heartbeatTimer?: NodeJS.Timeout;
   closed: boolean;
 }
 
@@ -49,6 +50,10 @@ interface ContainerLike {
 const CONTAINER_SUMMARY_CACHE_TTL_MS = 2_000;
 export const AGENT_SSE_CONNECTION_LIMIT = 5;
 const MAX_PENDING_SSE_BYTES = 256 * 1024;
+// SSE comment heartbeat so the controller can detect half-open streams. A comment
+// line (not an event) is ignored by controllers that predate it.
+export const AGENT_SSE_HEARTBEAT_INTERVAL_MS = 15_000;
+const SSE_HEARTBEAT_PAYLOAD = ': heartbeat\n\n';
 
 interface RuntimeEnvEntry {
   key: string;
@@ -85,6 +90,8 @@ function removeSseClient(client: SseClient, destroy: boolean): void {
     return;
   }
   client.closed = true;
+  clearInterval(client.heartbeatTimer);
+  client.heartbeatTimer = undefined;
   removeDrainHandler(client);
   client.req.off?.('close', client.closeHandler);
   client.pendingPayloads = [];
@@ -350,7 +357,7 @@ function sanitizeUpdateFailedPayloadForAgentSse(
 }
 
 function computeContainerSummary(): ContainerSummary {
-  const containers = storeContainer.getContainers();
+  const containers = storeContainer.getContainersForStats();
   const containerStatus = getContainerStatusSummary(containers);
   const images = new Set(
     containers.map(
@@ -442,6 +449,15 @@ export function subscribeEvents(req: Request, res: Response): boolean {
   };
   sseClients.push(client);
   req.on('close', closeHandler);
+  client.heartbeatTimer = setInterval(() => {
+    // A backpressured client is already not draining; queueing heartbeats behind
+    // it would only grow its backlog.
+    if (client.backpressured) {
+      return;
+    }
+    writeSsePayload(client, SSE_HEARTBEAT_PAYLOAD);
+  }, AGENT_SSE_HEARTBEAT_INTERVAL_MS);
+  client.heartbeatTimer.unref();
 
   // Send Welcome / Ack
   const ackMessage = {

@@ -132,6 +132,15 @@
         "structuralIncompatibility": "El proyecto, servicio o archivo de Compose no coincide con este contenedor.",
         "labelScope": "Excluido por las etiquetas de inclusión o exclusión dd.action/dd.notification de este contenedor."
       },
+      "notificationSkips": "Notificaciones",
+      "notificationSkipReason": {
+        "rule-disabled": "Omitida: la regla de notificación está desactivada para este disparador.",
+        "threshold-not-met": "Omitida: la actualización está por debajo del umbral de este disparador.",
+        "trigger-excluded": "Omitida: las etiquetas de este contenedor excluyen este disparador.",
+        "once-already-sent": "Omitida: ya se notificó esta actualización.",
+        "recently-applied": "Omitida: la actualización se acaba de aplicar, a la espera de que el watcher la confirme.",
+        "digest-buffered": "Retenida para el próximo resumen."
+      },
       "backupsRollback": "Backups y rollback",
       "rollingBack": "Haciendo rollback...",
       "rollbackLatest": "Rollback al último",

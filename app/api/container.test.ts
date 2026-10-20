@@ -2469,6 +2469,7 @@ describe('Container Router', () => {
         data: expect.any(Array),
         total: 1,
         unassociatedTriggers: [],
+        notificationSkips: [],
       });
     });
 

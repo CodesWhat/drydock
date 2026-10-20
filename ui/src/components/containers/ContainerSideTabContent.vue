@@ -137,6 +137,7 @@ const {
   triggersLoading,
   detailTriggers,
   unassociatedTriggers,
+  notificationSkips,
   getTriggerKey,
   triggerRunInProgress,
   runAssociatedTrigger,
@@ -1002,6 +1003,17 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
                     <div class="text-2xs dd-text-muted" data-test="unassociated-trigger-reason">{{ t(`containerComponents.fullPageActions.unavailableTriggerReason.${trigger.reason}`) }}</div>
                   </div>
+                </div>
+              </div>
+              <div v-if="notificationSkips.length > 0" class="mt-3 space-y-1.5" data-test="notification-skips">
+                <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.notificationSkips') }}</div>
+                <div v-for="skip in notificationSkips" :key="skip.trigger"
+                     :data-notification-skip-key="skip.trigger"
+                     :title="skip.at"
+                     class="px-2.5 py-2 dd-rounded text-2xs-plus"
+                     :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                  <div class="font-semibold dd-text truncate">{{ skip.trigger }}</div>
+                  <div class="text-2xs dd-text-muted" data-test="notification-skip-reason">{{ t(`containerComponents.fullPageActions.notificationSkipReason.${skip.reason}`) }}</div>
                 </div>
               </div>
             </div>

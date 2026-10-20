@@ -745,6 +745,9 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
         : undefined,
     status: operation.status,
     phase: operation.phase,
+    updatedAt: operation.updatedAt,
+    ...(typeof operation.fromVersion === 'string' ? { fromVersion: operation.fromVersion } : {}),
+    ...(typeof operation.toVersion === 'string' ? { toVersion: operation.toVersion } : {}),
     lastError:
       typeof operation.lastError === 'string' && operation.lastError.trim() !== ''
         ? operation.lastError

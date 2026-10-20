@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose-project, -service of -bestand komt niet overeen met deze container.",
         "labelScope": "Uitgesloten door de dd.action/dd.notification include- of exclude-labels van deze container."
       },
+      "notificationSkips": "Meldingen",
+      "notificationSkipReason": {
+        "rule-disabled": "Overgeslagen: de meldingsregel staat uit voor deze trigger.",
+        "threshold-not-met": "Overgeslagen: de update ligt onder de drempel van deze trigger.",
+        "trigger-excluded": "Overgeslagen: de labels van deze container sluiten deze trigger uit.",
+        "once-already-sent": "Overgeslagen: voor deze update is al een melding verstuurd.",
+        "recently-applied": "Overgeslagen: de update is net toegepast, wachten op bevestiging van de watcher.",
+        "digest-buffered": "Vastgehouden voor de volgende digest."
+      },
       "backupsRollback": "Back-ups en terugdraaien",
       "rollingBack": "Terugrollen...",
       "rollbackLatest": "Laatste terugdraaien",

@@ -276,7 +276,11 @@ describe('useContainerActions', () => {
     mocks.deleteContainer.mockResolvedValue({});
     mocks.scanContainer.mockResolvedValue({});
     mocks.getContainerUpdateOperations.mockResolvedValue([]);
-    mocks.getContainerTriggersWithReasons.mockResolvedValue({ data: [], unassociatedTriggers: [] });
+    mocks.getContainerTriggersWithReasons.mockResolvedValue({
+      data: [],
+      unassociatedTriggers: [],
+      notificationSkips: [],
+    });
     mocks.runTrigger.mockResolvedValue({});
     mocks.updateContainerPolicy.mockResolvedValue({});
     mocks.restartContainer.mockResolvedValue({});
@@ -2890,6 +2894,29 @@ describe('useContainerActions', () => {
     ]);
   });
 
+  it('loads the notification skip reasons from the same response as the triggers (DR-85)', async () => {
+    vi.useFakeTimers();
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
+      data: [],
+      unassociatedTriggers: [],
+      notificationSkips: [
+        { trigger: 'smtp.ops', reason: 'once-already-sent', at: '2026-10-19T10:00:00.000Z' },
+      ],
+    });
+    const { composable } = await mountActionsHarness({
+      activeDetailTab: 'actions',
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+    vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);
+    await flushPromises();
+
+    expect(composable.notificationSkips.value).toEqual([
+      { trigger: 'smtp.ops', reason: 'once-already-sent', at: '2026-10-19T10:00:00.000Z' },
+    ]);
+  });
+
   it('clears the unassociated-triggers list alongside the associated list when the shared load fails', async () => {
     vi.useFakeTimers();
     const container = makeContainer({ id: 'container-1', name: 'web' });
@@ -2904,6 +2931,7 @@ describe('useContainerActions', () => {
 
     expect(composable.detailTriggers.value).toEqual([]);
     expect(composable.unassociatedTriggers.value).toEqual([]);
+    expect(composable.notificationSkips.value).toEqual([]);
     expect(composable.triggerError.value).toBe('trigger load failed');
   });
 
@@ -2931,6 +2959,7 @@ describe('useContainerActions', () => {
     mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
       data: [{ type: 'slack', name: 'api-trigger' }],
       unassociatedTriggers: [],
+      notificationSkips: [],
     });
 
     // Initial mount already scheduled a debounced load for container-1 (web); let it fire and
@@ -2978,6 +3007,7 @@ describe('useContainerActions', () => {
     mocks.getContainerTriggersWithReasons.mockResolvedValueOnce({
       data: [{ type: 'slack', name: 'api-trigger' }],
       unassociatedTriggers: [],
+      notificationSkips: [],
     });
 
     vi.advanceTimersByTime(ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS);

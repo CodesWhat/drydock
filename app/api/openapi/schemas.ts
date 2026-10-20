@@ -1108,6 +1108,13 @@ export const openApiSchemas = {
       updateAvailable: { type: 'boolean' },
       tagPinGated: { type: 'boolean' },
       updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      notificationSkips: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerNotificationSkip' },
+        description:
+          'Last reason each notification trigger skipped this container (DR-85). Only present ' +
+          'on GET /containers/{id}; list responses omit it.',
+      },
       dependencyCount: {
         type: 'integer',
         minimum: 0,
@@ -1658,6 +1665,29 @@ export const openApiSchemas = {
         additionalProperties: true,
       },
     ],
+  },
+  ContainerNotificationSkip: {
+    type: 'object',
+    description:
+      'The last reason a notification trigger skipped a container (DR-85). Held in memory, ' +
+      'cleared when a notification for the pair is sent, and lost on restart.',
+    properties: {
+      trigger: { type: 'string', description: 'Trigger id, e.g. smtp.ops.' },
+      reason: {
+        type: 'string',
+        enum: [
+          'rule-disabled',
+          'threshold-not-met',
+          'trigger-excluded',
+          'once-already-sent',
+          'recently-applied',
+          'digest-buffered',
+        ],
+      },
+      at: { type: 'string', format: 'date-time' },
+    },
+    required: ['trigger', 'reason', 'at'],
+    additionalProperties: false,
   },
   ContainerUnassociatedTrigger: {
     type: 'object',

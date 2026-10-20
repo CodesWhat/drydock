@@ -377,3 +377,152 @@ describe('Dockercompose compose restore operation records', () => {
     });
   });
 });
+
+describe('Dockercompose update operation record details', () => {
+  let trigger;
+  let db: Database | undefined;
+  const composeCtx = (operationId?: string) => ({
+    composeFile: '/opt/drydock/test/stack.yml',
+    service: 'nginx',
+    serviceDefinition: {},
+    composeFileOnceApplied: false,
+    ...(operationId ? { runtimeContext: { operationId } } : {}),
+  });
+
+  beforeEach(() => {
+    ({ trigger } = setupDockercomposeTestContext({
+      DockercomposeCtor: Dockercompose,
+      watchMock: watch,
+      getStateMock: getState,
+    }));
+    trigger.configuration.dryrun = false;
+    db = createMigratedMemoryDatabase();
+    updateOperationStore.createCollections(db);
+    vi.spyOn(trigger, 'maybeRunPerServiceComposeRefresh').mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    db?.close();
+    db = undefined;
+  });
+
+  function insertQueued(id: string, containerId: string, containerName: string) {
+    updateOperationStore.insertOperation({
+      id,
+      containerName,
+      containerId,
+      status: 'queued',
+      phase: 'queued',
+    } as never);
+  }
+
+  test('fills triggerName, fromVersion, toVersion and targetImage like the docker action', async () => {
+    insertQueued('op-1', 'nginx-1', 'nginx');
+    const container = makeContainer({ id: 'nginx-1', name: 'nginx' });
+
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.1.0' },
+      container,
+      undefined,
+      composeCtx('op-1'),
+    );
+
+    expect(updateOperationStore.getOperationById('op-1')).toMatchObject({
+      triggerName: trigger.getId(),
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      targetImage: 'nginx:1.1.0',
+    });
+  });
+
+  test('falls back to the current tag when the update kind carries no values', async () => {
+    insertQueued('op-1', 'nginx-1', 'nginx');
+    const container = makeContainer({ id: 'nginx-1', name: 'nginx' });
+    container.updateKind = { kind: 'digest' };
+
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.0.0' },
+      container,
+      undefined,
+      composeCtx('op-1'),
+    );
+
+    expect(updateOperationStore.getOperationById('op-1')).toMatchObject({
+      fromVersion: '1.0.0',
+      toVersion: '1.0.0',
+      targetImage: 'nginx:1.0.0',
+    });
+  });
+
+  test('each service in a batch gets its own values', async () => {
+    insertQueued('op-nginx', 'nginx-1', 'nginx');
+    insertQueued('op-redis', 'redis-1', 'redis');
+    const nginx = makeContainer({ id: 'nginx-1', name: 'nginx' });
+    const redis = makeContainer({
+      id: 'redis-1',
+      name: 'redis',
+      imageName: 'redis',
+      tagValue: '7.0.0',
+      remoteValue: '7.2.0',
+    });
+    const context = (operationIds: Record<string, string>) => ({
+      ...composeCtx(),
+      runtimeContext: { operationIds },
+    });
+    const operationIds = { 'nginx-1': 'op-nginx', 'redis-1': 'op-redis' };
+
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.1.0' },
+      nginx,
+      undefined,
+      context(operationIds),
+    );
+    await trigger.performContainerUpdate({ newImage: 'redis:7.2.0' }, redis, undefined, {
+      ...context(operationIds),
+      service: 'redis',
+    });
+
+    expect(updateOperationStore.getOperationById('op-nginx')).toMatchObject({
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      targetImage: 'nginx:1.1.0',
+    });
+    expect(updateOperationStore.getOperationById('op-redis')).toMatchObject({
+      triggerName: trigger.getId(),
+      fromVersion: '7.0.0',
+      toVersion: '7.2.0',
+      targetImage: 'redis:7.2.0',
+    });
+  });
+
+  test('leaves terminal, missing and unrequested operations alone', async () => {
+    insertQueued('op-done', 'nginx-1', 'nginx');
+    updateOperationStore.markOperationTerminal('op-done', { status: 'succeeded' });
+    const container = makeContainer({ id: 'nginx-1', name: 'nginx' });
+    const updateSpy = vi.spyOn(updateOperationStore, 'updateOperation');
+
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.1.0' },
+      container,
+      undefined,
+      composeCtx('op-done'),
+    );
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.1.0' },
+      container,
+      undefined,
+      composeCtx('op-missing'),
+    );
+    await trigger.performContainerUpdate(
+      { newImage: 'nginx:1.1.0' },
+      container,
+      undefined,
+      composeCtx(),
+    );
+    await trigger.performContainerUpdate({}, container, undefined, composeCtx('op-done'));
+
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(updateOperationStore.getOperationById('op-done')?.targetImage).toBeUndefined();
+  });
+});

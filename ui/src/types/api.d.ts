@@ -91,6 +91,19 @@ export type ApiTriggerAssociationReason =
   | 'structuralIncompatibility'
   | 'labelScope';
 
+/** Last reason a notification trigger skipped a container (from GET /api/containers/:id/triggers). */
+export interface ApiNotificationSkip {
+  trigger: string;
+  reason:
+    | 'rule-disabled'
+    | 'threshold-not-met'
+    | 'trigger-excluded'
+    | 'once-already-sent'
+    | 'recently-applied'
+    | 'digest-buffered';
+  at: string;
+}
+
 /** Trigger that does not apply to a container (from GET /api/containers/:id/triggers). */
 export interface ApiUnassociatedContainerTrigger {
   id: string;

@@ -8,6 +8,7 @@ import {
   createTemporaryStoreDirectory,
   removeTemporaryStoreDirectory,
 } from '../test/sqlite-db.js';
+import { getContainerStatusSummary } from '../util/container-summary.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import { mapContainerToContainerReport } from '../watchers/providers/docker/container-processing.js';
@@ -1833,6 +1834,7 @@ test('getContainersForStats should return projected stat fields only', async () 
 
   // Required stat fields are present
   expect(projection.id).toBe(containerExample.id);
+  expect(projection.name).toBe(containerExample.name);
   expect(projection.watcher).toBe(containerExample.watcher);
   expect(projection.agent).toBe('edge-agent');
   expect(projection.status).toBe('unknown');
@@ -1862,6 +1864,25 @@ test('getContainersForStats should reflect live updateAvailable from stored cont
   const result = container.getContainersForStats({});
 
   expect(result[0].updateAvailable).toBe(true);
+});
+
+test('getContainersForStats feeds the same status summary and image count as getContainers', async () => {
+  seedContainer(createContainerFixture({ id: 'a', name: 'a', status: 'running' }));
+  seedContainer(
+    createContainerFixture({ id: 'b', name: 'b', status: 'exited', result: { tag: 'newer' } }),
+  );
+  seedContainer(createContainerFixture({ id: 'c', name: 'c', status: 'running' }));
+
+  const images = (list: Array<{ id?: unknown; image?: { id?: unknown; name?: unknown } }>) =>
+    new Set(list.map((c) => c.image?.id ?? c.image?.name ?? c.id)).size;
+  const full = container.getContainers({});
+  const projected = container.getContainersForStats({});
+
+  expect(getContainerStatusSummary(projected)).toEqual(getContainerStatusSummary(full));
+  expect(images(projected)).toBe(images(full));
+  expect(projected.map((c) => [c.id, c.name, c.watcher, c.agent])).toEqual(
+    full.map((c) => [c.id, c.name, c.watcher, c.agent]),
+  );
 });
 
 test('getContainersForStats should return empty array when collection is not initialized', async () => {
@@ -5726,6 +5747,234 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       expect(inserted.updatePolicy).toBeUndefined();
     });
 
+    describe('DR-147: a stash that excludes its predecessor', () => {
+      async function discoverReplacement(replacementId: string) {
+        const watcher = {
+          name: 'docker',
+          configuration: { watchevents: false },
+          dockerApi: {
+            getContainer: vi.fn().mockReturnValue({ inspect: vi.fn().mockResolvedValue({}) }),
+            getImage: vi.fn().mockReturnValue({
+              inspect: vi.fn().mockResolvedValue({
+                Id: 'image-1',
+                Architecture: 'amd64',
+                Os: 'linux',
+                Created: '2026-01-01T00:00:00.000Z',
+              }),
+            }),
+          },
+          log: { warn: vi.fn(), debug: vi.fn() },
+          ensureLogger: vi.fn(),
+          ensureRemoteAuthHeaders: vi.fn().mockResolvedValue(undefined),
+        };
+        const helpers = {
+          resolveLabelsFromContainer: vi.fn(() => ({})),
+          mergeConfigWithImgset: vi.fn(() => ({})),
+          normalizeContainer: vi.fn((c) => c),
+          resolveImageName: vi.fn().mockReturnValue({ domain: 'ghcr.io', path: 'acme/app' }),
+          resolveTagName: vi.fn().mockReturnValue('1.2.3'),
+          getMatchingImgsetConfiguration: vi.fn().mockReturnValue(undefined),
+        };
+        const discovered = await addImageDetailsToContainerOrchestration(
+          watcher as any,
+          {
+            Id: replacementId,
+            Image: 'ghcr.io/acme/app:1.2.3',
+            State: 'running',
+            Labels: {},
+            Names: ['/myapp'],
+            Ports: [],
+            Mounts: [],
+          } as any,
+          {},
+          helpers as any,
+        );
+        return discovered as any;
+      }
+
+      const reportDependencies = {
+        ensureLogger: vi.fn(),
+        log: { child: () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }) },
+      } as any;
+
+      // A long health gate or a failed cleanup leaves the renamed old container listed
+      // after the discovery settle. Discovery of the replacement deletes the old row and
+      // stashes its policy; the old container is then reported again under the kept name
+      // ahead of the replacement in the same scan.
+      test('the replacement takes the policy when the old container is re-reported first', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+        expect(container.getContainer('old-container')).toBeUndefined();
+
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+        mapContainerToContainerReport(replacement, reportDependencies);
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container.getContainer('old-container')?.updatePolicy).toBeUndefined();
+      });
+
+      test('the replacement still takes the policy when it is reported first', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+
+        mapContainerToContainerReport(replacement, reportDependencies);
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('a replacement skipped by a later recreate: the next container still gets the policy', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'chain-a',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        // A is deleted for B, but B is never inserted; C replaces B and finds no row to retarget.
+        await discoverReplacement('chain-b');
+        const replacementC = await discoverReplacement('chain-c');
+
+        mapContainerToContainerReport(replacementC, reportDependencies);
+
+        expect(container.getContainer('chain-c')?.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('the old container re-reported after the stash was consumed is a no-op', async () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'old-container',
+              watcher: 'docker',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        const replacement = await discoverReplacement('new-container');
+        mapContainerToContainerReport(replacement, reportDependencies);
+
+        mapContainerToContainerReport(
+          makePolicyFixture({ id: 'old-container', watcher: 'docker' }) as any,
+          reportDependencies,
+        );
+
+        expect(container.getContainer('new-container')?.updatePolicy).toEqual(MATURITY_POLICY);
+        expect(container.getContainer('old-container')?.updatePolicy).toBeUndefined();
+        expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+      });
+
+      test('the excluded id lives on the entry and leaves nothing behind once it is evicted', () => {
+        const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+        const fixtures = [];
+        for (let i = 0; i <= maxEntries; i++) {
+          fixtures.push({
+            data: makePolicyFixture({
+              id: `excl-old-${i}`,
+              name: `excl-app-${i}`,
+              updatePolicy: MATURITY_POLICY,
+            }),
+          });
+        }
+        mountWith(fixtures);
+
+        for (let i = 0; i <= maxEntries; i++) {
+          container.deleteContainer(`excl-old-${i}`, {
+            replacementExpected: true,
+            excludedContainerId: `excl-old-${i}`,
+          });
+        }
+
+        const cache = container._getUpdatePolicyRetentionCacheForTests();
+        expect(cache.size).toBeLessThanOrEqual(maxEntries);
+        expect(cache.has('::local::excl-app-0')).toBe(false);
+        expect(cache.get(`::local::excl-app-${maxEntries}`)?.excludedContainerId).toBe(
+          `excl-old-${maxEntries}`,
+        );
+      });
+
+      test('a plain recreate without an excluded id is still taken by any same-name insert', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({ id: 'plain-old', updatePolicy: MATURITY_POLICY }),
+          },
+        ]);
+        container.deleteContainer('plain-old', { replacementExpected: true });
+
+        const inserted = container.insertContainer(makePolicyFixture({ id: 'plain-new' }));
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('an excluded id on a delete that is not a replacement is ignored', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'ignored-old',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('ignored-old', {
+          retainUpdatePolicy: true,
+          excludedContainerId: 'ignored-old',
+        });
+
+        const inserted = container.insertContainer(makePolicyFixture({ id: 'ignored-old' }));
+
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+
+      test('an agent-owned insert of the excluded id leaves the stash for another id', () => {
+        mountWith([
+          {
+            data: makePolicyFixture({
+              id: 'agent-excl-old',
+              agent: 'agent1',
+              updatePolicy: MATURITY_POLICY,
+            }),
+          },
+        ]);
+        container.deleteContainer('agent-excl-old', {
+          replacementExpected: true,
+          excludedContainerId: 'agent-excl-old',
+        });
+
+        const excluded = container.insertContainer(
+          makePolicyFixture({ id: 'agent-excl-old', agent: 'agent1', name: 'myapp' }),
+        );
+        const inserted = container.insertContainer(
+          makePolicyFixture({ id: 'agent-excl-new', agent: 'agent1', name: 'myapp' }),
+        );
+
+        expect(excluded.updatePolicy).toBeUndefined();
+        expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+      });
+    });
+
     test('an agent-owned insert without a derivable identity looks nothing up', () => {
       mountWith([
         {
@@ -6395,6 +6644,32 @@ describe('updateContainerFields (roadmap 7-STORE slice 9)', () => {
     container.updateContainerFields('no-op', { status: 'running' });
 
     expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('emits containerUpdated once when only release notes change', () => {
+    seedContainer(
+      createContainerFixture({ id: 'notes-only', status: 'running', result: { tag: '1.4.0' } }),
+    );
+    const emitted = vi.spyOn(event, 'emitContainerUpdated');
+    const notes = {
+      title: 'v1.4.0',
+      body: 'notes',
+      url: 'https://x',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      provider: 'github',
+    } as const;
+
+    container.updateContainerFields('notes-only', { sourceRepo: 'github.com/o/r' });
+    container.updateContainerFields('notes-only', { currentReleaseNotes: notes });
+    container.updateContainerFields('notes-only', {
+      result: { tag: '1.4.0', releaseNotes: notes } as any,
+    });
+    // Same notes again: nothing changed, no extra event.
+    container.updateContainerFields('notes-only', {
+      result: { tag: '1.4.0', releaseNotes: { ...notes } } as any,
+    });
+
+    expect(emitted).toHaveBeenCalledTimes(3);
   });
 
   test('emits a health transition independent of other patched fields', () => {

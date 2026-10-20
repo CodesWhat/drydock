@@ -13,6 +13,10 @@ vi.mock('../../event/index.js', () => ({
 }));
 
 import { isRollbackContainer } from '../../model/container.js';
+import {
+  recordNotificationSkip,
+  resetNotificationSkips,
+} from '../../triggers/notification-skips.js';
 import { createCrudHandlers } from './crud.js';
 import { toApiContainer } from './shared.js';
 import { sortContainers } from './sorting.js';
@@ -2504,6 +2508,33 @@ describe('api/container/crud', () => {
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining(redacted));
+    });
+
+    test('attaches the recorded notification skips to the container detail', () => {
+      resetNotificationSkips();
+      recordNotificationSkip('smtp.ops', 'c1', 'once-already-sent', 'in flight');
+      recordNotificationSkip('smtp.ops', 'other', 'rule-disabled');
+      const harness = createHarness({ containers: [createContainer({ id: 'c1' })] });
+
+      const res = callGetContainer(harness.handlers, 'c1');
+      resetNotificationSkips();
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notificationSkips: [
+            { trigger: 'smtp.ops', reason: 'once-already-sent', at: expect.any(String) },
+          ],
+        }),
+      );
+    });
+
+    test('reports an empty notificationSkips list when nothing was skipped', () => {
+      resetNotificationSkips();
+      const harness = createHarness({ containers: [createContainer({ id: 'c1' })] });
+
+      const res = callGetContainer(harness.handlers, 'c1');
+
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ notificationSkips: [] }));
     });
 
     test('names the Drydock override in the eligibility message of a projected container', () => {

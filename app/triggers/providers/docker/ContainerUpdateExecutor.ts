@@ -150,6 +150,22 @@ type PreparedContainerUpdateExecution = {
 
 type ContainerUpdateOperation = ReturnType<typeof updateOperationStore.insertOperation>;
 
+/**
+ * The version and image fields every update-operation record carries, shared
+ * by the docker action's executor and the compose action's runtime path so both
+ * record the same values for the same container.
+ */
+export function buildContainerUpdateVersionFields(
+  container: ContainerForUpdate,
+  newImage: string,
+): { fromVersion: string; toVersion: string; targetImage: string } {
+  return {
+    fromVersion: container.updateKind.localValue ?? container.image.tag.value,
+    toVersion: container.updateKind.remoteValue ?? container.image.tag.value,
+    targetImage: newImage,
+  };
+}
+
 type ContainerUpdateOperationStartFields = {
   containerId: string;
   containerName: string;
@@ -815,9 +831,7 @@ class ContainerUpdateExecutor {
       tempName,
       oldContainerWasRunning: wasRunning,
       oldContainerStopped: false,
-      fromVersion: container.updateKind.localValue ?? container.image.tag.value,
-      toVersion: container.updateKind.remoteValue ?? container.image.tag.value,
-      targetImage: newImage,
+      ...buildContainerUpdateVersionFields(container, newImage),
       status: 'in-progress' as const,
       phase: 'pulling' as const,
       container: container as unknown as import('../../../model/container.js').Container,
