@@ -48,12 +48,7 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return {
-      ...this.configuration,
-      accesskeyid: Ecr.mask(this.configuration.accesskeyid),
-      secretaccesskey: Ecr.mask(this.configuration.secretaccesskey),
-      region: this.configuration.region,
-    };
+    return this.maskFields(['accesskeyid', 'secretaccesskey']);
   }
 
   /**

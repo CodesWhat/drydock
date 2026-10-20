@@ -56,7 +56,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['privatekey']);
+    return this.maskFields(['privatekey']);
   }
 
   match(image) {

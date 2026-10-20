@@ -23,12 +23,8 @@ const matchRegistryHostImageIsTyped: ExpectNotAny<
 const matchRegistryHostBaseHostsIsTyped: ExpectNotAny<
   Parameters<BaseRegistry['matchRegistryHost']>[1]
 > = true;
-const maskSensitiveFieldsFieldsIsTyped: ExpectNotAny<
-  Parameters<BaseRegistry['maskSensitiveFields']>[0]
-> = true;
-const maskSensitiveFieldsReturnIsTyped: ExpectNotAny<
-  ReturnType<BaseRegistry['maskSensitiveFields']>
-> = true;
+const maskFieldsFieldsIsTyped: ExpectNotAny<Parameters<BaseRegistry['maskFields']>[0]> = true;
+const maskFieldsReturnIsTyped: ExpectNotAny<ReturnType<BaseRegistry['maskFields']>> = true;
 
 const baseRegistry = new BaseRegistry();
 
@@ -47,8 +43,8 @@ baseRegistry.normalizeImageUrl({ registry: {} });
 // @ts-expect-error matchRegistryHost expects string base hosts
 baseRegistry.matchRegistryHost({ registry: { url: 'docker.io' } }, /^docker\.io$/);
 
-// @ts-expect-error maskSensitiveFields expects string field names
-baseRegistry.maskSensitiveFields([123]);
+// @ts-expect-error maskFields expects string field names
+baseRegistry.maskFields([123]);
 
 void authenticateBasicRequestOptionsIsTyped;
 void authenticateBearerRequestOptionsIsTyped;
@@ -57,5 +53,5 @@ void normalizeImageUrlImageIsTyped;
 void normalizeImageUrlReturnIsTyped;
 void matchRegistryHostImageIsTyped;
 void matchRegistryHostBaseHostsIsTyped;
-void maskSensitiveFieldsFieldsIsTyped;
-void maskSensitiveFieldsReturnIsTyped;
+void maskFieldsFieldsIsTyped;
+void maskFieldsReturnIsTyped;

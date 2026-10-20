@@ -21,7 +21,7 @@ class Acr extends BaseRegistry<AcrRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['clientsecret']);
+    return this.maskFields(['clientsecret']);
   }
 
   /**

@@ -221,7 +221,7 @@ test('validatedConfiguration should accept empty string (allow empty string alte
 });
 
 test('maskConfiguration should mask auth field specifically', async () => {
-  // Kills: StringLiteral "" replacing 'auth' in maskSensitiveFields(['password', 'auth'])
+  // Kills: StringLiteral "" replacing 'auth' in maskFields(['password', 'auth'])
   const registryWithAuth = new Custom();
   registryWithAuth.configuration = {
     url: 'https://registry.internal',
@@ -234,7 +234,7 @@ test('maskConfiguration should mask auth field specifically', async () => {
 });
 
 test('maskConfiguration should mask password field specifically', async () => {
-  // Kills: StringLiteral "" replacing 'password' in maskSensitiveFields(['password', 'auth'])
+  // Kills: StringLiteral "" replacing 'password' in maskFields(['password', 'auth'])
   const registryWithPassword = new Custom();
   registryWithPassword.configuration = {
     url: 'https://registry.internal',
