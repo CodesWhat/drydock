@@ -154,6 +154,20 @@ describe('logLegacyApiAliasHit', () => {
     expect(line).not.toContain('a'.repeat(201));
     expect(line).not.toContain('b'.repeat(121));
     expect(line).not.toContain('\n');
+    expect(line).toContain(`${'a'.repeat(200 - '/api/containers/'.length)}...`);
+  });
+
+  test('strips newlines and ANSI escapes from method and remote address', () => {
+    logLegacyApiAliasHit(
+      makeReq({ method: 'GET\nforged', ip: '10.0.0.5\r\n\x1b[31mred' }) as never,
+      0,
+    );
+    const line = mockLogInfo.mock.calls[0][0] as string;
+    expect(line).not.toContain('\n');
+    expect(line).not.toContain('\r');
+    expect(line).not.toContain('\x1b');
+    expect(line).toContain(': GETforged /api/containers/abc123');
+    expect(line).toContain('remote=10.0.0.5red.');
   });
 
   test('falls back when originalUrl, ip and user agent are missing', () => {
