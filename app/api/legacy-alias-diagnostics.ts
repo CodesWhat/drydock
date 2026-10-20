@@ -1,5 +1,6 @@
 import type { Request } from 'express';
 import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 
 const log = logger.child({ component: 'api' });
 
@@ -116,11 +117,6 @@ export function buildLegacyApiAliasKey(req: Request): string {
   return `${resource} via ${client}`;
 }
 
-function sanitizeForLog(value: string, limit: number): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: strips control characters to prevent log line forgery
-  return value.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, limit);
-}
-
 export function logLegacyApiAliasHit(req: Request, now: number = Date.now()) {
   const userAgent = firstHeaderValue(req.headers?.['user-agent']);
   const client = classifyLegacyApiClient(userAgent);
@@ -141,9 +137,11 @@ export function logLegacyApiAliasHit(req: Request, now: number = Date.now()) {
   });
 
   const rawPath = (req.originalUrl ?? req.path).split('?')[0];
-  const path = sanitizeForLog(rawPath, MAX_LOGGED_PATH_LENGTH);
-  const ua = userAgent === '' ? 'none' : sanitizeForLog(userAgent, MAX_LOGGED_USER_AGENT_LENGTH);
+  const path = sanitizeLogParam(rawPath, MAX_LOGGED_PATH_LENGTH);
+  const ua = userAgent === '' ? 'none' : sanitizeLogParam(userAgent, MAX_LOGGED_USER_AGENT_LENGTH);
+  const method = sanitizeLogParam(req.method);
+  const remote = sanitizeLogParam(req.ip ?? 'unknown');
   log.info(
-    `Removed unversioned API path hit (${resourceKey}): ${req.method} ${path} from client=${client} user-agent="${ua}" remote=${req.ip ?? 'unknown'}. Migrate the caller to /api/v1/*; this line is logged at most once per hour per resource and client.`,
+    `Removed unversioned API path hit (${resourceKey}): ${method} ${path} from client=${client} user-agent="${ua}" remote=${remote}. Migrate the caller to /api/v1/*; this line is logged at most once per hour per resource and client.`,
   );
 }
