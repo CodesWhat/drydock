@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import DetailField from '@/components/DetailField.vue';
@@ -9,6 +8,7 @@ import NotificationPolicyEditor from '@/components/NotificationPolicyEditor.vue'
 import ActionPolicyEditor from '@/components/ActionPolicyEditor.vue';
 import { isActionProvider } from '../services/action-editor';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useSearchFromQuery } from '../composables/useSearchFromQuery';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
 import { isNotificationProvider, type NotificationIdentity } from '../services/notification-editor';
@@ -17,7 +17,6 @@ import { isDryRunActionTrigger } from './containers/useContainerTriggers';
 
 const { t } = useI18n();
 const { isMobile } = useBreakpoints();
-const route = useRoute();
 type TriggerRow = ReturnType<typeof mapTrigger>;
 
 const selectedTrigger = ref<TriggerRow | null>(null);
@@ -108,16 +107,7 @@ const triggerViewMode = useViewMode('triggers');
 const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
-function applySearchFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  searchQuery.value = typeof raw === 'string' ? raw : '';
-}
-
-applySearchFromQuery(route.query.q);
-watch(
-  () => route.query.q,
-  (value) => applySearchFromQuery(value),
-);
+useSearchFromQuery(searchQuery);
 
 const filteredTriggers = computed(() => {
   if (!searchQuery.value) return triggersData.value;

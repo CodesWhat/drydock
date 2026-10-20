@@ -84,7 +84,8 @@ vi.mock('node:os', () => ({
 }));
 
 vi.mock('../../store/container.js', () => ({
-  getContainers: vi.fn(() => [
+  getContainers: vi.fn(() => []),
+  getContainersForStats: vi.fn(() => [
     { id: 'c1', status: 'running', image: { id: 'img-1' } },
     { id: 'c2', status: 'exited', image: { id: 'img-2' } },
     { id: 'c3', status: 'running', image: { id: 'img-1' } },
@@ -111,6 +112,52 @@ describe('agent API event', () => {
       writeHead: vi.fn(),
       write: vi.fn(),
     };
+  });
+
+  describe('heartbeat', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    test('writes an SSE comment heartbeat every 15 seconds', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS - 1);
+      expect(res.write).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(res.write).toHaveBeenCalledWith(': heartbeat\n\n');
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS);
+      expect(res.write).toHaveBeenCalledTimes(2);
+      expect(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS).toBe(15_000);
+    });
+
+    test('stops heartbeating once the stream closes', () => {
+      eventApi.subscribeEvents(req, res);
+      const closeHandler = req.on.mock.calls.find(([name]) => name === 'close')[1];
+      res.write.mockClear();
+
+      closeHandler();
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS * 4);
+
+      expect(res.write).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    test('skips the heartbeat while the client is backpressured', () => {
+      const slowResponse = createPressureResponse();
+      slowResponse.write.mockReturnValue(false);
+      eventApi.subscribeEvents(req, slowResponse);
+      slowResponse.write.mockClear();
+
+      vi.advanceTimersByTime(eventApi.AGENT_SSE_HEARTBEAT_INTERVAL_MS * 2);
+
+      expect(slowResponse.write).not.toHaveBeenCalled();
+    });
   });
 
   describe('subscribeEvents', () => {
@@ -417,7 +464,14 @@ describe('agent API event', () => {
       eventApi.subscribeEvents(req, res);
       eventApi.subscribeEvents(secondReq, secondRes);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(1);
+    });
+
+    test('computes the summary from the stats projection, not full container rows', () => {
+      eventApi.subscribeEvents(req, res);
+
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(1);
+      expect(storeContainer.getContainers).not.toHaveBeenCalled();
     });
 
     test('should set SSE headers and send ack', () => {
@@ -529,7 +583,7 @@ describe('agent API event', () => {
     });
 
     test('should compute image and stopped counts using fallback image keys', () => {
-      storeContainer.getContainers.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         { id: 'c1', status: 'running', image: { name: 'img-name' } },
         { id: 'c2', status: 'created', image: {} },
         { id: 'c3' },
@@ -2002,7 +2056,7 @@ describe('agent API event', () => {
     test('should recompute summary when cache expires', () => {
       // First call - creates cache
       eventApi.subscribeEvents(req, res);
-      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(1);
 
       // Advance time beyond cache TTL (2000ms)
       mockedNow += 5_000;
@@ -2013,13 +2067,13 @@ describe('agent API event', () => {
       eventApi.subscribeEvents(req2, res2);
 
       // Should recompute since cache is expired
-      expect(storeContainer.getContainers).toHaveBeenCalledTimes(2);
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(2);
     });
 
     test('cache expiry uses strict greater-than (expiresAtMs > nowMs)', () => {
       // Connect first client - cache set with expiresAtMs = mockedNow + 2000
       eventApi.subscribeEvents(req, res);
-      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(1);
 
       // Advance time to exactly expiresAtMs (cache should be considered expired - not >)
       mockedNow += 2_000;
@@ -2030,7 +2084,7 @@ describe('agent API event', () => {
       eventApi.subscribeEvents(req2, res2);
 
       // expiresAtMs == nowMs means NOT > so recompute happens
-      expect(storeContainer.getContainers).toHaveBeenCalledTimes(2);
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledTimes(2);
     });
   });
 

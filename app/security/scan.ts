@@ -423,7 +423,7 @@ export const warmTrivyDatabase = createTrivyDatabaseWarmup({
   onFailure: (error) => {
     logTrivyWarmup.warn(
       `Trivy database warm-up failed (${sanitizeLogParam(
-        getErrorMessage(error, 'Unknown Trivy database warm-up error'),
+        getScanErrorMessage(error, 'Unknown Trivy database warm-up error'),
       )}); the scan will continue with Trivy's normal database handling`,
     );
   },
@@ -508,7 +508,7 @@ async function runTrivyWorker(
   try {
     return await getDefaultScannerRuntime().run({ provider: 'trivy', ...invocation });
   } catch (error: unknown) {
-    if (DOCKER_WORKER_OUTPUT_LIMIT_PATTERN.test(getErrorMessage(error, ''))) {
+    if (DOCKER_WORKER_OUTPUT_LIMIT_PATTERN.test(getScanErrorMessage(error, ''))) {
       throw new Error(buildTrivyOutputLimitMessage(invocation.maxOutputBytes));
     }
     throw error;
@@ -810,7 +810,7 @@ async function scanWithProvider(
     return {
       provider,
       vulnerabilities: [],
-      error: getErrorMessage(error, 'Unknown security scan error'),
+      error: getScanErrorMessage(error, 'Unknown security scan error'),
     };
   }
 }
@@ -950,7 +950,7 @@ function classifyCosignFailure(errorMessage: string): SecuritySignatureStatus {
   return 'error';
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
+function getScanErrorMessage(error: unknown, fallback: string): string {
   if (typeof error !== 'object' || error === null) {
     return fallback;
   }
@@ -1064,7 +1064,7 @@ export async function verifyImageSignature(
     logSecurity.info(`Signature verification passed (${signaturesCount} signatures)`);
     return mapToSignatureResult(options.image, configuration, 'verified', signaturesCount);
   } catch (error: unknown) {
-    const errorMessage = getErrorMessage(error, 'Unknown signature verification error');
+    const errorMessage = getScanErrorMessage(error, 'Unknown signature verification error');
     const status = classifyCosignFailure(errorMessage);
     logSecurity.warn(`Signature verification ${status} (${errorMessage})`);
     return mapToSignatureResult(options.image, configuration, status, 0, errorMessage);
@@ -1108,7 +1108,7 @@ export async function generateImageSbom(
       documentMap.set(format, JSON.parse(sbomOutput));
       generatedFormats.push(format);
     } catch (error: unknown) {
-      errors.push(`${format}: ${getErrorMessage(error, 'Unknown SBOM generation error')}`);
+      errors.push(`${format}: ${getScanErrorMessage(error, 'Unknown SBOM generation error')}`);
     }
   }
 

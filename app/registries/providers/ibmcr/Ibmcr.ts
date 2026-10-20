@@ -40,7 +40,7 @@ class Ibmcr extends BaseRegistry<IbmcrRegistryConfiguration> {
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['password', 'auth', 'apikey']);
+    return this.maskFields(['password', 'auth', 'apikey']);
   }
 
   match(image) {

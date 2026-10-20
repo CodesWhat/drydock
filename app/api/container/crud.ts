@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { getNotificationSkipsForContainer } from '../../triggers/notification-skips.js';
 import { buildContainerDashboardSummary } from '../../util/container-summary.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
@@ -61,7 +62,10 @@ function getContainerHandler(context: CrudHandlerContext, req: Request, res: Res
     const redacted = context.redactContainerRuntimeEnv(container);
     const withOperation = attachInProgressUpdateOperation(context, redacted);
     const withEligibility = attachUpdateEligibility(context, withOperation);
-    res.status(200).json(withEligibility);
+    res.status(200).json({
+      ...withEligibility,
+      notificationSkips: getNotificationSkipsForContainer(container.id),
+    });
   } else {
     sendErrorResponse(res, 404, 'Container not found');
   }

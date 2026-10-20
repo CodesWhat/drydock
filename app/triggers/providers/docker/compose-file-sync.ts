@@ -9,7 +9,7 @@
  */
 import fs from 'node:fs/promises';
 import path from 'node:path';
-
+import { getErrorMessage } from '../../../util/error.js';
 import { updateComposeServiceImageInText } from '../dockercompose/ComposeFileParser.js';
 import {
   type DockerApiBindMountInspector,
@@ -58,7 +58,7 @@ async function resolveComposeFilePath(
     );
     return mapComposePathToContainerBindMount(resolvedComposeFilePath, bindMounts);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     options.logContainer.debug(
       `Unable to inspect bind mounts for compose file sync path remapping (${message})`,
     );
@@ -139,7 +139,7 @@ export async function syncComposeFileTag(options: ComposeFileSyncOptions): Promi
     );
     return true;
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     logContainer.warn(
       `Unable to sync compose file ${composeFilePath} for service '${serviceName}' (${message})`,
     );

@@ -1,6 +1,6 @@
 import type { Container, ContainerImage } from '../../model/container.js';
 import { buildImageReference } from '../../registries/image-reference.js';
-import { getErrorMessage } from '../../util/error.js';
+import { getErrorMessage, getErrorStatusCode } from '../../util/error.js';
 
 type RegistryAuth = { username?: string; password?: string };
 
@@ -69,20 +69,6 @@ export function hasUrlCredentials(value: unknown): boolean {
 
 export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): boolean {
   return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
-}
-
-export function getErrorStatusCode(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-
-  const response = (error as { response?: unknown }).response;
-  if (!response || typeof response !== 'object') {
-    return undefined;
-  }
-
-  const status = (response as { status?: unknown }).status;
-  return typeof status === 'number' ? status : undefined;
 }
 
 function classifyContainerRuntimeDetails<T>(details: T): T {
@@ -222,3 +208,5 @@ export async function resolveContainerRegistryAuth(
   }
   return undefined;
 }
+
+export { getErrorStatusCode };

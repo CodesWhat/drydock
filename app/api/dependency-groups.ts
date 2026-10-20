@@ -17,6 +17,7 @@ import {
   type RejectedContainerUpdateRequest,
   requestContainerUpdates,
 } from '../updates/request-update.js';
+import { getErrorMessage } from '../util/error.js';
 import { resolveDependencyChain } from './container-dependencies.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
@@ -177,7 +178,7 @@ async function updateDependencyGroup(req: Request, res: Response) {
   } catch (error: unknown) {
     log.warn(
       `Unexpected error accepting dependency group update for root ${sanitizeLogParam(rootId)} (${sanitizeLogParam(
-        error instanceof Error ? error.message : String(error),
+        getErrorMessage(error),
       )})`,
     );
     sendErrorResponse(res, 500, 'Unable to accept dependency group update');

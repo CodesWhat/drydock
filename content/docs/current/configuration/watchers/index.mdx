@@ -12,7 +12,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 ## Edit a watcher schedule in the UI
 
-This editor was introduced in v1.8.0-rc.1 and remains available in v1.8.0-rc.2 builds. It requires a writable [configuration file](/docs/configuration/config-file).
+This editor was introduced in v1.8.0-rc.1 and remains available in v1.8.0-rc.3 builds. It requires a writable [configuration file](/docs/configuration/config-file).
 
 Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
 panel. This editor changes four settings for existing controller-local watchers:
@@ -139,7 +139,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_LOCAL_CRON=0 1 * * *
@@ -151,7 +151,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_CRON="0 1 * * *" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -164,7 +164,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_LOCAL_WATCHALL=true
@@ -176,7 +176,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHALL="true" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -207,7 +207,7 @@ These two variables are **orthogonal** — they filter at different stages of th
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -219,7 +219,7 @@ services:
 docker run \
     -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -232,7 +232,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -252,7 +252,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="BEARER" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_BEARER="my-secret-token" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -265,7 +265,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -289,7 +289,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTID="my-client-id" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTSECRET="my-client-secret" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -304,7 +304,7 @@ Drydock requests a `client_credentials` token from `AUTH_OIDC_TOKENURL` and refr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -331,7 +331,7 @@ docker run \
     -v /my-host/my-certs/cert.pem:/certs/cert.pem:ro \
     -v /my-host/my-certs/key.pem:/certs/key.pem:ro \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -354,7 +354,7 @@ Then configure Drydock to connect to the forwarded port:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
@@ -390,7 +390,7 @@ This is the **recommended approach** for all deployments. It provides a strict s
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -472,7 +472,7 @@ Configure Drydock with the client certificates:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     environment:
       - DD_WATCHER_REMOTE_HOST=docker-host.example.com
       - DD_WATCHER_REMOTE_PORT=2376
@@ -509,7 +509,7 @@ echo $XDG_RUNTIME_DIR/docker.sock
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     volumes:
       - /run/user/1000/docker.sock:/var/run/docker.sock
     ports:
@@ -529,7 +529,7 @@ The simplest approach — mount the Docker socket directly. Drydock runs as a no
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -545,7 +545,7 @@ If the non-root user cannot connect to the socket (common with `:ro` mounts), yo
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -625,7 +625,7 @@ Use Podman's host socket path, but mount it inside the Drydock container at `/va
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     volumes:
       - /run/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -641,7 +641,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     volumes:
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -657,7 +657,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -730,7 +730,7 @@ For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-bl
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
         -  DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
@@ -746,7 +746,7 @@ docker run \
     -e  DD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
     -e  DD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -780,7 +780,7 @@ Only allow automatic updates between 2 AM and 4 AM in Europe/Berlin:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_WATCHER_LOCAL_CRON=0 * * * *
@@ -796,7 +796,7 @@ docker run \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW="* 2-3 * * *" \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ="Europe/Berlin" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -859,7 +859,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     environment:
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_IMAGE=ghcr.io/home-assistant/home-assistant
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TAG_INCLUDE=^\\d+\\.\\d+\\.\\d+$$
@@ -982,7 +982,7 @@ If you're trying to restrict which containers a trigger can touch at all, set `A
 
 ### Override labels with the API
 
-On the v1.8.0-rc.2 candidate, Drydock can store its own value for nine label-owned fields: the display name and icon, `dd.depends_on` and `dd.depends_on.action`, and the notification and action include, exclude and auto routing. This is for changing a container's behavior when you can't or don't want to edit its Compose file or recreate it. Saving an override never edits a Compose file, calls Docker, recreates or restarts a container, or runs a trigger. The endpoints and request format are in the [Container API](/docs/api/container#label-overrides).
+On the v1.8.0-rc.3 candidate, Drydock can store its own value for nine label-owned fields: the display name and icon, `dd.depends_on` and `dd.depends_on.action`, and the notification and action include, exclude and auto routing. This is for changing a container's behavior when you can't or don't want to edit its Compose file or recreate it. Saving an override never edits a Compose file, calls Docker, recreates or restarts a container, or runs a trigger. The endpoints and request format are in the [Container API](/docs/api/container#label-overrides).
 
 Each field resolves on its own, from lowest to highest priority:
 
@@ -1026,7 +1026,7 @@ Set `WATCHBYDEFAULT=false` so that only containers with an explicit `dd.watch=tr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
@@ -1038,7 +1038,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>
@@ -1534,7 +1534,7 @@ The containers table has two distinct columns for version information:
 - **Tag** (column key `version`) — the image tag used for update detection (e.g. `latest`, `1.4.5`). This column was called "Version" in releases before v1.5.1; the column key is unchanged so saved column preferences keep working.
 - **Version** (column key `softwareVersion`) — the application version surfaced from `image.softwareVersion` (the `org.opencontainers.image.version` OCI label, a `dd.inspect.tag.path` extract, or other runtime metadata). Falls back to the image tag when `softwareVersion` is not available. Visible by default for new installs; added automatically to saved column lists on upgrade.
 
-In v1.8.0-rc.2, digest checks also retain the remote candidate's OCI version label in the API's `result.softwareVersion` field when the selected platform's image config provides it. This optional field is separate from the installed `image.softwareVersion` shown in the Version column. Missing or unusable labels leave it absent. The label alone does not enable a gate. [Release-count maturity](/docs/api/container#release-count-maturity-unreleased-v18) uses this candidate version or bounded digest proof only when its policy is configured.
+In v1.8.0-rc.1, digest checks also retain the remote candidate's OCI version label in the API's `result.softwareVersion` field when the selected platform's image config provides it. This optional field is separate from the installed `image.softwareVersion` shown in the Version column. Missing or unusable labels leave it absent. The label alone does not enable a gate. [Release-count maturity](/docs/api/container#release-count-maturity-unreleased-v18) uses this candidate version or bounded digest proof only when its policy is configured.
 
 ### Version column display
 

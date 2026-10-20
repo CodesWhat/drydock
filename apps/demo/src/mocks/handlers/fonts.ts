@@ -7,6 +7,7 @@ import { HttpResponse, http } from 'msw';
  */
 
 const FONT_MAP: Record<string, { family: string; pkg: string }> = {
+  'ibm-plex-mono': { family: 'IBM Plex Mono', pkg: '@fontsource/ibm-plex-mono' },
   'jetbrains-mono': { family: 'JetBrains Mono', pkg: '@fontsource/jetbrains-mono' },
   'source-code-pro': { family: 'Source Code Pro', pkg: '@fontsource/source-code-pro' },
   inconsolata: { family: 'Inconsolata', pkg: '@fontsource/inconsolata' },

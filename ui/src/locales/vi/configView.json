@@ -42,6 +42,8 @@
         "name": "Tên",
         "key": "Khóa",
         "scopes": "Phạm vi",
+        "createdBy": "Tạo bởi",
+        "created": "Ngày tạo",
         "lastUsed": "Lần dùng cuối",
         "expires": "Hết hạn",
         "status": "Trạng thái"
@@ -55,6 +57,11 @@
         "header": "Thu hồi khóa API",
         "message": "Thu hồi {name} cũng sẽ thu hồi mọi khóa được tạo từ khóa này. Mọi thứ đang dùng chúng sẽ ngừng hoạt động ngay lập tức.",
         "accept": "Thu hồi"
+      },
+      "review": {
+        "banner": "Bạn đã đăng nhập bằng mã khôi phục. Hãy xem lại các khóa API của bạn và thu hồi khóa nào bạn không nhận ra.",
+        "done": "Đã xem xong",
+        "doneError": "Không thể hoàn tất việc xem xét. Hãy thử lại."
       },
       "cascade": "Đã thu hồi {count} khóa, bao gồm mọi khóa mà khóa này đã tạo ra.",
       "errors": {

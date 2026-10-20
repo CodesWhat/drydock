@@ -15,7 +15,7 @@ export const SITE_CONFIG = {
   /** Brand name shown in the header, footer, and metadata. */
   name: "Drydock",
   /** Current release version shown in the hero badge. */
-  version: "1.8.0-rc.2",
+  version: "1.8.0-rc.3",
   /** Short product tagline used in page titles and OG metadata. */
   tagline: "Container Update Monitoring",
   /** Default meta / OpenGraph / Twitter description. */
@@ -46,7 +46,7 @@ export const SITE_CONFIG = {
   /** Docker Hub image, "owner/name". */
   dockerImage: "codeswhat/drydock",
   /** License link shown in the footer. */
-  licenseUrl: "https://www.gnu.org/licenses/agpl-3.0.html",
+  licenseUrl: "https://opensource.org/licenses/MIT",
   /** Aurora background palette token (see globals.css `[data-bg]`). */
   aurora: "ocean" as AuroraPalette,
   /** Prefix for localStorage keys (keeps multi-site deploys from colliding). */

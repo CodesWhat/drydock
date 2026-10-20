@@ -5,6 +5,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as settingsStore from '../store/settings.js';
+import { getErrorMessage } from '../util/error.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { fetchAndCacheIconOnce } from './icons/fetch.js';
@@ -88,7 +89,7 @@ async function getIcon(req: Request, res: Response) {
       });
       return;
     }
-    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorMessage = getErrorMessage(e);
     log.warn(
       `Unable to fetch icon provider=${sanitizeLogParam(provider)} slug=${sanitizeLogParam(slug)} (${sanitizeLogParam(errorMessage)})`,
     );
@@ -114,7 +115,7 @@ async function clearCache(_req: Request, res: Response) {
     log.info(`Cleared ${cleared} cached icons`);
     res.status(200).json({ cleared });
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
+    const errorMessage = getErrorMessage(e);
     log.warn(`Failed to clear icon cache: ${sanitizeLogParam(errorMessage)}`);
     sendErrorResponse(res, 500, 'Failed to clear icon cache');
   }

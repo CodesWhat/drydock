@@ -372,6 +372,7 @@ describe('Images Router', () => {
         expect(res.json).toHaveBeenCalledWith({
           error:
             "The agent's Docker proxy returned no preview result. No prune was started. Retry the preview.",
+          details: { reason: 'timeout' },
         });
         expect(agentDockerApi.pruneImages).not.toHaveBeenCalled();
         expect(mockRecordAuditEvent).not.toHaveBeenCalled();
@@ -497,8 +498,53 @@ describe('Images Router', () => {
       });
     });
 
-    test('maps a 502 statusCode from an agent host to a 504 no-result error', async () => {
+    test('maps a bare 502 from an agent host to a generic 502 that does not claim the prune is running', async () => {
       const error = Object.assign(new Error('bad gateway'), { statusCode: 502 });
+      agentDockerApi.pruneImages.mockRejectedValue(error);
+
+      const res = await invokePostPrune(
+        pruneRequest({ body: { host: 'edge.docker.remote', mode: 'dangling' } }),
+      );
+
+      expect(res.status).toHaveBeenCalledWith(502);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "The agent's Docker proxy failed. Refresh the image list to see the current state.",
+        details: { reason: 'transport-failed' },
+      });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'image-prune', status: 'error' }),
+      );
+    });
+
+    test.each([
+      ['agent-unreachable', "The agent's Docker proxy could not be reached."],
+      ['bad-upstream-response', "The agent's Docker proxy returned an unreadable response."],
+    ])(
+      'maps a bridge %s failure to a distinct 502 without "may still be running"',
+      async (reason, prefix) => {
+        const error = Object.assign(new Error('(HTTP code 502) unexpected - x'), {
+          statusCode: 502,
+          json: { message: 'Portwing Docker transport failed', reason },
+        });
+        agentDockerApi.pruneImages.mockRejectedValue(error);
+
+        const res = await invokePostPrune(
+          pruneRequest({ body: { host: 'edge.docker.remote', mode: 'dangling' } }),
+        );
+
+        expect(res.status).toHaveBeenCalledWith(502);
+        const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(body.error).toContain(prefix);
+        expect(body.error).not.toContain('may still be running');
+        expect(body.details).toEqual({ reason });
+      },
+    );
+
+    test('maps a bridge timeout failure to the 504 still-running error', async () => {
+      const error = Object.assign(new Error('(HTTP code 504) unexpected - x'), {
+        statusCode: 504,
+        json: { message: 'Portwing Docker transport failed', reason: 'timeout' },
+      });
       agentDockerApi.pruneImages.mockRejectedValue(error);
 
       const res = await invokePostPrune(
@@ -509,10 +555,18 @@ describe('Images Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         error:
           "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.",
+        details: { reason: 'timeout' },
       });
-      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'image-prune', status: 'error' }),
+    });
+
+    test('maps a timeout reason without a 504 status to the still-running error', async () => {
+      agentDockerApi.pruneImages.mockRejectedValue({ json: { reason: 'timeout' } });
+
+      const res = await invokePostPrune(
+        pruneRequest({ body: { host: 'edge.docker.remote', mode: 'dangling' } }),
       );
+
+      expect(res.status).toHaveBeenCalledWith(504);
     });
 
     test('maps a 504 statusCode from an agent host to the 504 no-result error', async () => {
@@ -537,6 +591,7 @@ describe('Images Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         error:
           "The agent's Docker proxy returned no result; the prune may still be running. Refresh the image list.",
+        details: { reason: 'timeout' },
       });
     });
 

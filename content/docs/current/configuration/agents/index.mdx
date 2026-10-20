@@ -51,7 +51,7 @@ inventory result are separate signals.
 
 ## Architecture
 
-The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
+The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE). The Agent sends a heartbeat every 15 seconds, and the Controller drops the connection and reconnects after 45 seconds of silence, so a dead connection is detected within a minute instead of staying marked connected. This needs the Agent on 1.8.1 or later; older Agents keep working but aren't monitored this way.
 
 <Callout type="info">**The controller dials out to each agent — the agent does not need to know where the controller is.** Only the controller side gets `DD_AGENT_{name}_HOST`. The agent just needs its port reachable from the controller. (Both ends share the same secret so they trust each other.)</Callout>
 
@@ -113,7 +113,7 @@ The Drydock controller needs the agent's public key registered before it connect
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ports:
       - "3000:3000"
     environment:
@@ -137,7 +137,7 @@ A minimal two-host setup: one agent watching a remote host, one controller aggre
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     command: --agent
     ports:
       - "3000:3000"            # must be reachable from the controller
@@ -153,7 +153,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ports:
       - "3000:3000"
     environment:
@@ -221,7 +221,7 @@ services:
       start_period: 5s
 
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     command: --agent
     depends_on:
       drydock-socket-proxy:
@@ -257,6 +257,7 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
 | `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
+| `DD_AGENT_{name}_ROTATIONDIR` | ⚪ | Persistent controller-side directory (mode `0700`) where Drydock stores managed Ed25519 rotation keys. Only valid with `AUTHMODE=ed25519`; rejected otherwise. See [key rotation](#controller-assisted-key-rotation-development). | |
 | `DD_AGENT_ALLOW_INSECURE_SECRET` | ⚪ | **Insecure.** When `true`, allows configuring agents with a `secret` over plain HTTP. Drydock will log a warning on every startup but won't refuse to boot. Only enable on trusted private networks where you accept that the agent secret is sent in cleartext. | `false` |
 
 ¹ Required only when `AUTHMODE=ed25519`; ignored otherwise.
@@ -282,7 +283,7 @@ Fix it by configuring TLS (`DD_AGENT_{name}_CAFILE`/`CERTFILE`), terminating TLS
 ```yaml
 services:
   drydock-controller:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     environment:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_SECRET=mysecretkey
@@ -312,7 +313,7 @@ Use it when the remote agent verifies requests with a registered Ed25519 public 
 ```yaml
 services:
   drydock-controller:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     environment:
       - DD_AGENT_EDGE_HOST=edge.example.com
       - DD_AGENT_EDGE_AUTHMODE=ed25519
@@ -339,7 +340,7 @@ This example shows a controller watching its own containers and connecting to on
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ports:
       - "3000:3000"
     depends_on:
@@ -416,7 +417,7 @@ services:
       start_period: 5s
 
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     command: --agent
     depends_on:
       drydock-socket-proxy:
@@ -452,7 +453,7 @@ In short: for a registry used by an agent's containers, configure the same `DD_R
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     command: --agent
     ports:
       - "3000:3000"
@@ -477,7 +478,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ports:
       - "3000:3000"
     volumes:
@@ -518,6 +519,10 @@ The [Registry lookup image](/docs/configuration/registries#registry-lookup-image
   - A marked Portwing watcher automatically receives a controller-owned native `docker` action. Single/batch updates, start/stop/restart, update preview, and backup rollback work over Standard or Edge transport; Docker Compose is not part of this marker contract.
   - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.
 
+## Agent version
+
+Agents older than 1.7.0 still trust lifecycle hook labels baked into images, whatever version the controller runs. Upgrade them to 1.7.0 or later. While one is connected, the controller logs a warning, `GET /api/agents` returns `warnings: ["hook-labels-trusted"]` for it, and the Agents view shows an Update agent badge.
+
 ## Troubleshooting
 
 Agent connections are driven entirely from the controller, so the controller log (`docker logs <controller>`) is where you diagnose them. The controller retries with exponential backoff (up to 60s between attempts), so a failing connection repeats in the log until the agent is healthy.
@@ -540,7 +545,7 @@ Still stuck? Set `DD_LOG_LEVEL=debug` on the controller for the full `agent-clie
 ## Controller-assisted key rotation (Drydock RC, Portwing development) {#controller-assisted-key-rotation-development}
 
 The controller side first ships in Drydock v1.8.0-rc.1 and remains available in
-v1.8.0-rc.2 test builds. It requires a compatible
+v1.8.0-rc.3 test builds. It requires a compatible
 Portwing development build; published Portwing v1.0.0-rc.1 does not include
 the companion feature. No compatible published Portwing version is assigned yet.
 Drydock v1.7 and earlier do not provide this controller API.

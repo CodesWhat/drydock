@@ -1,3 +1,4 @@
+# Needs TLS fixtures first: bash test/generate-tls-fixtures.sh
 services:
   # Lightweight mock OIDC provider
   mock-oidc:

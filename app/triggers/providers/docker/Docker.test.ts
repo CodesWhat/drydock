@@ -2657,6 +2657,31 @@ describe('additional docker trigger coverage', () => {
     });
   });
 
+  test('preview exposes only the named fields and never runtime env values', async () => {
+    const container = createTriggerContainer();
+    vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue({ id: container.id });
+    vi.spyOn(docker, 'inspectContainer').mockResolvedValue({
+      State: { Running: true },
+      NetworkSettings: { Networks: { bridge: {} } },
+      Config: { Env: ['DB_PASSWORD=secret-pass', 'NODE_ENV=production'] },
+    });
+
+    const preview = await docker.preview({
+      ...container,
+      details: { ports: [], volumes: [], env: [{ key: 'DB_PASSWORD', value: 'secret-pass' }] },
+    });
+
+    expect(Object.keys(preview).sort()).toEqual([
+      'containerName',
+      'currentImage',
+      'isRunning',
+      'networks',
+      'newImage',
+      'updateKind',
+    ]);
+    expect(JSON.stringify(preview)).not.toContain('secret-pass');
+  });
+
   test('preview should return an explicit error when container is not found', async () => {
     vi.spyOn(docker, 'getCurrentContainer').mockResolvedValue(undefined);
     const preview = await docker.preview(createTriggerContainer());
@@ -2909,6 +2934,36 @@ describe('additional docker trigger coverage', () => {
       expect(dockerApi.getImage).toHaveBeenCalledWith('sha256:image-id');
       expect(hookConfig.hookPre).toBeUndefined();
       expect(hookConfig.hookPost).toBe('echo operator');
+    });
+
+    test('records a hook-label-ignored audit entry with keys only', async () => {
+      process.env.DD_HOOKS_ENABLED = 'true';
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi
+            .fn()
+            .mockResolvedValue({ Config: { Labels: { 'dd.hook.pre': 'echo baked' } } }),
+        })),
+      };
+      mockInsertAudit.mockClear();
+
+      await docker.buildHookConfig(
+        hookContainer({ 'dd.hook.pre': 'echo baked', 'dd.hook.post': 'echo operator' }),
+        { dockerApi, currentContainerSpec: { Image: 'sha256:image-id' } },
+      );
+
+      expect(mockAuditCounterInc).toHaveBeenCalledWith({ action: 'hook-label-ignored' });
+      const entry = mockInsertAudit.mock.calls
+        .map(([audit]) => audit)
+        .find((audit) => audit.action === 'hook-label-ignored');
+      expect(entry).toMatchObject({
+        containerName: expect.stringContaining('container-name'),
+        status: 'info',
+        details: expect.stringContaining('dd.hook.pre'),
+      });
+      expect(entry.details).toContain('container-id');
+      expect(entry.details).not.toContain('echo baked');
+      expect(entry.details).not.toContain('echo operator');
     });
 
     test('inspects the live container when the context has no container spec', async () => {

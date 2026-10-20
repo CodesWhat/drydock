@@ -5,13 +5,24 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.3 Highlights - October 20, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Drydock is now MIT licensed.** It was AGPL-3.0 before. Contributors agreed to the change.
+- **OIDC bearer tokens must be issued for this client.** A token minted for another application on the same provider no longer authenticates against the API. Scripts using OIDC bearer tokens need ones issued for Drydock's client, or extra audiences listed in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See the [OIDC guide](/docs/configuration/authentications/oidc) and [deprecations](/docs/deprecations).
+- **Image-baked hook labels are audited.** Drydock records a `hook-label-ignored` audit entry when it ignores a `dd.hook.*` label from an image, and warns when an agent older than 1.7.0 connects, because those agents still trust such labels.
+- **A recovery-code sign-in makes you review API keys.** When any active key exists, the session is held on the API Keys view until you choose Done reviewing. Keys are not revoked automatically.
+- **The image uses Alpine's patched zlib.** The custom zlib build is gone.
+- RC3 includes the RC1 and RC2 changes below and starts its own soak when published. v1.7.0 (GA 2026-10-19) is the latest stable release.
+
 ## v1.8.0-rc.2 Highlights - October 18, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
 
 - **Docker builds work with the current Alpine packages.** The exact libexpat pin is now `2.9.0-r0` on amd64 and arm64.
 - **Deployment examples and release surfaces match RC2.** The current docs pin the opt-in candidate and retain the SQLite warning; the website, demo and translated READMEs use the same candidate identity.
-- RC2 includes the RC1 features below and starts its own soak when published. v1.6.1 remains stable and v1.7.0-rc.24 remains the separate pending GA candidate.
+- RC2 includes the RC1 features below and starts its own soak when published. v1.7.0 (GA 2026-10-19) is the latest stable release.
 
 ## v1.8.0-rc.1 Highlights - October 17, 2026
 
@@ -23,6 +34,16 @@ import { Callout } from 'fumadocs-ui/components/callout';
 - **Fleet and update controls**, selective bulk updates, bounded concurrency, image inventory and cleanup, and release-family maturity with an optional age fallback. Historical digest counting for unversioned channels remains future work.
 - **Compatibility:** v1.7 removes legacy trigger inputs, curl and `/api/auth/methods`; v1.8 changes MQTT entity identity and removes the old `/auth/strategies` response. `PUT /api/v1/settings` remains a compatibility alias until API v2, and `/api/auth/status` remains supported.
 - **Portwing rotation:** the Drydock controller supports staged rotation with compatible Portwing development builds. Published Portwing v1.0.0-rc.1 does not include the companion feature. Edge `202` means waiting for reconnect.
+
+## v1.7.0 Highlights - October 19, 2026
+
+Consolidates the `1.7.0-rc.1` to `1.7.0-rc.24` prereleases into one GA release, promoted unchanged from `1.7.0-rc.24`. The main themes: dependency-aware update ordering, per-action update policy, an installable PWA with keyboard shortcuts and uptime, agent ownership and policy handoff fixes, updates and rollbacks that deploy the image that was verified, a dark-theme contrast pass, and security patches across the image, dependencies and website. The `DD_TRIGGER_*` prefix, `curl` in the image and the unversioned `/api/auth/methods` alias are removed, and the Home Assistant MQTT topic layout now includes an agent segment by default. Lifecycle hook labels baked into an image are no longer run or carried over; see [deprecations](/docs/deprecations#image-baked-lifecycle-hook-labels). Users already on `1.7.0-rc.24` receive no additional runtime changes. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0/CHANGELOG.md#170--2026-10-19) for the full release notes.
+
+## v1.6.1 Highlights - October 2, 2026
+
+Final release of the 1.6 line, consolidating `1.6.1-rc.1` to `1.6.1-rc.15`. Update checks report their real result, so a failed digest check shows as unknown instead of "Up to date". Notifications fire once per update, update policy survives agent and controller handoffs, and updates and rollbacks deploy the image that was verified. Agents can no longer take over a container owned by another agent or the controller. Debug dumps redact values but keep variable names. The image also gets patched Alpine packages and runtime dependencies. See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.6.1/CHANGELOG.md#161--2026-10-02) for the full release notes.
+
+## v1.7.0-rc.11 Highlights — September 5, 2026
 
 - **The maintenance window now means "when installs happen", not "when drydock looks"**: outside the window the scheduled scan keeps running on its own `CRON`, so new containers still appear, container state in the UI stays current, and update notifications go out when the update is found rather than hours later. Only the automatic action is deferred, and it runs as soon as the window opens: that covers the `command` action as well as the `docker`, `dockercompose` and `portainer` ones, and a digest-mode trigger flushes what it deferred when the window opens rather than waiting for its next digest run. `dd_watcher_maintenance_deferred_updates_total` counts what the window held back. Containers watched by a remote agent are deferred by the controller the same way, from the window state that agent reports. Set `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_SCOPE=scan` to restore the previous whole-scan behaviour ([Discussion #946](https://github.com/CodesWhat/drydock/discussions/946)).
 

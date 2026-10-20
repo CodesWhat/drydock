@@ -708,6 +708,73 @@ describe('HookExecutor', () => {
       expect(warn.mock.calls[0][0]).toContain('web');
       expect(warn.mock.calls[0][0]).toContain('dd.hook.pre');
       expect(warn.mock.calls[0][0]).not.toContain('evil.example');
+      expect(recordHookAudit).toHaveBeenCalledTimes(1);
+      const [action, auditedContainer, status, details] = recordHookAudit.mock.calls[0];
+      expect(action).toBe('hook-label-ignored');
+      expect(auditedContainer).toMatchObject({ name: 'web', id: 'container-id' });
+      expect(status).toBe('info');
+      expect(details).toContain('dd.hook.pre');
+      expect(details).toContain('web');
+      expect(details).toContain('container-id');
+      expect(details).toContain('DD_HOOKS_ALLOW_IMAGE_LABELS');
+      expect(details).not.toContain('evil.example');
+      expect(details).not.toContain('echo post');
+    });
+
+    test('records one audit entry listing every ignored key, never the values', async () => {
+      const { executor, context } = createProvenanceHarness({
+        'dd.hook.pre': 'secret-pre-command',
+        'dd.hook.timeout': '999',
+      });
+      const recordHookAudit = vi.fn();
+      executor.recordHookAudit = recordHookAudit;
+
+      await executor.resolveHookConfig(
+        createContainer({
+          labels: {
+            'dd.hook.pre': 'secret-pre-command',
+            'dd.hook.timeout': '999',
+            'dd.hook.post': 'echo operator',
+          },
+        }),
+        context,
+      );
+
+      expect(recordHookAudit).toHaveBeenCalledTimes(1);
+      const details = recordHookAudit.mock.calls[0][3];
+      expect(details).toContain('dd.hook.pre');
+      expect(details).toContain('dd.hook.timeout');
+      expect(details).not.toContain('dd.hook.post');
+      expect(details).not.toContain('secret-pre-command');
+      expect(details).not.toContain('999');
+    });
+
+    test('records no audit entry when no hook label comes from the image', async () => {
+      const { executor, context } = createProvenanceHarness({
+        'org.opencontainers.image.title': 'web',
+      });
+      const recordHookAudit = vi.fn();
+      executor.recordHookAudit = recordHookAudit;
+
+      await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
+      expect(recordHookAudit).not.toHaveBeenCalled();
+    });
+
+    test('records no audit entry when DD_HOOKS_ALLOW_IMAGE_LABELS is true', async () => {
+      process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = 'true';
+      const { executor, context } = createProvenanceHarness({ 'dd.hook.pre': 'echo pre' });
+      const recordHookAudit = vi.fn();
+      executor.recordHookAudit = recordHookAudit;
+
+      await executor.resolveHookConfig(
+        createContainer({ labels: { 'dd.hook.pre': 'echo pre' } }),
+        context,
+      );
+
       expect(recordHookAudit).not.toHaveBeenCalled();
     });
 

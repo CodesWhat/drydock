@@ -6,9 +6,11 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { clearNotificationSkip } from '../triggers/notification-skips.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
+import { getErrorStatusCode } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
@@ -96,21 +98,6 @@ function validateTriggerRequestBody(body: unknown): {
   return {
     value: validationResult.value,
   };
-}
-
-function getRemoteErrorStatusCode(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-  const response = (error as { response?: unknown }).response;
-  if (!response || typeof response !== 'object') {
-    return undefined;
-  }
-  const status = (response as { status?: unknown }).status;
-  if (typeof status !== 'number' || status < 400 || status > 599) {
-    return undefined;
-  }
-  return status;
 }
 
 function getRemoteErrorPayload(error: unknown): ErrorResponsePayload | undefined {
@@ -247,6 +234,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
       `Running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
     );
     await triggerToRun.trigger(containerToTrigger);
+    clearNotificationSkip(`${triggerType}.${triggerName}`, containerToTrigger.id);
     log.info(
       `Trigger executed with success (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
     );
@@ -357,7 +345,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     log.warn(
       `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(sanitizedReason)})`,
     );
-    const remoteStatusCode = getRemoteErrorStatusCode(e);
+    const remoteStatusCode = getErrorStatusCode(e, true);
     const remoteErrorMessage = getRemoteErrorMessage(e);
     const remoteErrorDetails = getRemoteErrorDetails(e);
     if (remoteStatusCode && remoteErrorMessage) {

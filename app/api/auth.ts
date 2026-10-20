@@ -6,6 +6,11 @@ import { getServerConfiguration } from '../configuration/index.js';
 import log from '../log/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { destroyOtherSubjectSessions } from '../util/session-limit.js';
+import {
+  acknowledgeApiKeyReview,
+  flagApiKeyReviewIfNeeded,
+  isApiKeyReviewPending,
+} from './api-key-review.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
   authenticateLogin,
@@ -164,7 +169,12 @@ function getAuthStrategiesTombstone(_req: Request, res: Response): void {
  * @param res
  */
 function getUser(req: AuthRequest, res: Response): void {
-  const user = { username: getPrincipal(req)?.username ?? ANONYMOUS_USERNAME };
+  const user: { username: string; apiKeyReviewPending?: true } = {
+    username: getPrincipal(req)?.username ?? ANONYMOUS_USERNAME,
+  };
+  if (isApiKeyReviewPending(req)) {
+    user.apiKeyReviewPending = true;
+  }
   res.set('Cache-Control', AUTH_USER_CACHE_CONTROL);
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
@@ -322,6 +332,9 @@ function establishLoginSession(
 
         req.session.rememberMe = rememberMe;
         applyRememberMe(req);
+        if (principal.kind === 'basic' && principal.identity.assurance === 'recovery') {
+          flagApiKeyReviewIfNeeded(req);
+        }
 
         const proceed = async (): Promise<void> => {
           if (options.revokeOtherSessions && principal.kind === 'basic' && req.sessionStore) {
@@ -554,6 +567,8 @@ export function init(app: Application): void {
   router.use(requireSameOriginForMutations);
 
   router.get('/user', getUser);
+
+  router.post('/api-key-review/acknowledge', acknowledgeApiKeyReview);
 
   router.post('/logout', logout);
 

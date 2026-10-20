@@ -18,7 +18,7 @@ You just need to give them different names.</Callout>
 
 ## Route notifications to a group
 
-On the v1.8.0-rc.2 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
+On the v1.8.0-rc.3 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
 
 The server resolves the container's group from `dd.group`, then `com.docker.compose.project`, then `com.docker.stack.namespace`. Names match exactly, including case, whitespace and punctuation. Empty or whitespace-only configured names are invalid. An empty higher-priority label does not fall through to a lower-priority label. Containers without a named group never match; the UI's ungrouped bucket is not a selectable routing identity. Browser grouping preferences, arbitrary label views and shared grouping URLs do not change notification routing.
 
@@ -30,7 +30,7 @@ Use separate notification instances for different groups or destinations. This s
 
 ## Per-container routing overrides
 
-On the v1.8.0-rc.2 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
+On the v1.8.0-rc.3 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
 
 An override changes which triggers a container reaches, nothing else. These limits still apply on top of it:
 
@@ -43,7 +43,7 @@ Trigger references in an override are checked when you save: each must match a r
 
 ## Edit notification delivery policy in the UI
 
-The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.2 builds. They require a writable [configuration file](/docs/configuration/config-file).
+The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.3 builds. They require a writable [configuration file](/docs/configuration/config-file).
 
 Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
 
@@ -168,7 +168,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 ### Manual updates by default
 
-On the **v1.8.0-rc.2 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
+On the **v1.8.0-rc.3 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
 
 ```text
 DD_ACTION_DOCKER_DATAVAULT_AUTO=onauto
@@ -200,6 +200,7 @@ The same setting works with `AUTO=oninclude`: unlabeled containers stay manual, 
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | Agent-prefixed update title with watcher suffix; digest updates use `New image available for container ... (tag currentTag)`, other updates use `New {kind} found for container ...` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_GROUP` | ⚪ | Restrict this notification instance to containers in one named group. Notification triggers only; action triggers reject it. See [Route notifications to a group](#route-notifications-to-a-group). | Non-empty string | unset (no group restriction) |
 
 <Callout type="warn" title="AUTO also sets the baseline access default, not just automatic execution">
 `all` and `none` don't only decide whether an update fires automatically — they also decide whether `dd.action.include` is consulted for manual access at all. `AUTO=none` reads like "off," but it means "no automatic execution": every watched container still gets **manual** access for that trigger, regardless of `dd.action.include`. `AUTO=all` is the same in reverse — every container gets manual and automatic access, ignoring `dd.action.include`. Only `oninclude` and `onauto` make `dd.action.include` (and, under `onauto`, `dd.action.auto`) actually gate access. See the [labels reference](/docs/configuration/watchers#labels) for the full breakdown.
@@ -320,6 +321,21 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 **UI:** The **Notification Outbox** page (Settings → Notification Outbox, route `/notifications/outbox`) shows tabs for Dead-letter, Pending, and Delivered entries with Retry and Discard actions.
 
 <Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Action triggers do not use the outbox. Docker and Docker Compose retries are handled by the update lifecycle; Command triggers run the configured command directly.</Callout>
+
+## Why didn't I get a notification?
+
+Drydock remembers the last reason each notification trigger skipped a container, so you can see it without turning on debug logging. Open the container's detail view and look at the **Notifications** list on the Actions tab, or read `notificationSkips` from `GET /api/v1/containers/{id}`. The debug dump (Config > Diagnostics) carries every recorded skip under `notificationSkips`.
+
+| Reason | What it means |
+| --- | --- |
+| `rule-disabled` | The notification rule is off, or this trigger isn't in the rule's trigger allow-list. |
+| `threshold-not-met` | The update is below the trigger's `THRESHOLD`. |
+| `trigger-excluded` | A `dd.notification.include` or `dd.notification.exclude` label (or an agent mismatch) keeps this trigger off the container. |
+| `once-already-sent` | `ONCE=true` and this exact result was already sent, or is being sent right now. |
+| `recently-applied` | The update was just applied and the watcher hasn't confirmed the new state yet. |
+| `digest-buffered` | Not a failure. The container is held for the next digest. |
+
+Only the last skip per trigger and container is kept. It clears when a notification for that pair is sent, when the watcher reports the update is gone, and on restart. The list holds at most 1000 entries, dropping the oldest. For the log-based causes behind each reason, see [Diagnosing a missed notification](#diagnosing-a-missed-notification).
 
 ## Diagnosing a missed notification
 
@@ -447,7 +463,7 @@ Inside `${...}` you can use:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
@@ -460,7 +476,7 @@ services:
 docker run \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${container.name} can be updated from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}' \
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>

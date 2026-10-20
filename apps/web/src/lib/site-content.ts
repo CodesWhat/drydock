@@ -295,7 +295,7 @@ export const roadmap: Milestone[] = [
   },
   {
     version: "v1.6.1",
-    title: "Latest stable release",
+    title: "Previous stable release (final 1.6 line)",
     emoji: "\u{1F512}",
     status: "released",
     dotColor:
@@ -303,12 +303,12 @@ export const roadmap: Milestone[] = [
     items: ["Stable maintenance and security fixes from the 1.6.1 candidate train"],
   },
   {
-    version: "v1.7.0-rc.24",
-    title: "Smart Updates & UX (RC, GA pending)",
+    version: "v1.7.0",
+    title: "Latest stable release: Smart Updates & UX (GA 2026-10-19)",
     emoji: "\u{1F680}",
-    status: "next",
+    status: "released",
     dotColor:
-      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Dependency-aware update flows",
       "Image cleanup and static-image monitoring",
@@ -316,7 +316,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.8.0-rc.2",
+    version: "v1.8.0-rc.3",
     title: "Fleet Management & SQLite (RC, testing only)",
     emoji: "\u{2699}️",
     status: "next",

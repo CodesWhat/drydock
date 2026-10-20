@@ -935,7 +935,7 @@ describe('validateOpenApiJsonResponse', () => {
       }),
     ).toEqual({
       valid: false,
-      errors: ['$: [object Object]'],
+      errors: ['$: unknown error'],
     });
     compileWithNullMissingRef.mockRestore();
 
@@ -953,7 +953,7 @@ describe('validateOpenApiJsonResponse', () => {
       }),
     ).toEqual({
       valid: false,
-      errors: ['$: null'],
+      errors: ['$: unknown error'],
     });
     compileWithNull.mockRestore();
   });
@@ -1316,7 +1316,7 @@ describe('validateOpenApiJsonResponse', () => {
       }),
     ).toEqual({
       valid: false,
-      errors: ['$: [object Object]'],
+      errors: ['$: unknown error'],
     });
     compileWithNumericMissingRef.mockRestore();
   });

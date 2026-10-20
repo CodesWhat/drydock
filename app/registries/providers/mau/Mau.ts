@@ -40,7 +40,7 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['token']);
+    return this.maskFields(['token']);
   }
 
   /**

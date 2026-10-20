@@ -30,9 +30,10 @@ import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
 import { ROUTES } from '@/router/routes';
 import { useTheme } from '@/theme/useTheme';
+import { timeAgo } from '@/utils/audit-helpers';
 import { distinctBuild } from '@/utils/build-identity';
 
-const { t, te } = useI18n();
+const { t, te, locale } = useI18n();
 const router = useRouter();
 const route = useRoute();
 const { icon } = useIcons();
@@ -303,6 +304,7 @@ const searchResourcesLoading = ref(false);
 interface LegacyInputSourceSummary {
   total: number;
   keys: string[];
+  lastSeen?: Record<string, string>;
 }
 
 interface LegacyInputSummary {
@@ -660,7 +662,18 @@ function normalizeLegacyInputSourceSummary(rawValue: unknown): LegacyInputSource
     Number.isFinite(parsedTotal) && parsedTotal >= 0
       ? Math.max(Math.floor(parsedTotal), uniqueKeys.length)
       : uniqueKeys.length;
-  return { total, keys: uniqueKeys };
+  const rawLastSeen = (rawValue as { lastSeen?: unknown })?.lastSeen;
+  const lastSeen: Record<string, string> = {};
+  if (rawLastSeen && typeof rawLastSeen === 'object' && !Array.isArray(rawLastSeen)) {
+    for (const [key, value] of Object.entries(rawLastSeen)) {
+      if (typeof value === 'string') {
+        lastSeen[key] = value;
+      }
+    }
+  }
+  return Object.keys(lastSeen).length > 0
+    ? { total, keys: uniqueKeys, lastSeen }
+    : { total, keys: uniqueKeys };
 }
 
 function normalizeLegacyInputSummary(rawValue: unknown): LegacyInputSummary | null {
@@ -729,9 +742,40 @@ const legacyEnvKeysPreview = computed(() =>
 const legacyLabelKeysPreview = computed(() =>
   summarizeLegacyKeys(legacyInputSummary.value?.label.keys ?? []),
 );
-const legacyApiPathKeysPreview = computed(() =>
-  summarizeLegacyKeys(legacyInputSummary.value?.api?.keys ?? []),
-);
+// Keys recorded for the removed alias look like "/api/containers/* via homepage"
+// (resource, then a coarse client class). Older or compat-route keys without
+// the suffix are shown as recorded.
+const LEGACY_API_CALLER_KEY = /^(.+) via ([a-z-]+)$/;
+const legacyApiCallerLines = computed(() => {
+  const api = legacyInputSummary.value?.api;
+  const keys = api?.keys ?? [];
+  const lines = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT).map((key) => {
+    const match = LEGACY_API_CALLER_KEY.exec(key);
+    if (!match) {
+      return key;
+    }
+    const resource = match[1];
+    const client =
+      match[2] === 'none'
+        ? t('appShell.banners.apiClientNone')
+        : match[2] === 'other'
+          ? t('appShell.banners.apiClientOther')
+          : match[2];
+    const lastSeen = api?.lastSeen?.[key];
+    return lastSeen
+      ? t('appShell.banners.apiCallerLabel', {
+          resource,
+          client,
+          time: timeAgo(lastSeen, locale.value, t),
+        })
+      : t('appShell.banners.apiCallerLabelNoTime', { resource, client });
+  });
+  const hiddenCount = keys.length - lines.length;
+  if (hiddenCount > 0) {
+    lines.push(t('appShell.banners.hiddenMore', { count: hiddenCount }));
+  }
+  return lines;
+});
 
 const showLegacyConfigDeprecationBanner = computed(
   () => legacyConfigDeprecationBanner.visible.value,
@@ -1716,9 +1760,16 @@ onUnmounted(() => {
             <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
             <template #compatFlag><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_COMPAT_WUDCARD=true</code></template>
           </i18n-t>
-          <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
-            {{ t('appShell.banners.apiPathsLabel', { count: legacyInputSummary?.api?.total, keys: legacyApiPathKeysPreview }) }}
-          </span>
+          <template v-if="legacyApiCallerLines.length > 0">
+            <span
+              v-for="line in legacyApiCallerLines"
+              :key="line"
+              data-testid="legacy-api-path-caller"
+              class="block mt-1 truncate">
+              {{ line }}
+            </span>
+            <span class="block mt-1">{{ t('appShell.banners.apiCallerLogHint') }}</span>
+          </template>
         </AnnouncementBanner>
 
         <AnnouncementBanner

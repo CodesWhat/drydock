@@ -87,6 +87,7 @@
       "hook-post-success": "Hook pós-execução bem-sucedido",
       "hook-pre-failed": "Hook pré-execução falhou",
       "hook-post-failed": "Hook pós-execução falhou",
+      "hook-label-ignored": "Rótulo de hook ignorado",
       "connected": "Conectado",
       "closed": "Fechado",
       "update-available": "Atualização disponível",

@@ -70,7 +70,7 @@ vi.mock('@/services/container', () => ({
   getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
   getContainerTriggersWithReasons: vi
     .fn()
-    .mockResolvedValue({ data: [], unassociatedTriggers: [] }),
+    .mockResolvedValue({ data: [], unassociatedTriggers: [], notificationSkips: [] }),
   getContainerVulnerabilities: vi.fn().mockResolvedValue({
     status: 'not-scanned',
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
@@ -106,6 +106,8 @@ vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: vi.fn((x: any) => x),
 }));
 
+const mockSeedFromContainerList = vi.hoisted(() => vi.fn());
+
 vi.mock('@/stores/operations', () => ({
   useOperationStore: () => ({
     displayBatches: new Map(),
@@ -120,6 +122,7 @@ vi.mock('@/stores/operations', () => ({
     incrementDisplayBatchFailed: vi.fn(),
     incrementDisplayBatchSucceeded: vi.fn(),
     replaceDisplayBatches: vi.fn(),
+    seedFromContainerList: mockSeedFromContainerList,
     applyOperationChanged: vi.fn(),
     applyUpdateApplied: vi.fn(),
     applyUpdateFailed: vi.fn(),
@@ -702,6 +705,18 @@ describe('ContainersView', () => {
       expect(wrapper.text()).toContain('nginx:1.1.0');
     },
   );
+
+  it('seeds the operations store from the list with the pre-request timestamp', async () => {
+    const before = Date.now();
+    const wrapper = await mountContainersView([makeContainer({ id: 'seeded', name: 'seeded' })]);
+    mockSeedFromContainerList.mockClear();
+    await (wrapper.vm as any).loadContainers();
+    expect(mockSeedFromContainerList).toHaveBeenCalledTimes(1);
+    const [rows, requestStartedAt] = mockSeedFromContainerList.mock.calls[0];
+    expect(rows).toEqual(expect.arrayContaining([expect.objectContaining({ id: 'seeded' })]));
+    expect(requestStartedAt).toBeGreaterThanOrEqual(before);
+    expect(requestStartedAt).toBeLessThanOrEqual(Date.now());
+  });
 
   it('restores local fleet counts after a successful list retry, without treating an action error as stale inventory', async () => {
     vi.mocked(getAllWatchers).mockResolvedValue([

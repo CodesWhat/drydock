@@ -48,7 +48,7 @@ class Hub extends Custom<HubRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['password', 'token', 'auth']);
+    return this.maskFields(['password', 'token', 'auth']);
   }
 
   /**

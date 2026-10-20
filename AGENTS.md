@@ -38,7 +38,7 @@ npx vitest run tests/path/to/file.spec.ts   # single test file
 npm run lint             # biome check .
 npm run lint:fix         # biome check --fix .
 
-# Static analysis from repo root (pre-push steps 4-5)
+# Static analysis from repo root (pre-push steps 5-6)
 ./scripts/qlty-check-gate.sh all
 node scripts/qlty-smells-gate.mjs --scope=all || true   # advisory
 
@@ -132,7 +132,7 @@ Add `!` before the colon (`feat(api)!: drop v1 tokens`), or a `BREAKING CHANGE:`
 11. `coverage` — sharded `app`+`ui` parallel vitest with the configured thresholds above (takes roughly **210 seconds**); on failure writes `.coverage-gaps.json`
 12. `build` — sharded `app`+`ui` parallel `tsc`/`vite`, no tests (they already ran in step 11)
 13. `docker-build` — optional, only when `DD_LOCAL_DOCKER=1`
-14. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed and `zizmor` is installed
+14. `zizmor` — GitHub Actions workflow security scan, only when `.github/workflows/*.yml` changed; fails if `zizmor` is not installed
 
 Coverage runs before build so tests execute exactly once per push, and a coverage failure surfaces before a slower build failure would bury it.
 

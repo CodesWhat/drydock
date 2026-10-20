@@ -19,6 +19,9 @@ const legacyInputCounts: Record<LegacyInputSource, Map<string, number>> = {
 interface LegacyInputSourceSummary {
   total: number;
   keys: string[];
+  // ISO timestamp of the most recent hit per key. Only populated for the
+  // 'api' source, whose key space is a fixed allowlist, so it stays bounded.
+  lastSeen?: Record<string, string>;
 }
 
 interface LegacyInputSummary {
@@ -28,19 +31,28 @@ interface LegacyInputSummary {
   api: LegacyInputSourceSummary;
 }
 
+const legacyApiLastSeen = new Map<string, string>();
+
 function incrementLegacyInputCount(source: LegacyInputSource, key: string) {
   const sourceCounts = legacyInputCounts[source];
   sourceCounts.set(key, (sourceCounts.get(key) ?? 0) + 1);
+  if (source === 'api') {
+    legacyApiLastSeen.set(key, new Date().toISOString());
+  }
 }
 
 function buildSourceSummary(source: LegacyInputSource): LegacyInputSourceSummary {
   const entries = Array.from(legacyInputCounts[source].entries()).sort(([a], [b]) =>
     a.localeCompare(b),
   );
-  return {
+  const summary: LegacyInputSourceSummary = {
     total: entries.reduce((count, [, value]) => count + value, 0),
     keys: entries.map(([key]) => key),
   };
+  if (source === 'api') {
+    summary.lastSeen = Object.fromEntries(legacyApiLastSeen);
+  }
+  return summary;
 }
 
 export function init() {

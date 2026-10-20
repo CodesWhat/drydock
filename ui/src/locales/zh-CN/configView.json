@@ -42,6 +42,8 @@
         "name": "名称",
         "key": "密钥",
         "scopes": "作用域",
+        "createdBy": "创建者",
+        "created": "创建时间",
         "lastUsed": "最后使用时间",
         "expires": "过期时间",
         "status": "状态"
@@ -55,6 +57,11 @@
         "header": "吊销 API 密钥",
         "message": "吊销 {name} 也会吊销由它创建的每一个密钥。任何使用这些密钥的东西都会立即停止工作。",
         "accept": "吊销"
+      },
+      "review": {
+        "banner": "你使用恢复码登录。请检查你的 API 密钥，并撤销任何你不认识的密钥。",
+        "done": "完成检查",
+        "doneError": "无法完成检查。请重试。"
       },
       "cascade": "已吊销 {count} 个密钥，包括此密钥创建的每一个密钥。",
       "errors": {

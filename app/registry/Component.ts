@@ -143,15 +143,38 @@ class Component<TConfiguration extends ComponentConfiguration = ComponentConfigu
   }
 
   /**
-   * Mask a String
+   * Mask a value that may hold a secret.
+   *
+   * One rule for every caller: a value is masked when it is present and still
+   * non-empty after String() coercion. null, undefined and '' return undefined
+   * (nothing to hide). Everything else returns the fixed '[REDACTED]' marker,
+   * including whitespace-only strings, numbers (0 included), booleans and
+   * objects, so a secret is never printed just because it is not a string.
    * @param value the value to mask
    * @returns {string|undefined} the masked string
    */
-  static mask(value: string | undefined): string | undefined {
-    if (!value) {
+  static mask(value: unknown): string | undefined {
+    if (value === undefined || value === null || String(value).length === 0) {
       return undefined;
     }
     return '[REDACTED]';
+  }
+
+  /**
+   * Return a copy of the configuration with the given flat fields masked.
+   * Absent and empty fields are left untouched. Providers with nested secrets
+   * build their masked configuration by hand with Component.mask().
+   * @param fields the configuration keys to mask
+   */
+  maskFields(fields: string[]): TConfiguration {
+    const masked = { ...this.configuration } as Record<string, unknown>;
+    for (const field of fields) {
+      const maskedValue = (this.constructor as typeof Component).mask(masked[field]);
+      if (maskedValue !== undefined) {
+        masked[field] = maskedValue;
+      }
+    }
+    return masked as TConfiguration;
   }
 }
 

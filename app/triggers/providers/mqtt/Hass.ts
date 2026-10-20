@@ -417,9 +417,7 @@ class Hass {
       try {
         await this.client.unsubscribeAsync(this.commandTopicFilters);
       } catch (error: unknown) {
-        this.log.warn(
-          `Failed to unsubscribe hass command topics (${error instanceof Error ? error.message : String(error)})`,
-        );
+        this.log.warn(`Failed to unsubscribe hass command topics (${getErrorMessage(error)})`);
       }
     }
     this.commandTopicFilters = undefined;
@@ -463,7 +461,7 @@ class Hass {
       this.commandSubscriptionActive = true;
     } catch (error: unknown) {
       this.log.warn(
-        `Failed to subscribe to Home Assistant command topics (${error instanceof Error ? error.message : String(error)})`,
+        `Failed to subscribe to Home Assistant command topics (${getErrorMessage(error)})`,
       );
       if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
         this.client.removeListener('message', this.commandMessageHandler);
@@ -602,7 +600,7 @@ class Hass {
         });
         return;
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const message = getErrorMessage(error);
       this.log.warn(
         `Unexpected error handling hass install command for container [${container.name}] (${message})`,
       );

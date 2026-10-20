@@ -35,14 +35,7 @@ class Docr extends Custom<DocrRegistryConfiguration> {
   }
 
   maskConfiguration() {
-    return {
-      ...this.configuration,
-      url: this.configuration.url,
-      login: this.configuration.login,
-      password: Docr.mask(this.configuration.password),
-      token: Docr.mask(this.configuration.token),
-      auth: Docr.mask(this.configuration.auth),
-    };
+    return this.maskFields(['password', 'token', 'auth']);
   }
 
   match(image) {

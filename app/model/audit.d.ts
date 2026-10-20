@@ -34,6 +34,7 @@ export interface AuditEntry {
     | 'hook-pre-failed'
     | 'hook-post-success'
     | 'hook-post-failed'
+    | 'hook-label-ignored'
     | 'auto-rollback'
     | 'auth-login'
     | 'totp-recovery-used'

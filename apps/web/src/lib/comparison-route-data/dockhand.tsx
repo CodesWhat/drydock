@@ -26,7 +26,7 @@ Git-based stack deployment|Yes|Planned|competitor
 Web terminal / shell|Yes|Planned|competitor
 File browser|Yes|Planned|competitor
 Secret management|Planned|Planned (free)|tie
-License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|AGPL-3.0|self
+License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|MIT|self
 `,
   highlightsTable: `
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Dockhand's safe-pull protection rolls back if a new container fails to start, but doesn't support proactive health-check rollback, maintenance windows, or lifecycle hooks.

@@ -2080,6 +2080,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     triggerRunInProgress: triggers.triggerRunInProgress,
     triggersLoading: triggers.triggersLoading,
     unassociatedTriggers: triggers.unassociatedTriggers,
+    notificationSkips: triggers.notificationSkips,
     unsnoozeSelected: policy.unsnoozeSelected,
     updateAllInGroup,
     updateContainer,

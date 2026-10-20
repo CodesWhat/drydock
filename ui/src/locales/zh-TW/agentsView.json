@@ -23,6 +23,10 @@
         "os": "作業系統",
         "version": "版本",
         "lastSeen": "最後活躍"
+      },
+      "warnings": {
+        "outdated": "需更新代理",
+        "hookLabelsTrusted": "此代理執行的版本低於 1.7.0，仍會信任映像檔中內建的生命週期掛鉤標籤。請升級到 1.7.0 或更新版本。"
       }
     },
     "detail": {

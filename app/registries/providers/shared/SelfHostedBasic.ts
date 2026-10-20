@@ -16,7 +16,7 @@ class SelfHostedBasic<
   }
 
   maskConfiguration() {
-    return this.maskSensitiveFields(['password', 'auth']);
+    return this.maskFields(['password', 'auth']);
   }
 
   init() {

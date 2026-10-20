@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose-Projekt, -Service oder -Datei stimmt nicht mit diesem Container überein.",
         "labelScope": "Durch die dd.action-/dd.notification-Include- oder -Exclude-Labels dieses Containers ausgeschlossen."
       },
+      "notificationSkips": "Benachrichtigungen",
+      "notificationSkipReason": {
+        "rule-disabled": "Übersprungen: Die Benachrichtigungsregel ist für diesen Trigger aus.",
+        "threshold-not-met": "Übersprungen: Das Update liegt unter dem Schwellenwert dieses Triggers.",
+        "trigger-excluded": "Übersprungen: Die Labels dieses Containers schließen diesen Trigger aus.",
+        "once-already-sent": "Übersprungen: Für dieses Update wurde bereits benachrichtigt.",
+        "recently-applied": "Übersprungen: Das Update wurde gerade angewendet, Bestätigung durch den Watcher steht aus.",
+        "digest-buffered": "Für die nächste Zusammenfassung zurückgehalten."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rollback läuft...",
       "rollbackLatest": "Letztes Backup zurückrollen",

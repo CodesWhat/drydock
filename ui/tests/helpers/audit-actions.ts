@@ -33,6 +33,7 @@ const backendAuditActions = {
   'hook-pre-failed': true,
   'hook-post-success': true,
   'hook-post-failed': true,
+  'hook-label-ignored': true,
   'auto-rollback': true,
   'auth-login': true,
   'totp-recovery-used': true,

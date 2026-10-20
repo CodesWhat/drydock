@@ -22,6 +22,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
+import { getErrorMessage } from '../util/error.js';
 import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'container-update-dispatch' });
@@ -64,7 +65,7 @@ export async function dispatchManualContainerUpdate(
     log.warn(
       `Unexpected error accepting update for container ${sanitizeLogParam(
         container.id,
-      )} (${sanitizeLogParam(error instanceof Error ? error.message : String(error))})`,
+      )} (${sanitizeLogParam(getErrorMessage(error))})`,
     );
     return { kind: 'rejected', statusCode: 500, message: CONTAINER_UPDATE_UNAVAILABLE_MESSAGE };
   }

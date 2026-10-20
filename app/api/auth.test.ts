@@ -49,6 +49,7 @@ const { previousMaxTrackedLockoutIdentities } = vi.hoisted(() => {
   process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES = '5';
   return { previousMaxTrackedLockoutIdentities: previous };
 });
+const mockListApiKeys = vi.hoisted(() => vi.fn(() => [] as unknown[]));
 const mockGetServerConfiguration = vi.hoisted(() => vi.fn(() => ({ cookie: {} })));
 const mockRecordAuditEvent = vi.hoisted(() => vi.fn());
 const mockValidateOpenApiJsonResponse = vi.hoisted(() =>
@@ -89,6 +90,10 @@ vi.mock('../store/totp.js', () => ({
   getSubjectVersion: vi.fn(() => 0),
   getFactorBySubject: vi.fn(() => undefined),
   hasEnrolledUsername: vi.fn(() => false),
+}));
+vi.mock('../store/api-key.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../store/api-key.js')>()),
+  listApiKeys: mockListApiKeys,
 }));
 vi.mock('../store/secrets.js', () => ({
   getStoredSessionSecret: vi.fn(() => null),
@@ -246,6 +251,7 @@ describe('Auth Router', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListApiKeys.mockReturnValue([]);
     mockDdEnvVars.DD_SESSION_SECRET = 'test-suite-session-secret';
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
     mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
@@ -1779,6 +1785,93 @@ describe('Auth Router', () => {
       handler({}, res);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ username: 'anonymous' });
+    });
+
+    test('getUser reports apiKeyReviewPending only while a session owes the review', () => {
+      const handler = getRouteHandler('get', '/user');
+      const pending = createResponse();
+      handler(
+        {
+          principal: { kind: 'session', username: 'john' },
+          session: { apiKeyReviewPending: true },
+        },
+        pending,
+      );
+      expect(pending.json).toHaveBeenCalledWith({ username: 'john', apiKeyReviewPending: true });
+      const contractValidation = validateOpenApiJsonResponse({
+        path: '/auth/user',
+        method: 'get',
+        statusCode: '200',
+        payload: pending.json.mock.calls[0][0],
+      });
+      expect(contractValidation.valid).toBe(true);
+
+      const clear = createResponse();
+      handler({ principal: { kind: 'session', username: 'john' }, session: {} }, clear);
+      expect(clear.json).toHaveBeenCalledWith({ username: 'john' });
+    });
+
+    test('POST /api-key-review/acknowledge is registered behind authentication and same-origin', () => {
+      const app = createApp();
+      auth.init(app);
+      const routeIndex = mockRouter.post.mock.calls.findIndex(
+        (c) => c[0] === '/api-key-review/acknowledge',
+      );
+      expect(routeIndex).toBeGreaterThan(-1);
+      const order = (fn: unknown) =>
+        mockRouter.use.mock.invocationCallOrder[
+          mockRouter.use.mock.calls.findIndex((c) => c[0] === fn)
+        ];
+      expect(order(auth.requireAuthentication)).toBeLessThan(
+        mockRouter.post.mock.invocationCallOrder[routeIndex],
+      );
+      expect(order(requireSameOriginForMutations)).toBeLessThan(
+        mockRouter.post.mock.invocationCallOrder[routeIndex],
+      );
+    });
+
+    describe('recovery-code login key review', () => {
+      const ACTIVE_KEY = [{ keyId: 'a'.repeat(12), revokedAt: null, expiresAt: null }];
+
+      async function loginWithAssurance(assurance: string) {
+        const handler = getRouteHandler('post', '/login');
+        const res = createResponse();
+        const req = {
+          principal: {
+            kind: 'basic',
+            username: 'john',
+            identity: { ...BASIC_IDENTITY, assurance },
+          },
+          session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        };
+        await handler(req, res);
+        return { req, res };
+      }
+
+      test('flags the session and says so in the response when active keys exist', async () => {
+        mockListApiKeys.mockReturnValue(ACTIVE_KEY);
+        const { req, res } = await loginWithAssurance('recovery');
+        expect(req.session).toMatchObject({ apiKeyReviewPending: true });
+        expect(res.json).toHaveBeenCalledWith({ username: 'john', apiKeyReviewPending: true });
+      });
+
+      test('does not flag a recovery login when no active key exists', async () => {
+        mockListApiKeys.mockReturnValue([
+          { keyId: 'b'.repeat(12), revokedAt: '2026-01-01T00:00:00.000Z', expiresAt: null },
+        ]);
+        const { req, res } = await loginWithAssurance('recovery');
+        expect(req.session).not.toHaveProperty('apiKeyReviewPending');
+        expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      });
+
+      test.each(['totp', 'password'])(
+        'does not flag a %s login even with active keys',
+        async (assurance) => {
+          mockListApiKeys.mockReturnValue(ACTIVE_KEY);
+          const { req } = await loginWithAssurance(assurance);
+          expect(req.session).not.toHaveProperty('apiKeyReviewPending');
+        },
+      );
     });
 
     test('login should return user info', async () => {

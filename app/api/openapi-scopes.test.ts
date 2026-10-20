@@ -230,6 +230,7 @@ describe('the published document', () => {
       'DELETE /auth/login-challenges/{id}',
       'POST /auth/remember',
       'GET /auth/user',
+      'POST /auth/api-key-review/acknowledge',
       'POST /auth/logout',
       'GET /metrics',
     ]);

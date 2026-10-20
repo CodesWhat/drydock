@@ -38,13 +38,19 @@ vi.mock('../log', () => ({
   default: { child: () => mockLog },
 }));
 
-vi.mock('../util/error', () => ({
+vi.mock('../util/error', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../util/error.js')>()),
   getErrorMessage: mockGetErrorMessage,
 }));
 
 import * as agent from '../agent/index.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import {
+  getNotificationSkipsSnapshot,
+  recordNotificationSkip,
+  resetNotificationSkips,
+} from '../triggers/notification-skips.js';
 import * as triggerRouter from './trigger.js';
 import { runTrigger } from './trigger.js';
 
@@ -222,6 +228,21 @@ describe('Trigger Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error when running trigger slack.default (trigger not found)',
       });
+    });
+
+    test('a manual send clears the recorded skip, a failed one keeps it', async () => {
+      resetNotificationSkips();
+      recordNotificationSkip('slack.default', 'c1', 'rule-disabled');
+      const mockTrigger = { trigger: vi.fn().mockRejectedValueOnce(new Error('down')) };
+      registry.getState.mockReturnValue({ trigger: { 'slack.default': mockTrigger } });
+      const req = { params: { type: 'slack', name: 'default' }, body: { id: 'c1' } };
+
+      await runTrigger(req, createMockResponse());
+      expect(getNotificationSkipsSnapshot()).toHaveLength(1);
+
+      mockTrigger.trigger.mockResolvedValueOnce(undefined);
+      await runTrigger(req, createMockResponse());
+      expect(getNotificationSkipsSnapshot()).toHaveLength(0);
     });
 
     test('should run trigger successfully', async () => {

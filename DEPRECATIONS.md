@@ -2,7 +2,7 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
-Entries marked v1.8.0 first appear in v1.8.0-rc.1. The current test candidate is v1.8.0-rc.2; v1.8.0 GA is not released and the latest stable remains v1.6.1.
+Entries marked v1.8.0 first appear in v1.8.0-rc.1. The current test candidate is v1.8.0-rc.3; v1.7.0 is the latest stable release (GA 2026-10-19), and entries marked v1.7.0 or earlier have shipped in it. v1.8.0 GA is not released.
 
 **API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
@@ -204,6 +204,8 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 
 **Migration:** Update all API calls to use the `/api/v1/` prefix (e.g., `/api/v1/containers` instead of `/api/containers`).
 
+**Finding the caller:** the in-app banner for removed API path requests lists each resource that was hit and a coarse client class, for example `/api/containers/* from homepage, last seen 5 min. ago`. `none` means the request had no `User-Agent` header. The server log carries the details the banner can't: the first hit per resource and client each hour is logged at info level with the method, path (no query string), `User-Agent` and remote address, so search the log for `Removed unversioned API path hit` to find the host to fix.
+
 **Exceptions:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` and are unaffected by this removal — the compat router dispatches its four whitelisted routes directly into the same `apiRouter` instance mounted at `/api/v1` (shared, not a second independent one — see `app/api/compat/wudcard.ts`) rather than by falling through to the (now-removed) `/api` alias, so auth and rate limiting are genuinely identical rather than merely implemented identically. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration (and Homepage's native `whatsupdocker` widget, which expects the same bare-array shape) working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
 
 Separately, `GET /api/auth/status` also keeps responding 200 at `/api/*` — unconditionally, not behind any flag — because it is registered directly on the app before the `/api` mounts rather than living inside the removed alias router. It has no removal scheduled and is documented as a standing compatibility alias for `GET /api/v1/auth/status`. `GET /api/auth/methods` used to keep responding for the same reason; see the entry immediately below for its v1.7.0 removal.
@@ -349,3 +351,27 @@ Before rc.3, an upgrading instance with no auth strategy configured was let thro
 Before rc.3, drydock served sessions under Express's default cookie name, `connect.sid` — the same name countless other Express apps use, making a drydock session fingerprintable and a potential collision risk with another Express app on the same host/path. rc.3 renames the cookie to `drydock.sid`. Because a shared, guessable session-cookie name was itself the exposure, it could not be kept alive behind a deprecation window.
 
 **Migration:** None required. Existing `connect.sid` cookies are simply no longer recognized, so every user is signed out once on upgrade and needs to log back in. No data is lost.
+
+### Image-baked lifecycle hook labels
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.7.0 (first enforced in v1.7.0-rc.20) |
+| **Removed in** | v1.7.0 (immediate, security fix, no grace period) |
+| **Affects** | Installs with `DD_HOOKS_ENABLED=true` that relied on `dd.hook.*` labels set with `LABEL` in an image |
+
+Before this change, a `dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort` or `dd.hook.timeout` label baked into an image ran as if you had set it on the container. Docker copies an image's `LABEL` instructions onto every container created from it, so anyone who controls an image could make Drydock run a command on your host at the next update ([GHSA-prfp-h8qf-63jg](https://github.com/CodesWhat/drydock/security/advisories/GHSA-prfp-h8qf-63jg)). Drydock now only runs hook labels set on the container itself. A `dd.hook.*` label whose key and value match the image's is ignored with a warning, and it is also left out when Drydock recreates a container, so an image label can no longer turn into a container label. Each update that ignores one also writes a `hook-label-ignored` audit entry listing the label keys (never the commands).
+
+**Migration:** Set `dd.hook.*` on the container (Compose `labels:` or `docker run --label`), not in the image. If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the old behavior, and only do that for images you control. See [Hooks](https://getdrydock.com/docs/configuration/hooks#labels-baked-into-images). The fix runs on the agent for agent-run updates, so upgrade agents to 1.7.0 or later too. Drydock logs a warning and flags the agent in the Agents view while one older than 1.7.0 is connected.
+
+### OIDC bearer tokens must be issued for this client
+
+| | |
+| --- | --- |
+| **Deprecated in** | Not deprecated (enforced security fix) |
+| **Removed in** | v1.8.1 (immediate, security fix, no grace period) |
+| **Affects** | Installs with an OIDC authentication configured whose API callers send an OIDC access token as `Authorization: Bearer` |
+
+Before this change, Drydock accepted any access token the configured IdP would answer a userinfo call for, whichever client it was issued to. A token minted for an unrelated application on the same IdP therefore authenticated against the Drydock API. Drydock now verifies the token (JWT signature through the IdP's JWKS, or RFC 7662 introspection for opaque tokens) and requires it to be issued for this client: `aud` contains the client ID, or `azp` or `client_id` equals it. A token that can't be verified either way is rejected, and the browser login flow is unaffected.
+
+**Migration:** Request the access token for the Drydock client. If your IdP puts a separate API audience on it, list that audience in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See [OIDC bearer tokens](https://getdrydock.com/docs/configuration/authentications/oidc#bearer-tokens).

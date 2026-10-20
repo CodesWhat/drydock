@@ -12,4 +12,17 @@ describe('sleep', () => {
       vi.useRealTimers();
     }
   });
+
+  test('rejects with an AbortError when the signal aborts', async () => {
+    const controller = new AbortController();
+    const sleepPromise = sleep(60_000, controller.signal);
+    controller.abort();
+    await expect(sleepPromise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  test('rejects immediately when the signal is already aborted', async () => {
+    await expect(sleep(60_000, AbortSignal.abort())).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
 });

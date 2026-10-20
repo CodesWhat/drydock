@@ -23,6 +23,10 @@
         "os": "system operacyjny",
         "version": "Wersja",
         "lastSeen": "Ostatnio widziany"
+      },
+      "warnings": {
+        "outdated": "Zaktualizuj agenta",
+        "hookLabelsTrusted": "Ten agent działa na wersji starszej niż 1.7.0 i nadal ufa etykietom hooków cyklu życia wbudowanym w obrazy. Zaktualizuj go do wersji 1.7.0 lub nowszej."
       }
     },
     "detail": {

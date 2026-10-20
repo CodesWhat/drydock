@@ -87,6 +87,7 @@
       "hook-post-success": "사후 훅 성공",
       "hook-pre-failed": "사전 훅 실패",
       "hook-post-failed": "사후 훅 실패",
+      "hook-label-ignored": "훅 라벨 무시됨",
       "connected": "연결됨",
       "closed": "닫힘",
       "update-available": "업데이트 가능",

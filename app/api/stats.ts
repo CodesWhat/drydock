@@ -14,7 +14,7 @@ let statsAggregationStarted = false;
 
 function getContainerStatsAggregator(): ContainerStatsAggregator {
   containerStatsAggregator ??= createContainerStatsAggregator({
-    getContainers: () => storeContainer.getContainers(),
+    getContainers: () => storeContainer.getContainersForStats(),
     getWatchers: () => registry.getState().watcher || {},
   });
   return containerStatsAggregator;

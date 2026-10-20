@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import capitalize from 'capitalize';
 import { resolveConfiguredPathWithinBase, resolveRuntimeRoot } from '../runtime/paths.js';
+import { getErrorMessage } from '../util/error.js';
 
 export type RegistryComponentKind = 'trigger' | 'watcher' | 'registry' | 'authentication' | 'agent';
 
@@ -40,7 +41,7 @@ export function getAvailableProviders(
       })
       .sort();
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     onError?.(`Unable to load providers under ${basePath}: ${message}`);
     return [];
   }

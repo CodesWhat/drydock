@@ -63,9 +63,9 @@ If the header is missing or does not match the expected token, the API responds 
 | Category | Endpoints | Description |
 | --- | --- | --- |
 | [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
-| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.8.0-rc.2 file configuration and source-aware editors; reads require a session, writes require admin |
+| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.8.0-rc.3 file configuration and source-aware editors; reads require a session, writes require admin |
 | [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
-| [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
+| [Agents](/docs/api/agent) | `GET /api/v1/agents`, `GET /api/v1/agents/roster` | Remote agent status, roster and logs |
 | [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
 | [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
 | [API Keys](/docs/api/api-keys) | `GET /api/v1/api-keys`, `POST`, `DELETE /:keyId` | Scoped API key management (`api-keys:manage`) |
@@ -383,7 +383,7 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `hook-label-ignored`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
 
 ## Server-Sent Events (SSE)
 
@@ -416,7 +416,7 @@ The replay buffer is an in-memory 5-minute ring buffer. If the requested event i
 | `dd:scan-started` | `{ "containerId": "...", "cycleId": "..." }` | A security scan started for a container; `cycleId` is present for bulk scans and optional otherwise |
 | `dd:scan-completed` | `{ "containerId": "...", "status": "...", "cycleId": "..." }` | A security scan finished; `cycleId` is present for bulk scans and optional otherwise. Bulk requests with `requestId` also include that ID, cumulative `completedCount`, and `scheduledCount`. Filter by request ID, validate the accepted cycle/total, and use the highest count rather than adding events |
 | `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
-| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "triggerName": "...", "status": "...", "phase": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed. `triggerName` is optional. |
+| `dd:update-operation-changed` | `{ "operationId": "...", "containerName": "...", "triggerName": "...", "status": "...", "phase": "...", "updatedAt": "...", "fromVersion": "...", "toVersion": "...", "queuePosition": int, "queueTotal": int }` | An in-flight update operation's status or queue position changed. `triggerName`, `fromVersion` and `toVersion` are optional; `updatedAt` is the operation's last update time as an ISO string. |
 | `dd:update-applied` | `{ "containerName": "...", "containerId": "...", "newContainerId": "...", "operationId": "...", "batchId": "..." }` | An update was successfully applied to a container |
 | `dd:update-failed` | `{ "containerName": "...", "error": "...", "operationId": "...", "batchId": "...", "phase": "...", "rollbackReason": "..." }` | An update attempt failed (or was rolled back) |
 | `dd:batch-update-completed` | `{ "batchId": "...", "total": int, "succeeded": int, "failed": int, "durationMs": int, "items": [...] }` | A batch update run finished |
@@ -634,6 +634,20 @@ curl -X POST http://drydock:3000/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username": "admin", "password": "..."}'
 ```
+
+When the account has a [second factor](#two-factor-management), the call answers `202` with a challenge id in the `Location` header instead of a session. The challenge is valid for five minutes.
+
+```bash
+# Complete the login with a TOTP code (or {"recoveryCode": "..."}); optional "remember"
+curl -X PUT http://drydock:3000/auth/login-challenges/<id> \
+  -H 'Content-Type: application/json' \
+  -d '{"code": "123456"}'
+
+# Cancel the challenge
+curl -X DELETE http://drydock:3000/auth/login-challenges/<id>
+```
+
+`PUT` takes exactly one of `code` or `recoveryCode`, plus optional `remember`, and answers `200` with the user and a session cookie. Both calls need a same-origin request.
 
 ### Get current user
 

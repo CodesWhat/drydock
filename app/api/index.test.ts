@@ -631,7 +631,7 @@ describe('API Index', () => {
     finishHandlers.forEach((cb) => cb());
 
     const summary = compatibility.getLegacyInputSummary();
-    expect(summary.api.keys).toContain('/api/containers/:id/stats');
+    expect(summary.api.keys).toContain('/api/containers/:id/stats via none');
     expect(summary.api.keys).not.toContain('/containers/abc123/stats');
     expect(summary.api.total).toBeGreaterThanOrEqual(1);
   });
@@ -670,8 +670,54 @@ describe('API Index', () => {
     finishHandlers.forEach((cb) => cb());
 
     const summary = compatibility.getLegacyInputSummary();
-    expect(summary.api.keys).toContain('unmatched');
-    expect(summary.api.keys).not.toContain('/containers/abc123');
+    // Allowlisted first segment only, never the id, plus the client class.
+    expect(summary.api.keys).toContain('/api/containers/* via none');
+    expect(summary.api.keys.join(' ')).not.toContain('abc123');
+    expect(summary.api.lastSeen?.['/api/containers/* via none']).toEqual(expect.any(String));
+  });
+
+  test('should log the caller once per resource and client for unmatched removed-alias hits', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const tracking = mockApp.use.mock.calls.find(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    )[1];
+
+    const finishHandlers = [];
+    const res = {
+      on: vi.fn((event, cb) => {
+        if (event === 'finish') finishHandlers.push(cb);
+      }),
+    };
+    const req = {
+      method: 'GET',
+      path: '/containers/abc123',
+      originalUrl: '/api/containers/abc123?x=1',
+      ip: '10.1.2.3',
+      baseUrl: '/api',
+      headers: { 'user-agent': 'Homepage/1.0' },
+    };
+    tracking(req, res, vi.fn());
+    tracking(req, res, vi.fn());
+    finishHandlers.forEach((cb) => cb());
+
+    const logged = mockLog.info.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('Removed unversioned API path hit'));
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('/api/containers/abc123');
+    expect(logged[0]).not.toContain('x=1');
+    expect(logged[0]).toContain('10.1.2.3');
   });
 
   test('should NOT record /api/v1/* fallthrough (unmatched method/path in the v1 router) as legacy-alias usage', async () => {
@@ -820,7 +866,7 @@ describe('API Index', () => {
     finishHandlers.forEach((cb) => cb());
 
     const summary = compatibility.getLegacyInputSummary();
-    expect(summary.api.keys).toContain('/api/containers/');
+    expect(summary.api.keys).toContain('/api/containers/ via none');
   });
 
   test('real Express /api/v1 isolation: a fully-handled /api/v1 request never reaches a router mounted at /api afterward', async () => {

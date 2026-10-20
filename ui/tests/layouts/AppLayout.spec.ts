@@ -1042,6 +1042,72 @@ describe('AppLayout', () => {
     );
   });
 
+  it('names the resource, client and last-seen time for removed API path hits', async () => {
+    const lastSeen = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 4,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+          api: {
+            total: 4,
+            keys: [
+              '/api/containers/* via homepage',
+              '/api/app/* via none',
+              '/api/store/* via other',
+              '/api/log/* via curl',
+              'unmatched via browser',
+              '/api/icons/* via wget',
+              '/api/stats/* via node',
+              '/api/watchers/* via python',
+            ],
+            lastSeen: {
+              '/api/containers/* via homepage': lastSeen,
+              '/api/app/* via none': 42,
+              '/api/store/* via other': lastSeen,
+            },
+          },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-api-path-deprecation-banner"]');
+    const text = banner.text();
+    expect(text).toContain('/api/containers/* from homepage, last seen');
+    expect(text).toContain('/api/app/* from no user agent');
+    expect(text).not.toContain('/api/app/* from no user agent, last seen');
+    expect(text).toContain('/api/store/* from other client, last seen');
+    expect(text).toContain('(+2 more)');
+    expect(text).toContain('server log');
+    expect(banner.findAll('[data-testid="legacy-api-path-caller"]').length).toBe(7);
+  });
+
+  it('shows legacy api keys without a client suffix as recorded and ignores malformed last-seen data', async () => {
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 1,
+          env: { total: 0, keys: [] },
+          label: { total: 0, keys: [] },
+          api: { total: 1, keys: ['/api/containers/'], lastSeen: ['nope'] },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-api-path-deprecation-banner"]');
+    expect(banner.text()).toContain('/api/containers/');
+    expect(banner.text()).not.toContain('last seen');
+  });
+
   it('shows a curl healthcheck deprecation banner when server reports a custom override', async () => {
     mockGetServer.mockResolvedValue({
       compatibility: {

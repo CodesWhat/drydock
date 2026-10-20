@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose 项目、服务或文件与此容器不匹配。",
         "labelScope": "被此容器的 dd.action/dd.notification 包含或排除标签排除。"
       },
+      "notificationSkips": "通知",
+      "notificationSkipReason": {
+        "rule-disabled": "已跳过：此触发器的通知规则已关闭。",
+        "threshold-not-met": "已跳过：更新低于此触发器的阈值。",
+        "trigger-excluded": "已跳过：此容器的标签排除了该触发器。",
+        "once-already-sent": "已跳过：此更新已通知过。",
+        "recently-applied": "已跳过：更新刚刚应用，正在等待 watcher 确认。",
+        "digest-buffered": "已留待下一次摘要发送。"
+      },
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",

@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Composeのプロジェクト、サービス、またはファイルがこのコンテナと一致しません。",
         "labelScope": "このコンテナの dd.action/dd.notification の include または exclude ラベルによって除外されています。"
       },
+      "notificationSkips": "通知",
+      "notificationSkipReason": {
+        "rule-disabled": "スキップ: このトリガーでは通知ルールがオフです。",
+        "threshold-not-met": "スキップ: アップデートがこのトリガーのしきい値を下回っています。",
+        "trigger-excluded": "スキップ: このコンテナのラベルがこのトリガーを除外しています。",
+        "once-already-sent": "スキップ: このアップデートはすでに通知済みです。",
+        "recently-applied": "スキップ: アップデートが適用されたばかりで、ウォッチャーの確認待ちです。",
+        "digest-buffered": "次のダイジェストまで保留中です。"
+      },
       "backupsRollback": "バックアップ＆ロールバック",
       "rollingBack": "ロールバック中...",
       "rollbackLatest": "最新へロールバック",

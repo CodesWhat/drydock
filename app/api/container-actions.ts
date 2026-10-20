@@ -12,6 +12,7 @@ import {
   type RejectedContainerUpdateRequest,
   requestContainerUpdates,
 } from '../updates/request-update.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import { toApiContainer } from './container/shared.js';
 import {
@@ -179,7 +180,7 @@ async function executeAction(
   } catch (e: unknown) {
     log.warn(
       `Container ${method} succeeded but status refresh failed for ${sanitizeLogParam(id)} (${sanitizeLogParam(
-        e instanceof Error ? e.message : String(e),
+        getErrorMessage(e),
       )})`,
     );
     responseContainer = storeContainer.getContainer(id) || container;
@@ -286,9 +287,7 @@ async function updateContainers(req: Request, res: Response) {
     });
   } catch (error: unknown) {
     log.warn(
-      `Unexpected error accepting bulk updates (${sanitizeLogParam(
-        error instanceof Error ? error.message : String(error),
-      )})`,
+      `Unexpected error accepting bulk updates (${sanitizeLogParam(getErrorMessage(error))})`,
     );
     sendErrorResponse(res, 500, 'Unable to accept container updates');
   }

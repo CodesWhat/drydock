@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
 import session from 'express-session';
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import { setRememberMe } from '../../../api/auth-remember-me.js';
 import { requireSameOriginForMutations } from '../../../api/csrf.js';
@@ -769,6 +770,7 @@ test('isAllowedAuthorizationRedirect should require authorization endpoint metad
 });
 
 test('verify should return user on valid token', async () => {
+  vi.spyOn(oidc, 'verifyBearerAccessToken').mockResolvedValue({});
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'test@example.com' });
 
   const done = vi.fn();
@@ -778,6 +780,7 @@ test('verify should return user on valid token', async () => {
 });
 
 test('verify should return false on invalid token', async () => {
+  vi.spyOn(oidc, 'verifyBearerAccessToken').mockResolvedValue({});
   openidClientMock.fetchUserInfo = vi.fn().mockRejectedValue(new Error('Invalid token'));
   oidc.log = { warn: vi.fn() };
 
@@ -2993,6 +2996,7 @@ test('validateCallbackData should log specific warn message when state does not 
 // --- verify() log message mutant killer ---
 
 test('verify should log specific error message on access token validation failure', async () => {
+  vi.spyOn(oidc, 'verifyBearerAccessToken').mockResolvedValue({});
   openidClientMock.fetchUserInfo = vi.fn().mockRejectedValue(new Error('token expired'));
 
   const done = vi.fn();
@@ -3950,4 +3954,224 @@ test('callback should reject pending check with null value', async () => {
 
   expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
   expect401JsonMessage(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
+
+// --- bearer audience / client binding ---
+
+describe('bearer token binding', () => {
+  const ISSUER = 'https://idp.example.com';
+  let signingKey: CryptoKey;
+  let localJwks: ReturnType<typeof createLocalJWKSet>;
+
+  beforeAll(async () => {
+    const pair = await generateKeyPair('RS256');
+    signingKey = pair.privateKey;
+    localJwks = createLocalJWKSet({
+      keys: [{ ...(await exportJWK(pair.publicKey)), kid: 'k1', alg: 'RS256', use: 'sig' }],
+    });
+  });
+
+  function setMetadata(extra: Record<string, unknown>) {
+    oidc.client = new Configuration(
+      { issuer: ISSUER, authorization_endpoint: 'https://idp/auth', ...extra },
+      'dd-client',
+      'dd-secret',
+      ClientSecretPost('dd-secret'),
+    );
+    oidc.configuration = { ...configurationValid, clientid: 'dd-client' };
+  }
+
+  function signToken(claims: Record<string, unknown>, issuer = ISSUER) {
+    return new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+      .setIssuer(issuer)
+      .setSubject('user-1')
+      .setExpirationTime('5m')
+      .sign(signingKey);
+  }
+
+  function authenticate(token: string) {
+    oidc.type = 'oidc';
+    oidc.name = 'default';
+    return oidc.authenticateBearer({ headers: { authorization: `Bearer ${token}` } });
+  }
+
+  beforeEach(() => {
+    openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+    openidClientMock.tokenIntrospection = vi.fn();
+    setMetadata({ jwks_uri: `${ISSUER}/jwks` });
+    vi.spyOn(oidc, 'getBearerKeyResolver').mockReturnValue(localJwks);
+  });
+
+  test('accepts a JWT with a matching aud and maps identity through userinfo with the token subject', async () => {
+    const token = await signToken({ aud: 'dd-client' });
+
+    await expect(authenticate(token)).resolves.toEqual({
+      kind: 'oidc',
+      username: 'user@example.com',
+    });
+    expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(oidc.client, token, 'user-1');
+  });
+
+  test('accepts a JWT with a matching azp', async () => {
+    const token = await signToken({ aud: 'account', azp: 'dd-client' });
+
+    await expect(authenticate(token)).resolves.toEqual({
+      kind: 'oidc',
+      username: 'user@example.com',
+    });
+  });
+
+  test('rejects a token minted for a foreign client without calling userinfo', async () => {
+    const token = await signToken({ aud: 'other-client', azp: 'other-client' });
+
+    await expect(authenticate(token)).resolves.toBeUndefined();
+    expect(openidClientMock.fetchUserInfo).not.toHaveBeenCalled();
+    expect(oidc.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not issued for this client'),
+    );
+  });
+
+  test('rejects a token from a different issuer', async () => {
+    const token = await signToken({ aud: 'dd-client' }, 'https://evil.example.com');
+
+    await expect(authenticate(token)).resolves.toBeUndefined();
+    expect(openidClientMock.fetchUserInfo).not.toHaveBeenCalled();
+  });
+
+  test('accepts a configured extra audience', async () => {
+    oidc.configuration = {
+      ...configurationValid,
+      clientid: 'dd-client',
+      beareraudiences: ' api://drydock, ,other ',
+    };
+    const token = await signToken({ aud: 'api://drydock' });
+
+    await expect(authenticate(token)).resolves.toEqual({
+      kind: 'oidc',
+      username: 'user@example.com',
+    });
+  });
+
+  test('getBearerAudiences is empty when the setting is absent', () => {
+    expect(oidc.getBearerAudiences()).toEqual([]);
+  });
+
+  test('accepts an opaque token that introspects as active for this client', async () => {
+    setMetadata({ introspection_endpoint: `${ISSUER}/introspect` });
+    openidClientMock.tokenIntrospection.mockResolvedValue({
+      active: true,
+      client_id: 'dd-client',
+      sub: 'svc-1',
+    });
+
+    await expect(authenticate('opaque-token')).resolves.toEqual({
+      kind: 'oidc',
+      username: 'user@example.com',
+    });
+    expect(openidClientMock.tokenIntrospection).toHaveBeenCalledWith(oidc.client, 'opaque-token');
+    expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+      oidc.client,
+      'opaque-token',
+      'svc-1',
+    );
+  });
+
+  test('rejects an opaque token that introspects as inactive', async () => {
+    setMetadata({ introspection_endpoint: `${ISSUER}/introspect` });
+    openidClientMock.tokenIntrospection.mockResolvedValue({ active: false });
+
+    await expect(authenticate('opaque-token')).resolves.toBeUndefined();
+    expect(openidClientMock.fetchUserInfo).not.toHaveBeenCalled();
+  });
+
+  test('rejects with a clear log when the IdP has no jwks_uri or introspection_endpoint', async () => {
+    setMetadata({});
+
+    await expect(authenticate('opaque-token')).resolves.toBeUndefined();
+    expect(openidClientMock.fetchUserInfo).not.toHaveBeenCalled();
+    expect(oidc.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('no usable jwks_uri or introspection_endpoint'),
+    );
+  });
+
+  test('the session callback flow does not go through bearer binding', async () => {
+    const bind = vi.spyOn(oidc, 'verifyBearerAccessToken');
+    const session = {
+      oidc: {
+        default: {
+          pending: {
+            'state-abcdef123': {
+              state: 'state-abcdef123',
+              codeVerifier: 'v',
+              createdAt: Date.now(),
+            },
+          },
+        },
+      },
+      save: vi.fn((cb) => cb()),
+      regenerate: vi.fn((cb) => cb()),
+      reload: vi.fn((cb) => cb()),
+    };
+    oidc.name = 'default';
+    openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+      access_token: 'opaque-session-token',
+      claims: () => ({ sub: 'sub-1' }),
+    });
+    const res = createRes();
+
+    await oidc.callback(
+      createCallbackReq('/auth/oidc/default/cb?code=abc&state=state-abcdef123', session),
+      res,
+    );
+
+    expect(bind).not.toHaveBeenCalled();
+    expect(openidClientMock.fetchUserInfo).toHaveBeenCalled();
+  });
+
+  describe('getBearerKeyResolver', () => {
+    beforeEach(() => {
+      vi.mocked(oidc.getBearerKeyResolver).mockRestore();
+    });
+
+    test('creates a resolver once per jwks uri and reuses it', () => {
+      const first = oidc.getBearerKeyResolver(`${ISSUER}/jwks`);
+      expect(oidc.getBearerKeyResolver(`${ISSUER}/jwks`)).toBe(first);
+      expect(oidc.getBearerKeyResolver(`${ISSUER}/jwks-2`)).not.toBe(first);
+    });
+
+    test('routes JWKS fetches through the configured custom fetch', async () => {
+      const oidcFetch = vi.fn().mockResolvedValue(
+        new globalThis.Response(JSON.stringify({ keys: [] }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+      oidc.oidcFetch = oidcFetch;
+      const getKey = oidc.getBearerKeyResolver(`${ISSUER}/jwks`);
+      const token = await signToken({ aud: 'dd-client' });
+
+      await expect(
+        getKey({ alg: 'RS256', kid: 'k1' } as never, { payload: '', signature: '' } as never),
+      ).rejects.toThrow();
+      expect(oidcFetch).toHaveBeenCalled();
+      expect(token).toBeTruthy();
+    });
+  });
+
+  test('maskConfiguration includes the bearer audiences setting', () => {
+    oidc.configuration = { ...configurationValid, beareraudiences: 'api://drydock' };
+
+    expect(oidc.maskConfiguration()).toEqual(
+      expect.objectContaining({ beareraudiences: 'api://drydock' }),
+    );
+  });
+
+  test('schema accepts the bearer audiences setting', () => {
+    expect(
+      oidc.getConfigurationSchema().validate({
+        ...configurationValid,
+        beareraudiences: 'api://drydock',
+      }).error,
+    ).toBeUndefined();
+  });
 });
