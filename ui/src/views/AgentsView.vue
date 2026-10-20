@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
 import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
@@ -12,6 +12,7 @@ import DataSortControl from '../components/DataSortControl.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useSearchFromQuery } from '../composables/useSearchFromQuery';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -55,7 +56,6 @@ interface AgentLog {
 
 const { t } = useI18n();
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
-const route = useRoute();
 const router = useRouter();
 let activeAgentStatusListener: EventListener | null = null;
 
@@ -277,16 +277,7 @@ const agentDensity = usePreference(
 const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
-function applySearchFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  searchQuery.value = typeof raw === 'string' ? raw : '';
-}
-
-applySearchFromQuery(route.query.q);
-watch(
-  () => route.query.q,
-  (value) => applySearchFromQuery(value),
-);
+useSearchFromQuery(searchQuery);
 
 const filteredAgents = computed(() => {
   if (!searchQuery.value) return agentsData.value;
