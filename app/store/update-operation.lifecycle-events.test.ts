@@ -404,4 +404,71 @@ describe('update operation lifecycle events', () => {
     expect(terminalCall![0].lastError).toBeUndefined();
     expect(terminalCall![0].rollbackReason).toBeUndefined();
   });
+
+  test('update-operation-changed carries updatedAt, fromVersion and toVersion across transitions', async () => {
+    mockEmitUpdateOperationChanged.mockClear();
+
+    const inserted = updateOperation.insertOperation({
+      id: 'op-sse-versions',
+      containerName: 'web',
+      status: 'queued',
+      phase: 'queued',
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+    });
+    await flushAsyncLifecycleEvents();
+    expect(mockEmitUpdateOperationChanged).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'queued',
+        updatedAt: inserted.updatedAt,
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      }),
+    );
+
+    const progressed = updateOperation.updateOperation(inserted.id, {
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+    await flushAsyncLifecycleEvents();
+    expect(mockEmitUpdateOperationChanged).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'in-progress',
+        updatedAt: progressed!.updatedAt,
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      }),
+    );
+
+    const terminal = updateOperation.markOperationTerminal(inserted.id, {
+      status: 'failed',
+      phase: 'failed',
+    });
+    await flushAsyncLifecycleEvents();
+    expect(mockEmitUpdateOperationChanged).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        updatedAt: terminal!.updatedAt,
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      }),
+    );
+  });
+
+  test('update-operation-changed omits versions when the record has none', async () => {
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.insertOperation({
+      id: 'op-sse-no-versions',
+      containerName: 'web',
+      status: 'queued',
+      phase: 'queued',
+    });
+    await flushAsyncLifecycleEvents();
+
+    const payload = mockEmitUpdateOperationChanged.mock.calls.at(-1)![0];
+    expect(payload).not.toHaveProperty('fromVersion');
+    expect(payload).not.toHaveProperty('toVersion');
+    expect(typeof payload.updatedAt).toBe('string');
+  });
 });

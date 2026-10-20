@@ -35,6 +35,9 @@ export type OperationChangedPayload = {
   queueTotal?: number;
   status: string;
   phase?: string;
+  updatedAt?: string;
+  fromVersion?: string;
+  toVersion?: string;
   lastError?: string;
   rollbackReason?: string;
 };
