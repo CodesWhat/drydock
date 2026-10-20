@@ -109,7 +109,7 @@ export function buildComparisonJsonLd({
           url: BASE_URL,
           applicationCategory: "DeveloperApplication",
           operatingSystem: "Docker",
-          license: "https://opensource.org/licenses/AGPL-3.0",
+          license: "https://opensource.org/licenses/MIT",
         },
       },
       {

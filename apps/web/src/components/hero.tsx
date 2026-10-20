@@ -8,7 +8,7 @@ const stats = [
   { value: "23", label: "registries" },
   { value: "21", label: "triggers" },
   { value: "100%", label: "TS coverage" },
-  { value: "AGPL-3.0", label: "license" },
+  { value: "MIT", label: "license" },
 ] as const;
 
 // Locked: hero variant A — centered, oversized type, whale mascot + badges below.

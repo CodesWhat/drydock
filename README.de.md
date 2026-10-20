@@ -496,7 +496,7 @@ Die vollständige Kompatibilitätsmatrix für alle drei Tools finden Sie in [por
 
 ---
 
-**[AGPL-3.0-Lizenz](LICENSE)**
+**[MIT-Lizenz](LICENSE)**
 
 <a href="https://github.com/CodesWhat">
   <picture>

@@ -46,7 +46,7 @@ export const SITE_CONFIG = {
   /** Docker Hub image, "owner/name". */
   dockerImage: "codeswhat/drydock",
   /** License link shown in the footer. */
-  licenseUrl: "https://www.gnu.org/licenses/agpl-3.0.html",
+  licenseUrl: "https://opensource.org/licenses/MIT",
   /** Aurora background palette token (see globals.css `[data-bg]`). */
   aurora: "ocean" as AuroraPalette,
   /** Prefix for localStorage keys (keeps multi-site deploys from colliding). */

@@ -55,5 +55,5 @@ signing key held on one maintainer's workstation. If one maintainer becomes
 unavailable, the remaining organization owner can revoke stale access, update
 role assignments, merge approved work, and publish a release within one week.
 
-Project forking is always available under the AGPL-3.0 license, but it is not the
+Project forking is always available under the MIT license, but it is not the
 primary continuity plan.

@@ -499,7 +499,7 @@ See [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/mai
 
 ---
 
-**[AGPL-3.0 License](LICENSE)**
+**[MIT License](LICENSE)**
 
 <a href="https://github.com/CodesWhat">
   <picture>
