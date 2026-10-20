@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { ConnectionOptions } from 'node:tls';
 import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
+import { createRemoteJWKSet, type JWTVerifyGetKey, customFetch as joseCustomFetch } from 'jose';
 import * as openidClientLibrary from 'openid-client';
 import { Agent, fetch as undiciFetch } from 'undici';
 import { v4 as uuid } from 'uuid';
@@ -16,6 +17,7 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
+import { type BearerBindingContext, verifyBearerBinding } from './bearer-binding.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
@@ -123,6 +125,7 @@ interface OidcConfiguration {
   redirect: boolean;
   logouturl?: string;
   timeout: number;
+  beareraudiences?: string;
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -387,6 +390,8 @@ class Oidc extends Authentication<OidcConfiguration> {
   client?: openidClientLibrary.Configuration;
   clientInitializationPromise?: Promise<void>;
   logoutUrl?: string;
+  oidcFetch?: openidClientLibrary.CustomFetch;
+  bearerJwks?: { uri: string; getKey: JWTVerifyGetKey };
 
   getSessionKey() {
     return this.name || 'default';
@@ -413,6 +418,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       redirect: this.joi.boolean().default(false),
       logouturl: this.joi.string().uri({ scheme: ['http', 'https'] }),
       timeout: this.joi.number().greater(500).default(5000),
+      beareraudiences: this.joi.string().allow(''),
     });
   }
 
@@ -442,6 +448,9 @@ class Oidc extends Authentication<OidcConfiguration> {
       redirect: this.configuration.redirect,
       ...(this.configuration.logouturl ? { logouturl: this.configuration.logouturl } : {}),
       timeout: this.configuration.timeout,
+      ...(this.configuration.beareraudiences
+        ? { beareraudiences: this.configuration.beareraudiences }
+        : {}),
     };
   }
 
@@ -497,6 +506,7 @@ class Oidc extends Authentication<OidcConfiguration> {
           dispatcher,
         }) as unknown as CustomFetchResult;
       discoveryOptions[openidClient.customFetch] = oidcFetch;
+      this.oidcFetch = oidcFetch;
     }
     this.client = await openidClient.discovery(
       discoveryUrl,
@@ -964,7 +974,8 @@ class Oidc extends Authentication<OidcConfiguration> {
   async verify(accessToken: string, done: OidcVerifyDone): Promise<void> {
     const verifyStartedAt = process.hrtime.bigint();
     try {
-      const user = await this.getUserFromAccessToken(accessToken);
+      const { subject } = await this.verifyBearerAccessToken(accessToken);
+      const user = await this.getUserFromAccessToken(accessToken, subject);
       this.recordLoginMetrics('success', verifyStartedAt);
       done(null, user);
     } catch (e: unknown) {
@@ -972,6 +983,49 @@ class Oidc extends Authentication<OidcConfiguration> {
       this.recordLoginMetrics('invalid', verifyStartedAt);
       done(null, false);
     }
+  }
+
+  getBearerAudiences(): string[] {
+    return (this.configuration.beareraudiences ?? '')
+      .split(',')
+      .map((audience) => audience.trim())
+      .filter((audience) => audience !== '');
+  }
+
+  getBearerKeyResolver(jwksUri: string): JWTVerifyGetKey {
+    if (this.bearerJwks?.uri !== jwksUri) {
+      const getKey = createRemoteJWKSet(new URL(jwksUri), {
+        timeoutDuration: this.configuration.timeout,
+        ...(this.oidcFetch ? { [joseCustomFetch]: this.oidcFetch as never } : {}),
+      });
+      this.bearerJwks = { uri: jwksUri, getKey };
+    }
+    return this.bearerJwks.getKey;
+  }
+
+  /**
+   * Prove a bearer access token was issued by the configured IdP for this
+   * client. Userinfo alone is not enough: any token the IdP minted for any
+   * client would pass it.
+   */
+  async verifyBearerAccessToken(accessToken: string) {
+    const openidClient = await this.getOpenIdClient();
+    await this.ensureClientInitialized();
+    const client = this.getInitializedClient();
+    const metadata = client.serverMetadata();
+    const context: BearerBindingContext = {
+      issuer: metadata.issuer,
+      clientId: this.configuration.clientid,
+      audiences: this.getBearerAudiences(),
+      ...(metadata.jwks_uri ? { getKey: this.getBearerKeyResolver(metadata.jwks_uri) } : {}),
+      ...(metadata.introspection_endpoint
+        ? {
+            introspect: async (token: string) =>
+              (await openidClient.tokenIntrospection(client, token)) as Record<string, unknown>,
+          }
+        : {}),
+    };
+    return verifyBearerBinding(accessToken, context);
   }
 
   recordLoginMetrics(outcome: 'success' | 'invalid' | 'locked' | 'error', startedAt: bigint): void {
