@@ -14,14 +14,19 @@ const ARM64 = 'b7 00';
 const AMD64 = '3e 00';
 const BINARIES = ['/sbin/tini', '/usr/local/bin/node', '/bin/healthcheck'];
 
-test('documents registry access, a digest example, and tag-index resolution', async () => {
+test('documents registry access, digest and local-only examples, and tag-index resolution', async () => {
   const script = await readFile(scriptPath, 'utf8');
   const comments = script
     .split('\n')
     .filter((line) => line.startsWith('#'))
     .join('\n');
 
-  assert.match(comments, /Requires a registry-accessible image reference/u);
+  assert.match(comments, /must be registry-accessible/u);
+  assert.match(comments, /scripts\/check-image-arch\.sh drydock:dev linux\/arm64/u);
+  assert.match(
+    comments,
+    /skips the\n# registry and probes the local image \(docker run --pull never\)/u,
+  );
   assert.match(
     comments,
     /scripts\/check-image-arch\.sh 'ghcr\.io\/codeswhat\/drydock@sha256:<digest>' linux\/arm64/u,
@@ -105,6 +110,7 @@ async function runGuard({
   dockerStderr = '',
   inspectExit = 0,
   inspectStderr = '',
+  localImage = false,
   rawManifest = SINGLE_PLATFORM_MANIFEST,
   args = ['drydock:test', 'linux/arm64'],
 } = {}) {
@@ -120,6 +126,10 @@ async function runGuard({
     await writeFile(
       fakeDocker,
       `#!/bin/sh
+if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
+  [ "$LOCAL_IMAGE" = "1" ] && exit 0
+  exit 1
+fi
 if [ "$1" = "buildx" ] && [ "$2" = "imagetools" ] && [ "$3" = "inspect" ]; then
   if [ "$INSPECT_EXIT" != "0" ]; then
     printf '%s\\n' "$INSPECT_STDERR" >&2
@@ -147,6 +157,7 @@ cat "$PROBE_OUTPUT_FILE"
       DOCKER_STDERR: dockerStderr,
       INSPECT_EXIT: String(inspectExit),
       INSPECT_STDERR: inspectStderr,
+      LOCAL_IMAGE: localImage ? '1' : '0',
       PROBE_OUTPUT_FILE: probeFile,
       RAW_MANIFEST_FILE: manifestFile,
       PATH: `${dir}:${process.env.PATH}`,
@@ -426,4 +437,51 @@ test('runs a non-index reference unchanged', async () => {
     result.dockerArgs,
     /ghcr\.io\/codeswhat\/drydock:release-staging-1@sha256:indexdigest0000/u,
   );
+});
+
+test('probes a local-only tag without a registry inspect and without pulling', async () => {
+  const result = await runGuard({
+    args: ['drydock:dev', 'linux/arm64'],
+    localImage: true,
+    // Would fail the run if the script still tried the remote inspect.
+    inspectExit: 1,
+    inspectStderr: 'pull access denied for drydock',
+  });
+
+  assert.equal(result.code, 0);
+  assert.match(
+    result.output,
+    /drydock:dev is in the local image store, skipping registry inspection/u,
+  );
+  assert.match(
+    result.dockerArgs,
+    /^run --rm --pull never --platform linux\/arm64 --entrypoint sh drydock:dev -c/u,
+  );
+});
+
+test('still inspects a digest reference even when a same-named image is local', async () => {
+  const result = await runGuard({
+    args: ['ghcr.io/codeswhat/drydock@sha256:indexdigest0000', 'linux/arm64'],
+    localImage: true,
+    inspectExit: 1,
+    inspectStderr: 'manifest unknown',
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(
+    result.output,
+    /Could not inspect ghcr\.io\/codeswhat\/drydock@sha256:indexdigest0000/u,
+  );
+  assert.equal(result.dockerArgs, '');
+});
+
+test('reports a local-only image built for the wrong architecture', async () => {
+  const result = await runGuard({
+    args: ['drydock:dev', 'linux/arm64'],
+    localImage: true,
+    probeOutput: allBinaries(AMD64),
+  });
+
+  assert.equal(result.code, 1);
+  assert.match(result.output, /is not a linux\/arm64 image/u);
 });

@@ -10,8 +10,11 @@
 #
 # Usage: scripts/check-image-arch.sh <image-ref> <platform>
 #   scripts/check-image-arch.sh 'ghcr.io/codeswhat/drydock@sha256:<digest>' linux/arm64
-# Requires a registry-accessible image reference, not a local-only image.
-# Registry inspection runs first; docker run uses --pull always for the probe.
+#   scripts/check-image-arch.sh drydock:dev linux/arm64   # local-only image
+# A reference with a registry digest (@sha256:...) must be registry-accessible:
+# registry inspection runs first and docker run uses --pull always for the probe.
+# A tag-only reference that already exists in the local image store skips the
+# registry and probes the local image (docker run --pull never).
 set -euo pipefail
 
 image_ref="${1:-}"
@@ -81,13 +84,27 @@ if [[ ${last_segment} == *:* ]]; then
 	repository="${repository%:*}"
 fi
 
+# A tag-only reference that is already in the local image store (a fresh
+# `docker build -t drydock:dev .`) may not exist in any registry, so inspecting
+# it remotely would fail before the probe ever ran. Probe the local image as is.
+# Digest references always go to the registry: that is what release-cut passes.
+local_image=false
+if [[ ${image_ref} != *@sha256:* ]] && docker image inspect "${image_ref}" >/dev/null 2>&1; then
+	local_image=true
+fi
+
 raw_manifest=""
-if ! raw_manifest="$(docker buildx imagetools inspect --raw "${image_ref}" 2>&1)"; then
+if [ "${local_image}" = "true" ]; then
+	echo "${image_ref} is in the local image store, skipping registry inspection."
+	is_index="false"
+elif ! raw_manifest="$(docker buildx imagetools inspect --raw "${image_ref}" 2>&1)"; then
 	echo "::error::Could not inspect ${image_ref}: ${raw_manifest}"
 	exit 1
 fi
 
-is_index="$(printf '%s' "${raw_manifest}" | jq -r 'if (.manifests | type) == "array" then "true" else "false" end')"
+if [ "${local_image}" != "true" ]; then
+	is_index="$(printf '%s' "${raw_manifest}" | jq -r 'if (.manifests | type) == "array" then "true" else "false" end')"
+fi
 
 run_ref="${image_ref}"
 if [ "${is_index}" = "true" ]; then
@@ -147,8 +164,12 @@ trap 'rm -f "${docker_stderr}"' EXIT
 
 # A pull failure or a missing emulator is a legitimate non-zero here, so keep
 # the output instead of letting set -e abort with nothing to read.
+pull_policy="always"
+if [ "${local_image}" = "true" ]; then
+	pull_policy="never"
+fi
 output=""
-if ! output="$(docker run --rm --pull always --platform "${platform}" --entrypoint sh "${run_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
+if ! output="$(docker run --rm --pull "${pull_policy}" --platform "${platform}" --entrypoint sh "${run_ref}" -c "${probe}" 2>"${docker_stderr}")"; then
 	echo "::error::Could not read ${run_ref} as ${platform}: $(cat "${docker_stderr}")"
 	exit 1
 fi
