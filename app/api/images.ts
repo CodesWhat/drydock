@@ -4,6 +4,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
@@ -109,7 +110,7 @@ async function fetchHostInventory(
     });
     return { items, summary: toHostSummary(host) };
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error listing images for host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );
@@ -242,7 +243,7 @@ function respondWithHostError(
       return;
     }
   }
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   sendErrorResponse(res, 500, message);
 }
 
@@ -275,7 +276,7 @@ async function getPrunePreview(req: Request, res: Response) {
     });
     res.status(200).json(estimateReclaimable(items, host.id, mode));
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error estimating reclaimable space for host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );
@@ -321,7 +322,7 @@ async function pruneImages(req: Request, res: Response) {
       result: { host: host.id, mode, imagesDeleted, spaceReclaimed },
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error pruning images on host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );

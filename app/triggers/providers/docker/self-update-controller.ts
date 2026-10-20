@@ -1,5 +1,5 @@
 import Dockerode from 'dockerode';
-import { getErrorMessage } from '../../../util/error.js';
+import { getErrorMessage, getErrorStatusCode } from '../../../util/error.js';
 import { toPositiveInteger } from '../../../util/parse.js';
 import { sleep } from '../../../util/sleep.js';
 import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
@@ -72,14 +72,6 @@ type SelfUpdateTerminalFinalizePayload = {
 };
 
 class SelfUpdateRollbackCompletedError extends Error {}
-
-function getErrorStatusCode(error: unknown): number | undefined {
-  if (typeof error !== 'object' || error === null) {
-    return undefined;
-  }
-  const errorWithStatusCode = error as ErrorWithStatusCode;
-  return errorWithStatusCode.statusCode ?? errorWithStatusCode.status;
-}
 
 function getRequiredEnv(name: string): string {
   const value = process.env[name];

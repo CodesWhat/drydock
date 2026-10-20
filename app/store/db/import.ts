@@ -38,6 +38,7 @@
  */
 import fs from 'node:fs';
 import logger from '../../log/index.js';
+import { getErrorMessage } from '../../util/error.js';
 import { type Database, openDatabase, StoreError } from './driver.js';
 import {
   type LokiDatabaseSnapshot,
@@ -204,7 +205,7 @@ function importIntoTemporaryDatabase(
   } catch (error: unknown) {
     db?.close();
     removeDatabaseFiles(importingPath);
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = getErrorMessage(error);
     throw new StoreError(
       `Failed to import the legacy store at ${legacyStorePath} into ${options.databasePath}: ${reason}`,
       IMPORT_FAILED_CODE,

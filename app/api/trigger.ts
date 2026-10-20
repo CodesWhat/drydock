@@ -10,6 +10,7 @@ import { clearNotificationSkip } from '../triggers/notification-skips.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
+import { getErrorStatusCode } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
@@ -97,21 +98,6 @@ function validateTriggerRequestBody(body: unknown): {
   return {
     value: validationResult.value,
   };
-}
-
-function getRemoteErrorStatusCode(error: unknown): number | undefined {
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-  const response = (error as { response?: unknown }).response;
-  if (!response || typeof response !== 'object') {
-    return undefined;
-  }
-  const status = (response as { status?: unknown }).status;
-  if (typeof status !== 'number' || status < 400 || status > 599) {
-    return undefined;
-  }
-  return status;
 }
 
 function getRemoteErrorPayload(error: unknown): ErrorResponsePayload | undefined {
@@ -359,7 +345,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     log.warn(
       `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(sanitizedReason)})`,
     );
-    const remoteStatusCode = getRemoteErrorStatusCode(e);
+    const remoteStatusCode = getErrorStatusCode(e, true);
     const remoteErrorMessage = getRemoteErrorMessage(e);
     const remoteErrorDetails = getRemoteErrorDetails(e);
     if (remoteStatusCode && remoteErrorMessage) {

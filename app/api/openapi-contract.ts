@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 import type { ErrorObject } from 'ajv';
+import { getErrorMessage } from '../util/error.js';
 import { openApiDocument } from './openapi.js';
 
 const require = createRequire(import.meta.url);
@@ -269,7 +270,7 @@ function validateSchema(schema: OpenApiSchemaObject, payload: unknown): string[]
     if (missingRef) {
       return [`$: unresolved schema reference ${missingRef}`];
     }
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     return [`$: ${message}`];
   }
 

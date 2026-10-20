@@ -45,14 +45,15 @@ class Acr extends BaseRegistry<AcrRegistryConfiguration> {
   }
 
   async authenticate(image, requestOptions) {
-    const requestOptionsWithAuth = {
-      ...requestOptions,
-      headers: {
-        ...(requestOptions?.headers || {}),
+    return this.authenticateBasic(
+      {
+        ...requestOptions,
+        headers: {
+          ...(requestOptions?.headers || {}),
+        },
       },
-    };
-    requestOptionsWithAuth.headers.Authorization = `Basic ${Acr.base64Encode(this.configuration.clientid, this.configuration.clientsecret)}`;
-    return this.withTlsRequestOptions(requestOptionsWithAuth);
+      Acr.base64Encode(this.configuration.clientid, this.configuration.clientsecret),
+    );
   }
 
   async getAuthPull() {

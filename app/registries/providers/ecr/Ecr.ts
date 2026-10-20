@@ -1,27 +1,11 @@
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import { NodeHttpHandler } from '@smithy/node-http-handler';
-import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
+import { requireAuthString } from '../../../security/auth.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
 const PRIVATE_ECR_AUTH_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
 const ECR_AUTH_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
-
-function getRegistryHost(registryUrl: string | undefined): string {
-  if (!registryUrl) {
-    return '';
-  }
-
-  try {
-    const withProtocol =
-      registryUrl.startsWith('http://') || registryUrl.startsWith('https://')
-        ? registryUrl
-        : `https://${registryUrl}`;
-    return new URL(withProtocol).hostname;
-  } catch {
-    return registryUrl.split('/')[0] || '';
-  }
-}
 
 /**
  * Elastic Container Registry integration.
@@ -81,7 +65,7 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
   match(image) {
     return (
       /^.*\.dkr\.ecr\..*\.amazonaws\.com$/.test(image.registry.url) ||
-      getRegistryHost(image.registry.url) === ECR_PUBLIC_GALLERY_HOSTNAME
+      this.getRegistryHostname(image.registry.url) === ECR_PUBLIC_GALLERY_HOSTNAME
     );
   }
 
@@ -189,15 +173,18 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
     // Private registry
     if (this.configuration.accesskeyid) {
       const tokenValue = await this.fetchPrivateEcrAuthToken();
-      return withAuthorizationHeader(
-        this.withTlsRequestOptions(requestOptionsWithAuth),
-        'Basic',
-        tokenValue,
-        `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
+      return this.authenticateBasic(
+        requestOptionsWithAuth,
+        requireAuthString(
+          tokenValue,
+          `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
+        ),
       );
 
       // Public ECR gallery
-    } else if (getRegistryHost(image?.registry?.url) === ECR_PUBLIC_GALLERY_HOSTNAME) {
+    } else if (
+      this.getRegistryHostname(image?.registry?.url ?? '') === ECR_PUBLIC_GALLERY_HOSTNAME
+    ) {
       return this.authenticateBearerFromAuthUrl(
         requestOptionsWithAuth,
         'https://public.ecr.aws/token/',

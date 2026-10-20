@@ -3,6 +3,7 @@ import semver from 'semver';
 import logger from '../../log/index.js';
 import { getGhcrTokenFallback } from '../../registries/ghcr-token-fallback.js';
 import { withRetry } from '../../registries/http-retry.js';
+import { getErrorStatusCode } from '../../util/error.js';
 import type { FetchByTagOptions, ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
 
 const log = logger.child({ component: 'release-notes.provider.github' });
@@ -41,13 +42,6 @@ type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
-}
-
-function getErrorStatusCode(error: unknown) {
-  if (!isRecord(error) || !isRecord(error.response)) {
-    return undefined;
-  }
-  return error.response.status;
 }
 
 function getErrorHeader(error: unknown, headerName: string) {
