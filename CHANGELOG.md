@@ -61,6 +61,7 @@ This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/
 - Only accept OIDC bearer tokens issued for this drydock client. The bearer path used to accept any access token the IdP would answer a userinfo call for, so a token minted for another application on the same IdP authenticated against the API. JWT access tokens are now verified against the IdP's JWKS (issuer, expiry, and `aud` containing the client ID or `azp`/`client_id` equal to it), opaque tokens go through RFC 7662 introspection, and a token that can be checked neither way is rejected. `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` adds extra accepted audiences. The browser login flow is unchanged. See DEPRECATIONS.md.
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
 - Update the backend's transitive `follow-redirects` (pulled in by `axios`) from 1.16.0 to 1.16.1 for CVE-2026-111755 (GHSA-8r9p-f939-6h3c).
+- Update the dev-only `vite` to 8.2.4 in the backend and UI and 7.3.7 in the demo for CVE-2026-112943 (GHSA-698v-4r3x-3vcv, Windows `launch-editor` argument escaping). It isn't part of the shipped image.
 
 ## [1.8.0-rc.2] - 2026-10-18
 
