@@ -1,5 +1,6 @@
 import type { KeyObject } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
@@ -307,6 +308,59 @@ function isContainerUpdateAppliedEventPayload(
 
   const containerName = (data as { containerName?: unknown }).containerName;
   return typeof containerName === 'string' && containerName.length > 0;
+}
+
+/**
+ * Axios reports ECONNABORTED for both a connect-phase timeout (agent behind a
+ * firewall that drops packets) and an inactivity timeout after the request was
+ * sent, and the socket state cannot tell them apart once axios destroys it.
+ * Record whether the TCP connection was ever established so callers can.
+ *
+ * Axios only installs its connect-phase timeout for its native transport, and
+ * Node's request.setTimeout starts after connect, so this transport enforces
+ * the connect timeout itself.
+ */
+function createConnectTrackingTransport(state: { connected: boolean }, timeoutMs: number) {
+  return {
+    request(options: http.RequestOptions, callback: (res: http.IncomingMessage) => void) {
+      const isHttps = options.protocol === 'https:';
+      const request = (isHttps ? https : http).request(options, callback);
+      let connectTimer: NodeJS.Timeout | undefined;
+      const clearConnectTimer = () => {
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = undefined;
+        }
+      };
+      request.once('close', clearConnectTimer);
+      request.once('error', clearConnectTimer);
+      request.once('socket', (socket) => {
+        if (!socket.connecting) {
+          state.connected = true;
+          return;
+        }
+        // TLS counts as connected only once the handshake completes: a stall
+        // before that means the request was never sent.
+        const connectedEvent = isHttps ? 'secureConnect' : 'connect';
+        const onConnected = () => {
+          state.connected = true;
+          clearConnectTimer();
+        };
+        socket.once(connectedEvent, onConnected);
+        connectTimer = setTimeout(() => {
+          connectTimer = undefined;
+          socket.removeListener(connectedEvent, onConnected);
+          request.destroy(
+            Object.assign(new Error(`timeout of ${timeoutMs}ms exceeded`), {
+              code: 'ECONNABORTED',
+            }),
+          );
+        }, timeoutMs);
+        connectTimer.unref();
+      });
+      return request;
+    },
+  };
 }
 
 export class AgentClient {
@@ -707,6 +761,7 @@ export class AgentClient {
     }
 
     const authConfig = this.buildRequestConfig(method, target, body);
+    const connectState = { connected: false };
     const response = await axios({
       ...authConfig,
       method,
@@ -721,7 +776,16 @@ export class AgentClient {
       maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxRedirects: 0,
+      transport: createConnectTrackingTransport(
+        connectState,
+        PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS,
+      ),
       validateStatus: () => true,
+    }).catch((error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        (error as { requestConnected?: boolean }).requestConnected = connectState.connected;
+      }
+      throw error;
     });
     return {
       statusCode: response.status,

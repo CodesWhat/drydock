@@ -330,6 +330,111 @@ describe('PortwingDockerBridge', () => {
     }
   });
 
+  test.each([
+    [
+      'timeout',
+      Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' }),
+      504,
+    ],
+    [
+      'timeout',
+      Object.assign(new Error('timeout of 30000ms exceeded'), {
+        code: 'ECONNABORTED',
+        requestConnected: true,
+      }),
+      504,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('timeout of 30000ms exceeded'), {
+        code: 'ECONNABORTED',
+        requestConnected: false,
+      }),
+      502,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('getaddrinfo ENOTFOUND timeout-agent.internal'), {
+        code: 'ENOTFOUND',
+      }),
+      502,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT' }),
+      502,
+    ],
+    ['timeout', new Error('Request abc timed out after 30000ms'), 504],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+      502,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }),
+      502,
+    ],
+    ['agent-unreachable', Object.assign(new Error('x'), { cause: { code: 'EAI_AGAIN' } }), 502],
+    ['agent-unreachable', new Error('connection closed'), 502],
+    ['bad-upstream-response', new Error('Malformed Docker API response from edge agent'), 502],
+    ['bad-upstream-response', Object.assign(new Error('x'), { code: 'ERR_BAD_RESPONSE' }), 502],
+    [
+      'bad-upstream-response',
+      Object.assign(new Error('Parse Error: Invalid character in Content-Length'), {
+        code: 'HPE_INVALID_CONTENT_LENGTH',
+      }),
+      502,
+    ],
+    [
+      'bad-upstream-response',
+      Object.assign(new Error('x'), { cause: { code: 'HPE_INVALID_HEADER_TOKEN' } }),
+      502,
+    ],
+    ['transport-failed', new Error('secret upstream detail'), 502],
+    ['transport-failed', 'not an error', 502],
+  ])(
+    'classifies a %s failure as a JSON response with a reason',
+    async (reason, failure, status) => {
+      const requestDockerApi = vi.fn().mockRejectedValue(failure);
+      const bridge = new PortwingDockerBridge({ requestDockerApi });
+      const endpoint = await bridge.start();
+
+      try {
+        const response = await fetch(`${endpoint.baseUrl}/v1.44/images/prune`, {
+          method: 'POST',
+          headers: { authorization: endpoint.authorization },
+        });
+        expect(response.status).toBe(status);
+        expect(response.headers.get('content-type')).toContain('application/json');
+        expect(await response.json()).toEqual({
+          message: 'Portwing Docker transport failed',
+          reason,
+        });
+      } finally {
+        await bridge.stop();
+      }
+    },
+  );
+
+  test('classifies an invalid upstream status as a bad upstream response', async () => {
+    const requestDockerApi = vi
+      .fn()
+      .mockResolvedValue({ statusCode: 700, headers: {}, body: Buffer.alloc(0) });
+    const bridge = new PortwingDockerBridge({ requestDockerApi });
+    const endpoint = await bridge.start();
+
+    try {
+      const response = await fetch(`${endpoint.baseUrl}/v1.44/info`, {
+        headers: { authorization: endpoint.authorization },
+      });
+      expect(response.status).toBe(502);
+      expect((await response.json()).reason).toBe('bad-upstream-response');
+    } finally {
+      await bridge.stop();
+    }
+  });
+
   test('rejects invalid upstream status codes and strips hop-by-hop response headers', async () => {
     const requestDockerApi = vi
       .fn()

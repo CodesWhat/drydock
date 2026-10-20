@@ -10721,6 +10721,261 @@ describe('AgentClient', () => {
       expect(pulled.body.toString()).toBe('{"status":"pulled"}\n');
     });
 
+    describe('connect tracking on standard-mode failures', () => {
+      const listen = async (handler: (req: unknown, res: unknown) => void) => {
+        const http = await import('node:http');
+        const server = http.createServer(handler as never);
+        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+        return { server, port: (server.address() as { port: number }).port };
+      };
+
+      test('tags a failure with requestConnected=false when no socket ever connected', async () => {
+        axios.mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+        const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+        expect(failure.requestConnected).toBe(false);
+      });
+
+      test('tags requestConnected=true after the socket connects (new socket)', async () => {
+        const { server, port } = await listen((_req, res: any) => res.end('ok'));
+        try {
+          axios.mockImplementationOnce(async (config: any) => {
+            await new Promise<void>((resolve, reject) => {
+              const req = config.transport.request(
+                { protocol: 'http:', hostname: '127.0.0.1', port, path: '/', agent: false },
+                (res: any) => {
+                  res.resume();
+                  res.on('end', resolve);
+                },
+              );
+              req.on('error', reject);
+              req.end();
+            });
+            throw Object.assign(new Error('timeout'), { code: 'ECONNABORTED' });
+          });
+          const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+          expect(failure.requestConnected).toBe(true);
+        } finally {
+          server.closeAllConnections();
+          await new Promise((resolve) => server.close(resolve));
+        }
+      });
+
+      test('tags requestConnected=true when a keep-alive socket is already connected', async () => {
+        const { server, port } = await listen((_req, res: any) => res.end('ok'));
+        const http = await import('node:http');
+        const agent = new http.Agent({ keepAlive: true });
+        try {
+          const warm = () =>
+            new Promise<void>((resolve, reject) => {
+              const req = http.request({ hostname: '127.0.0.1', port, path: '/', agent }, (res) => {
+                res.resume();
+                res.on('end', resolve);
+              });
+              req.on('error', reject);
+              req.end();
+            });
+          await warm();
+          axios.mockImplementationOnce(async (config: any) => {
+            await new Promise<void>((resolve, reject) => {
+              const req = config.transport.request(
+                { protocol: 'http:', hostname: '127.0.0.1', port, path: '/', agent },
+                (res: any) => {
+                  res.resume();
+                  res.on('end', resolve);
+                },
+              );
+              req.on('error', reject);
+              req.end();
+            });
+            throw Object.assign(new Error('timeout'), { code: 'ECONNABORTED' });
+          });
+          const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+          expect(failure.requestConnected).toBe(true);
+        } finally {
+          agent.destroy();
+          server.closeAllConnections();
+          await new Promise((resolve) => server.close(resolve));
+        }
+      });
+
+      describe('connect timeout enforcement', () => {
+        const stalledConnect = async () => {
+          const net = await import('node:net');
+          return () => {
+            const socket = new net.Socket();
+            Object.defineProperty(socket, 'connecting', { value: true, configurable: true });
+            return socket;
+          };
+        };
+
+        test('rejects a connect that never completes with requestConnected=false', async () => {
+          const createConnection = await stalledConnect();
+          axios.mockImplementationOnce(
+            (config: any) =>
+              new Promise((_resolve, reject) => {
+                const req = config.transport.request(
+                  {
+                    protocol: 'http:',
+                    hostname: '127.0.0.1',
+                    port: 1,
+                    path: '/',
+                    createConnection,
+                  },
+                  () => {},
+                );
+                req.on('error', reject);
+                req.end();
+              }),
+          );
+          const pending = client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+          await vi.advanceTimersByTimeAsync(30_000);
+          const failure = await pending;
+          expect(failure.code).toBe('ECONNABORTED');
+          expect(failure.message).toBe('timeout of 30000ms exceeded');
+          expect(failure.requestConnected).toBe(false);
+        });
+
+        test('a TLS handshake stall reports requestConnected=false', async () => {
+          const createConnection = await stalledConnect();
+          const timersBefore = vi.getTimerCount();
+          axios.mockImplementationOnce(
+            (config: any) =>
+              new Promise((_resolve, reject) => {
+                const req = config.transport.request(
+                  {
+                    protocol: 'https:',
+                    hostname: '127.0.0.1',
+                    port: 1,
+                    path: '/',
+                    createConnection,
+                  },
+                  () => {},
+                );
+                req.on('error', reject);
+                req.once('socket', (socket: any) => socket.emit('connect'));
+              }),
+          );
+          const pending = client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+          await vi.advanceTimersByTimeAsync(30_000);
+          const failure = await pending;
+          expect(failure.code).toBe('ECONNABORTED');
+          expect(failure.requestConnected).toBe(false);
+          expect(vi.getTimerCount()).toBe(timersBefore);
+        });
+
+        test('TLS secureConnect marks connected and clears the timer', async () => {
+          const createConnection = await stalledConnect();
+          axios.mockImplementationOnce(
+            (config: any) =>
+              new Promise((_resolve, reject) => {
+                const req = config.transport.request(
+                  {
+                    protocol: 'https:',
+                    hostname: '127.0.0.1',
+                    port: 1,
+                    path: '/',
+                    createConnection,
+                  },
+                  () => {},
+                );
+                req.on('error', () => {});
+                req.once('socket', (socket: any) => {
+                  const before = vi.getTimerCount();
+                  socket.emit('connect');
+                  const afterConnect = vi.getTimerCount();
+                  socket.emit('secureConnect');
+                  const afterSecure = vi.getTimerCount();
+                  req.destroy();
+                  if (afterConnect === before && afterSecure === before - 1) {
+                    reject(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+                  } else {
+                    reject(new Error(`timer counts ${before}/${afterConnect}/${afterSecure}`));
+                  }
+                });
+              }),
+          );
+          const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+          expect(failure.code).toBe('ECONNABORTED');
+          expect(failure.requestConnected).toBe(true);
+        });
+
+        test('does not fire after the socket connects and clears the timer', async () => {
+          const { server, port } = await listen((_req, res: any) => res.end('ok'));
+          const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+          try {
+            axios.mockImplementationOnce(async (config: any) => {
+              await new Promise<void>((resolve, reject) => {
+                const req = config.transport.request(
+                  { protocol: 'http:', hostname: '127.0.0.1', port, path: '/', agent: false },
+                  (res: any) => {
+                    res.resume();
+                    res.on('end', resolve);
+                  },
+                );
+                req.on('error', reject);
+                req.end();
+              });
+              throw Object.assign(new Error('timeout'), { code: 'ECONNABORTED' });
+            });
+            const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+            expect(failure.requestConnected).toBe(true);
+            expect(clearSpy).toHaveBeenCalled();
+          } finally {
+            clearSpy.mockRestore();
+            server.closeAllConnections();
+            await new Promise((resolve) => server.close(resolve));
+          }
+        });
+
+        test('a stall after connect is not mistaken for an unreachable agent', async () => {
+          const { server, port } = await listen(() => {});
+          try {
+            axios.mockImplementationOnce(
+              (config: any) =>
+                new Promise((_resolve, reject) => {
+                  const req = config.transport.request(
+                    { protocol: 'http:', hostname: '127.0.0.1', port, path: '/', agent: false },
+                    () => {},
+                  );
+                  req.on('error', reject);
+                  req.end();
+                  req.once('socket', (socket: any) =>
+                    socket.once('connect', () => {
+                      reject(Object.assign(new Error('timeout'), { code: 'ECONNABORTED' }));
+                    }),
+                  );
+                }),
+            );
+            const failure = await client.requestDockerApi('GET', '/v1.44/info').catch((e) => e);
+            expect(failure.requestConnected).toBe(true);
+          } finally {
+            server.closeAllConnections();
+            await new Promise((resolve) => server.close(resolve));
+          }
+        });
+      });
+
+      test('uses the https module for https transport options', async () => {
+        axios.mockImplementationOnce(async (config: any) => {
+          const req = config.transport.request(
+            { protocol: 'https:', hostname: '127.0.0.1', port: 1, path: '/' },
+            () => {},
+          );
+          req.on('error', () => {});
+          req.destroy();
+          return { status: 200, headers: {}, data: Buffer.alloc(0) };
+        });
+        await expect(client.requestDockerApi('GET', '/v1.44/info')).resolves.toMatchObject({
+          statusCode: 200,
+        });
+      });
+
+      test('rethrows a non-object rejection unchanged', async () => {
+        axios.mockRejectedValueOnce('boom');
+        await expect(client.requestDockerApi('GET', '/v1.44/info')).rejects.toBe('boom');
+      });
+    });
+
     test('edge mode parses JSON request bodies and recognizes exec start as streaming', async () => {
       const sendRequest = vi.fn().mockResolvedValue({ statusCode: 204, headers: {}, body: null });
       const sendStreamRequest = vi
