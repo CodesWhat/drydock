@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.3] - 2026-10-20
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1) and the [v1.8.0-rc.2 fixes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.2), and retains their upgrade warnings. Drydock is now MIT licensed, and OIDC bearer tokens must be issued for this Drydock client. Image-baked hook labels are now audited, agents older than 1.7.0 trigger a warning, a recovery-code sign-in makes the user review API keys, and the image uses Alpine's patched zlib. v1.8 GA is not released; v1.7.0 (GA 2026-10-19) is the latest stable release. RC3 has its own publication-based soak.
+
 ### Added
 
 - Record a `hook-label-ignored` audit entry (status `info`) when Drydock ignores a `dd.hook.*` label baked into an image, once per update per container. It lists the container and the ignored label keys, never the command values, and says the labels come from the image and `DD_HOOKS_ALLOW_IMAGE_LABELS` is not set. Before this the refusal only reached the log as a warning. Hook execution is unchanged.
@@ -31,6 +38,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Removed the README upgrade alert for the 1.4.6 security-hardening changes; UPGRADE-NOTES.md still covers them for anyone updating from an older release.
 - Refreshed the docs for the 1.7.0 GA. Stable is now v1.7.0 across the docs site, README, deprecations page and quickstart tag table (`1`, `latest` and the new `1.7.0` and `1.7` rows resolve to it), and the Updates page gains the v1.7.0 and v1.6.1 entries. Added the image-baked lifecycle hook label entry to `DEPRECATIONS.md` and the deprecations page. Reworded the README upgrade alert to target updates from 1.5.x or earlier, marked the approval queue as v1.8 (RC) in the comparison tables, and synced the translated READMEs with the English roadmap status. Fixed the dead sockguard preset link and the stale CONTRIBUTING notification example, and covered the registry init failure when trigger configuration throws.
 - Registry and trigger configuration masking now follows one rule. Any value that is present and non-empty is redacted as `[REDACTED]`, so numeric, boolean and object secrets (including `0` and `false`) no longer slip through in logs and API responses. Previously trigger fields masked strings only and registry fields masked on truthiness. Docr and ECR no longer emit `undefined` keys for unset secret fields.
+- Pin v1.8 documentation deployment examples to `1.8.0-rc.3` and align the website, demo, support policy and translated README testing guidance with RC3. Feature and deprecation introduction versions and the RC1 and RC2 release records are preserved.
 
 ### Fixed
 
@@ -3492,7 +3500,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...HEAD
+[1.8.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...v1.8.0-rc.3
 [1.8.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.1...v1.8.0-rc.2
 [1.8.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.24...v1.8.0-rc.1
 [1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0
