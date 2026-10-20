@@ -3707,6 +3707,68 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should relay fromVersion and toVersion from agent operation events into the controller store', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-versions',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-versions',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+        }),
+      );
+    });
+
+    test('should relay versions on updates to an existing active agent operation', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) =>
+        id === 'agent-test-agent-remote-op-versions-existing'
+          ? ({
+              id,
+              containerName: 'local_nginx',
+              status: 'queued',
+              phase: 'queued',
+            } as any)
+          : undefined,
+      );
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-versions-existing',
+        containerName: 'local_nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-versions-existing',
+        expect.objectContaining({ fromVersion: '1.0.0', toVersion: '1.1.0' }),
+      );
+    });
+
+    test('should relay versions on terminal agent operation events', async () => {
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-versions-terminal',
+        containerName: 'local_nginx',
+        status: 'failed',
+        phase: 'failed',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-versions-terminal',
+        expect.objectContaining({ fromVersion: '1.0.0', toVersion: '1.1.0' }),
+      );
+    });
+
     test('should insert active synthetic operations without optional fields', async () => {
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-minimal-active',

@@ -255,6 +255,8 @@ interface AgentUpdateOperationChangedPayload {
   containerId?: string;
   newContainerId?: string;
   phase?: ContainerUpdateOperationPhase;
+  fromVersion?: string;
+  toVersion?: string;
   container?: Record<string, unknown>;
 }
 
@@ -2121,6 +2123,12 @@ export class AgentClient {
         ? { newContainerId: toOptionalString(payload.newContainerId) }
         : {}),
       ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+      ...(toOptionalString(payload.fromVersion) !== undefined
+        ? { fromVersion: toOptionalString(payload.fromVersion) }
+        : {}),
+      ...(toOptionalString(payload.toVersion) !== undefined
+        ? { toVersion: toOptionalString(payload.toVersion) }
+        : {}),
       /* v8 ignore next 3 -- container object payloads are optional agent event metadata. */
       ...(toOptionalRecord(payload.container) !== undefined
         ? { container: { ...toOptionalRecord(payload.container), agent: this.name } }
@@ -2256,6 +2264,8 @@ export class AgentClient {
               : {}),
             status: payload.status as ActiveContainerUpdateOperationStatus,
             ...(payload.phase ? { phase: payload.phase as never } : {}),
+            ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+            ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
           });
         }
         return;
@@ -2264,6 +2274,8 @@ export class AgentClient {
         ...base,
         status: payload.status,
         ...(payload.phase ? { phase: payload.phase } : {}),
+        ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+        ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
       });
       return;
     }
@@ -2285,6 +2297,8 @@ export class AgentClient {
     newContainerId?: string;
     phase?: ContainerUpdateOperationPhase;
     lastError?: string;
+    fromVersion?: string;
+    toVersion?: string;
     container?: Record<string, unknown>;
   }): void {
     const operationId = this.ensureAgentOperationForTerminal(payload);
@@ -2304,6 +2318,8 @@ export class AgentClient {
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),
       ...(payload.lastError ? { lastError: payload.lastError } : {}),
+      ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+      ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
       ...(payload.container !== undefined ? { container: payload.container as never } : {}),
     });
   }
