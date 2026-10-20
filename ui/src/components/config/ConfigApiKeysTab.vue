@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DataTable, { type DataTableColumn } from '../../components/DataTable.vue';
+import { useApiKeyReview } from '../../composables/useApiKeyReview';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import {
   API_KEY_PAGE_SIZE,
@@ -15,6 +16,8 @@ import { errorMessage } from '../../utils/error';
 
 const { t } = useI18n();
 const { require: requireConfirm } = useConfirmDialog();
+const { pending: reviewPending, acknowledge: acknowledgeReview } = useApiKeyReview();
+const acknowledging = ref(false);
 
 const keys = ref<ApiKey[]>([]);
 const total = ref(0);
@@ -61,7 +64,32 @@ const scopeOptions = computed(() =>
  * Sizes are numeric so the shared column-sizing standard can resize and persist
  * them; a string width would opt this table out of it.
  */
-const columns = computed<DataTableColumn[]>(() => [
+const reviewColumns = computed<DataTableColumn[]>(() => [
+  {
+    key: 'createdBy',
+    label: t('configView.apiKeys.columns.createdBy'),
+    sortable: false,
+    size: 160,
+    minSize: 120,
+    maxSize: 260,
+    align: 'text-left',
+    overflow: 'truncate',
+    px: 'px-3',
+  },
+  {
+    key: 'createdAt',
+    label: t('configView.apiKeys.columns.created'),
+    sortable: false,
+    size: 180,
+    minSize: 120,
+    maxSize: 260,
+    align: 'text-left',
+    overflow: 'truncate',
+    px: 'px-3',
+  },
+]);
+
+const baseColumns = computed<DataTableColumn[]>(() => [
   {
     key: 'name',
     label: t('configView.apiKeys.columns.name'),
@@ -129,6 +157,15 @@ const columns = computed<DataTableColumn[]>(() => [
     px: 'px-3',
   },
 ]);
+
+/** Review mode adds who minted each key and when, the two facts that expose a stranger's key. */
+const columns = computed<DataTableColumn[]>(() => {
+  if (!reviewPending.value) {
+    return baseColumns.value;
+  }
+  const [name, ...rest] = baseColumns.value;
+  return [name, ...reviewColumns.value, ...rest];
+});
 
 /** Rows are informational; selecting one does nothing, so none is interactive. */
 function isStaticTableRow() {
@@ -312,6 +349,18 @@ function confirmRevoke(key: ApiKey) {
   });
 }
 
+async function finishReview() {
+  acknowledging.value = true;
+  actionError.value = '';
+  try {
+    await acknowledgeReview();
+  } catch (e: unknown) {
+    actionError.value = errorMessage(e, t('configView.apiKeys.review.doneError'));
+  } finally {
+    acknowledging.value = false;
+  }
+}
+
 void load();
 
 defineExpose({ load });
@@ -319,6 +368,19 @@ defineExpose({ load });
 
 <template>
   <div class="space-y-6">
+    <div
+      v-if="reviewPending"
+      class="dd-rounded p-4 flex items-center justify-between gap-4 flex-wrap"
+      role="alert"
+      data-testid="api-key-review-banner"
+      :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+    >
+      <div class="dd-text-body">{{ t('configView.apiKeys.review.banner') }}</div>
+      <AppButton variant="secondary" size="sm" :disabled="acknowledging" @click="finishReview">
+        {{ t('configView.apiKeys.review.done') }}
+      </AppButton>
+    </div>
+
     <div class="dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-card)' }">
       <div class="px-5 py-4 flex items-start justify-between gap-4">
         <div class="min-w-0">
@@ -456,6 +518,12 @@ defineExpose({ load });
           </template>
           <template #cell-scopes="{ row }">
             <span class="dd-text-body dd-text-muted">{{ row.scopes.join(', ') }}</span>
+          </template>
+          <template #cell-createdBy="{ value }">
+            <span class="dd-text-body dd-text-muted">{{ value }}</span>
+          </template>
+          <template #cell-createdAt="{ row }">
+            <span class="dd-text-body dd-text-muted">{{ formatTimestamp(row.createdAt) }}</span>
           </template>
           <template #cell-lastUsedAt="{ row }">
             <span class="dd-text-body dd-text-muted">{{ formatTimestamp(row.lastUsedAt) }}</span>

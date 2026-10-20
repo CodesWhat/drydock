@@ -42,6 +42,8 @@
         "name": "Name",
         "key": "Schlüssel",
         "scopes": "Berechtigungen",
+        "createdBy": "Erstellt von",
+        "created": "Erstellt",
         "lastUsed": "Zuletzt verwendet",
         "expires": "Läuft ab",
         "status": "Status"
@@ -55,6 +57,11 @@
         "header": "API-Schlüssel widerrufen",
         "message": "Das Widerrufen von {name} widerruft auch jeden damit erstellten Schlüssel. Alles, was sie verwendet, funktioniert sofort nicht mehr.",
         "accept": "Widerrufen"
+      },
+      "review": {
+        "banner": "Du hast dich mit einem Wiederherstellungscode angemeldet. Prüfe deine API-Schlüssel und widerrufe alle, die du nicht kennst.",
+        "done": "Prüfung abgeschlossen",
+        "doneError": "Die Prüfung konnte nicht abgeschlossen werden. Versuche es erneut."
       },
       "cascade": "{count} Schlüssel widerrufen, einschließlich aller damit erstellten Schlüssel.",
       "errors": {

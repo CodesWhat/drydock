@@ -6,6 +6,8 @@ import { errorMessage } from '../utils/error';
 
 interface CurrentUser {
   username: string;
+  /** True while a recovery-code sign-in still owes an API key review. */
+  apiKeyReviewPending?: boolean;
 }
 
 interface LoginChallenge {
@@ -217,6 +219,20 @@ async function getOidcRedirection(name: string) {
 }
 
 /**
+ * Tell the server the API key review a recovery-code sign-in required is done.
+ * Revoking keys does not do this; only this call releases the session.
+ */
+async function acknowledgeApiKeyReview(): Promise<void> {
+  const response = await fetch('/auth/api-key-review/acknowledge', {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new AuthRequestError(`Unable to finish the review (${response.status})`, response.status);
+  }
+}
+
+/**
  * Logout current user.
  * @returns {Promise<unknown>}
  */
@@ -233,6 +249,7 @@ async function logout() {
 export type { ChallengeProof, LoginChallenge };
 export {
   AuthRequestError,
+  acknowledgeApiKeyReview,
   cancelLoginChallenge,
   completeLoginChallenge,
   getOidcRedirection,

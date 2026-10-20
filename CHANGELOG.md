@@ -11,9 +11,21 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Record a `hook-label-ignored` audit entry (status `info`) when Drydock ignores a `dd.hook.*` label baked into an image, once per update per container. It lists the container and the ignored label keys, never the command values, and says the labels come from the image and `DD_HOOKS_ALLOW_IMAGE_LABELS` is not set. Before this the refusal only reached the log as a warning. Hook execution is unchanged.
+
 ### Security
 
+- A two-factor recovery-code sign-in now makes the user review their API keys. When any active key exists, the session is flagged (`apiKeyReviewPending` on `GET /auth/user`) and the UI holds it on the API Keys view, with a banner and each key's creator, creation time and last use, until the user chooses Done reviewing (`POST /auth/api-key-review/acknowledge`, session-only). Keys are not revoked automatically, and revoking one does not release the review. Previously a key minted from a stolen session survived the recovery login's session sweep without any prompt.
+- A configured GitLab registry no longer sends its bearer credentials to an image registry whose host only contains, or is contained in, the configured URL. `match()` compared the two with a substring check, so a registry at `gitlab.example.com` or `example.com` was treated as the one configured at `https://registry.gitlab.example.com`. GitLab registries now match on exact host and port, case-insensitive, with the scheme, path and trailing slash of the configured URL ignored.
+- Run the agent's batch route for update actions on the agent's own container records. It used the containers in the request body as sent, so a caller holding the agent secret could inject a `dd.hook.pre` label that the hook provenance check then treated as operator-set. For update actions the route now looks each container up by id in the agent's store, as the single trigger route does, and takes only the id and operationId from the body. If any id is unknown the whole batch is rejected with 404 and nothing runs. Notification batches still run on the payload as sent, since they carry transient fields and rows the agent store doesn't have. The controller payload is unchanged, so older controllers keep working, but there is no agent version gate: a newer controller talking to an older agent still gets the old behavior.
+- Only accept OIDC bearer tokens issued for this drydock client. The bearer path used to accept any access token the IdP would answer a userinfo call for, so a token minted for another application on the same IdP authenticated against the API. JWT access tokens are now verified against the IdP's JWKS (issuer, expiry, and `aud` containing the client ID or `azp`/`client_id` equal to it), opaque tokens go through RFC 7662 introspection, and a token that can be checked neither way is rejected. `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` adds extra accepted audiences. The browser login flow is unchanged. See DEPRECATIONS.md.
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
+
+### Added
+
+- Warn when an agent older than 1.7.0 connects. Those agents still trust lifecycle hook labels baked into images, whatever the controller version. The controller logs one warning per connection, `GET /api/agents` returns `warnings: ["hook-labels-trusted"]` for the agent, and the Agents view shows an Update agent badge next to its version. Nothing about hooks or triggers changes.
 
 ### Fixed
 

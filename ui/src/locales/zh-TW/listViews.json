@@ -87,6 +87,7 @@
       "hook-post-success": "後置鉤子成功",
       "hook-pre-failed": "前置鉤子失敗",
       "hook-post-failed": "後置鉤子失敗",
+      "hook-label-ignored": "Hook 標籤已忽略",
       "connected": "已連線",
       "closed": "已關閉",
       "update-available": "可用更新",

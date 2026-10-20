@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import ConfigApiKeysTab from '@/components/config/ConfigApiKeysTab.vue';
+import { useApiKeyReview } from '@/composables/useApiKeyReview';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { createApiKey, listApiKeys, revokeApiKey } from '@/services/api-key';
+import { acknowledgeApiKeyReview } from '@/services/auth';
 
 vi.mock('@/services/api-key', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/services/api-key')>();
@@ -13,6 +15,8 @@ vi.mock('@/services/api-key', async (importOriginal) => {
     revokeApiKey: vi.fn(),
   };
 });
+
+vi.mock('@/services/auth', () => ({ acknowledgeApiKeyReview: vi.fn() }));
 
 const AppButtonStub = defineComponent({
   props: ['disabled'],
@@ -81,6 +85,8 @@ beforeEach(() => {
   vi.mocked(createApiKey).mockReset();
   vi.mocked(revokeApiKey).mockReset();
   useConfirmDialog().dismiss();
+  useApiKeyReview().setApiKeyReviewPending(false);
+  vi.mocked(acknowledgeApiKeyReview).mockReset();
 });
 
 afterEach(() => {
@@ -547,5 +553,83 @@ describe('ConfigApiKeysTab paging', () => {
     await flushPromises();
 
     expect(listApiKeys).toHaveBeenLastCalledWith({ limit: 200 });
+  });
+});
+
+describe('ConfigApiKeysTab review mode', () => {
+  const BANNER =
+    "You signed in with a recovery code. Review your API keys and revoke any you don't recognise.";
+
+  it('shows no banner and no creator columns in normal use', async () => {
+    vi.mocked(listApiKeys).mockResolvedValue(page([record()]));
+
+    const wrapper = await mountTab();
+
+    expect(wrapper.find('[data-testid="api-key-review-banner"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Created by');
+  });
+
+  it('shows the banner with who created each key, when, and when it was last used', async () => {
+    useApiKeyReview().setApiKeyReviewPending(true);
+    vi.mocked(listApiKeys).mockResolvedValue(
+      page([record({ createdBy: 'user:mallory', lastUsedAt: '2026-09-02T00:00:00.000Z' })]),
+    );
+
+    const wrapper = await mountTab();
+
+    expect(wrapper.find('[data-testid="api-key-review-banner"]').text()).toContain(BANNER);
+    const header = wrapper.find('thead').text();
+    expect(header).toContain('Created by');
+    expect(header).toContain('Created');
+    expect(header).toContain('Last used');
+    const row = rowAt(wrapper).text();
+    expect(row).toContain('user:mallory');
+    expect(row).toContain('ci');
+  });
+
+  it('still offers revoke per key, and revoking does not release the review', async () => {
+    useApiKeyReview().setApiKeyReviewPending(true);
+    vi.mocked(listApiKeys).mockResolvedValue(page([record()]));
+    vi.mocked(revokeApiKey).mockResolvedValue({
+      keyId: 'a1b2c3d4e5f6',
+      revokedKeyIds: ['a1b2c3d4e5f6'],
+      cascadeCount: 1,
+    });
+    const wrapper = await mountTab();
+
+    await buttonByText(wrapper, 'Revoke').trigger('click');
+    await useConfirmDialog().accept();
+    await flushPromises();
+
+    expect(revokeApiKey).toHaveBeenCalledWith('a1b2c3d4e5f6');
+    expect(acknowledgeApiKeyReview).not.toHaveBeenCalled();
+    expect(useApiKeyReview().pending.value).toBe(true);
+    expect(wrapper.find('[data-testid="api-key-review-banner"]').exists()).toBe(true);
+  });
+
+  it('Done reviewing calls the acknowledgement and drops the banner', async () => {
+    useApiKeyReview().setApiKeyReviewPending(true);
+    vi.mocked(listApiKeys).mockResolvedValue(page([record()]));
+    vi.mocked(acknowledgeApiKeyReview).mockResolvedValue(undefined);
+    const wrapper = await mountTab();
+
+    await buttonByText(wrapper, 'Done reviewing').trigger('click');
+    await flushPromises();
+
+    expect(acknowledgeApiKeyReview).toHaveBeenCalledTimes(1);
+    expect(useApiKeyReview().pending.value).toBe(false);
+    expect(wrapper.find('[data-testid="api-key-review-banner"]').exists()).toBe(false);
+  });
+
+  it('keeps the banner and says so when the acknowledgement fails', async () => {
+    useApiKeyReview().setApiKeyReviewPending(true);
+    vi.mocked(acknowledgeApiKeyReview).mockRejectedValue(undefined);
+    const wrapper = await mountTab();
+
+    await buttonByText(wrapper, 'Done reviewing').trigger('click');
+    await flushPromises();
+
+    expect(useApiKeyReview().pending.value).toBe(true);
+    expect(wrapper.text()).toContain('Unable to finish the review. Try again.');
   });
 });

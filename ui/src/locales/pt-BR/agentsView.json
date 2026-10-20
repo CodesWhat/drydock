@@ -23,6 +23,10 @@
         "os": "SO",
         "version": "Versão",
         "lastSeen": "Última atividade"
+      },
+      "warnings": {
+        "outdated": "Atualizar agente",
+        "hookLabelsTrusted": "Este agente roda uma versão anterior à 1.7.0 e ainda confia nos rótulos de hook de ciclo de vida embutidos nas imagens. Atualize-o para a 1.7.0 ou posterior."
       }
     },
     "detail": {

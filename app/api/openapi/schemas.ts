@@ -275,9 +275,22 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       username: { type: 'string' },
+      apiKeyReviewPending: {
+        type: 'boolean',
+        description:
+          'Present and true while the session signed in with a recovery code and API keys still exist. The UI holds the user on the API keys view until POST /auth/api-key-review/acknowledge. Absent otherwise.',
+      },
     },
     required: ['username'],
     additionalProperties: true,
+  },
+  ApiKeyReviewAcknowledgement: {
+    type: 'object',
+    properties: {
+      apiKeyReviewPending: { type: 'boolean', enum: [false] },
+    },
+    required: ['apiKeyReviewPending'],
+    additionalProperties: false,
   },
   LoginChallengeResponse: {
     type: 'object',

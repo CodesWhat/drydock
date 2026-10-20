@@ -71,7 +71,7 @@ type HookExecutorDependencies = {
   recordHookAudit: (
     action: string,
     container: HookContainer,
-    status: 'success' | 'error',
+    status: 'success' | 'error' | 'info',
     details: string,
   ) => void;
 };
@@ -232,14 +232,25 @@ class HookExecutor {
     }
 
     const trustedLabels: Record<string, string> = {};
+    const ignoredKeys: string[] = [];
     for (const [key, value] of Object.entries(labels)) {
       if (isHookLabelKey(key) && imageLabels[key] === value) {
         this.getLogger()?.warn?.(
           `Ignoring lifecycle hook label ${key} on container ${container.name}: it comes from the image, not the container. Set DD_HOOKS_ALLOW_IMAGE_LABELS=true to trust image-baked hook labels.`,
         );
+        ignoredKeys.push(key);
         continue;
       }
       trustedLabels[key] = value;
+    }
+    if (ignoredKeys.length > 0) {
+      // Keys only: the values are the untrusted commands being refused.
+      this.recordHookAudit(
+        'hook-label-ignored',
+        container,
+        'info',
+        `Ignored image-baked lifecycle hook labels (${ignoredKeys.join(', ')}) on container ${container.name} (${container.id}): the labels come from the image, not the container (DD_HOOKS_ALLOW_IMAGE_LABELS is not set)`,
+      );
     }
     return trustedLabels;
   }

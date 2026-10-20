@@ -23,6 +23,10 @@
         "os": "İşletim Sistemi",
         "version": "Sürüm",
         "lastSeen": "Son Görülme"
+      },
+      "warnings": {
+        "outdated": "Ajanı güncelle",
+        "hookLabelsTrusted": "Bu ajan 1.7.0 öncesi bir sürümde çalışıyor ve imajlara gömülü yaşam döngüsü hook etiketlerine hâlâ güveniyor. 1.7.0 veya üstüne yükseltin."
       }
     },
     "detail": {

@@ -8,7 +8,12 @@ export interface SessionUser {
   identity?: SessionIdentity;
 }
 
-export type SessionWithRememberMe = Session & Partial<SessionData> & { rememberMe?: boolean };
+export type SessionWithRememberMe = Session &
+  Partial<SessionData> & {
+    rememberMe?: boolean;
+    /** Set by a recovery-code login while active API keys exist; cleared by the user's acknowledgement. */
+    apiKeyReviewPending?: boolean;
+  };
 
 export type AuthRequest = Request & {
   body?: { remember?: boolean; username?: unknown };

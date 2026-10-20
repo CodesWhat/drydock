@@ -87,6 +87,7 @@
       "hook-post-success": "Son hook başarılı",
       "hook-pre-failed": "Ön hook başarısız",
       "hook-post-failed": "Son hook başarısız",
+      "hook-label-ignored": "Hook etiketi yok sayıldı",
       "connected": "Bağlandı",
       "closed": "Kapatıldı",
       "update-available": "Güncelleme Mevcut",

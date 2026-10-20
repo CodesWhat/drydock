@@ -400,6 +400,27 @@ describe('AgentsView', () => {
     });
   });
 
+  it('shows an update badge only on agents that still trust image hook labels', async () => {
+    mockGetAgents.mockResolvedValue([
+      makeAgent({ name: 'old', version: '1.6.1', warnings: ['hook-labels-trusted'] }),
+      makeAgent({ name: 'new', version: '1.8.0' }),
+    ]);
+
+    const wrapper = await mountAgentsView();
+
+    expect(wrapper.text().match(/Update agent/g)).toHaveLength(1);
+  });
+
+  it('shows the update badge in card mode', async () => {
+    mockGetAgents.mockResolvedValue([
+      makeAgent({ name: 'old', version: '1.6.1', warnings: ['hook-labels-trusted'] }),
+    ]);
+
+    const wrapper = await mountAgentsCardView();
+
+    expect(wrapper.text()).toContain('Update agent');
+  });
+
   it('successful load renders agent rows', async () => {
     mockGetAgents.mockResolvedValue([
       makeAgent({ name: 'edge-1' }),

@@ -175,6 +175,7 @@ function getAgentsList(req: Request, res: Response) {
       lastSeen: agent.info?.lastSeen,
       logLevel: agent.info?.logLevel,
       pollInterval: agent.info?.pollInterval,
+      warnings: agent.warnings,
       ...projectStatsBucket(bucket),
     };
   });

@@ -87,6 +87,7 @@
       "hook-post-success": "نجح الخطاف اللاحق",
       "hook-pre-failed": "فشل الخطاف المسبق",
       "hook-post-failed": "فشل الخطاف اللاحق",
+      "hook-label-ignored": "تم تجاهل تسمية الخطاف",
       "connected": "متصل",
       "closed": "مغلق",
       "update-available": "تحديث متاح",

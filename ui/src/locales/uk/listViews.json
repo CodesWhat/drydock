@@ -87,6 +87,7 @@
       "hook-post-success": "Завершальний хук виконано",
       "hook-pre-failed": "Попередній хук не виконано",
       "hook-post-failed": "Завершальний хук не виконано",
+      "hook-label-ignored": "Мітку хука проігноровано",
       "connected": "Підключено",
       "closed": "Закрито",
       "update-available": "Доступне оновлення",

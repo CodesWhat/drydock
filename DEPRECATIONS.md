@@ -358,6 +358,18 @@ Before rc.3, drydock served sessions under Express's default cookie name, `conne
 | **Removed in** | v1.7.0 (immediate, security fix, no grace period) |
 | **Affects** | Installs with `DD_HOOKS_ENABLED=true` that relied on `dd.hook.*` labels set with `LABEL` in an image |
 
-Before this change, a `dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort` or `dd.hook.timeout` label baked into an image ran as if you had set it on the container. Docker copies an image's `LABEL` instructions onto every container created from it, so anyone who controls an image could make Drydock run a command on your host at the next update ([GHSA-prfp-h8qf-63jg](https://github.com/CodesWhat/drydock/security/advisories/GHSA-prfp-h8qf-63jg)). Drydock now only runs hook labels set on the container itself. A `dd.hook.*` label whose key and value match the image's is ignored with a warning, and it is also left out when Drydock recreates a container, so an image label can no longer turn into a container label.
+Before this change, a `dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort` or `dd.hook.timeout` label baked into an image ran as if you had set it on the container. Docker copies an image's `LABEL` instructions onto every container created from it, so anyone who controls an image could make Drydock run a command on your host at the next update ([GHSA-prfp-h8qf-63jg](https://github.com/CodesWhat/drydock/security/advisories/GHSA-prfp-h8qf-63jg)). Drydock now only runs hook labels set on the container itself. A `dd.hook.*` label whose key and value match the image's is ignored with a warning, and it is also left out when Drydock recreates a container, so an image label can no longer turn into a container label. Each update that ignores one also writes a `hook-label-ignored` audit entry listing the label keys (never the commands).
 
-**Migration:** Set `dd.hook.*` on the container (Compose `labels:` or `docker run --label`), not in the image. If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the old behavior, and only do that for images you control. See [Hooks](https://getdrydock.com/docs/configuration/hooks#labels-baked-into-images).
+**Migration:** Set `dd.hook.*` on the container (Compose `labels:` or `docker run --label`), not in the image. If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the old behavior, and only do that for images you control. See [Hooks](https://getdrydock.com/docs/configuration/hooks#labels-baked-into-images). The fix runs on the agent for agent-run updates, so upgrade agents to 1.7.0 or later too. Drydock logs a warning and flags the agent in the Agents view while one older than 1.7.0 is connected.
+
+### OIDC bearer tokens must be issued for this client
+
+| | |
+| --- | --- |
+| **Deprecated in** | Not deprecated (enforced security fix) |
+| **Removed in** | v1.8.1 (immediate, security fix, no grace period) |
+| **Affects** | Installs with an OIDC authentication configured whose API callers send an OIDC access token as `Authorization: Bearer` |
+
+Before this change, Drydock accepted any access token the configured IdP would answer a userinfo call for, whichever client it was issued to. A token minted for an unrelated application on the same IdP therefore authenticated against the Drydock API. Drydock now verifies the token (JWT signature through the IdP's JWKS, or RFC 7662 introspection for opaque tokens) and requires it to be issued for this client: `aud` contains the client ID, or `azp` or `client_id` equals it. A token that can't be verified either way is rejected, and the browser login flow is unaffected.
+
+**Migration:** Request the access token for the Drydock client. If your IdP puts a separate API audience on it, list that audience in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See [OIDC bearer tokens](https://getdrydock.com/docs/configuration/authentications/oidc#bearer-tokens).
