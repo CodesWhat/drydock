@@ -265,7 +265,10 @@ test('secret scanning gates full history and the tracked working tree', () => {
     expect(block).toContain('regexes =');
   }
 
-  const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
+  const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8')
+    .trim()
+    .split('\n')
+    .filter((entry) => !entry.startsWith('#'));
   // CI-16 removed the line-pinned curl-auth-header fingerprints for
   // content/docs/ in favor of the pattern-based allowlist above, so the
   // historical baseline shrank from 446 to 399; the floor here just guards
