@@ -613,6 +613,18 @@ describe('a session that signed in with a recovery code', () => {
     expect(apiKeyStore.findApiKeyById(existing.record.keyId)?.revokedAt).not.toBeNull();
   });
 
+  test('revoking a key does not clear the pending key review', () => {
+    const existing = mint('leaked', ['read']);
+    const session = { apiKeyReviewPending: true };
+    const revokeRes = createMockResponse();
+    handlerFor('delete', '/:keyId')(
+      recoverySession({ params: { keyId: existing.record.keyId }, session }),
+      revokeRes,
+    );
+    expect(revokeRes.status).toHaveBeenCalledWith(200);
+    expect(session.apiKeyReviewPending).toBe(true);
+  });
+
   test.each([
     ['a code from the authenticator app', { identity: localIdentity('totp') }],
     ['a password and no factor', { identity: localIdentity('password') }],

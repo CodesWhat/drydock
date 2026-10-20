@@ -42,6 +42,8 @@
         "name": "Naam",
         "key": "Sleutel",
         "scopes": "Bereiken",
+        "createdBy": "Aangemaakt door",
+        "created": "Aangemaakt",
         "lastUsed": "Laatst gebruikt",
         "expires": "Verloopt",
         "status": "Status"
@@ -55,6 +57,11 @@
         "header": "API-sleutel intrekken",
         "message": "Het intrekken van {name} trekt ook elke sleutel in die ermee is aangemaakt. Alles wat ze gebruikt, stopt onmiddellijk met werken.",
         "accept": "Intrekken"
+      },
+      "review": {
+        "banner": "Je bent aangemeld met een herstelcode. Controleer je API-sleutels en trek alle sleutels in die je niet herkent.",
+        "done": "Controle klaar",
+        "doneError": "De controle kon niet worden afgerond. Probeer het opnieuw."
       },
       "cascade": "{count} sleutels ingetrokken, inclusief elke sleutel die deze heeft aangemaakt.",
       "errors": {

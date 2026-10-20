@@ -42,6 +42,8 @@
         "name": "Nazwa",
         "key": "Klucz",
         "scopes": "Zakresy",
+        "createdBy": "Utworzony przez",
+        "created": "Utworzony",
         "lastUsed": "Ostatnio użyty",
         "expires": "Wygasa",
         "status": "Status"
@@ -55,6 +57,11 @@
         "header": "Odwołaj klucz API",
         "message": "Odwołanie {name} odwołuje też każdy klucz utworzony za jego pomocą. Wszystko, co ich używa, przestaje działać natychmiast.",
         "accept": "Odwołaj"
+      },
+      "review": {
+        "banner": "Zalogowano za pomocą kodu odzyskiwania. Sprawdź swoje klucze API i unieważnij te, których nie rozpoznajesz.",
+        "done": "Przegląd zakończony",
+        "doneError": "Nie udało się zakończyć przeglądu. Spróbuj ponownie."
       },
       "cascade": "Odwołano {count} kluczy, w tym każdy klucz utworzony przez ten klucz.",
       "errors": {

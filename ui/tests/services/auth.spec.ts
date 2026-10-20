@@ -557,3 +557,31 @@ describe('Auth Service', () => {
     });
   });
 });
+
+describe('acknowledgeApiKeyReview', () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it('POSTs the acknowledgement with the session cookie', async () => {
+    const { acknowledgeApiKeyReview } = await loadAuthService();
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200 });
+
+    await expect(acknowledgeApiKeyReview()).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledWith('/auth/api-key-review/acknowledge', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  });
+
+  it('throws an AuthRequestError carrying the status when the server refuses', async () => {
+    const { acknowledgeApiKeyReview, AuthRequestError } = await loadAuthService();
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 403 });
+
+    const failure = await acknowledgeApiKeyReview().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(AuthRequestError);
+    expect((failure as { status: number }).status).toBe(403);
+  });
+});

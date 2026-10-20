@@ -173,6 +173,22 @@ export const authPaths = {
       },
     },
   },
+  '/auth/api-key-review/acknowledge': {
+    post: {
+      tags: ['Authentication', 'Actions'],
+      summary: 'Acknowledge the API key review a recovery-code login requires',
+      description:
+        'Clears the apiKeyReviewPending flag on the calling session. Session-only: an API key is refused. Revoking keys does not clear the flag; this call does.',
+      operationId: 'acknowledgeApiKeyReview',
+      responses: {
+        200: jsonResponse('Review acknowledged', {
+          $ref: '#/components/schemas/ApiKeyReviewAcknowledgement',
+        }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Not a signed-in session, or a cross-site request'),
+      },
+    },
+  },
   '/auth/logout': {
     post: {
       tags: ['Authentication', 'Actions'],
