@@ -12,6 +12,7 @@ import {
   type StatsSummaryStreamController,
 } from '../../services/stats';
 import { getAllWatchers } from '../../services/watcher';
+import { useOperationStore } from '../../stores/operations';
 import type { Container } from '../../types/container';
 import {
   type ActiveContainerUpdateOperationPhase,
@@ -321,6 +322,7 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
     }
 
     try {
+      const requestStartedAt = Date.now();
       const livePromises = Promise.all([getAllContainers(), getContainerRecentStatus()]);
 
       const staticPromises = staticFresh
@@ -338,6 +340,8 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
       if (!staticFresh) {
         lastStaticFetchAt = Date.now();
       }
+
+      useOperationStore().seedFromContainerList(containersRes, requestStartedAt);
 
       applyFetchedDashboardData(state, {
         containersRes,

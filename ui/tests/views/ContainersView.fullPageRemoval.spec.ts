@@ -96,6 +96,8 @@ vi.mock('@/services/preview', () => ({
   previewContainer: vi.fn().mockResolvedValue({}),
 }));
 
+const mockSeedFromContainerList = vi.hoisted(() => vi.fn());
+
 vi.mock('@/stores/operations', () => ({
   useOperationStore: () => ({
     displayBatches: new Map(),
@@ -113,6 +115,7 @@ vi.mock('@/stores/operations', () => ({
     incrementDisplayBatchFailed: vi.fn(),
     incrementDisplayBatchSucceeded: vi.fn(),
     replaceDisplayBatches: vi.fn(),
+    seedFromContainerList: mockSeedFromContainerList,
     applyOperationChanged: vi.fn(),
     applyUpdateApplied: vi.fn(),
     applyUpdateFailed: vi.fn(),
