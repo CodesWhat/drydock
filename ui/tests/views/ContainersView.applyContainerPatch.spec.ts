@@ -64,7 +64,7 @@ vi.mock('@/services/container', () => ({
   getContainerSbom: vi.fn().mockResolvedValue({ format: 'spdx-json', document: {} }),
   getContainerTriggersWithReasons: vi
     .fn()
-    .mockResolvedValue({ data: [], unassociatedTriggers: [] }),
+    .mockResolvedValue({ data: [], unassociatedTriggers: [], notificationSkips: [] }),
   getContainerVulnerabilities: vi.fn().mockResolvedValue({
     status: 'not-scanned',
     summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
@@ -117,6 +117,7 @@ vi.mock('@/stores/operations', () => ({
     incrementDisplayBatchFailed: vi.fn(),
     incrementDisplayBatchSucceeded: vi.fn(),
     replaceDisplayBatches: vi.fn(),
+    seedFromContainerList: vi.fn(),
     applyOperationChanged: vi.fn(),
     applyUpdateApplied: vi.fn(),
     applyUpdateFailed: vi.fn(),

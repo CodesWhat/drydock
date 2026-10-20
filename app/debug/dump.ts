@@ -6,6 +6,8 @@ import type { RegistryState } from '../registry/index.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as store from '../store/index.js';
+import { getNotificationSkipsSnapshot } from '../triggers/notification-skips.js';
+import { getErrorMessage } from '../util/error.js';
 import { redactDebugDump } from './redact.js';
 
 export const DEFAULT_RECENT_EVENT_MINUTES = 30;
@@ -73,10 +75,6 @@ function getDockerWatchers(
   return Object.entries(watcherState).filter(([, watcher]) => watcher?.type === 'docker') as Array<
     [string, DockerWatcherLike]
   >;
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 async function runOptionalAsyncHook(
@@ -307,6 +305,12 @@ function collectMqttHomeAssistantSensors(
   );
 }
 
+function collectNotificationSkips(): JsonObject {
+  // Already capped at the store's own bound; reasons are fixed codes and detail is short.
+  const entries = getNotificationSkipsSnapshot();
+  return { total: entries.length, entries };
+}
+
 export async function collectDebugDump(options: CollectDebugDumpOptions = {}) {
   const recentMinutes = normalizeRecentMinutes(options.recentMinutes);
   // getContainers() returns the same redacted clones GET /containers serves.
@@ -346,6 +350,7 @@ export async function collectDebugDump(options: CollectDebugDumpOptions = {}) {
     aliasFiltering: {
       recentDecisions: collectRecentAliasFilterDecisions(dockerWatchers, recentMinutes),
     },
+    notificationSkips: collectNotificationSkips(),
     store: {
       stats: store.getDebugSnapshot(),
     },

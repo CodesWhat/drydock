@@ -122,6 +122,7 @@ export default {
     setupFiles: [],
     coverage: {
       ...base.test.coverage,
+      include: base.test.coverage.include.map((glob) => glob.replace(${JSON.stringify(uiDirectory)}, ${JSON.stringify(directory)})),
       customProviderModule: ${JSON.stringify(join(uiDirectory, 'vitest.coverage-provider.ts'))},
       reportsDirectory: ${JSON.stringify(join(directory, 'coverage'))},
     },

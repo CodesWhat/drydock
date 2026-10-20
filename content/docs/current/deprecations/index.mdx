@@ -5,9 +5,9 @@ description: "Deprecated and removed features in Drydock, with removal versions 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-This page lists every deprecated feature, the version it will be removed in, and how to migrate. Until removal, deprecated features continue to work. Detection methods and warning behavior vary by feature; check the applicable **Detection** row and the [detection summary](#detection-summary).
+This page lists every deprecated feature, the version it is removed in, and how to migrate. Removals in v1.5.0, v1.6.0 and v1.7.0 have shipped; v1.7.0 is the latest stable release (GA 2026-10-19), and v1.8.0 is still a release candidate. Until a removal ships, deprecated features continue to work. Detection methods and warning behavior vary by feature; check the applicable **Detection** row and the [detection summary](#detection-summary).
 
-<Callout type="warn">Features listed under a removal version will **stop working** in that release. Migrate before upgrading.</Callout>
+<Callout type="warn">Features listed under a removal version stopped working in that release, and features still marked for a pending version (v1.8.0 and API v2) will **stop working** in that release. Migrate before upgrading.</Callout>
 
 ## Removal in v1.5.0
 
@@ -43,6 +43,8 @@ The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. A
 | **Deprecated since** | v1.4.0 |
 | **Removed since** | v1.6.0 |
 | **Migration** | Replace `/api/` with `/api/v1/` in all integrations. If you depend on wud-card or Homepage's `whatsupdocker` widget and can't change their base path, set `DD_COMPAT_WUDCARD=true` |
+
+**Finding the caller:** the in-app banner for removed API path requests lists each resource that was hit and a coarse client class, for example `/api/containers/* from homepage, last seen 5 min. ago`. `none` means the request had no `User-Agent` header. The server log carries the details the banner can't: the first hit per resource and client each hour is logged at info level with the method, path (no query string), `User-Agent` and remote address, so search the log for `Removed unversioned API path hit` to find the host to fix.
 
 ### Unversioned WebSocket alias (`WS /api/log/stream`) {#unversioned-ws-log-stream}
 
@@ -313,6 +315,13 @@ These behaviors were removed immediately rather than going through a grace perio
 | --- | --- |
 | **Removed since** | v1.6.0-rc.3 |
 | **Migration** | None required. Existing `connect.sid` cookies are no longer recognized, so every user is signed out once on upgrade and needs to log back in |
+
+### Image-baked lifecycle hook labels {#image-baked-lifecycle-hook-labels}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.7.0 (first enforced in v1.7.0-rc.20) |
+| **Migration** | Set `dd.hook.*` on the container (Compose `labels:` or `docker run --label`), not in the image. A label baked in with `LABEL` is no longer run or carried over when Drydock recreates the container ([GHSA-prfp-h8qf-63jg](https://github.com/CodesWhat/drydock/security/advisories/GHSA-prfp-h8qf-63jg)). If you build the images yourself and want hooks baked into them, set `DD_HOOKS_ALLOW_IMAGE_LABELS=true` to restore the old behavior, and only do that for images you control. See [Hooks](/docs/configuration/hooks#labels-baked-into-images) |
 
 ## Detection summary
 

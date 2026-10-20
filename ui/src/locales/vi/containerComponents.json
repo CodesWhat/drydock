@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Dự án, dịch vụ hoặc tệp Compose không khớp với container này.",
         "labelScope": "Bị loại trừ bởi nhãn include hoặc exclude dd.action/dd.notification của container này."
       },
+      "notificationSkips": "Thông báo",
+      "notificationSkipReason": {
+        "rule-disabled": "Đã bỏ qua: quy tắc thông báo đang tắt cho trigger này.",
+        "threshold-not-met": "Đã bỏ qua: bản cập nhật thấp hơn ngưỡng của trigger này.",
+        "trigger-excluded": "Đã bỏ qua: nhãn của container này loại trừ trigger này.",
+        "once-already-sent": "Đã bỏ qua: bản cập nhật này đã được thông báo.",
+        "recently-applied": "Đã bỏ qua: bản cập nhật vừa được áp dụng, đang chờ watcher xác nhận.",
+        "digest-buffered": "Đang giữ lại cho bản tổng hợp tiếp theo."
+      },
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",

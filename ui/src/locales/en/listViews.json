@@ -87,6 +87,7 @@
       "hook-post-success": "Hook Post Success",
       "hook-pre-failed": "Hook Pre Failed",
       "hook-post-failed": "Hook Post Failed",
+      "hook-label-ignored": "Hook Label Ignored",
       "connected": "Connected",
       "closed": "Closed",
       "update-available": "Update Available",

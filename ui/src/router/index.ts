@@ -8,6 +8,7 @@ import {
   clearStaleChunkReloadGuard,
   requestStaleChunkReload,
 } from '@/bootstrap/stale-chunk-recovery';
+import { useApiKeyReview } from '@/composables/useApiKeyReview';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { hydrateFromServer } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
@@ -104,6 +105,13 @@ function createLoginRedirect(to: RouteLocationNormalized) {
 
 interface AuthenticatedUser {
   username?: string;
+  apiKeyReviewPending?: boolean;
+}
+
+const API_KEY_REVIEW_LOCATION = { path: ROUTES.CONFIG, query: { tab: 'apiKeys' } };
+
+function isApiKeyReviewRoute(to: RouteLocationNormalized): boolean {
+  return to.path === ROUTES.CONFIG && to.query.tab === 'apiKeys';
 }
 
 /**
@@ -117,12 +125,20 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   const user = (await getUser()) as AuthenticatedUser | undefined;
 
   if (user !== undefined) {
+    const reviewPending = user.apiKeyReviewPending === true;
+    useApiKeyReview().setApiKeyReviewPending(reviewPending);
+    // A recovery-code sign-in owes a look at the API keys before anything else.
+    // Logout is a request, not a route, so it stays reachable from here.
+    if (reviewPending && !isApiKeyReviewRoute(to)) {
+      return API_KEY_REVIEW_LOCATION;
+    }
     if (user.username && user.username !== 'anonymous') {
       // Fire-and-forget — the preference fetch has no timeout, and navigation
       // must never block on it; hydrateFromServer swallows its own errors.
       void hydrateFromServer(user.username);
     }
-    return validateAndGetNextRoute(to);
+    // A `next` target would only bounce straight back to the review.
+    return reviewPending ? true : validateAndGetNextRoute(to);
   }
 
   return createLoginRedirect(to);

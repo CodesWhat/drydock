@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Проект, сервис или файл Compose не соответствует этому контейнеру.",
         "labelScope": "Исключён метками include/exclude dd.action/dd.notification этого контейнера."
       },
+      "notificationSkips": "Уведомления",
+      "notificationSkipReason": {
+        "rule-disabled": "Пропущено: правило уведомлений выключено для этого триггера.",
+        "threshold-not-met": "Пропущено: обновление ниже порога этого триггера.",
+        "trigger-excluded": "Пропущено: метки этого контейнера исключают этот триггер.",
+        "once-already-sent": "Пропущено: об этом обновлении уже уведомляли.",
+        "recently-applied": "Пропущено: обновление только что применено, ждём подтверждения от watcher.",
+        "digest-buffered": "Удержано до следующего дайджеста."
+      },
       "backupsRollback": "Резервные копии и откат",
       "rollingBack": "Откат...",
       "rollbackLatest": "Откат к последней копии",

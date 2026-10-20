@@ -445,7 +445,11 @@ describe('Container Service', () => {
       expect(fetch).toHaveBeenCalledWith('/api/v1/containers/container1/triggers', {
         credentials: 'include',
       });
-      expect(result).toEqual({ data: mockTriggers, unassociatedTriggers: mockUnassociated });
+      expect(result).toEqual({
+        data: mockTriggers,
+        unassociatedTriggers: mockUnassociated,
+        notificationSkips: [],
+      });
     });
 
     it('returns an empty unassociatedTriggers array when the response has no such field', async () => {
@@ -455,7 +459,20 @@ describe('Container Service', () => {
       } as any);
 
       const result = await getContainerTriggersWithReasons('container1');
-      expect(result).toEqual({ data: [], unassociatedTriggers: [] });
+      expect(result).toEqual({ data: [], unassociatedTriggers: [], notificationSkips: [] });
+    });
+
+    it('passes the notificationSkips list through when the response carries one (DR-85)', async () => {
+      const skips = [
+        { trigger: 'smtp.ops', reason: 'threshold-not-met', at: '2026-10-19T10:00:00.000Z' },
+      ];
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [], total: 0, notificationSkips: skips }),
+      } as any);
+
+      const result = await getContainerTriggersWithReasons('container1');
+      expect(result.notificationSkips).toEqual(skips);
     });
 
     it('throws when fetching triggers fails', async () => {

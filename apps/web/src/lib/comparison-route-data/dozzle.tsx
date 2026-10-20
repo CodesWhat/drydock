@@ -26,7 +26,7 @@ OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Aut
 RBAC|Yes|Planned|competitor
 Docker Swarm|Yes|Planned|competitor
 Kubernetes|Yes (since v8.11)|Planned (v2.0.0)|competitor
-License|MIT|AGPL-3.0|tie
+License|MIT|MIT|tie
 `,
   highlightsTable: `
 eye|Image Update Detection|Dozzle is a log viewer — it doesn't monitor for image updates. Drydock continuously checks 23 registries and notifies you when new versions are available.

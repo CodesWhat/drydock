@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useSearchFromQuery } from '../composables/useSearchFromQuery';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
 import type { ApiComponentResponse } from '../types/api';
@@ -16,7 +16,6 @@ type RegistryRow = ReturnType<typeof mapRegistry>;
 const registriesData = ref<RegistryRow[]>([]);
 const loading = ref(true);
 const error = ref('');
-const route = useRoute();
 
 const { isMobile } = useBreakpoints();
 const selectedRegistry = ref<RegistryRow | null>(null);
@@ -141,16 +140,7 @@ const registryViewMode = useViewMode('registries');
 const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
-function applySearchFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  searchQuery.value = typeof raw === 'string' ? raw : '';
-}
-
-applySearchFromQuery(route.query.q);
-watch(
-  () => route.query.q,
-  (value) => applySearchFromQuery(value),
-);
+useSearchFromQuery(searchQuery);
 
 const filteredRegistries = computed(() => {
   if (!searchQuery.value) return registriesData.value;

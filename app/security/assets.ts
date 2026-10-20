@@ -1,4 +1,5 @@
 import { sanitizeLogParam } from '../log/sanitize.js';
+import { getErrorMessage } from '../util/error.js';
 
 export type ScannerAssetProviderId = 'trivy' | 'grype' | 'syft';
 type ScannerAssetState = 'missing' | 'pulling' | 'warming' | 'ready' | 'error';
@@ -130,9 +131,8 @@ function clearedInspectionMetadata(): ScannerAssetInspection {
   };
 }
 
-function getErrorMessage(error: unknown, auth?: ScannerAssetAuth): string {
-  let message =
-    error instanceof Error ? error.message : String(error ?? 'Unknown scanner asset error');
+function getScannerAssetErrorMessage(error: unknown, auth?: ScannerAssetAuth): string {
+  let message = getErrorMessage(error, 'Unknown scanner asset error');
   for (const secret of [auth?.username, auth?.password]) {
     if (secret) {
       message = message.split(secret).join('[REDACTED]');
@@ -244,7 +244,7 @@ export function createScannerAssetManager(
         ...existing,
         state: 'error',
         inspectedAt,
-        lastError: getErrorMessage(error),
+        lastError: getScannerAssetErrorMessage(error),
       });
     }
   }
@@ -307,7 +307,7 @@ export function createScannerAssetManager(
       return cloneStatus(completedStatus);
     } catch (error: unknown) {
       const completedAt = now().toISOString();
-      const lastError = getErrorMessage(error, auth);
+      const lastError = getScannerAssetErrorMessage(error, auth);
       const failedStatus = setStatus(id, {
         ...requireStatus(id),
         state: 'error',

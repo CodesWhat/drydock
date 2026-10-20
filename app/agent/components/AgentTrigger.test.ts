@@ -47,6 +47,7 @@ vi.mock('../../event/index.js', () => ({
   registerAgentConnected: vi.fn(() => vi.fn()),
   registerAgentDisconnected: vi.fn(() => vi.fn()),
   registerContainerHealthTransition: vi.fn(() => vi.fn()),
+  registerContainerRemoved: vi.fn(() => vi.fn()),
 }));
 
 vi.mock('../../prometheus/trigger.js', () => ({

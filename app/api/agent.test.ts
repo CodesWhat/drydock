@@ -245,6 +245,7 @@ describe('Agent Router', () => {
           uptimeSeconds: 3600,
           lastSeen: '2026-02-28T10:00:00.000Z',
         },
+        warnings: ['hook-labels-trusted'],
       },
       {
         name: 'agent-2',
@@ -280,6 +281,7 @@ describe('Agent Router', () => {
           memoryGb: 31.4,
           uptimeSeconds: 3600,
           lastSeen: '2026-02-28T10:00:00.000Z',
+          warnings: ['hook-labels-trusted'],
           containers: { total: 3, running: 2, stopped: 1, updatesAvailable: 0 },
           images: 2,
         },

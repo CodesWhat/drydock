@@ -36,7 +36,7 @@ class Quay extends BaseRegistry<QuayRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['token']);
+    return this.maskFields(['token']);
   }
 
   /**

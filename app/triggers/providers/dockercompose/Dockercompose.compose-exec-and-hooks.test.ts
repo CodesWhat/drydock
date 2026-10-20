@@ -3671,6 +3671,27 @@ describe('Dockercompose Trigger', () => {
         expect(postHookSpy).toHaveBeenCalledWith(redis, redisHookConfig, expect.anything());
       });
 
+      test('records one hook-label-ignored audit entry per container for the batch', async () => {
+        process.env.DD_HOOKS_ENABLED = 'true';
+        mockRedisRunningImage(async () => ({
+          Config: { Labels: { 'dd.hook.pre': 'echo baked' } },
+        }));
+        spyOnBatchSideEffects();
+        const recordAuditSpy = vi.spyOn(trigger, 'recordAudit');
+
+        await trigger.processComposeFile(composeFile, makeBatch({ 'dd.hook.pre': 'echo baked' }));
+
+        const ignoredEntries = recordAuditSpy.mock.calls.filter(
+          ([action]) => action === 'hook-label-ignored',
+        );
+        expect(ignoredEntries).toHaveLength(1);
+        const [, auditedContainer, status, details] = ignoredEntries[0];
+        expect(auditedContainer).toMatchObject({ name: 'redis' });
+        expect(status).toBe('info');
+        expect(details).toContain('dd.hook.pre');
+        expect(details).not.toContain('echo baked');
+      });
+
       test('trusts an image-baked hook label without inspecting anything when DD_HOOKS_ALLOW_IMAGE_LABELS is true', async () => {
         process.env.DD_HOOKS_ENABLED = 'true';
         process.env.DD_HOOKS_ALLOW_IMAGE_LABELS = 'true';
@@ -3678,6 +3699,7 @@ describe('Dockercompose Trigger', () => {
           throw new Error('no such image');
         });
         const { sideEffects, preHookSpy } = spyOnBatchSideEffects();
+        const recordAuditSpy = vi.spyOn(trigger, 'recordAudit');
         const [nginx, redis] = makeBatch({ 'dd.hook.pre': 'echo baked' });
 
         await trigger.processComposeFile(composeFile, [nginx, redis]);
@@ -3690,6 +3712,9 @@ describe('Dockercompose Trigger', () => {
           'gate:redis',
         ]);
         expect(inspectRunningImageSpy).not.toHaveBeenCalled();
+        expect(recordAuditSpy.mock.calls.map(([action]) => action)).not.toContain(
+          'hook-label-ignored',
+        );
         expect(preHookSpy).toHaveBeenCalledWith(
           redis,
           expect.objectContaining({ hookPre: 'echo baked' }),

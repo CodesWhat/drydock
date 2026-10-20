@@ -424,6 +424,11 @@ describe('createScannerAssetManager', () => {
       throw '';
     });
     await expect(manager.pull('grype')).rejects.toThrow('Unknown scanner asset error');
+
+    provider.pull = vi.fn(async () => {
+      throw new Error('\u0001');
+    });
+    await expect(manager.pull('grype')).rejects.toThrow('Unknown scanner asset error');
   });
 
   test('runs a queued warm after a pull failure and sanitizes absent errors', async () => {

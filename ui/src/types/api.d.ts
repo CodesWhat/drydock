@@ -39,6 +39,8 @@ export interface ApiAgent {
   lastSeen?: string;
   logLevel?: string;
   pollInterval?: string;
+  /** `hook-labels-trusted`: agent predates 1.7.0 and still trusts image-baked hook labels. */
+  warnings?: string[];
   containers: { total: number; running: number; stopped: number };
   images?: number;
 }
@@ -88,6 +90,19 @@ export type ApiTriggerAssociationReason =
   | 'agentOwnership'
   | 'structuralIncompatibility'
   | 'labelScope';
+
+/** Last reason a notification trigger skipped a container (from GET /api/containers/:id/triggers). */
+export interface ApiNotificationSkip {
+  trigger: string;
+  reason:
+    | 'rule-disabled'
+    | 'threshold-not-met'
+    | 'trigger-excluded'
+    | 'once-already-sent'
+    | 'recently-applied'
+    | 'digest-buffered';
+  at: string;
+}
 
 /** Trigger that does not apply to a container (from GET /api/containers/:id/triggers). */
 export interface ApiUnassociatedContainerTrigger {

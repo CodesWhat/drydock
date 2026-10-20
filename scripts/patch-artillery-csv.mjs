@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Artillery 2.0.34 still imports the default export removed by csv-parse 5.
-// Keep its CSV payload support while overriding the vulnerable parser to 7.0.2.
+// Keep its CSV payload support while overriding the vulnerable parser to 7.0.3.
 const directory =
   process.argv[2] ?? fileURLToPath(new URL('../e2e/node_modules/artillery', import.meta.url));
 const imports = [

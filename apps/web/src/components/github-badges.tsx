@@ -30,8 +30,8 @@ type Badge = { href: string; src: string; alt: string };
 const quality: Badge[] = [
   {
     href: `${GITHUB_URL}/blob/main/LICENSE`,
-    src: "https://img.shields.io/badge/license-AGPL--3.0-C9A227",
-    alt: "License AGPL-3.0",
+    src: "https://img.shields.io/badge/license-MIT-C9A227",
+    alt: "License MIT",
   },
   {
     href: `${GITHUB_URL}/actions/workflows/ci-verify.yml`,

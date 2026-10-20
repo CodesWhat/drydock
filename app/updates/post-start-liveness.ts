@@ -15,6 +15,7 @@
 
 import { getErrorMessage } from '../util/error.js';
 import { parseEnvNonNegativeInteger } from '../util/parse.js';
+import { sleep as defaultSleep } from '../util/sleep.js';
 
 const DEFAULT_POST_START_LIVENESS_GRACE_MS = 2_000;
 const MIN_POST_START_LIVENESS_GRACE_MS = 100;
@@ -123,8 +124,4 @@ export async function verifyContainerStillRunning(args: {
   throw new PostStartLivenessFailedError(
     `Container ${containerName} exited within ${graceMs}ms of start (status: ${status})${detail}`,
   );
-}
-
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

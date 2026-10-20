@@ -1,5 +1,6 @@
 import type { KeyObject } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
@@ -63,6 +64,7 @@ import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
+import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
@@ -253,6 +255,8 @@ interface AgentUpdateOperationChangedPayload {
   containerId?: string;
   newContainerId?: string;
   phase?: ContainerUpdateOperationPhase;
+  fromVersion?: string;
+  toVersion?: string;
   container?: Record<string, unknown>;
 }
 
@@ -269,6 +273,13 @@ const AGENT_STATS_CHANGED_DEBOUNCE_MS = 250;
 // on response-received alone lets a stream that returns HTTP 200 then ends
 // immediately defeat the backoff, producing a flat 1s reconnect loop (#362).
 const SSE_STABLE_CONNECTION_MS = 30_000;
+// The agent sends an SSE comment heartbeat every 15 s (AGENT_SSE_HEARTBEAT_INTERVAL_MS
+// in agent/api/event.ts). Once a stream has delivered one, 3 missed intervals of
+// silence means the connection is half-open and gets torn down.
+export const AGENT_SSE_IDLE_TIMEOUT_MS = 45_000;
+const SSE_HEARTBEAT_LINE = ': heartbeat';
+// Longer than any heartbeat line, so a trailing partial line never needs more.
+const SSE_PARTIAL_LINE_KEEP_CHARS = SSE_HEARTBEAT_LINE.length + 4;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -301,6 +312,59 @@ function isContainerUpdateAppliedEventPayload(
   return typeof containerName === 'string' && containerName.length > 0;
 }
 
+/**
+ * Axios reports ECONNABORTED for both a connect-phase timeout (agent behind a
+ * firewall that drops packets) and an inactivity timeout after the request was
+ * sent, and the socket state cannot tell them apart once axios destroys it.
+ * Record whether the TCP connection was ever established so callers can.
+ *
+ * Axios only installs its connect-phase timeout for its native transport, and
+ * Node's request.setTimeout starts after connect, so this transport enforces
+ * the connect timeout itself.
+ */
+function createConnectTrackingTransport(state: { connected: boolean }, timeoutMs: number) {
+  return {
+    request(options: http.RequestOptions, callback: (res: http.IncomingMessage) => void) {
+      const isHttps = options.protocol === 'https:';
+      const request = (isHttps ? https : http).request(options, callback);
+      let connectTimer: NodeJS.Timeout | undefined;
+      const clearConnectTimer = () => {
+        if (connectTimer) {
+          clearTimeout(connectTimer);
+          connectTimer = undefined;
+        }
+      };
+      request.once('close', clearConnectTimer);
+      request.once('error', clearConnectTimer);
+      request.once('socket', (socket) => {
+        if (!socket.connecting) {
+          state.connected = true;
+          return;
+        }
+        // TLS counts as connected only once the handshake completes: a stall
+        // before that means the request was never sent.
+        const connectedEvent = isHttps ? 'secureConnect' : 'connect';
+        const onConnected = () => {
+          state.connected = true;
+          clearConnectTimer();
+        };
+        socket.once(connectedEvent, onConnected);
+        connectTimer = setTimeout(() => {
+          connectTimer = undefined;
+          socket.removeListener(connectedEvent, onConnected);
+          request.destroy(
+            Object.assign(new Error(`timeout of ${timeoutMs}ms exceeded`), {
+              code: 'ECONNABORTED',
+            }),
+          );
+        }, timeoutMs);
+        connectTimer.unref();
+      });
+      return request;
+    },
+  };
+}
+
 export class AgentClient {
   public name: string;
   public config: AgentClientConfig;
@@ -330,6 +394,7 @@ export class AgentClient {
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
   private stableConnectionTimer: NodeJS.Timeout | null;
+  private sseIdleTimer: NodeJS.Timeout | null = null;
   private activeSseStream: (NodeJS.EventEmitter & { destroy?: () => void }) | undefined;
   private stopped: boolean;
   private hasConnectedOnce: boolean;
@@ -698,6 +763,7 @@ export class AgentClient {
     }
 
     const authConfig = this.buildRequestConfig(method, target, body);
+    const connectState = { connected: false };
     const response = await axios({
       ...authConfig,
       method,
@@ -712,7 +778,16 @@ export class AgentClient {
       maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxRedirects: 0,
+      transport: createConnectTrackingTransport(
+        connectState,
+        PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS,
+      ),
       validateStatus: () => true,
+    }).catch((error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        (error as { requestConnected?: boolean }).requestConnected = connectState.connected;
+      }
+      throw error;
     });
     return {
       statusCode: response.status,
@@ -1399,8 +1474,16 @@ export class AgentClient {
     }
   }
 
+  private clearSseIdleTimer() {
+    if (this.sseIdleTimer) {
+      clearTimeout(this.sseIdleTimer);
+      this.sseIdleTimer = null;
+    }
+  }
+
   stop() {
     this.inventory.invalidate();
+    this.clearSseIdleTimer();
     this.stopped = true;
     const activeSseStream = this.activeSseStream;
     this.activeSseStream = undefined;
@@ -1442,6 +1525,7 @@ export class AgentClient {
 
   scheduleReconnect(delay?: number) {
     this.clearStableConnectionTimer();
+    this.clearSseIdleTimer();
     if (this.stopped || this.reconnectTimer) {
       return;
     }
@@ -1505,9 +1589,40 @@ export class AgentClient {
     let buffer = '';
     let queuedBytes = 0;
     let sseProcessing = Promise.resolve();
+    // Armed by the first heartbeat on this stream, so agents that predate the
+    // heartbeat (and never send one) are never torn down for being quiet.
+    let watchdogArmed = false;
+    // Trailing partial line of the previous chunks, so a heartbeat split across
+    // chunks is still seen as one whole line.
+    let partialLine = '';
+
+    const containsHeartbeatLine = (decoded: string): boolean => {
+      const lines = (partialLine + decoded).split('\n');
+      const lastLine = lines.pop() as string;
+      partialLine = lastLine.slice(0, SSE_PARTIAL_LINE_KEEP_CHARS);
+      return lines.some((line) => line.replace(/\r$/, '') === SSE_HEARTBEAT_LINE);
+    };
+
+    const resetIdleTimer = () => {
+      this.clearSseIdleTimer();
+      const timer = setTimeout(() => {
+        this.sseIdleTimer = null;
+        // Every path that retires this stream clears the timer first, so a
+        // firing timer always belongs to the active stream.
+        this.activeSseStream = undefined;
+        this.log.warn(
+          `No SSE data from agent ${sanitizeLogParam(this.name)} for ${AGENT_SSE_IDLE_TIMEOUT_MS / 1000}s; treating the connection as dead. Reconnecting...`,
+        );
+        stream.destroy?.();
+        this.scheduleReconnect();
+      }, AGENT_SSE_IDLE_TIMEOUT_MS);
+      timer.unref();
+      this.sseIdleTimer = timer;
+    };
 
     const failForBufferOverflow = () => {
       this.activeSseStream = undefined;
+      this.clearSseIdleTimer();
       stream.destroy?.();
       this.log.error(
         `SSE event buffer exceeded the ${MAX_SSE_EVENT_BUFFER_BYTES}-byte limit. Reconnecting...`,
@@ -1522,6 +1637,12 @@ export class AgentClient {
       const decodedChunk = decoder.write(chunk);
       if (!decodedChunk) {
         return;
+      }
+      if (!watchdogArmed && containsHeartbeatLine(decodedChunk)) {
+        watchdogArmed = true;
+      }
+      if (watchdogArmed) {
+        resetIdleTimer();
       }
       const decodedBytes = Buffer.byteLength(decodedChunk, 'utf8');
       if (
@@ -1660,12 +1781,21 @@ export class AgentClient {
     };
   }
 
+  get warnings(): AgentWarning[] {
+    return getAgentWarnings(this.info);
+  }
+
   private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
     const ackData = data as AgentRuntimeAckPayload;
     const { build } = this.info;
     const buildSuffix = build && build !== ackData.version ? `, build: ${build}` : '';
     this.log.info(`Agent ${this.name} connected (version: ${ackData.version}${buildSuffix})`);
+    if (this.warnings.includes('hook-labels-trusted')) {
+      this.log.warn(
+        `Agent ${this.name} runs ${build ?? this.info.version}; image-baked lifecycle hook labels are still trusted there. Upgrade it to 1.7.0 or later.`,
+      );
+    }
     void this.handshake().catch((error: unknown) => {
       this.log.error(`Handshake failed after dd:ack: ${getErrorMessage(error)}`);
     });
@@ -1993,6 +2123,12 @@ export class AgentClient {
         ? { newContainerId: toOptionalString(payload.newContainerId) }
         : {}),
       ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+      ...(toOptionalString(payload.fromVersion) !== undefined
+        ? { fromVersion: toOptionalString(payload.fromVersion) }
+        : {}),
+      ...(toOptionalString(payload.toVersion) !== undefined
+        ? { toVersion: toOptionalString(payload.toVersion) }
+        : {}),
       /* v8 ignore next 3 -- container object payloads are optional agent event metadata. */
       ...(toOptionalRecord(payload.container) !== undefined
         ? { container: { ...toOptionalRecord(payload.container), agent: this.name } }
@@ -2128,6 +2264,8 @@ export class AgentClient {
               : {}),
             status: payload.status as ActiveContainerUpdateOperationStatus,
             ...(payload.phase ? { phase: payload.phase as never } : {}),
+            ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+            ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
           });
         }
         return;
@@ -2136,6 +2274,8 @@ export class AgentClient {
         ...base,
         status: payload.status,
         ...(payload.phase ? { phase: payload.phase } : {}),
+        ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+        ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
       });
       return;
     }
@@ -2157,6 +2297,8 @@ export class AgentClient {
     newContainerId?: string;
     phase?: ContainerUpdateOperationPhase;
     lastError?: string;
+    fromVersion?: string;
+    toVersion?: string;
     container?: Record<string, unknown>;
   }): void {
     const operationId = this.ensureAgentOperationForTerminal(payload);
@@ -2176,6 +2318,8 @@ export class AgentClient {
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),
       ...(payload.lastError ? { lastError: payload.lastError } : {}),
+      ...(payload.fromVersion !== undefined ? { fromVersion: payload.fromVersion } : {}),
+      ...(payload.toVersion !== undefined ? { toVersion: payload.toVersion } : {}),
       ...(payload.container !== undefined ? { container: payload.container as never } : {}),
     });
   }

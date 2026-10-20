@@ -1138,6 +1138,20 @@ test('init should register all components', async () => {
   ]);
 });
 
+test('init should reject and register nothing further when trigger configuration throws', async () => {
+  watchers = {
+    local: {},
+  };
+  mockGetTriggerConfigurations.mockImplementation(() => {
+    throw new Error('Legacy DD_TRIGGER_* variables are no longer supported');
+  });
+
+  await expect(registry.init()).rejects.toThrow('Legacy DD_TRIGGER_* variables');
+
+  expect(mockGetWatcherConfigurations).not.toHaveBeenCalled();
+  expect(Object.keys(registry.getState().watcher)).toEqual([]);
+});
+
 test('init should prune local containers whose watcher no longer exists', async () => {
   watchers = {
     local: {},

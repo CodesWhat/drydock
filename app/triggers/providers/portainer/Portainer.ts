@@ -5,6 +5,8 @@ import { getState } from '../../../registry/index.js';
 import { save as saveStore } from '../../../store/index.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
+import { getErrorMessage } from '../../../util/error.js';
+import { sleep } from '../../../util/sleep.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
 import type { PostPullHookOptions } from '../docker/UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
@@ -330,11 +332,6 @@ function validateComposePullPolicy(
     `Portainer service ${service} has unsafe Compose pull_policy ${String(pullPolicy)}`,
   );
 }
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function isTargetServiceContainer(
   item: DockerContainerListItem,
   container,
@@ -368,10 +365,6 @@ function isMatchingServiceContainer(
     labels[COMPOSE_SERVICE_LABEL] === resolved.service &&
     labels[COMPOSE_PROJECT_LABEL] === container.labels?.[COMPOSE_PROJECT_LABEL]
   );
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 class PortainerRecoveryUnavailableError extends Error {
@@ -890,7 +883,7 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         );
       }
 
-      await delay(REDEPLOY_POLL_INTERVAL_MS);
+      await sleep(REDEPLOY_POLL_INTERVAL_MS);
     } while (Date.now() - startedAt < timeoutMs);
 
     throw new Error(

@@ -54,6 +54,26 @@ describe('Container Dependencies Router', () => {
   });
 
   describe('GET /dependencies', () => {
+    test('builds the graph from the listed containers, excluding rollback containers', () => {
+      mockGetContainers.mockReturnValue([]);
+      getHandler('get', '/dependencies')(createMockRequest(), createMockResponse());
+      expect(mockGetContainers).toHaveBeenCalledWith({ excludeRollbackContainers: true });
+    });
+
+    test('edges match what the list handler counts when rollback containers are hidden', () => {
+      const db = makeContainer({ id: 'db', name: 'db' });
+      const api = makeContainer({ id: 'api', name: 'api', dependsOn: ['db'] });
+      const rollback = makeContainer({ id: 'api-old', name: 'api-old', dependsOn: ['db'] });
+      mockGetContainers.mockImplementation((query?: Record<string, unknown>) =>
+        query?.excludeRollbackContainers === true ? [db, api] : [db, api, rollback],
+      );
+      const res = createMockResponse();
+      getHandler('get', '/dependencies')(createMockRequest(), res);
+      const payload = res.json.mock.calls[0][0];
+      expect(payload.nodes.map((n: { id: string }) => n.id).sort()).toEqual(['api', 'db']);
+      expect(payload.edges).toHaveLength(1);
+    });
+
     test('returns the full resolved graph with node metadata and cycle detection', () => {
       const db = makeContainer({ id: 'db', name: 'db' });
       const api = makeContainer({ id: 'api', name: 'api', dependsOn: ['db'] });

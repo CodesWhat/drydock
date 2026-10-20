@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Projekt, usługa lub plik Compose nie pasują do tego kontenera.",
         "labelScope": "Wykluczony przez etykiety include/exclude dd.action/dd.notification tego kontenera."
       },
+      "notificationSkips": "Powiadomienia",
+      "notificationSkipReason": {
+        "rule-disabled": "Pominięto: reguła powiadomień jest wyłączona dla tego wyzwalacza.",
+        "threshold-not-met": "Pominięto: aktualizacja jest poniżej progu tego wyzwalacza.",
+        "trigger-excluded": "Pominięto: etykiety tego kontenera wykluczają ten wyzwalacz.",
+        "once-already-sent": "Pominięto: o tej aktualizacji już powiadomiono.",
+        "recently-applied": "Pominięto: aktualizacja została właśnie zastosowana, czekam na potwierdzenie przez watcher.",
+        "digest-buffered": "Wstrzymano do następnego zestawienia."
+      },
       "backupsRollback": "Kopie zapasowe i przywracanie",
       "rollingBack": "Cofanie się...",
       "rollbackLatest": "Wycofaj najnowszą",

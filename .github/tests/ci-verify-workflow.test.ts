@@ -265,7 +265,10 @@ test('secret scanning gates full history and the tracked working tree', () => {
     expect(block).toContain('regexes =');
   }
 
-  const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8').trim().split('\n');
+  const baselineEntries = readFileSync(gitleaksIgnorePath, 'utf8')
+    .trim()
+    .split('\n')
+    .filter((entry) => !entry.startsWith('#'));
   // CI-16 removed the line-pinned curl-auth-header fingerprints for
   // content/docs/ in favor of the pattern-based allowlist above, so the
   // historical baseline shrank from 446 to 399; the floor here just guards
@@ -658,4 +661,24 @@ test('build job checks base image pins before building, for the platforms it smo
   expect(guard?.with?.command).toBe(
     `scripts/check-dockerfile-base-indexes.sh Dockerfile ${smokePlatforms}`,
   );
+});
+
+test('the advisory ci-timing job cannot fail the run or gate a release', () => {
+  const workflow = loadWorkflow();
+  const job = workflow.jobs?.['ci-timing'] as Record<string, unknown> | undefined;
+  expect(job?.['continue-on-error']).toBe(true);
+  expect(job?.name).toBe('CI timing');
+
+  for (const [jobId, other] of Object.entries(workflow.jobs ?? {})) {
+    const needs = ([] as string[]).concat((other as { needs?: string | string[] }).needs ?? []);
+    if (jobId !== 'ci-timing') {
+      expect(needs, `${jobId} must not wait on ci-timing`).not.toContain('ci-timing');
+    }
+  }
+
+  const releaseCut = readFileSync(
+    fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url)),
+    'utf8',
+  );
+  expect(releaseCut).not.toMatch(/ci-timing|CI timing/);
 });

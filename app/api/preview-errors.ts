@@ -1,7 +1,7 @@
 import type { Response } from 'express';
 import type { Container } from '../model/container.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
-import { getErrorMessage } from '../util/error.js';
+import { getErrorMessage, getErrorStatusCode } from '../util/error.js';
 
 export type PreviewErrorCode =
   | 'container-not-found'
@@ -58,15 +58,6 @@ export const TRIGGER_ACTION: PreviewErrorAction = {
 
 function asErrorLike(error: unknown): ErrorLike {
   return error && typeof error === 'object' ? (error as ErrorLike) : {};
-}
-
-function getHttpStatus(error: unknown): number | undefined {
-  const errorLike = asErrorLike(error);
-  const candidates = [errorLike.response?.status, errorLike.status, errorLike.statusCode];
-  return candidates.find(
-    (candidate): candidate is number =>
-      typeof candidate === 'number' && candidate >= 400 && candidate <= 599,
-  );
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -141,7 +132,7 @@ export function classifyPreviewError(
   const registry = getRegistryHost(container);
   const details = { reason, ...(registry ? { registry } : {}) };
   const errorCode = getErrorCode(error);
-  const status = getHttpStatus(error);
+  const status = getErrorStatusCode(error, true);
 
   if (status === 401 || status === 403) {
     return {

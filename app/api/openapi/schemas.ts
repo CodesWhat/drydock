@@ -275,9 +275,22 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       username: { type: 'string' },
+      apiKeyReviewPending: {
+        type: 'boolean',
+        description:
+          'Present and true while the session signed in with a recovery code and API keys still exist. The UI holds the user on the API keys view until POST /auth/api-key-review/acknowledge. Absent otherwise.',
+      },
     },
     required: ['username'],
     additionalProperties: true,
+  },
+  ApiKeyReviewAcknowledgement: {
+    type: 'object',
+    properties: {
+      apiKeyReviewPending: { type: 'boolean', enum: [false] },
+    },
+    required: ['apiKeyReviewPending'],
+    additionalProperties: false,
   },
   LoginChallengeResponse: {
     type: 'object',
@@ -473,6 +486,11 @@ export const openApiSchemas = {
       keys: {
         type: 'array',
         items: { type: 'string' },
+      },
+      lastSeen: {
+        type: 'object',
+        description: 'ISO timestamp of the most recent hit per key (api source only).',
+        additionalProperties: { type: 'string', format: 'date-time' },
       },
     },
     required: ['total', 'keys'],
@@ -1095,6 +1113,13 @@ export const openApiSchemas = {
       updateAvailable: { type: 'boolean' },
       tagPinGated: { type: 'boolean' },
       updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      notificationSkips: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/ContainerNotificationSkip' },
+        description:
+          'Last reason each notification trigger skipped this container (DR-85). Only present ' +
+          'on GET /containers/{id}; list responses omit it.',
+      },
       dependencyCount: {
         type: 'integer',
         minimum: 0,
@@ -1645,6 +1670,29 @@ export const openApiSchemas = {
         additionalProperties: true,
       },
     ],
+  },
+  ContainerNotificationSkip: {
+    type: 'object',
+    description:
+      'The last reason a notification trigger skipped a container (DR-85). Held in memory, ' +
+      'cleared when a notification for the pair is sent, and lost on restart.',
+    properties: {
+      trigger: { type: 'string', description: 'Trigger id, e.g. smtp.ops.' },
+      reason: {
+        type: 'string',
+        enum: [
+          'rule-disabled',
+          'threshold-not-met',
+          'trigger-excluded',
+          'once-already-sent',
+          'recently-applied',
+          'digest-buffered',
+        ],
+      },
+      at: { type: 'string', format: 'date-time' },
+    },
+    required: ['trigger', 'reason', 'at'],
+    additionalProperties: false,
   },
   ContainerUnassociatedTrigger: {
     type: 'object',

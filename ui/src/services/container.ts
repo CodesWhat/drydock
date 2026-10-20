@@ -2,6 +2,7 @@ import { i18n } from '../boot/i18n';
 import type {
   ApiContainerTrigger,
   ApiContainerUpdateOperation,
+  ApiNotificationSkip,
   ApiUnassociatedContainerTrigger,
 } from '../types/api';
 import type { DependencyGraph, UpdateChainPreview } from '../types/container';
@@ -252,6 +253,7 @@ async function getContainerTriggers(containerId: string) {
 async function getContainerTriggersWithReasons(containerId: string): Promise<{
   data: ApiContainerTrigger[];
   unassociatedTriggers: ApiUnassociatedContainerTrigger[];
+  notificationSkips: ApiNotificationSkip[];
 }> {
   const response = await fetch(`/api/v1/containers/${containerId}/triggers`, {
     credentials: 'include',
@@ -262,11 +264,14 @@ async function getContainerTriggersWithReasons(containerId: string): Promise<{
     );
   }
   const payload = await readJsonResponse(response, 'Container triggers API');
-  const envelope = payload as { unassociatedTriggers?: unknown };
+  const envelope = payload as { unassociatedTriggers?: unknown; notificationSkips?: unknown };
   return {
     data: extractCollectionData<ApiContainerTrigger>(payload),
     unassociatedTriggers: Array.isArray(envelope.unassociatedTriggers)
       ? (envelope.unassociatedTriggers as ApiUnassociatedContainerTrigger[])
+      : [],
+    notificationSkips: Array.isArray(envelope.notificationSkips)
+      ? (envelope.notificationSkips as ApiNotificationSkip[])
       : [],
   };
 }

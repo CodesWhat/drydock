@@ -38,7 +38,7 @@ Then mount it as a secret:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     environment:
       - DD_AUTH_TOTP_KEYRING__FILE=/run/secrets/drydock_totp_keyring
       - DD_AUTH_TOTP_ACTIVE_KEY_ID=2026-10
@@ -176,6 +176,8 @@ Details worth knowing:
 ## Someone lost their device
 
 If they still have a recovery code, they don't need you. They choose **Use a recovery code** at sign-in, then replace or remove the factor. A recovery sign-in ends the account's other sessions and [can't create API keys](/docs/api#what-a-recovery-login-cant-do).
+
+If any API key is still active when that sign-in happens, Drydock holds the session on **Settings → API Keys** with a banner asking you to review them. A key someone minted from a stolen session would otherwise outlive the sign-out of that session. Revoke anything you don't recognise, then choose **Done reviewing**. Revoking a key doesn't release the page on its own; **Done reviewing** does. Signing out is the only other way off it. API clients can read the flag as `apiKeyReviewPending` on `GET /auth/user`.
 
 If the device and the recovery codes are both gone, remove the factor offline:
 

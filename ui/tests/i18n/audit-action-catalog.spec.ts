@@ -32,6 +32,7 @@ const newActionLabels = [
   'api-key-created',
   'api-key-revoked',
   'api-key-auth-failed',
+  'hook-label-ignored',
 ];
 
 describe('audit action catalog contract', () => {

@@ -35,17 +35,12 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.2 是需主动选择的测试版本。** 测试前请停止 Drydock 并备份整个存储目录。首次启动会将 JSON 数据导入 SQLite。降级需要恢复升级前的备份，仅写入 SQLite 的更改不会迁回。请参阅[迁移与弃用说明](DEPRECATIONS.md)。
+> **v1.8.0-rc.3 是需主动选择的测试版本。** 测试前请停止 Drydock 并备份整个存储目录。首次启动会将 JSON 数据导入 SQLite。降级需要恢复升级前的备份，仅写入 SQLite 的更改不会迁回。请参阅[迁移与弃用说明](DEPRECATIONS.md)。
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
-> **从旧版本更新？首先阅读升级说明。** 三个安全强化修复程序首先在 **1.4.6** 中发布，并贯穿整个 **1.5** 系列，因此从早于 1.4.6 的版本进行更新的任何人都会受到影响，无论他们登陆的是哪个版本（1.4.6、任何 1.5.x 或更高版本）。它们不是弃用，也没有宽限期：OIDC 现在要求您的提供商的发现元数据中包含 `authorization_endpoint`，TCP 对等地址上未经身份验证的速率限制密钥（反向代理后面的共享存储桶），并且 HTTP 触发代理 URL 必须使用 `http(s)://`。更新前请参阅 **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)**。
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
-> [!WARNING]
-> **正在升级到 1.6.0-rc.3 或更高版本？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
+> **正在从 1.5.x 或更早版本升级？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
 
 <h2 align="center">内容</h2>
 
@@ -174,7 +169,7 @@ volumes:
   drydock-store:
 ```
 
-请参阅 sockguard 的 [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) 预设，了解起始 `sockguard.yaml`（相同的预设 portwing 在其自己的示例中提供）。
+请参阅 sockguard 的 [`app/configs/drydock.yaml`](https://github.com/CodesWhat/sockguard/blob/main/app/configs/drydock.yaml) 预设，了解起始 `sockguard.yaml`。
 
 </details>
 
@@ -335,7 +330,7 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 <tr><td>镜像摘要监控</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>更新阈值过滤（major/minor/patch/digest）</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>依赖感知的更新排序</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>待审批队列</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>待审批队列（v1.8 RC）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>镜像备份与回滚</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>生命周期钩子（更新前/后）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>漏洞扫描</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -378,7 +373,7 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 <tr><td>镜像摘要监控</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>更新阈值过滤（major/minor/patch/digest）</td><td align="center">✅</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>依赖感知的更新排序</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>
-<tr><td>待审批队列</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>待审批队列（v1.8 RC）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>镜像备份与回滚</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>漏洞扫描</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>审计日志</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
@@ -416,7 +411,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 <details>
 <summary><strong>版本主题及亮点</strong></summary>
 
-此方向至少覆盖未来十二个月，直至 2027 年 8 月。
+此方向至少覆盖未来十二个月，直至 2027 年 10 月。
 此处仅列出高级主题；各版本详情请参阅 [CHANGELOG.md](CHANGELOG.md)。
 
 | 版本                                           | 主题           | 亮点                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -426,12 +421,18 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 | **v1.5.0** ✅ | 可观察性和 i18n   | 触发分类拆分 (`DD_ACTION_*`/`DD_NOTIFICATION_*`)、WebSocket 日志查看器、仪表板自定义、资源监控、通知发件箱 + DLQ、安全扫描摘要、17 个区域设置、SSE 最后事件 ID 重播、使用 Ed25519 身份验证的边缘代理拨出（实验性、`DD_EXPERIMENTAL_PORTWING=true`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | **v1.5.1** ✅ | 安全与维护        | GCR/GAR pull-auth 修复、注册表 TLS 完成 (M-2)、hook env-var 注入强化、`DD_SESSION_SECRET__FILE` 支持、调试转储凭据编辑、机密文件权限检查、成熟度门死锁修复、完整 UI 可翻译性 + 社区翻译、维护窗口自动应用门、容器正常运行时间显示、标签/版本列分割显示软件版本（OCI 标签，带有 `dd.inspect.tag.path`双写 + 选择加入 `dd.inspect.tag.version-only` 路由），选择加入 compose 挂载前缀匹配，`${currentReleaseNotes}` 模板变量                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | **v1.5.2** ✅ | 政策和固定标签可靠性   | 娱乐安全成熟度/跳过/暂停策略保留、固定标签摘要重建检测和信息同族洞察、回滚候选清理、回滚级联预防、显式 MAC 保存和本地映像注册表跳过行为                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **v1.6.0**   | 通知、策略与发布情报 | 每规则/每触发器通知模板，具有实时预览、通知铃声首选项、跨设备首选项同步、零依赖自定义仪表板网格 ([#281](https://github.com/CodesWhat/drydock/issues/281))、声明性更新策略 ([#320](https://github.com/CodesWhat/drydock/issues/320))、成熟稳定倒计时 + 即时候选人可见性 + 手动覆盖 ([#406](https://github.com/CodesWhat/drydock/discussions/406))、可操作更新状态面板和全局`notify` / `manual` / `auto` 更新模式 ([#325](https://github.com/CodesWhat/drydock/discussions/325))、观察者/imgset/容器标签策略继承以及堆叠当前 → 较新的固定标签可见性 ([#498](https://github.com/CodesWhat/drydock/issues/498))、标准化 44px 跨表、卡片和详细信息的源/发行说明/注册表资源操作([#295](https://github.com/CodesWhat/drydock/discussions/295))、运行状况事件通知 ([#198](https://github.com/CodesWhat/drydock/discussions/198))、双向 Home Assistant MQTT、响应式表/卡列表视图、通过命令或固定 Docker-worker 后端执行 Trivy、Grype 或两者扫描、扫描器资产拉取/热控制、堆外重复数据删除SBOM 存储、Trivy 长扫描正确性 ([#490](https://github.com/CodesWhat/drydock/issues/490))、触发分类迁移警告、v1.6 兼容性删除、文档/API 卫生以及 `/api` → `/api/v1` 迁移完成，并选择加入 wud-card/Homepage 兼容性填充程序 (`DD_COMPAT_WUDCARD`)。 |
-| **v1.7.0** | 智能更新和用户体验 | 依赖感知的更新排序（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、每次操作更新策略（[#511](https://github.com/CodesWhat/drydock/discussions/511)）、统一的成熟度/更新时间时钟、可点击端口链接、键盘快捷键、PWA、深色主题对比度改进（WCAG 2.2）（[#850](https://github.com/CodesWhat/drydock/issues/850)、[#865](https://github.com/CodesWhat/drydock/discussions/865)）、`DD_TRIGGER_*` 删除（v1.5.0 弃用窗口结束）、从镜像中删除了 curl |
-| **v1.8.0** | 集群管理与实时配置 | **已在 v1.8.0-rc.2 中提供测试，GA 尚未发布：** SQLite 存储、审批队列、YAML 配置、限定范围的监视器/通知/操作策略编辑器及安全摘要模板、并行更新、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、依赖顺序界面、镜像清单与清理、集群健康状态与清单刷新、可分享的标签分组、 仅用于通知的精确分组路由 ([#1251](https://github.com/CodesWhat/drydock/pull/1251))、带有限制性操作规则的持久分组策略、有效策略视图与编辑器、Drydock 对容器标签设置的覆盖、带恢复码的 TOTP 双因素登录、仅限制安装的维护窗口 ([#946](https://github.com/CodesWhat/drydock/discussions/946))、第一方身份验证、限定范围的 API 密钥 ([#469](https://github.com/CodesWhat/drydock/discussions/469))，以及 Home Assistant 更新进度与设备 ([#210](https://github.com/CodesWhat/drydock/discussions/210))。**待完成：** 更广泛的实时配置仍需确定设置归属；静态镜像列表监视器暂缓至 GA 之后。 |
+| **v1.6.0** ✅ | 通知、策略与发布情报 | 每规则/每触发器通知模板，具有实时预览、通知铃声首选项、跨设备首选项同步、零依赖自定义仪表板网格 ([#281](https://github.com/CodesWhat/drydock/issues/281))、声明性更新策略 ([#320](https://github.com/CodesWhat/drydock/issues/320))、成熟稳定倒计时 + 即时候选人可见性 + 手动覆盖 ([#406](https://github.com/CodesWhat/drydock/discussions/406))、可操作更新状态面板和全局`notify` / `manual` / `auto` 更新模式 ([#325](https://github.com/CodesWhat/drydock/discussions/325))、观察者/imgset/容器标签策略继承以及堆叠当前 → 较新的固定标签可见性 ([#498](https://github.com/CodesWhat/drydock/issues/498))、标准化 44px 跨表、卡片和详细信息的源/发行说明/注册表资源操作([#295](https://github.com/CodesWhat/drydock/discussions/295))、运行状况事件通知 ([#198](https://github.com/CodesWhat/drydock/discussions/198))、双向 Home Assistant MQTT、响应式表/卡列表视图、通过命令或固定 Docker-worker 后端执行 Trivy、Grype 或两者扫描、扫描器资产拉取/热控制、堆外重复数据删除SBOM 存储、Trivy 长扫描正确性 ([#490](https://github.com/CodesWhat/drydock/issues/490))、触发分类迁移警告、v1.6 兼容性删除、文档/API 卫生以及 `/api` → `/api/v1` 迁移完成，并选择加入 wud-card/Homepage 兼容性填充程序 (`DD_COMPAT_WUDCARD`)。 |
+| **v1.7.0** ✅ | 智能更新和用户体验 | 依赖感知的更新排序（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、每次操作更新策略（[#511](https://github.com/CodesWhat/drydock/discussions/511)）、统一的成熟度/更新时间时钟、可点击端口链接、键盘快捷键、PWA、深色主题对比度改进（WCAG 2.2）（[#850](https://github.com/CodesWhat/drydock/issues/850)、[#865](https://github.com/CodesWhat/drydock/discussions/865)）、`DD_TRIGGER_*` 删除（v1.5.0 弃用窗口结束）、从镜像中删除了 curl |
+| **v1.8.0** | 集群管理与实时配置 | **已在 v1.8.0-rc.3 中提供测试，GA 尚未发布：** SQLite 存储、审批队列、YAML 配置、限定范围的监视器/通知/操作策略编辑器及安全摘要模板、并行更新、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、依赖顺序界面、镜像清单与清理、集群健康状态与清单刷新、可分享的标签分组、 仅用于通知的精确分组路由 ([#1251](https://github.com/CodesWhat/drydock/pull/1251))、带有限制性操作规则的持久分组策略、有效策略视图与编辑器、Drydock 对容器标签设置的覆盖、带恢复码的 TOTP 双因素登录、仅限制安装的维护窗口 ([#946](https://github.com/CodesWhat/drydock/discussions/946))、第一方身份验证、限定范围的 API 密钥 ([#469](https://github.com/CodesWhat/drydock/discussions/469))，以及 Home Assistant 更新进度与设备 ([#210](https://github.com/CodesWhat/drydock/discussions/210))。**待完成：** 更广泛的实时配置仍需确定设置归属；静态镜像列表监视器暂缓至 GA 之后。 |
 | **v2.0+** | 平台扩展及其他 | Swarm/Kubernetes 观察者、GitOps 同步、卷浏览器、根据声明的上游基础监控本地构建的镜像（[#897](https://github.com/CodesWhat/drydock/discussions/897)）、健康门、金丝雀部署、Web 终端、RBAC、LDAP/AD、通过其 Docker 兼容 API 提供的基础 Podman 支持、CLI、Wolfi 强化映像、套接字代理 |
 
-**尚未完成的社区需求：** 跨主机依赖更新和重启（[#219](https://github.com/CodesWhat/drydock/discussions/219)）尚未实现。基于发布数量的成熟度判断（[#558](https://github.com/CodesWhat/drydock/discussions/558)）已在 v1.8 中实现版本家族核心逻辑，包括可选的按时间回退以及对带版本别名的有限摘要验证；无版本通道的历史摘要计数仍待实现。同一主机上的依赖排序不满足远程主机需求。本地构建检测和安全重新构建仍是未来工作（[#897](https://github.com/CodesWhat/drydock/discussions/897)）。进程级摘要检查默认设置（[#657](https://github.com/CodesWhat/drydock/discussions/657)）使用 `DD_DEFAULTS_WATCH_DIGEST`，每个代理需单独配置。这些条目均不承诺具体发布日期。
+**发布与升级状态：** v1.7.0 是最新稳定版（2026-10-19 GA，由 v1.7.0-rc.24 晋升）。v1.8.0-rc.3 供自愿测试，已发布的 1.7 文档与当前的 1.8 文档分开保存。
+
+**兼容性：** v1.7 移除了旧版触发器输入、curl 和 `/api/auth/methods`。v1.8 更改了 MQTT 实体标识和旧的 `/auth/strategies` 响应。`PUT /api/v1/settings` 在 API v2 之前保持可用；其 `Sunset` 日期不允许从冻结的 v1 API 中移除方法。`/api/auth/status` 仍受支持。
+
+**Portwing 轮换：** Drydock 控制器自 v1.8.0-rc.1 起首次支持分阶段轮换，需配合兼容的 Portwing 开发构建。已发布的 Portwing v1.0.0-rc.1 不包含配套功能，因此不声明任何已发布的兼容 Portwing 版本。边缘端返回 `202` 表示等待重新连接，并非轮换已完成。
+
+**尚未完成的社区需求：** 跨主机依赖更新和重启（[#219](https://github.com/CodesWhat/drydock/discussions/219)）尚未实现。基于发布数量的成熟度判断（[#558](https://github.com/CodesWhat/drydock/discussions/558)）的版本家族核心逻辑已在 v1.8.0-rc.3 中提供测试，包括可选的按时间回退以及对带版本别名的有限摘要验证；无版本通道的历史摘要计数仍待实现。同一主机上的依赖排序不满足远程主机需求。本地构建检测和安全重新构建仍是未来工作（[#897](https://github.com/CodesWhat/drydock/discussions/897)）。进程级摘要检查默认设置（[#657](https://github.com/CodesWhat/drydock/discussions/657)）已在 v1.8.0-rc.3 中提供测试，通过 `DD_DEFAULTS_WATCH_DIGEST` 使用，每个代理需单独配置。这些条目均不承诺具体发布日期。
 
 </details>
 
@@ -495,7 +496,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 ---
 
-**[AGPL-3.0 许可证](LICENSE)**
+**[MIT 许可证](LICENSE)**
 
 <a href="https://github.com/CodesWhat">
   <picture>

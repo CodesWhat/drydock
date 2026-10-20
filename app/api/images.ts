@@ -4,6 +4,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import * as registry from '../registry/index.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
@@ -109,7 +110,7 @@ async function fetchHostInventory(
     });
     return { items, summary: toHostSummary(host) };
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error listing images for host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );
@@ -186,12 +187,28 @@ function resolveHostAndMode(
   return { host, mode: modeValue };
 }
 
-function isAgentPruneTimeoutError(host: ImageHost, error: unknown): boolean {
-  if (!host.agent || !error || typeof error !== 'object') {
-    return false;
+const AGENT_UNREACHABLE_MESSAGE =
+  "The agent's Docker proxy could not be reached. Check the agent connection, then refresh the image list.";
+
+const AGENT_BAD_RESPONSE_MESSAGE =
+  "The agent's Docker proxy returned an unreadable response. Refresh the image list to see whether the operation completed.";
+
+const AGENT_TRANSPORT_FAILED_MESSAGE =
+  "The agent's Docker proxy failed. Refresh the image list to see the current state.";
+
+function agentTransportReason(error: unknown): string | undefined {
+  const json = (error as { json?: unknown }).json;
+  const reason =
+    json && typeof json === 'object' ? (json as { reason?: unknown }).reason : undefined;
+  return typeof reason === 'string' ? reason : undefined;
+}
+
+function isAgentTimeoutError(error: unknown, reason: string | undefined): boolean {
+  if (reason === 'timeout') {
+    return true;
   }
   const candidate = error as { statusCode?: unknown; message?: unknown };
-  if (candidate.statusCode === 502 || candidate.statusCode === 504) {
+  if (candidate.statusCode === 504) {
     return true;
   }
   const message = typeof candidate.message === 'string' ? candidate.message : '';
@@ -204,11 +221,29 @@ function respondWithHostError(
   error: unknown,
   timeoutMessage: string,
 ): void {
-  if (isAgentPruneTimeoutError(host, error)) {
-    sendErrorResponse(res, 504, timeoutMessage);
-    return;
+  if (host.agent && error && typeof error === 'object') {
+    const reason = agentTransportReason(error);
+    if (reason === 'agent-unreachable') {
+      sendErrorResponse(res, 502, { message: AGENT_UNREACHABLE_MESSAGE, details: { reason } });
+      return;
+    }
+    if (reason === 'bad-upstream-response') {
+      sendErrorResponse(res, 502, { message: AGENT_BAD_RESPONSE_MESSAGE, details: { reason } });
+      return;
+    }
+    if (isAgentTimeoutError(error, reason)) {
+      sendErrorResponse(res, 504, { message: timeoutMessage, details: { reason: 'timeout' } });
+      return;
+    }
+    if ((error as { statusCode?: unknown }).statusCode === 502) {
+      sendErrorResponse(res, 502, {
+        message: AGENT_TRANSPORT_FAILED_MESSAGE,
+        details: { reason: 'transport-failed' },
+      });
+      return;
+    }
   }
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   sendErrorResponse(res, 500, message);
 }
 
@@ -241,7 +276,7 @@ async function getPrunePreview(req: Request, res: Response) {
     });
     res.status(200).json(estimateReclaimable(items, host.id, mode));
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error estimating reclaimable space for host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );
@@ -287,7 +322,7 @@ async function pruneImages(req: Request, res: Response) {
       result: { host: host.id, mode, imagesDeleted, spaceReclaimed },
     });
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = getErrorMessage(e);
     log.warn(
       `Error pruning images on host ${sanitizeLogParam(host.id)} (${sanitizeLogParam(message)})`,
     );

@@ -23,6 +23,10 @@
         "os": "OS",
         "version": "Phiên bản",
         "lastSeen": "Lần cuối thấy"
+      },
+      "warnings": {
+        "outdated": "Cập nhật agent",
+        "hookLabelsTrusted": "Agent này chạy phiên bản cũ hơn 1.7.0 và vẫn tin các nhãn hook vòng đời được nhúng trong image. Hãy nâng cấp lên 1.7.0 trở lên."
       }
     },
     "detail": {

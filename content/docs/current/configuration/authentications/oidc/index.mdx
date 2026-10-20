@@ -20,6 +20,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_AUTH_OIDC_{auth_name}_REDIRECT` | ⚪ | Skip internal login page & automatically redirect to the OIDC provider | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` | ⚪ | Explicit IdP logout URL fallback when discovery metadata has no `end_session_endpoint` | URL | empty |
 | `DD_AUTH_OIDC_{auth_name}_TIMEOUT` | ⚪ | Timeout (in ms) when calling the OIDC provider | Must be greater than 500 | `5000` |
+| `DD_AUTH_OIDC_{auth_name}_BEARERAUDIENCES` | ⚪ | Extra `aud` values accepted on bearer access tokens, besides the client ID (see [Bearer tokens](#bearer-tokens)) | Comma-separated list | empty |
 | `DD_PUBLIC_URL` | 🔴 | Public URL of your drydock instance (used to build the OIDC callback URL) | URL | |
 
 The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oidc/${auth_name}/cb`.
@@ -40,6 +41,28 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 - **Redirect URL validation** — Post-login redirects are validated against the backend's endpoint allowlist. OIDC flows cannot be hijacked into landing on arbitrary paths. No configuration is needed.
 - **OIDC error log redaction** — OIDC warn logs redact RFC-1918 IP addresses (`[internal-addr]`) and absolute filesystem paths (`[path]`) from error cause chains so private network addresses and CA certificate file paths do not appear in centralized log aggregators.
 - **OIDC logout URL resolution** — drydock first tries the provider discovery `end_session_endpoint`. If it is missing, you can set `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` when your provider (or proxy) exposes a logout URL outside discovery metadata. If neither is available, `POST /auth/logout` only destroys the local drydock session.
+
+## Bearer tokens
+
+Besides the browser login, an OIDC access token sent as `Authorization: Bearer <token>` authenticates API requests. Drydock only accepts a token that the configured IdP issued for this drydock client. A token the same IdP minted for a different application is rejected with `401`, even though the IdP would still answer a userinfo call for it.
+
+How a token is checked:
+
+- **JWT access tokens** are verified against the IdP's `jwks_uri` signature keys. The `iss` must match the discovery issuer, `exp` and `nbf` are enforced with 30 seconds of clock skew, and the token must be bound to this client: `aud` contains the client ID, or `azp` or `client_id` equals the client ID.
+- **Opaque access tokens** are checked with RFC 7662 introspection when discovery advertises an `introspection_endpoint`, authenticated with the client ID and secret. The response must have `active: true` and the same issuer, expiry and client binding rules apply (`client_id`, `azp` or `aud`).
+- **Neither available**: the token is rejected and a warning is logged. Drydock does not fall back to accepting a token on a userinfo call alone.
+
+Once a token passes, the userinfo endpoint is used only to map it to a username.
+
+If your IdP puts a separate API audience on the access token instead of the client ID, list it in `DD_AUTH_OIDC_{auth_name}_BEARERAUDIENCES`, for example `DD_AUTH_OIDC_ENTRA_BEARERAUDIENCES=api://<drydock_app_id>`. Extra audiences are matched against `aud` only.
+
+| IdP | What to check |
+| --- | --- |
+| Keycloak | Access tokens carry `azp` set to the client ID, so nothing extra is needed. |
+| Authentik | Access tokens carry the provider's client ID in `aud`, so nothing extra is needed. Keep the provider's signing key set so tokens are JWTs. |
+| Microsoft Entra ID | Tokens issued to the drydock app registration have `aud` set to the application ID or `api://<application_id>`. Add the `api://...` form to `BEARERAUDIENCES` if that is what your tokens carry. |
+
+<Callout type="warn">As of v1.8.1, bearer tokens issued for other clients stop working. Machine clients that reuse a token minted for another application must request one for the drydock client (or for an audience listed in `BEARERAUDIENCES`). See [DEPRECATIONS](https://github.com/CodesWhat/drydock/blob/main/DEPRECATIONS.md#oidc-bearer-tokens-must-be-issued-for-this-client).</Callout>
 
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)
 
@@ -90,7 +113,7 @@ identity_providers:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -108,7 +131,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHELIA_CLIENTSECRET="this-is-a-very-secure-secret" \
   -e DD_AUTH_OIDC_AUTHELIA_DISCOVERY="https://<your_authelia_public_domain>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 
 </Tab>
@@ -134,7 +157,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -152,7 +175,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTH0_CLIENTSECRET="<paste the Client Secret from auth0 application settings>" \
   -e DD_AUTH_OIDC_AUTH0_DISCOVERY="https://<paste the domain from auth0 application settings>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 
 </Tab>
@@ -190,7 +213,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -209,7 +232,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 
 Opt in to direct Authentik redirect only when you intentionally want to skip the internal login page. Add this option before the `...` line in the Docker command above:
@@ -235,7 +258,7 @@ Opt in to direct Authentik redirect only when you intentionally want to skip the
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -255,7 +278,7 @@ docker run \
   -e DD_AUTH_OIDC_DEX_CLIENTSECRET="<dex_client_secret>" \
   -e DD_AUTH_OIDC_DEX_DISCOVERY="https://<your_dex_public_domain>/dex/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 
 Opt in to a real Dex logout endpoint only when your IdP or auth proxy provides one. Add this option before the `...` line in the Docker command above:

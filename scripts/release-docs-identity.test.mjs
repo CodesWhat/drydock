@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-const RC_VERSION = '1.8.0-rc.2';
-const PREV_RC_VERSION = '1.8.0-rc.1';
-const RC_DATE = '2026-10-18';
-const RC_DISPLAY_DATE = 'October 18, 2026';
+const RC_VERSION = '1.8.0-rc.3';
+const PREV_RC_VERSION = '1.8.0-rc.2';
+const RC_DATE = '2026-10-20';
+const RC_DISPLAY_DATE = 'October 20, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
   'content/docs/v1.7',
@@ -45,7 +45,7 @@ test('self-update examples allow manual updates within the candidate train', () 
     const pattern = example.labels.find((label) => label.startsWith('dd.tag.include='));
     assert.ok(pattern, 'self-update must opt into candidate tag discovery');
     const filter = new RegExp(pattern.slice('dd.tag.include='.length).replaceAll('$$', '$'), 'u');
-    assert.ok(filter.test('1.8.0-rc.2'));
+    assert.ok(filter.test('1.8.0-rc.3'));
     assert.ok(!filter.test('1.8.0'));
     assert.ok(!filter.test('1.9.0-rc.1'));
   }
@@ -272,7 +272,7 @@ test('stable 1.6 and retained 1.7 docs remain available when current advances to
   assert.match(docsReadme, /`v1\.5\/`, `v1\.4\/`, `v1\.3\/`: archived documentation/u);
   assert.match(
     docsReadme,
-    /`v1\.6\/`: latest-stable 1\.6 documentation, initialized from the published v1\.6\.0 docs/u,
+    /`v1\.6\/`: frozen 1\.6 documentation, initialized from the published v1\.6\.0 docs/u,
   );
   assert.match(docsReadme, /## Versioned-doc correction policy/u);
   assert.match(
@@ -406,7 +406,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.2|:v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.3|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }
@@ -651,7 +651,6 @@ test('security policy distinguishes stable and prerelease support', () => {
 
   assert.match(security, /Latest stable release/u);
   assert.match(security, /Latest v1\.8 release candidate/u);
-  assert.match(security, /Latest v1\.7 release candidate/u);
   assert.match(security, /Older release candidates are not patched/u);
   assert.doesNotMatch(security, /\|\s*latest\s*\|/iu);
 });

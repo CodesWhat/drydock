@@ -10,6 +10,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { getErrorMessage } from '../util/error.js';
 
 /**
  * Dependency-chain restart primitive (`dd.depends_on.action=restart`, v1.7
@@ -63,7 +64,7 @@ export async function restartDependentContainer(container: Container): Promise<v
     }
   } catch (error: unknown) {
     log.debug(
-      `Restarted ${sanitizeLogParam(container.name)} as a dependency-chain action but failed to refresh its stored status (${sanitizeLogParam(error instanceof Error ? error.message : String(error))})`,
+      `Restarted ${sanitizeLogParam(container.name)} as a dependency-chain action but failed to refresh its stored status (${sanitizeLogParam(getErrorMessage(error))})`,
     );
   }
 

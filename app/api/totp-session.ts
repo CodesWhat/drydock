@@ -44,6 +44,9 @@ export function replaceSessionAfterFactorChange(
       return;
     }
     const rememberMe = session.rememberMe === true;
+    // Resetting the factor from a recovery session must not shake off the key
+    // review that session owes.
+    const apiKeyReviewPending = session.apiKeyReviewPending === true;
     session.regenerate((regenerateError: unknown) => {
       if (regenerateError) {
         refuse(getErrorMessage(regenerateError));
@@ -55,6 +58,9 @@ export function replaceSessionAfterFactorChange(
         return;
       }
       fresh.rememberMe = rememberMe;
+      if (apiKeyReviewPending) {
+        fresh.apiKeyReviewPending = true;
+      }
       applyRememberMe(req);
       enforceSessionLimitBeforeLogin(
         req,

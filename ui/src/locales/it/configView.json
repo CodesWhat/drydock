@@ -42,6 +42,8 @@
         "name": "Nome",
         "key": "Chiave",
         "scopes": "Ambiti",
+        "createdBy": "Creata da",
+        "created": "Creata",
         "lastUsed": "Ultimo utilizzo",
         "expires": "Scadenza",
         "status": "Stato"
@@ -55,6 +57,11 @@
         "header": "Revoca chiave API",
         "message": "Revocare {name} revoca anche ogni chiave creata con essa. Tutto ciò che le utilizza smette di funzionare immediatamente.",
         "accept": "Revoca"
+      },
+      "review": {
+        "banner": "Hai effettuato l'accesso con un codice di recupero. Controlla le tue chiavi API e revoca quelle che non riconosci.",
+        "done": "Revisione completata",
+        "doneError": "Impossibile completare la revisione. Riprova."
       },
       "cascade": "Revocate {count} chiavi, incluse tutte quelle create da questa.",
       "errors": {

@@ -69,7 +69,7 @@ export function handleContainerActionError({
   log: Logger;
   res: Response;
 }): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error);
   log.warn(`Error ${actionLabel} container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
 
   recordAuditEvent({

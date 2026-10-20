@@ -1,0 +1,84 @@
+{
+  "total_count": 4,
+  "jobs": [
+    {
+      "name": "Quality: Test & Coverage",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-19T06:31:00Z",
+      "completed_at": "2026-10-19T06:49:30Z",
+      "steps": [
+        {
+          "name": "Harden Runner",
+          "conclusion": "success",
+          "started_at": "2026-10-19T06:31:00Z",
+          "completed_at": "2026-10-19T06:31:04Z"
+        },
+        {
+          "name": "Run unit tests",
+          "conclusion": "success",
+          "started_at": "2026-10-19T06:33:00Z",
+          "completed_at": "2026-10-19T06:46:10Z"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success",
+          "started_at": "2026-10-19T06:31:10Z",
+          "completed_at": "2026-10-19T06:33:00Z"
+        },
+        {
+          "name": "Upload coverage",
+          "conclusion": "skipped",
+          "started_at": "2026-10-19T06:49:00Z",
+          "completed_at": "2026-10-19T06:49:00Z"
+        }
+      ]
+    },
+    {
+      "name": "Build",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-19T06:31:00Z",
+      "completed_at": "2026-10-19T06:40:05Z",
+      "steps": [
+        {
+          "name": "Build image",
+          "conclusion": "success",
+          "started_at": "2026-10-19T06:31:30Z",
+          "completed_at": "2026-10-19T06:39:50Z"
+        }
+      ]
+    },
+    {
+      "name": "E2E: Cucumber",
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2026-10-19T06:40:10Z",
+      "completed_at": "2026-10-19T06:47:00Z",
+      "steps": [
+        {
+          "name": "Run e2e | cucumber",
+          "conclusion": "failure",
+          "started_at": "2026-10-19T06:41:00Z",
+          "completed_at": "2026-10-19T06:46:55Z"
+        }
+      ]
+    },
+    {
+      "name": "Security: Secrets",
+      "status": "completed",
+      "conclusion": "skipped",
+      "started_at": null,
+      "completed_at": null,
+      "steps": []
+    },
+    {
+      "name": "CI timing",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-19T06:50:00Z",
+      "completed_at": null,
+      "steps": []
+    }
+  ]
+}

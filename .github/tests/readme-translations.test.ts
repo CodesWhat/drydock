@@ -102,8 +102,8 @@ describe.each(translatedReadmes)('%s', (readme) => {
   });
 
   test('carries the security and SQLite RC migration warnings', () => {
-    expect(content.match(/^> \[!WARNING\]$/gm)).toHaveLength(3);
-    expect(content).toContain('1.8.0-rc.2');
+    expect(content.match(/^> \[!WARNING\]$/gm)).toHaveLength(2);
+    expect(content).toContain('1.8.0-rc.3');
     expect(content).toContain('SQLite');
     expect(content).toContain('`401`');
     expect(content).toContain('`503`');

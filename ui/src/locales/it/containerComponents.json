@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Il progetto, il servizio o il file Compose non corrisponde a questo container.",
         "labelScope": "Escluso dalle etichette di inclusione o esclusione dd.action/dd.notification di questo container."
       },
+      "notificationSkips": "Notifiche",
+      "notificationSkipReason": {
+        "rule-disabled": "Saltata: la regola di notifica è disattivata per questo trigger.",
+        "threshold-not-met": "Saltata: l'aggiornamento è sotto la soglia di questo trigger.",
+        "trigger-excluded": "Saltata: le etichette di questo container escludono questo trigger.",
+        "once-already-sent": "Saltata: questo aggiornamento è già stato notificato.",
+        "recently-applied": "Saltata: l'aggiornamento è stato appena applicato, in attesa della conferma del watcher.",
+        "digest-buffered": "Trattenuta per il prossimo riepilogo."
+      },
       "backupsRollback": "Backup e rollback",
       "rollingBack": "Rollback in corso...",
       "rollbackLatest": "Rollback ultimo",

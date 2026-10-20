@@ -46,16 +46,36 @@ class Gitlab<
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['token']);
+    return this.maskFields(['token']);
   }
 
   /**
-   * Return true if image has no registry url.
+   * Return true if the image registry host equals the configured registry host.
    * @param image the image
    * @returns {boolean}
    */
   match(image) {
-    return this.configuration.url.includes(image.registry.url);
+    const imageRegistryUrl = image?.registry?.url;
+    if (typeof imageRegistryUrl !== 'string' || typeof this.configuration?.url !== 'string') {
+      return false;
+    }
+    const configuredHost = Gitlab.getHostAndPort(this.configuration.url);
+    return (
+      configuredHost !== undefined && configuredHost === Gitlab.getHostAndPort(imageRegistryUrl)
+    );
+  }
+
+  /**
+   * Normalize a registry URL-like value into a lowercase host:port (default ports dropped).
+   * Exact equality on this value is what keeps a lookalike host from receiving credentials.
+   */
+  private static getHostAndPort(value: string): string | undefined {
+    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      return new URL(withProtocol).host.toLowerCase();
+    } catch {
+      return undefined;
+    }
   }
 
   /**

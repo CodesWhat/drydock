@@ -18,11 +18,17 @@ interface CustomCoverageConfig {
   thresholds: Record<'src/**/*.ts' | 'src/**/*.vue', CoverageThresholds>;
 }
 
+// Coverage globs are matched against absolute paths, so a bare 'src/**' also matches
+// ui/tests/helpers when the checkout itself lives under a directory named src.
+// Anchoring the includes to this directory keeps the gate independent of the checkout path.
+const uiRoot = fileURLToPath(new URL('.', import.meta.url)).replace(/\/$/, '');
+const escapedUiRoot = uiRoot.replace(/[\\()[\]{}!*?+@|]/g, '\\$&');
+
 const coverageConfig: CustomCoverageConfig = {
   provider: 'custom',
   customProviderModule: './vitest.coverage-provider.ts',
   reporter: ['text', 'lcov', 'html', 'json-summary'],
-  include: ['src/**/*.ts', 'src/**/*.vue'],
+  include: [`${escapedUiRoot}/src/**/*.ts`, `${escapedUiRoot}/src/**/*.vue`],
   exclude: ['**/*.typecheck.ts', '**/*.d.ts', '**/types/**', '**/node_modules/**'],
   thresholds: {
     'src/**/*.ts': {
