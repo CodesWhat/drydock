@@ -336,6 +336,34 @@ describe('PortwingDockerBridge', () => {
       Object.assign(new Error('timeout of 30000ms exceeded'), { code: 'ECONNABORTED' }),
       504,
     ],
+    [
+      'timeout',
+      Object.assign(new Error('timeout of 30000ms exceeded'), {
+        code: 'ECONNABORTED',
+        requestConnected: true,
+      }),
+      504,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('timeout of 30000ms exceeded'), {
+        code: 'ECONNABORTED',
+        requestConnected: false,
+      }),
+      502,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('getaddrinfo ENOTFOUND timeout-agent.internal'), {
+        code: 'ENOTFOUND',
+      }),
+      502,
+    ],
+    [
+      'agent-unreachable',
+      Object.assign(new Error('connect ETIMEDOUT'), { code: 'ETIMEDOUT' }),
+      502,
+    ],
     ['timeout', new Error('Request abc timed out after 30000ms'), 504],
     [
       'agent-unreachable',
@@ -351,6 +379,18 @@ describe('PortwingDockerBridge', () => {
     ['agent-unreachable', new Error('connection closed'), 502],
     ['bad-upstream-response', new Error('Malformed Docker API response from edge agent'), 502],
     ['bad-upstream-response', Object.assign(new Error('x'), { code: 'ERR_BAD_RESPONSE' }), 502],
+    [
+      'bad-upstream-response',
+      Object.assign(new Error('Parse Error: Invalid character in Content-Length'), {
+        code: 'HPE_INVALID_CONTENT_LENGTH',
+      }),
+      502,
+    ],
+    [
+      'bad-upstream-response',
+      Object.assign(new Error('x'), { cause: { code: 'HPE_INVALID_HEADER_TOKEN' } }),
+      502,
+    ],
     ['transport-failed', new Error('secret upstream detail'), 502],
     ['transport-failed', 'not an error', 502],
   ])(

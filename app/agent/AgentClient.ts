@@ -1,5 +1,6 @@
 import type { KeyObject } from 'node:crypto';
 import fs from 'node:fs';
+import http from 'node:http';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
@@ -299,6 +300,30 @@ function isContainerUpdateAppliedEventPayload(
 
   const containerName = (data as { containerName?: unknown }).containerName;
   return typeof containerName === 'string' && containerName.length > 0;
+}
+
+/**
+ * Axios reports ECONNABORTED for both a connect-phase timeout (agent behind a
+ * firewall that drops packets) and an inactivity timeout after the request was
+ * sent, and the socket state cannot tell them apart once axios destroys it.
+ * Record whether the TCP connection was ever established so callers can.
+ */
+function createConnectTrackingTransport(state: { connected: boolean }) {
+  return {
+    request(options: http.RequestOptions, callback: (res: http.IncomingMessage) => void) {
+      const request = (options.protocol === 'https:' ? https : http).request(options, callback);
+      request.once('socket', (socket) => {
+        if (socket.connecting) {
+          socket.once('connect', () => {
+            state.connected = true;
+          });
+        } else {
+          state.connected = true;
+        }
+      });
+      return request;
+    },
+  };
 }
 
 export class AgentClient {
@@ -698,6 +723,7 @@ export class AgentClient {
     }
 
     const authConfig = this.buildRequestConfig(method, target, body);
+    const connectState = { connected: false };
     const response = await axios({
       ...authConfig,
       method,
@@ -712,7 +738,13 @@ export class AgentClient {
       maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxRedirects: 0,
+      transport: createConnectTrackingTransport(connectState),
       validateStatus: () => true,
+    }).catch((error: unknown) => {
+      if (typeof error === 'object' && error !== null) {
+        (error as { requestConnected?: boolean }).requestConnected = connectState.connected;
+      }
+      throw error;
     });
     return {
       statusCode: response.status,

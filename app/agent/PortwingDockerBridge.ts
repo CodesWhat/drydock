@@ -78,8 +78,11 @@ const UNREACHABLE_ERROR_CODES = new Set([
   'EHOSTUNREACH',
   'ENETUNREACH',
   'EPIPE',
+  'ETIMEDOUT',
   'ERR_NETWORK',
 ]);
+
+const TIMEOUT_ERROR_CODES = new Set(['ECONNABORTED']);
 
 const BAD_RESPONSE_ERROR_CODES = new Set(['ERR_BAD_RESPONSE', 'ERR_FR_MAX_BODY_LENGTH_EXCEEDED']);
 
@@ -101,18 +104,25 @@ function classifyTransportError(error: unknown): PortwingTransportFailureReason 
   const codes = errorCodes(error);
   if (
     /^Malformed Docker API response|^Invalid upstream status|maxContentLength/i.test(message) ||
-    codes.some((code) => BAD_RESPONSE_ERROR_CODES.has(code))
+    codes.some((code) => BAD_RESPONSE_ERROR_CODES.has(code) || code.startsWith('HPE_'))
   ) {
     return 'bad-upstream-response';
   }
-  if (codes.includes('ECONNABORTED') || /timeout|timed out/i.test(message)) {
-    return 'timeout';
-  }
-  if (
-    codes.some((code) => UNREACHABLE_ERROR_CODES.has(code)) ||
-    /connection closed/i.test(message)
-  ) {
+  if (codes.some((code) => UNREACHABLE_ERROR_CODES.has(code))) {
     return 'agent-unreachable';
+  }
+  if (codes.some((code) => TIMEOUT_ERROR_CODES.has(code))) {
+    // AgentClient records whether the TCP connection was ever established. A
+    // timeout before that means the agent never answered, not a slow daemon.
+    return (error as { requestConnected?: unknown }).requestConnected === false
+      ? 'agent-unreachable'
+      : 'timeout';
+  }
+  if (/connection closed/i.test(message)) {
+    return 'agent-unreachable';
+  }
+  if (/timeout|timed out/i.test(message)) {
+    return 'timeout';
   }
   return 'transport-failed';
 }
