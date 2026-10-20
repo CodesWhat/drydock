@@ -1,3 +1,4 @@
+# Needs TLS fixtures first: bash test/generate-tls-fixtures.sh
 services:
   # Nginx reverse proxy — TLS-terminating proxy in front of drydock
   # Simulates the common self-hosted setup (NPM, Traefik, Caddy, etc.)
