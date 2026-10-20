@@ -18,6 +18,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - A controller-to-agent event stream that silently died (half-open connection) left the agent shown as connected until something else failed. Agents now send an SSE comment heartbeat every 15 seconds, and the controller destroys the stream and reconnects after 45 seconds of silence, marking the agent disconnected meanwhile. The watchdog only arms once an agent has sent a heartbeat, so agents older than 1.8.1 are unaffected. (DR-86)
+### Added
+
+- Show why a notification was skipped without turning on debug logging (DR-85). Each notification trigger now remembers the last skip reason per container (`rule-disabled`, `threshold-not-met`, `trigger-excluded`, `once-already-sent`, `recently-applied`, `digest-buffered`), clears it when a notification is sent, and keeps at most 1000 entries in memory. The reasons appear in the container detail Actions tab, as `notificationSkips` on `GET /api/v1/containers/{id}` and `/triggers`, and in the debug dump.
 
 ### Security
 

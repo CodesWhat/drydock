@@ -533,6 +533,11 @@ export const containerPaths = {
               description:
                 'Triggers that do not apply to this container, each with a reason (DR-78).',
             },
+            notificationSkips: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ContainerNotificationSkip' },
+              description: 'Last reason each notification trigger skipped this container (DR-85).',
+            },
           },
           required: ['data', 'total'],
           additionalProperties: true,

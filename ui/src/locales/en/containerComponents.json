@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Compose project, service, or file doesn't match this container.",
         "labelScope": "Excluded by this container's dd.action/dd.notification include or exclude labels."
       },
+      "notificationSkips": "Notifications",
+      "notificationSkipReason": {
+        "rule-disabled": "Skipped: the notification rule is off for this trigger.",
+        "threshold-not-met": "Skipped: the update is below this trigger's threshold.",
+        "trigger-excluded": "Skipped: this container's labels exclude this trigger.",
+        "once-already-sent": "Skipped: already notified for this update.",
+        "recently-applied": "Skipped: the update was just applied, waiting for the watcher to confirm.",
+        "digest-buffered": "Held for the next digest."
+      },
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rolling back...",
       "rollbackLatest": "Rollback Latest",

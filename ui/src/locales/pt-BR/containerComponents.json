@@ -132,6 +132,15 @@
         "structuralIncompatibility": "O projeto, serviço ou arquivo do Compose não corresponde a este contêiner.",
         "labelScope": "Excluído pelas labels de inclusão ou exclusão dd.action/dd.notification deste contêiner."
       },
+      "notificationSkips": "Notificações",
+      "notificationSkipReason": {
+        "rule-disabled": "Ignorada: a regra de notificação está desativada para este gatilho.",
+        "threshold-not-met": "Ignorada: a atualização está abaixo do limite deste gatilho.",
+        "trigger-excluded": "Ignorada: os rótulos deste contêiner excluem este gatilho.",
+        "once-already-sent": "Ignorada: esta atualização já foi notificada.",
+        "recently-applied": "Ignorada: a atualização acabou de ser aplicada, aguardando confirmação do watcher.",
+        "digest-buffered": "Retida para o próximo resumo."
+      },
       "backupsRollback": "Backups e rollback",
       "rollingBack": "Fazendo rollback...",
       "rollbackLatest": "Rollback do mais recente",
