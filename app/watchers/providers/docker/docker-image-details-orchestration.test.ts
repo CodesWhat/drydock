@@ -3024,4 +3024,73 @@ describe('docker image details orchestration module', () => {
       expect(patch).toHaveProperty('dependsOnSource', undefined);
     });
   });
+
+  describe('name refresh after an external recreate (DR-82)', () => {
+    function storedWithName(name: string) {
+      return {
+        id: 'container-1',
+        name,
+        displayName: name,
+        status: 'running',
+        health: 'healthy',
+        details: { ports: [], volumes: [], env: [] },
+        image: {
+          id: 'image-old',
+          name: 'acme/service',
+          registry: { name: 'ghcr', url: 'ghcr.io' },
+          tag: { value: 'latest', semver: false },
+          digest: { repo: 'sha256:old', value: 'sha256:old', watch: false },
+          created: '2025-01-01T00:00:00.000Z',
+        },
+      };
+    }
+
+    test.each(['abc_service_1', '8bf70beac570_service'])(
+      'a cached container stored as %s is persisted under the current Docker name on the next watch',
+      async (generatedName) => {
+        const stored = storedWithName(generatedName);
+        vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+        const updateContainerFields = vi
+          .spyOn(storeContainer, 'updateContainerFields')
+          .mockReturnValue(undefined);
+        const { watcher, inspectContainer } = createWatcher();
+        inspectContainer.mockRejectedValue(new Error('gone'));
+
+        const result = await addImageDetailsToContainerOrchestration(
+          watcher as any,
+          createDockerSummaryContainer({ Names: ['/service'] }),
+          {},
+          createHelpers() as any,
+        );
+
+        expect(result?.name).toBe('service');
+        expect(updateContainerFields).toHaveBeenCalledWith(
+          'container-1',
+          { name: 'service', displayName: 'service' },
+          undefined,
+          { labelOwned: 'declared' },
+        );
+      },
+    );
+
+    test('a rollback-suffixed Docker name does not overwrite the stored name', async () => {
+      const stored = storedWithName('service');
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(stored as any);
+      const updateContainerFields = vi
+        .spyOn(storeContainer, 'updateContainerFields')
+        .mockReturnValue(undefined);
+      const { watcher, inspectContainer } = createWatcher();
+      inspectContainer.mockRejectedValue(new Error('gone'));
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Names: ['/service-old-1700000000000'] }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.name).toBe('service');
+      expect(updateContainerFields).not.toHaveBeenCalled();
+    });
+  });
 });
