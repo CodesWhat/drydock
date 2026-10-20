@@ -132,6 +132,15 @@
         "structuralIncompatibility": "مشروع أو خدمة أو ملف Compose لا يطابق هذه الحاوية.",
         "labelScope": "مستبعدة بواسطة تصنيفات dd.action/dd.notification للتضمين أو الاستبعاد الخاصة بهذه الحاوية."
       },
+      "notificationSkips": "الإشعارات",
+      "notificationSkipReason": {
+        "rule-disabled": "تم التخطي: قاعدة الإشعارات متوقفة لهذا المشغّل.",
+        "threshold-not-met": "تم التخطي: التحديث أقل من حد هذا المشغّل.",
+        "trigger-excluded": "تم التخطي: تسميات هذه الحاوية تستثني هذا المشغّل.",
+        "once-already-sent": "تم التخطي: تم الإشعار بهذا التحديث مسبقًا.",
+        "recently-applied": "تم التخطي: تم تطبيق التحديث للتو، بانتظار تأكيد المراقب.",
+        "digest-buffered": "محتجز للملخص التالي."
+      },
       "backupsRollback": "النسخ الاحتياطية والتراجع",
       "rollingBack": "جارٍ التراجع...",
       "rollbackLatest": "التراجع إلى الأحدث",

@@ -51,6 +51,11 @@ import {
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import {
+  clearNotificationSkip,
+  type NotificationSkipReason,
+  recordNotificationSkip,
+} from '../notification-skips.js';
+import {
   getContainerTriggerFiltersForCategory,
   getTriggerCategoryForType,
 } from '../trigger-category.js';
@@ -934,6 +939,31 @@ class Trigger<
     return getTriggerCategoryForType(this.type);
   }
 
+  /**
+   * DR-85: remember why this notification trigger skipped a container so the debug dump and
+   * the container detail API can show it without DEBUG logging. Action triggers never record:
+   * this answers "why didn't I get a notification", not "why didn't it update".
+   */
+  private recordSkip(
+    container: Container | undefined,
+    reason: NotificationSkipReason,
+    detail?: string,
+  ) {
+    const containerId = container?.id;
+    if (this.getCategory() !== 'notification' || typeof containerId !== 'string' || !containerId) {
+      return;
+    }
+    recordNotificationSkip(this.getId(), containerId, reason, detail);
+  }
+
+  /** The update is gone or applied, so a recorded skip would only mislead. */
+  private clearSkip(container: Container | undefined) {
+    const containerId = container?.id;
+    if (typeof containerId === 'string' && containerId) {
+      clearNotificationSkip(this.getId(), containerId);
+    }
+  }
+
   private isAutomaticActionDispatchBlocked() {
     return this.getCategory() === 'action' && getUpdateMode() !== 'auto';
   }
@@ -1287,6 +1317,7 @@ class Trigger<
     }
 
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
+      this.recordSkip(container, 'rule-disabled', ruleId);
       return false;
     }
 
@@ -1298,6 +1329,7 @@ class Trigger<
     const threshold = (this.configuration.threshold ?? 'all').toLowerCase();
     if (!options.skipThreshold && !Trigger.isThresholdReached(container, threshold)) {
       this.log.debug(`Threshold not reached for ${ruleId} event => ignore`);
+      this.recordSkip(container, 'threshold-not-met', `threshold=${threshold}`);
       return false;
     }
 
@@ -1306,6 +1338,7 @@ class Trigger<
       this.log.debug(
         `Trigger conditions not met for ${ruleId} event => ignore (${mustTriggerDecision.reason})`,
       );
+      this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
       return false;
     }
 
@@ -1434,6 +1467,7 @@ class Trigger<
     const containerIdForHistory =
       typeof container?.id === 'string' && container.id !== '' ? container.id : undefined;
     if (containerIdForHistory) {
+      clearNotificationSkip(this.getId(), containerIdForHistory);
       notificationHistoryStore.clearNotificationsForContainerAndEvent(
         containerIdForHistory,
         'update-available',
@@ -1674,6 +1708,7 @@ class Trigger<
       this.log.debug(
         `Skipping maturity-cleared notification for ${fullName(container)} (already notified for update-available)`,
       );
+      this.recordSkip(container, 'once-already-sent');
       return;
     }
 
@@ -1714,10 +1749,6 @@ class Trigger<
         this.releaseOnceNotificationSlot(container, 'maturity-cleared', reservationToken);
       }
     }
-  }
-
-  private isUpdateAvailableAutoTriggerEnabled() {
-    return this.getUpdateAvailableAutoTriggerDispatchDecision().enabled;
   }
 
   private warnIfDigestRoutingIsSuppressed(
@@ -1779,6 +1810,7 @@ class Trigger<
     if (!containerId) {
       return;
     }
+    clearNotificationSkip(this.getId(), containerId);
     notificationHistoryStore.recordNotification(
       this.getId(),
       containerId,
@@ -1831,6 +1863,7 @@ class Trigger<
       return true;
     }
     if (this.hasAlreadyNotifiedForResult(container, eventKind)) {
+      this.recordSkip(container, 'once-already-sent');
       return false;
     }
     const containerId =
@@ -1842,6 +1875,7 @@ class Trigger<
     }
     const key = `${this.getId()}::${containerId}::${eventKind}::${notificationHistoryStore.computeResultHash(container)}`;
     if (this.inFlightOnceNotificationKeys.has(key)) {
+      this.recordSkip(container, 'once-already-sent', 'in flight');
       return false;
     }
     const token: OnceReservationToken = Symbol(key);
@@ -2095,6 +2129,7 @@ class Trigger<
     this.log.debug(
       `${suppressLogContext} ${matchedKey}: update just applied, waiting for watcher confirmation`,
     );
+    this.recordSkip(container, 'recently-applied');
     return true;
   }
 
@@ -2352,11 +2387,19 @@ class Trigger<
   }
 
   private shouldDispatchUpdateAvailableContainer(container: Container) {
-    return (
-      container.updateAvailable &&
-      Trigger.isThresholdReached(container, this.getSimpleModeThreshold()) &&
-      this.mustTrigger(container)
-    );
+    if (!container.updateAvailable) {
+      return false;
+    }
+    if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      this.recordSkip(container, 'threshold-not-met', `threshold=${this.getSimpleModeThreshold()}`);
+      return false;
+    }
+    const mustTriggerDecision = this.getMustTriggerDecision(container);
+    if (!mustTriggerDecision.allowed) {
+      this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
+      return false;
+    }
+    return true;
   }
 
   private shouldHandleBatchContainerReport(
@@ -2494,12 +2537,14 @@ class Trigger<
       logContainer.debug(
         `Threshold not reached => ignore (threshold=${this.getSimpleModeThreshold()}, updateKind=${container.updateKind?.kind ?? 'unknown'}, semverDiff=${container.updateKind?.semverDiff ?? 'unknown'})`,
       );
+      this.recordSkip(container, 'threshold-not-met', `threshold=${this.getSimpleModeThreshold()}`);
       return;
     }
 
     const mustTriggerDecision = this.getMustTriggerDecision(container);
     if (!mustTriggerDecision.allowed) {
       logContainer.debug(`Trigger conditions not met => ignore (${mustTriggerDecision.reason})`);
+      this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
       return;
     }
 
@@ -2591,6 +2636,7 @@ class Trigger<
     // on the normal auto-enabled path; liftSuppressionIfConfirmed is idempotent.
     if (!containerReport.container.updateAvailable) {
       this.liftSuppressionIfConfirmed(containerReport.container, 'update confirmed');
+      this.clearSkip(containerReport.container);
     }
 
     if (this.isAutomaticActionDispatchBlocked()) {
@@ -2609,6 +2655,9 @@ class Trigger<
       this.log.debug(
         `Skipping update-available notification for ${fullName(containerReport.container)} (${dispatchDecision.reason})`,
       );
+      if (containerReport.container.updateAvailable) {
+        this.recordSkip(containerReport.container, 'rule-disabled', dispatchDecision.reason);
+      }
       return;
     }
 
@@ -2649,7 +2698,13 @@ class Trigger<
    * @returns {Promise<void>}
    */
   async handleContainerReports(emittedReports: ContainerReport[]) {
-    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+    const batchDispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
+    if (!batchDispatchDecision.enabled) {
+      for (const report of emittedReports) {
+        if (report.container.updateAvailable) {
+          this.recordSkip(report.container, 'rule-disabled', batchDispatchDecision.reason);
+        }
+      }
       return;
     }
 
@@ -2667,6 +2722,7 @@ class Trigger<
     for (const report of containerReports) {
       if (!report.container.updateAvailable) {
         this.liftSuppressionIfConfirmed(report.container, 'batch update confirmed');
+        this.clearSkip(report.container);
       }
     }
 
@@ -2843,10 +2899,13 @@ class Trigger<
       // post-update state, so lift the recently-applied guard so future real
       // updates can notify again via the digest path.
       this.liftSuppressionIfConfirmed(container, 'digest update confirmed');
+      this.clearSkip(container);
       return;
     }
 
-    if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+    const digestDispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
+    if (!digestDispatchDecision.enabled) {
+      this.recordSkip(container, 'rule-disabled', digestDispatchDecision.reason);
       return;
     }
     if (this.isAutomaticActionDispatchBlocked()) {
@@ -2877,6 +2936,11 @@ class Trigger<
     }
     try {
       if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+        this.recordSkip(
+          container,
+          'threshold-not-met',
+          `threshold=${this.getSimpleModeThreshold()}`,
+        );
         return;
       }
       const mustTriggerDecision = this.getMustTriggerDecision(container);
@@ -2887,9 +2951,11 @@ class Trigger<
         this.log.debug(
           `Trigger conditions not met for ${containerName} => ignore (${mustTriggerDecision.reason})`,
         );
+        this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
         return;
       }
       this.bufferContainerForDigest(container);
+      this.recordSkip(container, 'digest-buffered');
     } finally {
       // Release the reservation taken by shouldHandleDigestContainerReport()
       // above, whether or not this report was buffered, so the next flush can

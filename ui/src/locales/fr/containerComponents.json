@@ -132,6 +132,15 @@
         "structuralIncompatibility": "Le projet, le service ou le fichier Compose ne correspond pas à ce conteneur.",
         "labelScope": "Exclu par les labels d'inclusion ou d'exclusion dd.action/dd.notification de ce conteneur."
       },
+      "notificationSkips": "Notifications",
+      "notificationSkipReason": {
+        "rule-disabled": "Ignorée : la règle de notification est désactivée pour ce déclencheur.",
+        "threshold-not-met": "Ignorée : la mise à jour est sous le seuil de ce déclencheur.",
+        "trigger-excluded": "Ignorée : les labels de ce conteneur excluent ce déclencheur.",
+        "once-already-sent": "Ignorée : cette mise à jour a déjà été notifiée.",
+        "recently-applied": "Ignorée : la mise à jour vient d'être appliquée, en attente de confirmation du watcher.",
+        "digest-buffered": "Retenue pour le prochain résumé."
+      },
       "backupsRollback": "Backups et rollback",
       "rollingBack": "Rollback en cours...",
       "rollbackLatest": "Rollback du dernier",

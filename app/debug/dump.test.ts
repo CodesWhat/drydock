@@ -73,6 +73,7 @@ vi.mock('./redact.js', () => ({
   redactDebugDump: mockRedactDebugDump,
 }));
 
+import { recordNotificationSkip, resetNotificationSkips } from '../triggers/notification-skips.js';
 import {
   collectDebugDump,
   DEFAULT_RECENT_EVENT_MINUTES,
@@ -691,6 +692,26 @@ describe('debug dump utilities', () => {
       },
     });
     expect(mockRedactDebugDump).toHaveBeenCalledTimes(1);
+  });
+
+  test('collectDebugDump includes the recorded notification skips', async () => {
+    configureFixture();
+    resetNotificationSkips();
+
+    const empty = (await collectDebugDump()) as any;
+    expect(empty.notificationSkips).toEqual({ total: 0, entries: [] });
+
+    recordNotificationSkip('smtp.ops', 'c1', 'threshold-not-met', 'threshold=major-only');
+    const dump = (await collectDebugDump()) as any;
+    resetNotificationSkips();
+
+    expect(dump.notificationSkips.total).toBe(1);
+    expect(dump.notificationSkips.entries[0]).toMatchObject({
+      trigger: 'smtp.ops',
+      containerId: 'c1',
+      reason: 'threshold-not-met',
+      detail: 'threshold=major-only',
+    });
   });
 
   test('collectDebugDump reports the base version and keeps the release candidate as the build', async () => {

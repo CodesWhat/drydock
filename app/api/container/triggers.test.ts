@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
+import {
+  recordNotificationSkip,
+  resetNotificationSkips,
+} from '../../triggers/notification-skips.js';
 import * as requestUpdate from '../../updates/request-update.js';
 import { createTriggerHandlers } from './triggers.js';
 
@@ -281,6 +285,7 @@ describe('api/container/triggers', () => {
             reason: 'labelScope',
           },
         ],
+        notificationSkips: [],
       });
     });
 
@@ -310,6 +315,7 @@ describe('api/container/triggers', () => {
             reason: 'labelScope',
           },
         ],
+        notificationSkips: [],
       });
     });
 
@@ -548,6 +554,23 @@ describe('api/container/triggers', () => {
 
       expect(payload.data).toHaveLength(1);
       expect('resolvedState' in payload.data[0]).toBe(false);
+    });
+  });
+
+  describe('getContainerTriggers — notificationSkips (DR-85)', () => {
+    test('includes the recorded skips for the container alongside the trigger list', async () => {
+      resetNotificationSkips();
+      recordNotificationSkip('slack.notify', 'c1', 'threshold-not-met', 'threshold=major-only');
+      recordNotificationSkip('slack.notify', 'other', 'rule-disabled');
+      const harness = createHarness({ container: { id: 'c1' }, triggerMap: {} });
+
+      const res = await callGetContainerTriggers(harness.handlers);
+      const payload = res.json.mock.calls[0][0];
+      resetNotificationSkips();
+
+      expect(payload.notificationSkips).toEqual([
+        { trigger: 'slack.notify', reason: 'threshold-not-met', at: expect.any(String) },
+      ]);
     });
   });
 

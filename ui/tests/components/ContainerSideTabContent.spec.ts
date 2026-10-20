@@ -139,6 +139,7 @@ const detailTriggers = ref<Array<{ type: string; name: string; agent?: string }>
 const unassociatedTriggers = ref<
   Array<{ id: string; type: string; name: string; agent?: string; reason: string }>
 >([]);
+const notificationSkips = ref<Array<{ trigger: string; reason: string; at: string }>>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -239,6 +240,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     triggersLoading,
     detailTriggers,
     unassociatedTriggers,
+    notificationSkips,
     getTriggerKey: (trigger: { type: string; name: string }) => `${trigger.type}.${trigger.name}`,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -409,6 +411,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     triggersLoading.value = false;
     detailTriggers.value = [];
     unassociatedTriggers.value = [];
+    notificationSkips.value = [];
     triggerRunInProgress.value = null;
     triggerMessage.value = null;
     triggerError.value = null;
@@ -908,6 +911,33 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.find('[data-unassociated-trigger-key="docker.deploy"] button').exists()).toBe(
       false,
     );
+  });
+
+  it('lists the last skip reason per notification trigger in plain words (DR-85)', () => {
+    activeDetailTab.value = 'actions';
+    notificationSkips.value = [
+      { trigger: 'smtp.ops', reason: 'once-already-sent', at: '2026-10-19T10:00:00.000Z' },
+      { trigger: 'slack.team', reason: 'digest-buffered', at: '2026-10-19T10:05:00.000Z' },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Notifications');
+    const smtp = wrapper.get('[data-notification-skip-key="smtp.ops"]');
+    expect(smtp.text()).toContain('smtp.ops');
+    expect(smtp.text()).toContain('Skipped: already notified for this update.');
+    expect(smtp.attributes('title')).toBe('2026-10-19T10:00:00.000Z');
+    expect(wrapper.get('[data-notification-skip-key="slack.team"]').text()).toContain(
+      'Held for the next digest.',
+    );
+  });
+
+  it('renders no notification skip section when nothing was skipped (DR-85)', () => {
+    activeDetailTab.value = 'actions';
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="notification-skips"]').exists()).toBe(false);
   });
 
   it('renders populated overview rows for ports, volumes, runtime warnings, and hook variables', () => {

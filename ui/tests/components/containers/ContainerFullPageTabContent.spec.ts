@@ -128,6 +128,7 @@ const triggersLoading = ref(false);
 const detailTriggers = ref<Trigger[]>([]);
 type UnassociatedTrigger = Trigger & { id: string; reason: string };
 const unassociatedTriggers = ref<UnassociatedTrigger[]>([]);
+const notificationSkips = ref<Array<{ trigger: string; reason: string; at: string }>>([]);
 const triggerRunInProgress = ref<string | null>(null);
 const triggerMessage = ref<string | null>(null);
 const triggerError = ref<string | null>(null);
@@ -267,6 +268,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     triggersLoading,
     detailTriggers,
     unassociatedTriggers,
+    notificationSkips,
     getTriggerKey: mockGetTriggerKey,
     triggerRunInProgress,
     runAssociatedTrigger: mockRunAssociatedTrigger,
@@ -366,6 +368,7 @@ function resetState() {
   triggersLoading.value = false;
   detailTriggers.value = [];
   unassociatedTriggers.value = [];
+  notificationSkips.value = [];
   triggerRunInProgress.value = null;
   triggerMessage.value = null;
   triggerError.value = null;
@@ -967,6 +970,25 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.find('[data-unassociated-trigger-key="portainer.update"] button').exists()).toBe(
       false,
     );
+  });
+
+  it('lists the last skip reason per notification trigger in plain words (DR-85)', () => {
+    notificationSkips.value = [
+      { trigger: 'smtp.ops', reason: 'threshold-not-met', at: '2026-10-19T10:00:00.000Z' },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Notifications');
+    const row = wrapper.get('[data-notification-skip-key="smtp.ops"]');
+    expect(row.text()).toContain("Skipped: the update is below this trigger's threshold.");
+    expect(row.attributes('title')).toBe('2026-10-19T10:00:00.000Z');
+  });
+
+  it('renders no notification skip section when nothing was skipped (DR-85)', () => {
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="notification-skips"]').exists()).toBe(false);
   });
 
   it('renders action-tab status/error messages and running-state branches', () => {

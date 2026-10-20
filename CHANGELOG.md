@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Show why a notification was skipped without turning on debug logging (DR-85). Each notification trigger now remembers the last skip reason per container (`rule-disabled`, `threshold-not-met`, `trigger-excluded`, `once-already-sent`, `recently-applied`, `digest-buffered`), clears it when a notification is sent, and keeps at most 1000 entries in memory. The reasons appear in the container detail Actions tab, as `notificationSkips` on `GET /api/v1/containers/{id}` and `/triggers`, and in the debug dump.
+
 ### Security
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.

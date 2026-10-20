@@ -5,6 +5,7 @@ import {
   resolveForTrigger,
 } from '../../model/action-policy.js';
 import type { Container } from '../../model/container.js';
+import { getNotificationSkipsForContainer } from '../../triggers/notification-skips.js';
 import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
@@ -243,6 +244,7 @@ function createGetContainerTriggersHandler({
       data: associatedTriggers,
       total: associatedTriggers.length,
       unassociatedTriggers,
+      notificationSkips: getNotificationSkipsForContainer(container.id),
     });
   };
 }
