@@ -14,6 +14,7 @@ import {
   withContainerUpdateLocks,
 } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
+import { buildContainerUpdateVersionFields } from '../docker/ContainerUpdateExecutor.js';
 import {
   attachCreatedContainerCandidate,
   cleanupCreatedContainerCandidate,
@@ -2218,6 +2219,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
+    this.recordComposeOperationDetails(container, context, runtimeContext);
     const composeUpdateOptions = this.buildPerformContainerUpdateOptions(
       requiredComposeCtx,
       runtimeContext,
@@ -2240,6 +2242,30 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     );
 
     return !this.configuration.dryrun;
+  }
+
+  /**
+   * The compose path never goes through the docker executor, which is what
+   * stamps the trigger name, versions and target image on an operation row.
+   * Stamp the same values here so the record matches the docker action's.
+   */
+  private recordComposeOperationDetails(
+    container,
+    context,
+    runtimeContext: ComposeRuntimeContext,
+  ): void {
+    const operationId = getRequestedOperationId(container, runtimeContext);
+    if (!operationId || typeof context?.newImage !== 'string') {
+      return;
+    }
+    const operation = updateOperationStore.getOperationById(operationId);
+    if (operation?.status !== 'queued' && operation?.status !== 'in-progress') {
+      return;
+    }
+    updateOperationStore.updateOperation(operationId, {
+      triggerName: this.getId(),
+      ...buildContainerUpdateVersionFields(container, context.newImage),
+    });
   }
 
   buildPerformContainerUpdateOptions(
@@ -2777,13 +2803,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
 
   /**
    * Terminalize every operation caught up in a compose-file-once preflight
-   * failure. An API-requested update already has an operation row —
-   * request-update.ts pre-creates it, with an id this can look up via
-   * `getRequestedOperationId` — but a scheduled (cron-driven) auto-update
-   * never went through that path, so it has neither a row nor an id to find
-   * one with. Without inserting a row for it here, `markOperationTerminal`
-   * has nothing to terminalize and the failed lifecycle event never fires
-   * for it, leaving only the audit record the preflight itself wrote (DR-36).
+   * failure. Every normal flow already has an operation row —
+   * request-update.ts inserts it at admission and passes its id down, which
+   * this looks up via `getRequestedOperationId`. That covers API requests and
+   * scheduled single auto-updates and cron/digest batches, which Trigger.ts
+   * enqueues through the same admission. Only a direct compose invocation
+   * with no id (no normal flow) has no row to find. Without inserting one for
+   * it here, `markOperationTerminal` has nothing to terminalize and the
+   * failed lifecycle event never fires for it, leaving only the audit record
+   * the preflight itself wrote (DR-36).
    *
    * Only the service whose preflight step actually threw (tagged via
    * `tagComposeFileOncePreflightError`) is genuinely at fault, so it alone
