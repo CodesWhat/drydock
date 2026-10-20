@@ -1898,3 +1898,37 @@ jobs:
           path: artifacts/load-test/stress/*.json
           if-no-files-found: warn
           retention-days: 30
+
+  ci-timing:
+    # Advisory only: never a required check. Publishes job and step timings to
+    # the run summary and compares the branch's median run time week over week.
+    name: "CI timing"
+    if: always()
+    # release-cut waits on a successful CI Verify run, so a checkout or network
+    # blip here must not turn the whole run red.
+    continue-on-error: true
+    needs: [security-actions, secrets, changes, codeql, fuzz, dependency-review, lint, test, web, build, grype-image, dast-zap-baseline, e2e, load-test-ci, load-test-behavior]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/ci-timing-summary.mjs
+
+      - name: Publish timing summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          TIMING_BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: node scripts/ci-timing-summary.mjs
