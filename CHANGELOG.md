@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Record a `hook-label-ignored` audit entry (status `info`) when Drydock ignores a `dd.hook.*` label baked into an image, once per update per container. It lists the container and the ignored label keys, never the command values, and says the labels come from the image and `DD_HOOKS_ALLOW_IMAGE_LABELS` is not set. Before this the refusal only reached the log as a warning. Hook execution is unchanged.
+
 ### Security
 
 - A two-factor recovery-code sign-in now makes the user review their API keys. When any active key exists, the session is flagged (`apiKeyReviewPending` on `GET /auth/user`) and the UI holds it on the API Keys view, with a banner and each key's creator, creation time and last use, until the user chooses Done reviewing (`POST /auth/api-key-review/acknowledge`, session-only). Keys are not revoked automatically, and revoking one does not release the review. Previously a key minted from a stolen session survived the recovery login's session sweep without any prompt.

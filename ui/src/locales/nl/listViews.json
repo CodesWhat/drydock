@@ -87,6 +87,7 @@
       "hook-post-success": "Post-hook geslaagd",
       "hook-pre-failed": "Pre-hook mislukt",
       "hook-post-failed": "Post-hook mislukt",
+      "hook-label-ignored": "Hook-label genegeerd",
       "connected": "Verbonden",
       "closed": "Gesloten",
       "update-available": "Update beschikbaar",

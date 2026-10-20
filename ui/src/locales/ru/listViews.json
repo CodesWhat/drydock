@@ -87,6 +87,7 @@
       "hook-post-success": "Завершающий хук выполнен",
       "hook-pre-failed": "Предварительный хук не выполнен",
       "hook-post-failed": "Завершающий хук не выполнен",
+      "hook-label-ignored": "Метка хука проигнорирована",
       "connected": "Подключено",
       "closed": "Закрыто",
       "update-available": "Доступно обновление",

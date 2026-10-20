@@ -87,6 +87,7 @@
       "hook-post-success": "事後フック成功",
       "hook-pre-failed": "事前フック失敗",
       "hook-post-failed": "事後フック失敗",
+      "hook-label-ignored": "フックラベルを無視",
       "connected": "接続済み",
       "closed": "クローズ",
       "update-available": "更新利用可能",
