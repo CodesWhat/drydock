@@ -772,6 +772,9 @@ function hasContainerChangedWithSecurityHashes(
   if (getUpdatePolicyComparisonKey(existing) !== getUpdatePolicyComparisonKey(incoming)) {
     return true;
   }
+  if (getReleaseNotesComparisonKey(existing) !== getReleaseNotesComparisonKey(incoming)) {
+    return true;
+  }
   if (getLabelOwnedComparisonKey(existing) !== getLabelOwnedComparisonKey(incoming)) {
     return true;
   }
@@ -779,6 +782,19 @@ function hasContainerChangedWithSecurityHashes(
     return true;
   }
   return false;
+}
+
+/**
+ * Release notes can land after the scan that persisted the result (the watcher stops
+ * waiting on a slow provider), and the UI only learns about them from a container-updated
+ * event, so they count as a change.
+ */
+function getReleaseNotesComparisonKey(containerToCompare: container.Container): string {
+  return JSON.stringify([
+    containerToCompare.sourceRepo ?? null,
+    containerToCompare.currentReleaseNotes ?? null,
+    containerToCompare.result?.releaseNotes ?? null,
+  ]);
 }
 
 /**

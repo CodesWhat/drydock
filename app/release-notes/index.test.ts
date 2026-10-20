@@ -33,7 +33,9 @@ import {
   toContainerReleaseNotes,
   truncateReleaseNotesBody,
 } from './index.js';
-import { _resetGithubProviderCooldownForTests } from './providers/GithubProvider.js';
+import GithubProvider, {
+  _resetGithubProviderCooldownForTests,
+} from './providers/GithubProvider.js';
 
 describe('release-notes service', () => {
   beforeEach(() => {
@@ -1152,6 +1154,55 @@ describe('release-notes service', () => {
     expect(second?.title).toBe('Cached Release');
     // fetchByTag must only have been called once — second call served from cache
     expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+  });
+
+  test('in-flight lookups for the same provider+repo+tag share one request and release afterwards', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    let resolveRequest!: (value: unknown) => void;
+    mockAxiosGet.mockImplementationOnce(() => new Promise((resolve) => (resolveRequest = resolve)));
+    const container = {
+      labels: {},
+      image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+      result: { tag: '3.0.0' },
+    } as any;
+    const imageLabels = { 'org.opencontainers.image.source': 'https://github.com/acme/shared' };
+
+    const first = getReleaseNotesForTag(container, '3.0.0', imageLabels);
+    const second = getReleaseNotesForTag({ ...container }, '3.0.0', imageLabels);
+    await vi.waitFor(() => expect(mockAxiosGet).toHaveBeenCalled());
+    resolveRequest({
+      data: {
+        tag_name: 'v3.0.0',
+        name: 'Shared',
+        body: 'notes',
+        html_url: 'https://github.com/acme/shared/releases/tag/v3.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    expect((await first)?.title).toBe('Shared');
+    expect((await second)?.title).toBe('Shared');
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed in-flight lookup is not remembered, so the next call retries', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    const fetchByTag = vi
+      .spyOn(GithubProvider.prototype, 'fetchByTag')
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(undefined);
+    const container = {
+      labels: {},
+      image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+      result: { tag: '3.0.0' },
+    } as any;
+    const imageLabels = { 'org.opencontainers.image.source': 'https://github.com/acme/flaky' };
+
+    await expect(getReleaseNotesForTag(container, '3.0.0', imageLabels)).rejects.toThrow('boom');
+    await getReleaseNotesForTag(container, '3.0.0', imageLabels);
+
+    expect(fetchByTag).toHaveBeenCalledTimes(2);
+    fetchByTag.mockRestore();
   });
 
   // -----------------------------------------------------------------------

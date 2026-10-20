@@ -6397,6 +6397,32 @@ describe('updateContainerFields (roadmap 7-STORE slice 9)', () => {
     expect(emitted).not.toHaveBeenCalled();
   });
 
+  test('emits containerUpdated once when only release notes change', () => {
+    seedContainer(
+      createContainerFixture({ id: 'notes-only', status: 'running', result: { tag: '1.4.0' } }),
+    );
+    const emitted = vi.spyOn(event, 'emitContainerUpdated');
+    const notes = {
+      title: 'v1.4.0',
+      body: 'notes',
+      url: 'https://x',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      provider: 'github',
+    } as const;
+
+    container.updateContainerFields('notes-only', { sourceRepo: 'github.com/o/r' });
+    container.updateContainerFields('notes-only', { currentReleaseNotes: notes });
+    container.updateContainerFields('notes-only', {
+      result: { tag: '1.4.0', releaseNotes: notes } as any,
+    });
+    // Same notes again: nothing changed, no extra event.
+    container.updateContainerFields('notes-only', {
+      result: { tag: '1.4.0', releaseNotes: { ...notes } } as any,
+    });
+
+    expect(emitted).toHaveBeenCalledTimes(3);
+  });
+
   test('emits a health transition independent of other patched fields', () => {
     seedContainer(
       createContainerFixture({
