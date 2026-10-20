@@ -11,6 +11,7 @@ import * as notificationHistoryStore from '../../store/notification-history.js';
 import {
   getNotificationSkipsForContainer,
   getNotificationSkipsSnapshot,
+  recordNotificationSkip,
   resetNotificationSkips,
 } from '../notification-skips.js';
 import Trigger from './Trigger.js';
@@ -447,6 +448,127 @@ describe('event dispatch', () => {
 
     await trigger.handleMaturityGateClearedEvent(payload(container));
     await vi.waitFor(() => expect(reasonFor(trigger, 'c1')).toBeUndefined());
+  });
+});
+
+describe('skip lifecycle', () => {
+  const failed = (container: any) => ({ containerName: container.name, error: 'boom', container });
+
+  test('update-failed: disabled records a skip, re-enabled delivery clears it', async () => {
+    const trigger = createTrigger('slack', 'simple');
+    const sendSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const container = createContainer('c1');
+
+    vi.mocked(notificationStore.isTriggerEnabledForRule).mockReturnValue(false);
+    await trigger.handleContainerUpdateFailedEvent(failed(container));
+    expect(reasonFor(trigger, 'c1')).toMatchObject({ reason: 'rule-disabled' });
+
+    vi.mocked(notificationStore.isTriggerEnabledForRule).mockReturnValue(true);
+    await trigger.handleContainerUpdateFailedEvent(failed(container));
+    await vi.waitFor(() => expect(sendSpy).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(reasonFor(trigger, 'c1')).toBeUndefined());
+  });
+
+  test('update-failed in batch mode: a delivered flush clears the skip', async () => {
+    const trigger = createTrigger('slack', 'batch');
+    const batchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+    const container = createContainer('c1');
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled', 'update-failed');
+
+    await trigger.flushEventBatchDispatch('update-failed', [container]);
+
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(reasonFor(trigger, 'c1')).toBeUndefined();
+  });
+
+  test('a failed lifecycle delivery keeps the skip', async () => {
+    const trigger = createTrigger('slack', 'simple');
+    vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('smtp down'));
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled', 'update-failed');
+
+    await trigger.handleContainerUpdateFailedEvent(failed(createContainer('c1')));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(reasonFor(trigger, 'c1')).toBeDefined();
+  });
+
+  test('a successful outbox retry clears the skip', async () => {
+    const trigger = createTrigger('slack', 'simple');
+    vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled', 'update-failed');
+
+    await trigger.dispatchOutboxEntry({
+      id: 'o1',
+      payload: { container: createContainer('c1') },
+    } as any);
+
+    expect(reasonFor(trigger, 'c1')).toBeUndefined();
+  });
+
+  test('a failed outbox retry keeps the skip', async () => {
+    const trigger = createTrigger('slack', 'simple');
+    vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('still down'));
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled', 'update-failed');
+
+    await expect(
+      trigger.dispatchOutboxEntry({
+        id: 'o1',
+        payload: { container: createContainer('c1') },
+      } as any),
+    ).rejects.toThrow('still down');
+
+    expect(reasonFor(trigger, 'c1')).toBeDefined();
+  });
+
+  test('batch mode: a disabled rule still clears the skip of a container with no update', async () => {
+    const trigger = createTrigger('slack', 'batch');
+    vi.mocked(notificationStore.getTriggerDispatchDecisionForRule).mockReturnValue({
+      enabled: false,
+      reason: 'excluded-from-allow-list',
+    } as any);
+    recordNotificationSkip(trigger.getId(), 'c2', 'threshold-not-met');
+
+    await trigger.handleContainerReports([
+      report(createContainer('c1')),
+      report(createContainer('c2', { updateAvailable: false })),
+    ]);
+
+    expect(reasonFor(trigger, 'c2')).toBeUndefined();
+    expect(reasonFor(trigger, 'c1')).toMatchObject({ reason: 'rule-disabled' });
+  });
+
+  test('deregistering a trigger drops its skips and refuses late ones, re-init allows them', async () => {
+    const trigger = createTrigger('slack', 'simple', { auto: false });
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled');
+    recordNotificationSkip('smtp.other', 'c1', 'rule-disabled');
+
+    await trigger.deregisterComponent();
+    recordNotificationSkip(trigger.getId(), 'c2', 'rule-disabled');
+    expect(getNotificationSkipsSnapshot().map((skip) => skip.trigger)).toEqual(['smtp.other']);
+
+    await trigger.init();
+    recordNotificationSkip(trigger.getId(), 'c2', 'rule-disabled');
+    expect(reasonFor(trigger, 'c2')).toBeDefined();
+    await trigger.deregisterComponent();
+  });
+
+  test('removing a container drops its skips for this trigger', async () => {
+    let onRemoved: ((container: any) => void) | undefined;
+    const unregister = vi.fn();
+    vi.mocked(event.registerContainerRemoved).mockImplementation(((handler: any) => {
+      onRemoved = handler;
+      return unregister;
+    }) as any);
+    const trigger = createTrigger('slack', 'simple', { auto: false });
+    await trigger.init();
+    recordNotificationSkip(trigger.getId(), 'c1', 'rule-disabled');
+    recordNotificationSkip(trigger.getId(), 'c2', 'rule-disabled');
+
+    onRemoved?.(createContainer('c1'));
+    expect(getNotificationSkipsSnapshot().map((skip) => skip.containerId)).toEqual(['c2']);
+
+    await trigger.deregisterComponent();
+    expect(unregister).toHaveBeenCalledTimes(1);
   });
 });
 

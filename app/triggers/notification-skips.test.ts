@@ -1,7 +1,10 @@
 import {
   clearNotificationSkip,
+  clearNotificationSkipsForContainer,
+  clearNotificationSkipsForTrigger,
   getNotificationSkipsForContainer,
   getNotificationSkipsSnapshot,
+  markNotificationTriggerRegistered,
   NOTIFICATION_SKIP_MAX_DETAIL_LENGTH,
   NOTIFICATION_SKIP_MAX_ENTRIES,
   recordNotificationSkip,
@@ -70,5 +73,36 @@ describe('notification skip store', () => {
     expect(snapshot.some((s) => s.containerId === 'c1')).toBe(false);
     expect(snapshot.some((s) => s.containerId === 'c0')).toBe(true);
     expect(snapshot.at(-1)?.containerId).toBe('overflow');
+  });
+
+  test('clearing a container drops its entries for every trigger', () => {
+    recordNotificationSkip('smtp.a', 'c1', 'rule-disabled');
+    recordNotificationSkip('slack.b', 'c1', 'rule-disabled');
+    recordNotificationSkip('smtp.a', 'c2', 'rule-disabled');
+
+    clearNotificationSkipsForContainer('c1');
+
+    expect(getNotificationSkipsSnapshot().map((skip) => skip.containerId)).toEqual(['c2']);
+  });
+
+  test('clearing a trigger drops its entries and refuses new ones until it registers again', () => {
+    recordNotificationSkip('smtp.a', 'c1', 'rule-disabled');
+    recordNotificationSkip('slack.b', 'c1', 'rule-disabled');
+
+    clearNotificationSkipsForTrigger('smtp.a');
+    recordNotificationSkip('smtp.a', 'c2', 'rule-disabled');
+    expect(getNotificationSkipsForContainer('c1').map((skip) => skip.trigger)).toEqual(['slack.b']);
+    expect(getNotificationSkipsForContainer('c2')).toEqual([]);
+
+    markNotificationTriggerRegistered('smtp.a');
+    recordNotificationSkip('smtp.a', 'c2', 'rule-disabled');
+    expect(getNotificationSkipsForContainer('c2')).toHaveLength(1);
+  });
+
+  test('reset also forgets removed triggers', () => {
+    clearNotificationSkipsForTrigger('smtp.a');
+    resetNotificationSkips();
+    recordNotificationSkip('smtp.a', 'c1', 'rule-disabled');
+    expect(getNotificationSkipsSnapshot()).toHaveLength(1);
   });
 });

@@ -52,6 +52,8 @@ import {
 } from '../../updates/request-update.js';
 import {
   clearNotificationSkip,
+  clearNotificationSkipsForTrigger,
+  markNotificationTriggerRegistered,
   type NotificationSkipReason,
   recordNotificationSkip,
 } from '../notification-skips.js';
@@ -741,6 +743,7 @@ class Trigger<
   private unregisterContainerHealthTransition?: () => void;
   private unregisterMaturityGateCleared?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
+  private unregisterContainerRemovedForSkips?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   /**
    * Keys of containers whose update was just applied but whose watcher report
@@ -957,7 +960,7 @@ class Trigger<
   }
 
   /** The update is gone or applied, so a recorded skip would only mislead. */
-  private clearSkip(container: Container | undefined) {
+  private clearSkip(container: { id?: string } | undefined) {
     const containerId = container?.id;
     if (typeof containerId === 'string' && containerId) {
       clearNotificationSkip(this.getId(), containerId);
@@ -1254,6 +1257,9 @@ class Trigger<
     container: Container,
     reservationToken: OnceReservationToken | undefined,
   ) {
+    // Every delivered lifecycle event (update-failed, security, health...) retires a stale
+    // skip, not only maturity-cleared, which is the only one that records history below.
+    this.clearSkip(container);
     if (ruleId !== 'maturity-cleared') {
       return;
     }
@@ -1427,6 +1433,7 @@ class Trigger<
       throw new Error(`Outbox entry ${entry.id} missing container payload`);
     }
     await this.trigger(container);
+    this.clearSkip(container);
   }
 
   async handleContainerUpdateAppliedEvent(payload: ContainerUpdateAppliedEventPayload) {
@@ -2698,16 +2705,6 @@ class Trigger<
    * @returns {Promise<void>}
    */
   async handleContainerReports(emittedReports: ContainerReport[]) {
-    const batchDispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
-    if (!batchDispatchDecision.enabled) {
-      for (const report of emittedReports) {
-        if (report.container.updateAvailable) {
-          this.recordSkip(report.container, 'rule-disabled', batchDispatchDecision.reason);
-        }
-      }
-      return;
-    }
-
     // Strip Docker recreate alias prefixes before any trigger processing
     for (const report of emittedReports) {
       Trigger.canonicalizeReportName(report);
@@ -2724,6 +2721,18 @@ class Trigger<
         this.liftSuppressionIfConfirmed(report.container, 'batch update confirmed');
         this.clearSkip(report.container);
       }
+    }
+
+    // After the no-update cleanup above, as in simple mode: a disabled rule must still drop
+    // the skip of a container whose update is gone.
+    const batchDispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
+    if (!batchDispatchDecision.enabled) {
+      for (const report of containerReports) {
+        if (report.container.updateAvailable) {
+          this.recordSkip(report.container, 'rule-disabled', batchDispatchDecision.reason);
+        }
+      }
+      return;
     }
 
     if (this.isAutomaticActionDispatchBlocked()) {
@@ -3549,6 +3558,11 @@ class Trigger<
    */
   async init() {
     await this.initTrigger();
+    markNotificationTriggerRegistered(this.getId());
+    // A removed container takes its recorded skips with it.
+    this.unregisterContainerRemovedForSkips = event.registerContainerRemoved((container) => {
+      this.clearSkip(container);
+    });
     if (this.getAutoMode() !== 'none') {
       const autoMode = this.getAutoMode();
       const normalizedMode = Trigger.normalizeMode(this.configuration.mode);
@@ -3684,6 +3698,10 @@ class Trigger<
   }
 
   async deregisterComponent(): Promise<void> {
+    this.unregisterContainerRemovedForSkips?.();
+    this.unregisterContainerRemovedForSkips = undefined;
+    clearNotificationSkipsForTrigger(this.getId());
+
     this.unregisterContainerReport?.();
     this.unregisterContainerReport = undefined;
 

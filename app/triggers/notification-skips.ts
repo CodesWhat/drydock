@@ -31,6 +31,9 @@ export const NOTIFICATION_SKIP_MAX_ENTRIES = 1000;
 export const NOTIFICATION_SKIP_MAX_DETAIL_LENGTH = 160;
 
 const skips = new Map<string, NotificationSkip>();
+// Triggers that were deregistered and not registered again. A late async skip from one of
+// them is dropped instead of recorded, so a removed trigger cannot leave an orphan entry.
+const removedTriggers = new Set<string>();
 
 function skipKey(trigger: string, containerId: string): string {
   return `${trigger}\u0000${containerId}`;
@@ -42,6 +45,9 @@ export function recordNotificationSkip(
   reason: NotificationSkipReason,
   detail?: string,
 ): void {
+  if (removedTriggers.has(trigger)) {
+    return;
+  }
   const key = skipKey(trigger, containerId);
   // Delete first so a re-recorded pair moves to the newest position and the oldest
   // entry (first in insertion order) is always the one evicted at the cap.
@@ -59,6 +65,30 @@ export function recordNotificationSkip(
 
 export function clearNotificationSkip(trigger: string, containerId: string): void {
   skips.delete(skipKey(trigger, containerId));
+}
+
+/** Drop every entry for a container, e.g. when the container is removed from the store. */
+export function clearNotificationSkipsForContainer(containerId: string): void {
+  for (const [key, entry] of skips) {
+    if (entry.containerId === containerId) {
+      skips.delete(key);
+    }
+  }
+}
+
+/** Drop every entry for a trigger and refuse new ones until it registers again. */
+export function clearNotificationSkipsForTrigger(trigger: string): void {
+  removedTriggers.add(trigger);
+  for (const [key, entry] of skips) {
+    if (entry.trigger === trigger) {
+      skips.delete(key);
+    }
+  }
+}
+
+/** A (re-)registered trigger may record skips again. */
+export function markNotificationTriggerRegistered(trigger: string): void {
+  removedTriggers.delete(trigger);
 }
 
 /** Last skip per trigger for one container, shaped for the container detail API. */
@@ -81,4 +111,5 @@ export function getNotificationSkipsSnapshot(): NotificationSkip[] {
 
 export function resetNotificationSkips(): void {
   skips.clear();
+  removedTriggers.clear();
 }

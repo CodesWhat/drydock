@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockResponse } from '../../test/helpers.js';
 import {
+  getNotificationSkipsForContainer,
   recordNotificationSkip,
   resetNotificationSkips,
 } from '../../triggers/notification-skips.js';
@@ -936,6 +937,25 @@ describe('api/container/triggers', () => {
       expect(trigger.trigger).toHaveBeenCalledWith(harness.container);
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({});
+    });
+
+    test('a manual send clears the recorded skip, a failed one keeps it', async () => {
+      resetNotificationSkips();
+      recordNotificationSkip('slack.notify', 'c1', 'rule-disabled');
+      const trigger = createTrigger({
+        trigger: vi.fn().mockRejectedValueOnce(new Error('down')).mockResolvedValueOnce(undefined),
+      });
+      const harness = createHarness({
+        container: { id: 'c1' },
+        triggerMap: { 'slack.notify': trigger },
+      });
+      const params = { id: 'c1', triggerType: 'slack', triggerName: 'notify' };
+
+      await callRunTrigger(harness.handlers, params);
+      expect(getNotificationSkipsForContainer('c1')).toHaveLength(1);
+
+      await callRunTrigger(harness.handlers, params);
+      expect(getNotificationSkipsForContainer('c1')).toHaveLength(0);
     });
 
     test('returns 500 when trigger execution throws', async () => {

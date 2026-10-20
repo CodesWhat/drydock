@@ -6,6 +6,7 @@ import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
+import { clearNotificationSkip } from '../triggers/notification-skips.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
@@ -247,6 +248,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
       `Running trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
     );
     await triggerToRun.trigger(containerToTrigger);
+    clearNotificationSkip(`${triggerType}.${triggerName}`, containerToTrigger.id);
     log.info(
       `Trigger executed with success (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(JSON.stringify(containerToTrigger), 500)})`,
     );
