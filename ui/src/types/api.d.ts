@@ -39,6 +39,8 @@ export interface ApiAgent {
   lastSeen?: string;
   logLevel?: string;
   pollInterval?: string;
+  /** `hook-labels-trusted`: agent predates 1.7.0 and still trusts image-baked hook labels. */
+  warnings?: string[];
   containers: { total: number; running: number; stopped: number };
   images?: number;
 }

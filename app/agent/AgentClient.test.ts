@@ -2425,6 +2425,38 @@ describe('AgentClient', () => {
       });
     });
 
+    test('should warn once per ack and flag agents older than 1.7.0', async () => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+      mockLogChild.warn.mockClear();
+      await client.handleEvent('dd:ack', { version: '1.6.1' });
+      expect(client.warnings).toEqual(['hook-labels-trusted']);
+      const hookWarnings = mockLogChild.warn.mock.calls.filter(([m]) =>
+        String(m).includes('image-baked lifecycle hook labels'),
+      );
+      expect(hookWarnings).toHaveLength(1);
+      expect(hookWarnings[0][0]).toBe(
+        `Agent ${client.name} runs 1.6.1; image-baked lifecycle hook labels are still trusted there. Upgrade it to 1.7.0 or later.`,
+      );
+    });
+
+    test('should fall back to the cached version when the ack reports none', async () => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+      client.info = { version: '1.6.0' };
+      mockLogChild.warn.mockClear();
+      await client.handleEvent('dd:ack', {});
+      expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('runs 1.6.0;'));
+    });
+
+    test('should not warn for agents on 1.7.0 or later', async () => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+      mockLogChild.warn.mockClear();
+      await client.handleEvent('dd:ack', { version: '1.8.0-rc.2' });
+      expect(client.warnings).toEqual([]);
+      expect(mockLogChild.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('image-baked lifecycle hook labels'),
+      );
+    });
+
     test('should preserve existing runtime info when dd:ack payload fields are invalid', async () => {
       client.info = {
         version: 'existing-version',
