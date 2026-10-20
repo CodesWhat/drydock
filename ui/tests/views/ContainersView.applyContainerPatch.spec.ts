@@ -117,6 +117,7 @@ vi.mock('@/stores/operations', () => ({
     incrementDisplayBatchFailed: vi.fn(),
     incrementDisplayBatchSucceeded: vi.fn(),
     replaceDisplayBatches: vi.fn(),
+    seedFromContainerList: vi.fn(),
     applyOperationChanged: vi.fn(),
     applyUpdateApplied: vi.fn(),
     applyUpdateFailed: vi.fn(),

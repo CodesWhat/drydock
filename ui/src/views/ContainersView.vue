@@ -17,6 +17,7 @@ import { useOperationDisplayHold } from '../composables/useOperationDisplayHold'
 import { useToast } from '../composables/useToast';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
+import { useOperationStore } from '../stores/operations';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
@@ -68,6 +69,7 @@ const {
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
 const toast = useToast();
+const operationStore = useOperationStore();
 const { updateMode } = useUpdateMode();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
@@ -263,7 +265,9 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
 
 async function loadContainers(throwOnFailure = false) {
   try {
+    const requestStartedAt = Date.now();
     const apiContainers = await getAllContainers();
+    operationStore.seedFromContainerList(apiContainers, requestStartedAt);
     const mappedRaw = mapApiContainers(apiContainers, t);
     const mapped = preserveTransientUiFields(containers.value, mappedRaw);
     const nextPolicyMetadataFingerprint = updatePolicyMetadataFingerprint(

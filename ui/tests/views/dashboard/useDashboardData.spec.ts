@@ -1,5 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, h, nextTick } from 'vue';
+import { useOperationStore } from '@/stores/operations';
 import type { Container } from '@/types/container';
 import { useDashboardData } from '@/views/dashboard/useDashboardData';
 
@@ -129,6 +131,7 @@ describe('useDashboardData', () => {
   };
 
   beforeEach(() => {
+    setActivePinia(createPinia());
     vi.useRealTimers();
     vi.resetAllMocks();
 
@@ -183,6 +186,18 @@ describe('useDashboardData', () => {
       Reflect.deleteProperty(document, 'visibilityState');
     }
     vi.useRealTimers();
+  });
+
+  it('seeds the operations store from the fetched container list', async () => {
+    const seed = vi.spyOn(useOperationStore(), 'seedFromContainerList');
+    const apiRows = [{ id: 'api-c1' }];
+    mocks.getAllContainers.mockResolvedValue(apiRows);
+    const before = Date.now();
+
+    await mountDashboardData();
+
+    expect(seed).toHaveBeenCalledWith(apiRows, expect.any(Number));
+    expect(seed.mock.calls[0][1]).toBeGreaterThanOrEqual(before);
   });
 
   it('loads dashboard data, maps recent statuses, and manages maintenance timer', async () => {

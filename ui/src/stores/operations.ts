@@ -1,11 +1,17 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { getHeldOperation } from '../composables/useOperationDisplayHold';
+import type { ContainerUpdateOperation } from '../types/container';
 import {
+  type ActiveContainerUpdateOperationStatus,
   type ContainerUpdateOperationPhase,
   type ContainerUpdateOperationStatus,
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
   isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
 } from '../types/update-operation';
+import { buildContainerIdentityKey } from '../utils/container-action-key';
 import {
   type BatchUpdateCompletedPayload,
   type OperationChangedPayload,
@@ -29,6 +35,22 @@ export interface UiUpdateOperation {
   phase?: OperationPhase;
   error?: string;
   completedAt?: string;
+  /** Server value from the container list, else the SSE event receipt time. */
+  updatedAt?: string;
+  fromVersion?: string;
+  toVersion?: string;
+  identityKey?: string;
+  /** Client epoch ms, stamped on every upsert. */
+  lastSeenAt: number;
+}
+
+type OperationUpsert = Omit<UiUpdateOperation, 'lastSeenAt'> & { lastSeenAt?: number };
+
+/** Minimal container identity needed to resolve its operation. */
+export interface OperationContainerRef {
+  id: string;
+  identityKey?: string;
+  name?: string;
 }
 
 export interface UiBatchProgress {
@@ -53,6 +75,9 @@ export interface FrozenBatch {
   succeededCount: number;
   failedCount: number;
 }
+
+/** Terminal operations outside any display batch are dropped after this long. */
+const TERMINAL_OPERATION_RETENTION_MS = 30 * 60 * 1000;
 
 const ACTIVE_STATUSES = new Set<OperationStatus>(['queued', 'in-progress']);
 
@@ -106,6 +131,81 @@ function getOperationContainerIds(operation: UiUpdateOperation | undefined): str
     ids.add(operation.newContainerId);
   }
   return [...ids];
+}
+
+function getRecordString(record: Record<string, unknown>, key: string): string | undefined {
+  return getString(record[key]);
+}
+
+/** Same derivation as the container mapper, so a mapped container's identityKey hits the index. */
+function deriveRowIdentityKey(row: Record<string, unknown>): string | undefined {
+  return buildContainerIdentityKey(row) || getString(row.id) || getString(row.name);
+}
+
+/**
+ * Validate the `updateOperation` attached to a container list row. Only an
+ * active operation with a phase valid for its status and an `updatedAt` is
+ * accepted; anything else is treated as "no operation".
+ */
+function normalizeListOperation(row: unknown): UiUpdateOperation | undefined {
+  if (!isObject(row) || !isObject(row.updateOperation)) {
+    return undefined;
+  }
+  const operation = row.updateOperation;
+  const operationId = getRecordString(operation, 'id');
+  const status = operation.status;
+  if (!operationId || !isActiveContainerUpdateOperationStatus(status)) {
+    return undefined;
+  }
+  const phase = operation.phase;
+  const updatedAt = getRecordString(operation, 'updatedAt');
+  if (!isActiveContainerUpdateOperationPhaseForStatus(status, phase) || !updatedAt) {
+    return undefined;
+  }
+  const batchId = getRecordString(operation, 'batchId');
+  const queuePosition = getPositiveInteger(operation.queuePosition);
+  const queueTotal = getPositiveInteger(operation.queueTotal);
+  const hasBatch = Boolean(batchId && queuePosition && queueTotal && queuePosition <= queueTotal);
+  const fromVersion = getRecordString(operation, 'fromVersion');
+  const toVersion = getRecordString(operation, 'toVersion');
+  const containerId = getString(row.id);
+  const containerName = getString(row.name);
+  const identityKey = deriveRowIdentityKey(row);
+
+  return {
+    operationId,
+    status,
+    phase,
+    updatedAt,
+    lastSeenAt: 0,
+    ...(containerId ? { containerId } : {}),
+    ...(identityKey ? { identityKey } : {}),
+    ...(containerName ? { containerName } : {}),
+    ...(fromVersion ? { fromVersion } : {}),
+    ...(toVersion ? { toVersion } : {}),
+    ...(hasBatch ? { batchId, queuePosition, queueTotal } : {}),
+  };
+}
+
+function toContainerUpdateOperation(operation: UiUpdateOperation): ContainerUpdateOperation {
+  // Callers only pass operations resolved through the active indexes.
+  const status = operation.status as ActiveContainerUpdateOperationStatus;
+  const phase = isActiveContainerUpdateOperationPhaseForStatus(status, operation.phase)
+    ? operation.phase
+    : status === 'queued'
+      ? 'queued'
+      : 'pulling';
+  return {
+    id: operation.operationId,
+    status,
+    phase,
+    updatedAt: operation.updatedAt ?? new Date(operation.lastSeenAt).toISOString(),
+    ...(operation.batchId ? { batchId: operation.batchId } : {}),
+    ...(operation.queuePosition ? { queuePosition: operation.queuePosition } : {}),
+    ...(operation.queueTotal ? { queueTotal: operation.queueTotal } : {}),
+    ...(operation.fromVersion ? { fromVersion: operation.fromVersion } : {}),
+    ...(operation.toVersion ? { toVersion: operation.toVersion } : {}),
+  };
 }
 
 function normalizeOperationChangedPayload(payload: unknown): OperationChangedPayload | undefined {
@@ -207,6 +307,7 @@ function normalizeBatchCompletedPayload(payload: unknown): BatchUpdateCompletedP
 export const useOperationStore = defineStore('operations', () => {
   const byId = ref<Record<string, UiUpdateOperation>>({});
   const byContainerId = ref(new Map<string, string>());
+  const byIdentityKey = ref(new Map<string, string>());
   const batchSummaries = ref<Record<string, UiBatchProgress>>({});
   const displayBatches = ref(new Map<string, FrozenBatch>());
   let unsubscribeEventStream: Array<() => void> = [];
@@ -230,9 +331,22 @@ export const useOperationStore = defineStore('operations', () => {
     }
 
     byContainerId.value = nextIndex;
+
+    const nextIdentityIndex = new Map(byIdentityKey.value);
+    if (
+      previous?.identityKey &&
+      nextIdentityIndex.get(previous.identityKey) === previous.operationId
+    ) {
+      nextIdentityIndex.delete(previous.identityKey);
+    }
+    if (next && isActiveOperation(next) && next.identityKey) {
+      nextIdentityIndex.set(next.identityKey, next.operationId);
+    }
+    byIdentityKey.value = nextIdentityIndex;
   }
 
-  function upsertOperation(operation: UiUpdateOperation): void {
+  function upsertOperation(input: OperationUpsert): void {
+    const operation: UiUpdateOperation = { ...input, lastSeenAt: input.lastSeenAt ?? Date.now() };
     const existing = byId.value[operation.operationId];
     if (!existing) {
       // First insert — no guard needed.
@@ -305,6 +419,7 @@ export const useOperationStore = defineStore('operations', () => {
       queueTotal: payload.queueTotal,
       status: payload.status,
       phase: getOperationPhase(payload.phase),
+      updatedAt: new Date().toISOString(),
     });
   }
 
@@ -317,6 +432,7 @@ export const useOperationStore = defineStore('operations', () => {
       status: 'succeeded',
       phase: 'succeeded',
       completedAt: payload.timestamp,
+      updatedAt: payload.timestamp,
     });
   }
 
@@ -330,6 +446,7 @@ export const useOperationStore = defineStore('operations', () => {
       phase: getOperationPhase(payload.phase) ?? 'failed',
       error: payload.error,
       completedAt: payload.timestamp,
+      updatedAt: payload.timestamp,
     });
   }
 
@@ -355,6 +472,7 @@ export const useOperationStore = defineStore('operations', () => {
         status: item.status,
         phase: item.status,
         completedAt: payload.timestamp,
+        updatedAt: payload.timestamp,
       });
     }
   }
@@ -362,6 +480,126 @@ export const useOperationStore = defineStore('operations', () => {
   function getOperationByContainerId(containerId: string): UiUpdateOperation | undefined {
     const operationId = byContainerId.value.get(containerId);
     return operationId ? byId.value[operationId] : undefined;
+  }
+
+  function getOperationByIdentityKey(identityKey: string): UiUpdateOperation | undefined {
+    const operationId = byIdentityKey.value.get(identityKey);
+    return operationId ? byId.value[operationId] : undefined;
+  }
+
+  function findOperationByName(name: string): UiUpdateOperation | undefined {
+    // Same rule as holdMatchesTarget: a name-only match is allowed only for
+    // operations that carry no container id at all (#411 safety).
+    return Object.values(byId.value).find(
+      (operation) =>
+        isActiveOperation(operation) &&
+        !operation.containerId &&
+        !operation.newContainerId &&
+        operation.containerName === name,
+    );
+  }
+
+  /**
+   * Resolve the active operation for a container: held display op, then
+   * container id, then identity key, then a guarded name match.
+   */
+  function getOperationForContainer(
+    container: OperationContainerRef,
+  ): ContainerUpdateOperation | undefined {
+    const held = getHeldOperation(container);
+    if (held) {
+      return held;
+    }
+    const operation =
+      getOperationByContainerId(container.id) ??
+      (container.identityKey ? getOperationByIdentityKey(container.identityKey) : undefined) ??
+      (container.name ? findOperationByName(container.name) : undefined);
+    return operation ? toContainerUpdateOperation(operation) : undefined;
+  }
+
+  function isContainerUpdateActive(container: OperationContainerRef): boolean {
+    return getOperationForContainer(container) !== undefined;
+  }
+
+  function getActiveOperationStatus(
+    container: OperationContainerRef,
+  ): ContainerUpdateOperation['status'] | undefined {
+    return getOperationForContainer(container)?.status;
+  }
+
+  function operationAgeAnchor(operation: UiUpdateOperation): number {
+    const completed = operation.completedAt ? Date.parse(operation.completedAt) : Number.NaN;
+    return Number.isNaN(completed) ? operation.lastSeenAt : completed;
+  }
+
+  /** Drop terminal operations past retention that belong to no display batch. */
+  function pruneTerminalOperations(now: number = Date.now()): void {
+    for (const operation of Object.values(byId.value)) {
+      if (isActiveOperation(operation)) {
+        continue;
+      }
+      if (operation.batchId && displayBatches.value.has(operation.batchId)) {
+        continue;
+      }
+      if (now - operationAgeAnchor(operation) > TERMINAL_OPERATION_RETENTION_MS) {
+        removeOperation(operation.operationId);
+      }
+    }
+  }
+
+  function dropContainerIndexEntry(
+    key: string,
+    index: 'container' | 'identity',
+    seenBefore: number,
+  ) {
+    const map = index === 'container' ? byContainerId : byIdentityKey;
+    const operationId = map.value.get(key);
+    const operation = operationId ? byId.value[operationId] : undefined;
+    if (!operation || !isActiveOperation(operation) || operation.lastSeenAt >= seenBefore) {
+      return;
+    }
+    const next = new Map(map.value);
+    next.delete(key);
+    map.value = next;
+  }
+
+  /**
+   * Seed the store from a GET /containers payload. Rows with a valid active
+   * operation are upserted (the status-rank guard keeps a stale list from
+   * pulling an SSE-terminal operation back to active). For rows without one,
+   * an active operation that was last seen before the request started and that
+   * the list no longer shows loses its per-container index entry; batch counts
+   * are untouched.
+   */
+  function seedFromContainerList(apiContainers: unknown, requestStartedAt: number): void {
+    if (!Array.isArray(apiContainers)) {
+      return;
+    }
+    for (const row of apiContainers) {
+      const normalized = normalizeListOperation(row);
+      if (normalized) {
+        const { lastSeenAt: _ignored, ...incoming } = normalized;
+        const existing = byId.value[incoming.operationId];
+        if (existing?.containerId && incoming.containerId) {
+          if (existing.containerId !== incoming.containerId) {
+            // Recreated container: keep the original id, index the new one beside it.
+            incoming.newContainerId = incoming.containerId;
+            delete incoming.containerId;
+          }
+        }
+        upsertOperation(incoming);
+        continue;
+      }
+      const rowId = isObject(row) ? getString(row.id) : undefined;
+      const rowIdentityKey = isObject(row) ? deriveRowIdentityKey(row) : undefined;
+      if (rowId) {
+        dropContainerIndexEntry(rowId, 'container', requestStartedAt);
+      }
+      if (rowIdentityKey) {
+        dropContainerIndexEntry(rowIdentityKey, 'identity', requestStartedAt);
+      }
+    }
+    pruneTerminalOperations();
   }
 
   function getBatchProgress(batchId: string): UiBatchProgress | undefined {
@@ -532,6 +770,12 @@ export const useOperationStore = defineStore('operations', () => {
       incrementDisplayBatch(groupKey, 'succeededCount'),
     replaceDisplayBatches,
     getOperationByContainerId,
+    getOperationByIdentityKey,
+    getOperationForContainer,
+    isContainerUpdateActive,
+    getActiveOperationStatus,
+    seedFromContainerList,
+    pruneTerminalOperations,
     getBatchProgress,
     getActiveBatchProgress,
   };
