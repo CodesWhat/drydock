@@ -15,11 +15,6 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Record a `hook-label-ignored` audit entry (status `info`) when Drydock ignores a `dd.hook.*` label baked into an image, once per update per container. It lists the container and the ignored label keys, never the command values, and says the labels come from the image and `DD_HOOKS_ALLOW_IMAGE_LABELS` is not set. Before this the refusal only reached the log as a warning. Hook execution is unchanged.
 
-### Fixed
-
-- A controller-to-agent event stream that silently died (half-open connection) left the agent shown as connected until something else failed. Agents now send an SSE comment heartbeat every 15 seconds, and the controller destroys the stream and reconnects after 45 seconds of silence, marking the agent disconnected meanwhile. The watchdog only arms once an agent has sent a heartbeat, so agents older than 1.8.1 are unaffected. (DR-86)
-### Added
-
 - Show why a notification was skipped without turning on debug logging (DR-85). Each notification trigger now remembers the last skip reason per container (`rule-disabled`, `threshold-not-met`, `trigger-excluded`, `once-already-sent`, `recently-applied`, `digest-buffered`), clears it when a notification is sent, and keeps at most 1000 entries in memory. The reasons appear in the container detail Actions tab, as `notificationSkips` on `GET /api/v1/containers/{id}` and `/triggers`, and in the debug dump.
 
 ### Security
@@ -36,6 +31,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- A controller-to-agent event stream that silently died (half-open connection) left the agent shown as connected until something else failed. Agents now send an SSE comment heartbeat every 15 seconds, and the controller destroys the stream and reconnects after 45 seconds of silence, marking the agent disconnected meanwhile. The watchdog only arms once an agent has sent a heartbeat, so agents older than 1.8.1 are unaffected. (DR-86)
 - The demo's font proxy now serves IBM Plex Mono, so the default monospace font loads on the demo host instead of falling back to the system font.
 - Fill the update-operation record for compose updates the way the Docker action does. An update run through the `dockercompose` action left `triggerName`, `fromVersion`, `toVersion` and `targetImage` empty on the record because the compose path bypasses the Docker executor that sets them. Each compose service's record now carries its own values.
 - Update detection no longer waits on release notes. The watcher fetched optional GitHub release notes before saving a container's result, so a 403 or slow lookup (with its 60 s retry intervals) stalled detection and left registry fixtures unready. The lookup now gets a 5 s budget; past it the result is saved without notes and the notes are attached when the lookup finishes, still honoring the provider's retry and cooldown.
