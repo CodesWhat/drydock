@@ -29,7 +29,7 @@ Drydock follows Quay pagination for large repositories, including standard RFC 5
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.2
+    image: codeswhat/drydock:1.8.0-rc.3
     ...
     environment:
       - DD_REGISTRY_QUAY_PRIVATE_NAMESPACE=mynamespace
@@ -45,7 +45,7 @@ docker run \
   -e DD_REGISTRY_QUAY_PRIVATE_ACCOUNT="myaccount" \
   -e DD_REGISTRY_QUAY_PRIVATE_TOKEN="YOUR_QUAY_ROBOT_TOKEN" \
   ...
-  codeswhat/drydock:1.8.0-rc.2
+  codeswhat/drydock:1.8.0-rc.3
 ```
 </Tab>
 </Tabs>

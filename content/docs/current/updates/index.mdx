@@ -5,6 +5,17 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.3 Highlights - October 20, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Drydock is now MIT licensed.** It was AGPL-3.0 before. Contributors agreed to the change.
+- **OIDC bearer tokens must be issued for this client.** A token minted for another application on the same provider no longer authenticates against the API. Scripts using OIDC bearer tokens need ones issued for Drydock's client, or extra audiences listed in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See the [OIDC guide](/docs/configuration/authentications/oidc) and [deprecations](/docs/deprecations).
+- **Image-baked hook labels are audited.** Drydock records a `hook-label-ignored` audit entry when it ignores a `dd.hook.*` label from an image, and warns when an agent older than 1.7.0 connects, because those agents still trust such labels.
+- **A recovery-code sign-in makes you review API keys.** When any active key exists, the session is held on the API Keys view until you choose Done reviewing. Keys are not revoked automatically.
+- **The image uses Alpine's patched zlib.** The custom zlib build is gone.
+- RC3 includes the RC1 and RC2 changes below and starts its own soak when published. v1.7.0 (GA 2026-10-19) is the latest stable release.
+
 ## v1.8.0-rc.2 Highlights - October 18, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
