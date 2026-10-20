@@ -25,7 +25,7 @@ Docker Compose updates|Limited|Full compose pull & recreate|self
 Lifecycle hooks|Yes (advisory — no abort on failure)|Yes (pre/post with abort & audit)|self
 Image backup|No|Pre-update backup with retention|self
 Webhook API|HTTP API (token-authenticated, on-demand trigger)|Event-driven webhooks (token-authenticated)|self
-License|Apache 2.0|AGPL-3.0|tie
+License|Apache 2.0|MIT|tie
 `,
   highlightsTable: `
 monitor|Full Web Dashboard|Watchtower is CLI-only with no built-in UI. Drydock ships with a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs — no terminal required.

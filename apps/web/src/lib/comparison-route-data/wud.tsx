@@ -26,7 +26,7 @@ Audit log|None|Yes, with REST API & Prometheus counter|self
 Semver-aware updates|Yes|Yes|tie
 Container log viewer|None|Yes, with level filtering & auto-fetch|self
 Test framework|Jest|Vitest 4|self
-License|MIT|AGPL-3.0|tie
+License|MIT|MIT|tie
 `,
   highlightsTable: `
 git-branch|Fork & Evolve|We started as a WUD fork, then migrated to TypeScript, added security scanning, distributed agents, audit logging, and dozens of new features — taking WUD's foundation much further.

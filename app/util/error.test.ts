@@ -101,3 +101,43 @@ describe('getErrorChainMessage', () => {
     expect(getErrorChainMessage(withoutCode)).toBe('plain error');
   });
 });
+
+describe('getErrorStatusCode', () => {
+  const { getErrorStatusCode } = errorUtils;
+
+  test('reads response.status, then status, then statusCode', () => {
+    expect(getErrorStatusCode({ response: { status: 429 }, status: 500 })).toBe(429);
+    expect(getErrorStatusCode({ status: 404, statusCode: 500 })).toBe(404);
+    expect(getErrorStatusCode({ statusCode: 409 })).toBe(409);
+  });
+
+  test('ignores non-numeric statuses and non-object errors', () => {
+    expect(getErrorStatusCode({ response: { status: '429' } })).toBeUndefined();
+    expect(getErrorStatusCode({ response: 'nope' })).toBeUndefined();
+    expect(getErrorStatusCode(undefined)).toBeUndefined();
+    expect(getErrorStatusCode('boom')).toBeUndefined();
+  });
+
+  test('httpErrorsOnly keeps only 4xx and 5xx candidates', () => {
+    expect(getErrorStatusCode({ response: { status: 200 }, status: 502 }, true)).toBe(502);
+    expect(getErrorStatusCode({ response: { status: 302 } }, true)).toBeUndefined();
+    expect(getErrorStatusCode({ statusCode: 600 }, true)).toBeUndefined();
+    expect(getErrorStatusCode({ status: 399 }, true)).toBeUndefined();
+  });
+});
+
+describe('getErrorMessageProperty', () => {
+  const { getErrorMessageProperty } = errorUtils;
+
+  test('returns only a string message property of an object', () => {
+    expect(getErrorMessageProperty(new Error('boom'))).toBe('boom');
+    expect(getErrorMessageProperty({ message: '' })).toBe('');
+  });
+
+  test('returns undefined for primitives, null and non-string messages', () => {
+    expect(getErrorMessageProperty('boom')).toBeUndefined();
+    expect(getErrorMessageProperty(null)).toBeUndefined();
+    expect(getErrorMessageProperty({ message: 42 })).toBeUndefined();
+    expect(getErrorMessageProperty({})).toBeUndefined();
+  });
+});

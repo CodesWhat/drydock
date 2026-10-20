@@ -13,6 +13,7 @@ import {
   buildComposeProjectLockKey,
   withContainerUpdateLocks,
 } from '../../../updates/update-locks.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { sleep } from '../../../util/sleep.js';
 import { buildContainerUpdateVersionFields } from '../docker/ContainerUpdateExecutor.js';
 import {
@@ -869,13 +870,6 @@ function getImageRepositoryKey(imageReference: unknown): string {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-function getErrorMessage(error: unknown): string {
-  if (!error || typeof error !== 'object' || !('message' in error)) {
-    return String(error);
-  }
-  return String((error as { message?: unknown }).message);
 }
 
 function getErrorCode(error: unknown): string | undefined {

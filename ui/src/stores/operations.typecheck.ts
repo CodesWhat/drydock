@@ -9,6 +9,7 @@ const validOperation: UiUpdateOperation = {
   operationId: 'op-valid',
   status: 'in-progress',
   phase: 'pulling',
+  lastSeenAt: 0,
 };
 
 const invalidOperation: UiUpdateOperation = {
@@ -16,6 +17,7 @@ const invalidOperation: UiUpdateOperation = {
   status: 'in-progress',
   // @ts-expect-error arbitrary phase strings should not be accepted
   phase: 'creating',
+  lastSeenAt: 0,
 };
 
 void phase;

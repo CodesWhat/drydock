@@ -27,7 +27,7 @@ export default function Home() {
     description: "Open source container update monitoring built in TypeScript with modern tooling.",
     applicationCategory: "DeveloperApplication",
     operatingSystem: "Docker",
-    license: "https://opensource.org/licenses/AGPL-3.0",
+    license: "https://opensource.org/licenses/MIT",
     downloadUrl: GITHUB_RELEASES_URL,
     installUrl: GITHUB_RELEASES_URL,
     offers: {

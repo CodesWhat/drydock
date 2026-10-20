@@ -25,7 +25,7 @@ Audit log|No|Yes, with REST API|self
 Semver-aware updates|No|Yes|self
 Digest watching|Yes|Yes|tie
 Multi-arch (amd64/arm64)|Yes|Yes|tie
-License|MIT|AGPL-3.0|tie
+License|MIT|MIT|tie
 `,
   highlightsTable: `
 monitor|Full Web Dashboard|Ouroboros is CLI-only with no built-in UI. Drydock ships with a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs.

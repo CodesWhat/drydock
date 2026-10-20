@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import WatcherScheduleEditor from '@/components/WatcherScheduleEditor.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useSearchFromQuery } from '../composables/useSearchFromQuery';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
@@ -24,7 +25,6 @@ function watcherServerName(name: unknown): string {
 
 const { t, locale } = useI18n();
 const { isMobile } = useBreakpoints();
-const route = useRoute();
 const router = useRouter();
 type WatcherRow = ReturnType<typeof mapWatcher>;
 
@@ -76,16 +76,7 @@ const watcherViewMode = useViewMode('watchers');
 const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
-function applySearchFromQuery(queryValue: unknown) {
-  const raw = Array.isArray(queryValue) ? queryValue[0] : queryValue;
-  searchQuery.value = typeof raw === 'string' ? raw : '';
-}
-
-applySearchFromQuery(route.query.q);
-watch(
-  () => route.query.q,
-  (value) => applySearchFromQuery(value),
-);
+useSearchFromQuery(searchQuery);
 
 const filteredWatchers = computed(() => {
   if (!searchQuery.value) return watchersData.value;

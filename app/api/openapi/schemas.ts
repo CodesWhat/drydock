@@ -487,6 +487,11 @@ export const openApiSchemas = {
         type: 'array',
         items: { type: 'string' },
       },
+      lastSeen: {
+        type: 'object',
+        description: 'ISO timestamp of the most recent hit per key (api source only).',
+        additionalProperties: { type: 'string', format: 'date-time' },
+      },
     },
     required: ['total', 'keys'],
     additionalProperties: false,

@@ -25,7 +25,7 @@ Distributed agents|No (one instance per host)|SSE-based agent architecture|self
 Kubernetes support|Yes|Planned (v2.0.0)|competitor
 Semver-aware updates|Partial|Yes|self
 Audit log|No|Yes, with REST API|self
-License|MIT|AGPL-3.0|tie
+License|MIT|MIT|tie
 `,
   highlightsTable: `
 monitor|Full Web Dashboard|Diun is a CLI daemon with no built-in UI. Drydock provides a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs — all from the browser.

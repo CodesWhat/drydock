@@ -4280,22 +4280,6 @@ class Trigger<
   }
 
   /**
-   * Mask the specified fields in the configuration, returning a copy.
-   * For simple flat-field masking; providers with nested fields should
-   * override maskConfiguration() directly.
-   */
-  protected maskFields(fieldsToMask: string[]): TConfiguration {
-    const masked = { ...this.configuration } as Record<string, unknown>;
-    for (const field of fieldsToMask) {
-      const value = masked[field];
-      if (typeof value === 'string' && value.length > 0) {
-        masked[field] = (this.constructor as typeof Trigger).mask(value);
-      }
-    }
-    return masked as TConfiguration;
-  }
-
-  /**
    * Build the container template context used by trigger body/title rendering.
    * Release notes bodies are shortened for notifications to avoid excessively long payloads.
    */

@@ -20,7 +20,7 @@
   },
   "author": "CodesWhat",
   "repository": "CodesWhat/drydock",
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "dependencies": {
     "@aws-sdk/client-ecr": "3.1126.0",
     "@prometheus-io/client": "0.16.1",

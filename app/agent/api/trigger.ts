@@ -9,6 +9,7 @@ import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
+import { getErrorMessageProperty } from '../../util/error.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
 
@@ -18,18 +19,6 @@ interface TriggerRouteParams {
 }
 
 type TriggerRequest = Request<TriggerRouteParams>;
-
-function getErrorMessage(error: unknown): string | undefined {
-  if (
-    error &&
-    typeof error === 'object' &&
-    'message' in error &&
-    typeof error.message === 'string'
-  ) {
-    return error.message;
-  }
-  return undefined;
-}
 
 /**
  * Get Triggers.
@@ -132,7 +121,7 @@ export async function runTriggerBatch(req: TriggerRequest, res: Response) {
     await trigger.triggerBatch(batchContainers, runtimeContext);
     res.status(200).json({});
   } catch (e: unknown) {
-    const errorMessage = getErrorMessage(e);
+    const errorMessage = getErrorMessageProperty(e);
     const sanitizedReason = errorMessage ? sanitizePreviewErrorReason(errorMessage) : '';
     log.error(
       `Error running batch trigger ${sanitizeLogParam(name)}: ${sanitizeLogParam(sanitizedReason)}`,

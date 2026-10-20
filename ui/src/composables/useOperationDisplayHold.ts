@@ -185,7 +185,7 @@ function updateHoldTargets(hold: OperationDisplayHoldRecord, target: OperationDi
   };
 }
 
-function getHeldOperation(
+export function getHeldOperation(
   target: string | OperationDisplayHoldContainerTarget | OperationDisplayHoldTarget,
 ) {
   const now = Date.now();

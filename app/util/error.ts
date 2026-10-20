@@ -39,6 +39,16 @@ export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE
   return fallback;
 }
 
+// Only an object's own string `message`; unlike getErrorMessage it does not
+// coerce primitives or substitute a fallback, so callers can tell "no message".
+export function getErrorMessageProperty(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined;
+  }
+  const message = (error as { message?: unknown }).message;
+  return typeof message === 'string' ? message : undefined;
+}
+
 const MAX_ERROR_CAUSE_DEPTH = 5;
 
 // undici's fetch surfaces as a generic `TypeError: fetch failed`; the
@@ -66,4 +76,28 @@ export function getErrorChainMessage(error: unknown, fallback = DEFAULT_ERROR_ME
   }
 
   return parts.length > 0 ? parts.join(' ← ') : fallback;
+}
+
+type StatusLikeError = {
+  response?: { status?: unknown } | null;
+  status?: unknown;
+  statusCode?: unknown;
+};
+
+// Pulls an HTTP status off the shapes errors carry in practice: axios and
+// octokit (`response.status`), fetch-style (`status`) and docker-modem
+// (`statusCode`). With `httpErrorsOnly`, only 4xx/5xx candidates count.
+export function getErrorStatusCode(error: unknown, httpErrorsOnly = false): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+  const { response, status, statusCode } = error as StatusLikeError;
+  const responseStatus =
+    response && typeof response === 'object'
+      ? (response as { status?: unknown }).status
+      : undefined;
+  return [responseStatus, status, statusCode].find(
+    (candidate): candidate is number =>
+      typeof candidate === 'number' && (!httpErrorsOnly || (candidate >= 400 && candidate <= 599)),
+  );
 }

@@ -38,7 +38,8 @@ vi.mock('../log', () => ({
   default: { child: () => mockLog },
 }));
 
-vi.mock('../util/error', () => ({
+vi.mock('../util/error', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../util/error.js')>()),
   getErrorMessage: mockGetErrorMessage,
 }));
 

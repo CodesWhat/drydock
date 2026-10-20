@@ -25,6 +25,7 @@ import * as wudCardCompatRouter from './compat/wudcard.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
+import { buildLegacyApiAliasKey, logLegacyApiAliasHit } from './legacy-alias-diagnostics.js';
 import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
 import { attachPortwingWsServer } from './portwing-ws.js';
 import * as prometheusRouter from './prometheus.js';
@@ -160,20 +161,23 @@ function configurePermissionsPolicy(app) {
 // router is gone, req.route is only ever set for the compat router's four
 // whitelisted routes (when DD_COMPAT_WUDCARD is enabled) — every other hit
 // falls straight through to the tombstone below without matching a route,
-// so getLegacyApiAliasRouteKey's 'unmatched' fallback is the common case.
+// so the unmatched fallback is the common case. For those hits the key is the
+// allowlisted first path segment (`/api/containers/*`, never an id) plus a
+// coarse client class (`via homepage`), see legacy-alias-diagnostics.ts, and
+// the first hit per resource and client each hour is logged with the caller's
+// details so the banner has something to point at.
 function trackLegacyApiAliasUsage(req, res, next) {
   if (req.path === '/v1' || req.path.startsWith('/v1/')) {
     next();
     return;
   }
   res.on('finish', () => {
-    recordLegacyInput('api', getLegacyApiAliasRouteKey(req));
+    recordLegacyInput('api', buildLegacyApiAliasKey(req));
+    if (!req.route) {
+      logLegacyApiAliasHit(req);
+    }
   });
   next();
-}
-
-function getLegacyApiAliasRouteKey(req) {
-  return req.route ? `${req.baseUrl}${req.route.path}` : 'unmatched';
 }
 
 // Tombstone for the removed unversioned /api/* alias (removed in v1.6.0 —

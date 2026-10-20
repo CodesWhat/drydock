@@ -1,4 +1,5 @@
 import type Dockerode from 'dockerode';
+import { getErrorMessageProperty } from '../../../util/error.js';
 
 export const DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS = 1000;
 const DOCKER_EVENTS_RECONNECT_MAX_DELAY_MS = 30 * 1000;
@@ -48,14 +49,6 @@ interface DockerEventsStreamFailureDependencies {
   scheduleDockerEventsReconnect: (reason: string, err?: unknown) => void;
 }
 
-function getErrorMessage(error: unknown): string {
-  if (typeof error !== 'object' || error === null) {
-    return '';
-  }
-  const message = (error as { message?: unknown }).message;
-  return typeof message === 'string' ? message : '';
-}
-
 function stringifyDockerEventChunk(dockerEventChunk: unknown): string {
   if (typeof dockerEventChunk === 'string') {
     return dockerEventChunk;
@@ -85,7 +78,7 @@ function logReconnectScheduled(
   err: unknown,
   reconnectDelayMs: number,
 ) {
-  const reconnectErrorMessage = getErrorMessage(err);
+  const reconnectErrorMessage = getErrorMessageProperty(err) ?? '';
   const errorMessage = reconnectErrorMessage ? ` (${reconnectErrorMessage})` : '';
   // First reconnect is expected (proxy timeout, network blip) — log as info.
   // Subsequent attempts indicate a real problem — escalate to warn.
@@ -100,7 +93,7 @@ function logReconnectScheduled(
 }
 
 function logReconnectFailure(state: DockerEventsState, reconnectError: unknown) {
-  const reconnectErrorMessage = getErrorMessage(reconnectError);
+  const reconnectErrorMessage = getErrorMessageProperty(reconnectError) ?? '';
   const errorMessage = reconnectErrorMessage ? ` (${reconnectErrorMessage})` : '';
   if (state.log && typeof state.log.warn === 'function') {
     state.log.warn(
@@ -203,7 +196,7 @@ export function onDockerEventsStreamFailure(
 }
 
 export function isRecoverableDockerEventParseError(error: unknown) {
-  const message = getErrorMessage(error).toLowerCase();
+  const message = (getErrorMessageProperty(error) ?? '').toLowerCase();
   return (
     message.includes('unexpected end of json input') ||
     message.includes('unterminated string in json')

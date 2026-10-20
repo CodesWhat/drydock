@@ -46,7 +46,7 @@ class Gitlab<
    * @returns {*}
    */
   maskConfiguration() {
-    return this.maskSensitiveFields(['token']);
+    return this.maskFields(['token']);
   }
 
   /**

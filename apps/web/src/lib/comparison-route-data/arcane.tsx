@@ -6,7 +6,7 @@ export const arcaneComparisonRouteData = {
   comparisonTable: `
 Project status|Actively maintained (~35 releases/6mo)|Actively maintained|tie
 Language / stack|Go backend, SvelteKit frontend|TypeScript (full ESM)|tie
-License|BSD-3-Clause|AGPL-3.0|tie
+License|BSD-3-Clause|MIT|tie
 Web UI|Yes|Yes|tie
 General container management (create, exec, commit)|Yes, full container CRUD plus shell exec and commit-to-image|No, update-focused (start/stop/restart/redeploy only)|competitor
 Compose project management|Yes, create/deploy/redeploy/destroy with an in-app editor|No, updates existing stacks only|competitor

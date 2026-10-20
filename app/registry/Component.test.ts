@@ -21,6 +21,47 @@ test('mask should redact short values', async () => {
   expect(Component.mask('abc')).toStrictEqual('[REDACTED]');
 });
 
+test.each([
+  ['undefined', undefined, undefined],
+  ['null', null, undefined],
+  ['empty string', '', undefined],
+  ['whitespace string', ' ', '[REDACTED]'],
+  ['short string', 'a', '[REDACTED]'],
+  ['long string', 'a'.repeat(512), '[REDACTED]'],
+  ['zero', 0, '[REDACTED]'],
+  ['number', 42, '[REDACTED]'],
+  ['false', false, '[REDACTED]'],
+  ['true', true, '[REDACTED]'],
+  ['plain object', { a: 1 }, '[REDACTED]'],
+  ['empty object', {}, '[REDACTED]'],
+  ['empty array', [], undefined],
+  ['non-empty array', ['x'], '[REDACTED]'],
+])('mask should handle %s', (_label, input, expected) => {
+  expect(Component.mask(input)).toBe(expected);
+});
+
+test.each([
+  ['non-empty string', { secret: 's3cret' }, '[REDACTED]'],
+  ['empty string', { secret: '' }, ''],
+  ['number', { secret: 0 }, '[REDACTED]'],
+  ['boolean', { secret: false }, '[REDACTED]'],
+  ['object', { secret: { a: 1 } }, '[REDACTED]'],
+  ['null', { secret: null }, null],
+])('maskFields should handle a %s value', (_label, configuration, expected) => {
+  const component = new Component<Record<string, unknown>>();
+  component.configuration = { ...configuration, keep: 'visible' };
+  expect(component.maskFields(['secret'])).toStrictEqual({ secret: expected, keep: 'visible' });
+  expect(component.configuration.keep).toBe('visible');
+});
+
+test('maskFields should not add keys for absent fields and should not mutate the configuration', () => {
+  const component = new Component<Record<string, unknown>>();
+  component.configuration = { secret: 'x' };
+  const result = component.maskFields(['secret', 'missing']);
+  expect(result).toStrictEqual({ secret: '[REDACTED]' });
+  expect(component.configuration).toStrictEqual({ secret: 'x' });
+});
+
 test('getId should return the concatenation $type.$name', async () => {
   const component = new Component();
   component.register('kind', 'type', 'name', { x: 'x' });

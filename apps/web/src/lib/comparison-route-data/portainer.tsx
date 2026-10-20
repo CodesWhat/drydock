@@ -5,7 +5,7 @@ export const portainerComparisonRouteData = {
   slug: "portainer",
   comparisonTable: `
 Project status|Actively maintained|Actively maintained|tie
-Pricing|Free CE / Paid BE ($$$)|Free, AGPL-3.0 licensed|self
+Pricing|Free CE / Paid BE ($$$)|Free, MIT licensed|self
 Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
@@ -26,7 +26,7 @@ Web terminal / shell|Yes|Planned|competitor
 Compose templates|Yes|Planned|competitor
 Audit log|Yes (BE only)|Yes (free)|self
 Resource footprint|Heavier (~100–200MB RAM)|Lightweight (~80MB RAM)|self
-License|Zlib (CE) / Proprietary (BE)|AGPL-3.0|self
+License|Zlib (CE) / Proprietary (BE)|MIT|self
 `,
   highlightsTable: `
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. We built these into Drydock because Portainer doesn't offer automatic rollback or these safety primitives.
