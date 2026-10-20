@@ -2442,6 +2442,7 @@ describe('docker image details orchestration module', () => {
     expect(getContainersSpy).toHaveBeenCalledWith();
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-id', {
       replacementExpected: true,
+      excludedContainerId: 'old-container-id',
     });
   });
 
@@ -2473,6 +2474,7 @@ describe('docker image details orchestration module', () => {
     expect(result?.id).toBe('new-container-id');
     expect(deleteContainerSpy).toHaveBeenCalledWith('7ea6b8a42686old-container-id', {
       replacementExpected: true,
+      excludedContainerId: '7ea6b8a42686old-container-id',
     });
   });
 
@@ -2541,9 +2543,11 @@ describe('docker image details orchestration module', () => {
     expect(result?.id).toBe('new-container-id');
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-current-watcher', {
       replacementExpected: true,
+      excludedContainerId: 'old-container-current-watcher',
     });
     expect(deleteContainerSpy).toHaveBeenCalledWith('old-container-same-source-different-watcher', {
       replacementExpected: true,
+      excludedContainerId: 'old-container-same-source-different-watcher',
     });
   });
 
