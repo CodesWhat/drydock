@@ -308,6 +308,8 @@ export const useOperationStore = defineStore('operations', () => {
   const byId = ref<Record<string, UiUpdateOperation>>({});
   const byContainerId = ref(new Map<string, string>());
   const byIdentityKey = ref(new Map<string, string>());
+  /** Container-list row ids that carried an operation owned by another container id (SSE owns the ids). */
+  const byListAlias = ref(new Map<string, string>());
   const batchSummaries = ref<Record<string, UiBatchProgress>>({});
   const displayBatches = ref(new Map<string, FrozenBatch>());
   let unsubscribeEventStream: Array<() => void> = [];
@@ -343,6 +345,16 @@ export const useOperationStore = defineStore('operations', () => {
       nextIdentityIndex.set(next.identityKey, next.operationId);
     }
     byIdentityKey.value = nextIdentityIndex;
+
+    if (previous && !isActiveOperation(next)) {
+      const nextAliasIndex = new Map(byListAlias.value);
+      for (const [alias, operationId] of byListAlias.value) {
+        if (operationId === previous.operationId) {
+          nextAliasIndex.delete(alias);
+        }
+      }
+      byListAlias.value = nextAliasIndex;
+    }
   }
 
   function upsertOperation(input: OperationUpsert): void {
@@ -482,6 +494,11 @@ export const useOperationStore = defineStore('operations', () => {
     return operationId ? byId.value[operationId] : undefined;
   }
 
+  function getOperationByListAlias(containerId: string): UiUpdateOperation | undefined {
+    const operationId = byListAlias.value.get(containerId);
+    return operationId ? byId.value[operationId] : undefined;
+  }
+
   function getOperationByIdentityKey(identityKey: string): UiUpdateOperation | undefined {
     const operationId = byIdentityKey.value.get(identityKey);
     return operationId ? byId.value[operationId] : undefined;
@@ -501,7 +518,7 @@ export const useOperationStore = defineStore('operations', () => {
 
   /**
    * Resolve the active operation for a container: held display op, then
-   * container id, then identity key, then a guarded name match.
+   * container id, then list alias, then identity key, then a guarded name match.
    */
   function getOperationForContainer(
     container: OperationContainerRef,
@@ -512,6 +529,7 @@ export const useOperationStore = defineStore('operations', () => {
     }
     const operation =
       getOperationByContainerId(container.id) ??
+      getOperationByListAlias(container.id) ??
       (container.identityKey ? getOperationByIdentityKey(container.identityKey) : undefined) ??
       (container.name ? findOperationByName(container.name) : undefined);
     return operation ? toContainerUpdateOperation(operation) : undefined;
@@ -532,6 +550,12 @@ export const useOperationStore = defineStore('operations', () => {
     return Number.isNaN(completed) ? operation.lastSeenAt : completed;
   }
 
+  function batchHasActiveOperation(batchId: string): boolean {
+    return Object.values(byId.value).some(
+      (candidate) => candidate.batchId === batchId && isActiveOperation(candidate),
+    );
+  }
+
   /** Drop terminal operations past retention that belong to no display batch. */
   function pruneTerminalOperations(now: number = Date.now()): void {
     for (const operation of Object.values(byId.value)) {
@@ -539,6 +563,10 @@ export const useOperationStore = defineStore('operations', () => {
         continue;
       }
       if (operation.batchId && displayBatches.value.has(operation.batchId)) {
+        continue;
+      }
+      // Batch counts are derived from byId; pruning a finished member of a live batch shrinks them.
+      if (operation.batchId && batchHasActiveOperation(operation.batchId)) {
         continue;
       }
       if (now - operationAgeAnchor(operation) > TERMINAL_OPERATION_RETENTION_MS) {
@@ -549,10 +577,11 @@ export const useOperationStore = defineStore('operations', () => {
 
   function dropContainerIndexEntry(
     key: string,
-    index: 'container' | 'identity',
+    index: 'container' | 'identity' | 'alias',
     seenBefore: number,
   ) {
-    const map = index === 'container' ? byContainerId : byIdentityKey;
+    const map =
+      index === 'container' ? byContainerId : index === 'alias' ? byListAlias : byIdentityKey;
     const operationId = map.value.get(key);
     const operation = operationId ? byId.value[operationId] : undefined;
     if (!operation || !isActiveOperation(operation) || operation.lastSeenAt >= seenBefore) {
@@ -561,6 +590,57 @@ export const useOperationStore = defineStore('operations', () => {
     const next = new Map(map.value);
     next.delete(key);
     map.value = next;
+  }
+
+  /**
+   * Merge a list row into an operation the store already knows. SSE owns the
+   * operation's container ids, so a differing row id becomes a list alias rather
+   * than a rewrite (compose replicas can share an operation through the backend
+   * identity fallback). A list fetched before the last SSE touch only fills
+   * fields the operation is missing.
+   */
+  function mergeListRowIntoExisting(
+    existing: UiUpdateOperation,
+    incoming: OperationUpsert,
+    requestStartedAt: number,
+  ): void {
+    const rowContainerId = incoming.containerId;
+    const merged: OperationUpsert = { ...incoming };
+    delete merged.containerId;
+    delete merged.newContainerId;
+    if (!existing.containerId && rowContainerId) {
+      merged.containerId = rowContainerId;
+    }
+
+    if (existing.lastSeenAt >= requestStartedAt) {
+      const { status: _s, phase: _p, ...rest } = merged;
+      const fill = Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => existing[key as keyof UiUpdateOperation] === undefined,
+        ),
+      );
+      upsertOperation({
+        ...existing,
+        ...fill,
+        operationId: existing.operationId,
+        status: existing.status,
+        phase: existing.phase,
+      });
+    } else {
+      upsertOperation(merged);
+    }
+
+    const current = byId.value[existing.operationId];
+    if (
+      rowContainerId &&
+      current &&
+      isActiveOperation(current) &&
+      !getOperationContainerIds(current).includes(rowContainerId)
+    ) {
+      const nextAliases = new Map(byListAlias.value);
+      nextAliases.set(rowContainerId, current.operationId);
+      byListAlias.value = nextAliases;
+    }
   }
 
   /**
@@ -580,20 +660,18 @@ export const useOperationStore = defineStore('operations', () => {
       if (normalized) {
         const { lastSeenAt: _ignored, ...incoming } = normalized;
         const existing = byId.value[incoming.operationId];
-        if (existing?.containerId && incoming.containerId) {
-          if (existing.containerId !== incoming.containerId) {
-            // Recreated container: keep the original id, index the new one beside it.
-            incoming.newContainerId = incoming.containerId;
-            delete incoming.containerId;
-          }
+        if (existing) {
+          mergeListRowIntoExisting(existing, incoming, requestStartedAt);
+        } else {
+          upsertOperation(incoming);
         }
-        upsertOperation(incoming);
         continue;
       }
       const rowId = isObject(row) ? getString(row.id) : undefined;
       const rowIdentityKey = isObject(row) ? deriveRowIdentityKey(row) : undefined;
       if (rowId) {
         dropContainerIndexEntry(rowId, 'container', requestStartedAt);
+        dropContainerIndexEntry(rowId, 'alias', requestStartedAt);
       }
       if (rowIdentityKey) {
         dropContainerIndexEntry(rowIdentityKey, 'identity', requestStartedAt);
@@ -771,6 +849,7 @@ export const useOperationStore = defineStore('operations', () => {
     replaceDisplayBatches,
     getOperationByContainerId,
     getOperationByIdentityKey,
+    getOperationByListAlias,
     getOperationForContainer,
     isContainerUpdateActive,
     getActiveOperationStatus,
