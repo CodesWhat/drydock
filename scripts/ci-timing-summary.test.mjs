@@ -123,3 +123,16 @@ test('pull requests skip the week-over-week section', async () => {
   });
   assert.ok(!summary.includes('Week over week'));
 });
+
+test('table cells escape backslashes before pipes', () => {
+  const jobs = [
+    {
+      name: 'a\\|b',
+      conclusion: 'success',
+      started_at: '2026-10-19T00:00:00Z',
+      completed_at: '2026-10-19T00:00:10Z',
+    },
+  ];
+  const row = buildJobTable(jobs, 'CI timing').split('\n')[2];
+  assert.equal(row, '| a\\\\\\|b | success | 10s |');
+});

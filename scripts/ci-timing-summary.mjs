@@ -32,7 +32,8 @@ export function median(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
-const cell = (text) => String(text).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+const cell = (text) =>
+  String(text).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 
 export function buildJobTable(jobs, excludeName) {
   const rows = jobs
