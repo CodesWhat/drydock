@@ -76,3 +76,15 @@ test('init and recordLegacyInput should be no-ops when counter factory returns n
   expect(() => fresh.recordLegacyInput('env', 'WUD_FALLBACK_ONLY')).not.toThrow();
   expect(fresh.getLegacyInputSummary().env.keys).toContain('WUD_FALLBACK_ONLY');
 });
+
+test('getLegacyInputSummary should report last-seen timestamps for api keys only', () => {
+  const apiKey = `/api/lastseen-${Date.now()} via curl`;
+  compatibility.recordLegacyInput('api', apiKey);
+  compatibility.recordLegacyInput('env', `WUD_LASTSEEN_${Date.now()}`);
+
+  const summary = compatibility.getLegacyInputSummary();
+
+  expect(Number.isNaN(Date.parse(summary.api.lastSeen?.[apiKey] ?? ''))).toBe(false);
+  expect(summary.env.lastSeen).toBeUndefined();
+  expect(summary.label.lastSeen).toBeUndefined();
+});

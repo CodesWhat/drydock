@@ -44,6 +44,8 @@ The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. A
 | **Removed since** | v1.6.0 |
 | **Migration** | Replace `/api/` with `/api/v1/` in all integrations. If you depend on wud-card or Homepage's `whatsupdocker` widget and can't change their base path, set `DD_COMPAT_WUDCARD=true` |
 
+**Finding the caller:** the in-app banner for removed API path requests lists each resource that was hit and a coarse client class, for example `/api/containers/* from homepage, last seen 5 min. ago`. `none` means the request had no `User-Agent` header. The server log carries the details the banner can't: the first hit per resource and client each hour is logged at info level with the method, path (no query string), `User-Agent` and remote address, so search the log for `Removed unversioned API path hit` to find the host to fix.
+
 ### Unversioned WebSocket alias (`WS /api/log/stream`) {#unversioned-ws-log-stream}
 
 The system log stream WebSocket accepted both the versioned `/api/v1/log/stream` path and the unversioned `/api/log/stream` alias, following the same transition-alias policy as the REST `/api/*` path above. As of v1.6.0, an upgrade request to the unversioned path is rejected with a 410-style upgrade failure instead of completing the WebSocket handshake.
