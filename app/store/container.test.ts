@@ -8,6 +8,7 @@ import {
   createTemporaryStoreDirectory,
   removeTemporaryStoreDirectory,
 } from '../test/sqlite-db.js';
+import { getContainerStatusSummary } from '../util/container-summary.js';
 import { updateContainerFromInspect } from '../watchers/providers/docker/container-event-update.js';
 import { pruneOldContainers } from '../watchers/providers/docker/container-init.js';
 import { mapContainerToContainerReport } from '../watchers/providers/docker/container-processing.js';
@@ -1833,6 +1834,7 @@ test('getContainersForStats should return projected stat fields only', async () 
 
   // Required stat fields are present
   expect(projection.id).toBe(containerExample.id);
+  expect(projection.name).toBe(containerExample.name);
   expect(projection.watcher).toBe(containerExample.watcher);
   expect(projection.agent).toBe('edge-agent');
   expect(projection.status).toBe('unknown');
@@ -1862,6 +1864,25 @@ test('getContainersForStats should reflect live updateAvailable from stored cont
   const result = container.getContainersForStats({});
 
   expect(result[0].updateAvailable).toBe(true);
+});
+
+test('getContainersForStats feeds the same status summary and image count as getContainers', async () => {
+  seedContainer(createContainerFixture({ id: 'a', name: 'a', status: 'running' }));
+  seedContainer(
+    createContainerFixture({ id: 'b', name: 'b', status: 'exited', result: { tag: 'newer' } }),
+  );
+  seedContainer(createContainerFixture({ id: 'c', name: 'c', status: 'running' }));
+
+  const images = (list: Array<{ id?: unknown; image?: { id?: unknown; name?: unknown } }>) =>
+    new Set(list.map((c) => c.image?.id ?? c.image?.name ?? c.id)).size;
+  const full = container.getContainers({});
+  const projected = container.getContainersForStats({});
+
+  expect(getContainerStatusSummary(projected)).toEqual(getContainerStatusSummary(full));
+  expect(images(projected)).toBe(images(full));
+  expect(projected.map((c) => [c.id, c.name, c.watcher, c.agent])).toEqual(
+    full.map((c) => [c.id, c.name, c.watcher, c.agent]),
+  );
 });
 
 test('getContainersForStats should return empty array when collection is not initialized', async () => {

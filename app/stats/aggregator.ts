@@ -9,6 +9,9 @@ const log = logger.child({ component: 'stats.aggregator' });
 
 const DEFAULT_TOP_N = 5;
 
+// Only the fields the tick reads, so the store's stats projection satisfies it.
+type StatsContainer = Pick<Container, 'id' | 'name' | 'watcher' | 'agent'>;
+
 interface ContainerStatsSummaryRow {
   id: string;
   name: string;
@@ -57,7 +60,7 @@ function isDockerStatsWatcherApi(watcher: unknown): watcher is DockerStatsWatche
 }
 
 export interface ContainerStatsAggregatorDependencies {
-  getContainers: () => Container[];
+  getContainers: () => StatsContainer[];
   getWatchers: () => Record<string, unknown>;
   intervalSeconds?: number;
   topN?: number;
@@ -111,7 +114,7 @@ async function defaultFetchSnapshot(
 }
 
 interface AggregatorRuntime {
-  getContainers: () => Container[];
+  getContainers: () => StatsContainer[];
   getWatchers: () => Record<string, unknown>;
   intervalMs: number;
   topN: number;
@@ -140,7 +143,7 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
     const containers = runtime.getContainers();
     const watchers = runtime.getWatchers();
 
-    const targets: Array<{ container: Container; watcher: DockerStatsWatcherApi }> = [];
+    const targets: Array<{ container: StatsContainer; watcher: DockerStatsWatcherApi }> = [];
     for (const container of containers) {
       const watcherId = getDockerWatcherRegistryId(container.watcher, container.agent ?? undefined); // #386
       const watcher = watchers[watcherId];

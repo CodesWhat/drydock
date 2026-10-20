@@ -1,14 +1,21 @@
-const { mockRouter, mockGetContainers, mockRegistryState, mockAggregator, mockHandlers } =
-  vi.hoisted(() => ({
-    mockRouter: { use: vi.fn(), get: vi.fn() },
-    mockGetContainers: vi.fn(() => []),
-    mockRegistryState: vi.fn(() => ({ watcher: {} })),
-    mockAggregator: { start: vi.fn(), stop: vi.fn(), getCurrent: vi.fn(), subscribe: vi.fn() },
-    mockHandlers: {
-      getStatsSummary: vi.fn(),
-      streamStatsSummary: vi.fn(),
-    },
-  }));
+const {
+  mockRouter,
+  mockGetContainers,
+  mockGetContainersForStats,
+  mockRegistryState,
+  mockAggregator,
+  mockHandlers,
+} = vi.hoisted(() => ({
+  mockRouter: { use: vi.fn(), get: vi.fn() },
+  mockGetContainers: vi.fn(() => []),
+  mockGetContainersForStats: vi.fn(() => []),
+  mockRegistryState: vi.fn(() => ({ watcher: {} })),
+  mockAggregator: { start: vi.fn(), stop: vi.fn(), getCurrent: vi.fn(), subscribe: vi.fn() },
+  mockHandlers: {
+    getStatsSummary: vi.fn(),
+    streamStatsSummary: vi.fn(),
+  },
+}));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -18,6 +25,7 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/container.js', () => ({
   getContainers: mockGetContainers,
+  getContainersForStats: mockGetContainersForStats,
 }));
 
 vi.mock('../registry/index.js', () => ({
@@ -72,7 +80,8 @@ describe('Stats Router', () => {
     });
     const args = vi.mocked(createContainerStatsAggregator).mock.calls[0]?.[0];
     args?.getContainers();
-    expect(mockGetContainers).toHaveBeenCalled();
+    expect(mockGetContainersForStats).toHaveBeenCalled();
+    expect(mockGetContainers).not.toHaveBeenCalled();
     args?.getWatchers();
     expect(mockRegistryState).toHaveBeenCalled();
   });
