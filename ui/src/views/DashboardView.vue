@@ -18,6 +18,7 @@ import { useToast } from '../composables/useToast';
 import { ELIGIBILITY_DOCS } from '../composables/useUpdateStatus';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
+import { useOperationStore } from '../stores/operations';
 import { ROUTES } from '../router/routes';
 import { updateContainer, updateContainers } from '../services/container-actions';
 import {
@@ -58,6 +59,7 @@ const { t } = useI18n();
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
+const operationStore = useOperationStore();
 const { updateMode } = useUpdateMode();
 const managedUpdatesAllowed = computed(() => updateMode.value !== 'notify');
 const {
@@ -283,29 +285,6 @@ function getDashboardContainerReconciliationKey(container: {
   return container.identityKey || container.id || container.name || '';
 }
 
-// Per-row (identity, updateOperation.status, updateOperation.updatedAt)
-// fingerprint used as a watch source for reconcileHoldsAgainstContainers below.
-// useDashboardData's SSE handlers write container.updateOperation in place
-// (Object.assign on 'updated' patches, a direct `row.updateOperation = ...`
-// write for operation-status patches) without ever reassigning containers.value
-// or changing its length, so neither a reference-only watch nor a
-// length-augmented one (see the watch right above this function) observes
-// them. Mapping + joining only the fields reconcileHoldsAgainstContainers
-// actually reads is deliberately NOT { deep: true } on the containers ref:
-// a deep watch would re-run this on every unrelated in-place field mutation
-// (image tag, stats, security fields, ...) to every row -- exactly the
-// per-row invalidation the in-place patch pipeline exists to avoid.
-function dashboardUpdateOperationFingerprint(list: Container[]): string {
-  const parts = new Array<string>(list.length);
-  for (let i = 0; i < list.length; i += 1) {
-    const container = list[i]!;
-    const operation = container.updateOperation;
-    parts[i] =
-      `${getDashboardContainerReconciliationKey(container)}:${operation?.status ?? ''}:${operation?.updatedAt ?? ''}`;
-  }
-  return parts.join('\n');
-}
-
 function stopDashboardPendingUpdatePolling() {
   if (!dashboardPendingUpdatePollTimer.value) {
     dashboardPendingUpdatePollDelayMs.value = DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS;
@@ -521,10 +500,28 @@ function findDashboardContainerForOperationTarget(target: {
   return undefined;
 }
 
+// A list-seeded row.updateOperation goes stale once its operation ends, so the
+// hold must not inherit batch/queue fields from it. Take the prior operation
+// from the operations store, and only when it is this same operation.
+function resolveHoldSourceContainer(
+  target: { containerId?: string; newContainerId?: string; containerName?: string },
+  operationId: string | undefined,
+): Container | undefined {
+  const container = findDashboardContainerForOperationTarget(target);
+  if (!container) {
+    return undefined;
+  }
+  const previous = operationStore.getOperationForContainer(container);
+  return {
+    ...container,
+    updateOperation: previous && previous.id === operationId ? previous : undefined,
+  };
+}
+
 function applyDashboardParsedOperationSse(parsed: ParsedUpdateOperationSse) {
   return applyUpdateOperationSseToHold({
     parsed,
-    resolveContainer: findDashboardContainerForOperationTarget,
+    resolveContainer: (target) => resolveHoldSourceContainer(target, parsed.operationId),
     // DashboardView doesn't mutate container rows — the widget projects held
     // containers through projectContainerDisplayState, so reactivity flows from
     // the hold map into the derived computed.
@@ -546,24 +543,14 @@ function applyDashboardOperationSse(event: Event) {
   applyDashboardParsedOperationSse(parsed);
 }
 
-// After every container-list refresh AND after any in-place updateOperation
-// patch, reconcile holds against the raw container state so a replayed or
-// reconciled terminal state releases the display hold. Watches
-// dashboardUpdateOperationFingerprint(containers.value) rather than the
-// containers ref itself: a reference-only watch fires on the full-reload
-// reassignment but never on the SSE patch pipeline's in-place
-// container.updateOperation writes (useDashboardData's
-// applyDashboardContainerPatch Object.assign on 'updated' events, and
-// applyDashboardOperationPatch's direct `row.updateOperation = ...` /
-// `= undefined` writes on operation-status events) -- exactly the missed-SSE
-// case this safety net exists to cover. See dashboardUpdateOperationFingerprint
-// above for why this isn't { deep: true } on containers instead.
-watch(
-  () => dashboardUpdateOperationFingerprint(containers.value),
-  () => {
-    reconcileHoldsAgainstContainers(containers.value, Date.now());
-  },
-);
+// Every fetch (initial, poll, realtime refresh) seeds the operations store and
+// then reassigns containers.value, so a reference-only watch is a
+// reconcile-after-fetch. A replayed or missed terminal state releases its
+// display hold here. In-place SSE patches deliberately do not trigger this:
+// operation state no longer lives on the rows.
+watch(containers, () => {
+  reconcileHoldsAgainstContainers(containers.value, Date.now());
+});
 
 function handleDashboardSseUpdateApplied(event: Event) {
   const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;

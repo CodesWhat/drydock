@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 import { setI18nLocale } from '@/boot/i18n';
 import type { Container } from '@/types/container';
@@ -10,10 +11,18 @@ import type {
 } from '@/views/dashboard/dashboardTypes';
 import { useDashboardComputed } from '@/views/dashboard/useDashboardComputed';
 import { getWatcherConfiguration } from '@/views/dashboard/watcherConfiguration';
+import { seedOperation } from '../../helpers/operations';
 
 vi.mock('@/views/dashboard/watcherConfiguration', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/views/dashboard/watcherConfiguration')>();
   return { getWatcherConfiguration: vi.fn(original.getWatcherConfiguration) };
+});
+
+let pinia: ReturnType<typeof createPinia>;
+
+beforeEach(() => {
+  pinia = createPinia();
+  setActivePinia(pinia);
 });
 
 function makeContainer(
@@ -1407,32 +1416,40 @@ describe('useDashboardComputed recent updates', () => {
   });
 
   it('keeps later visible standalone queued rows queued when a hidden pinned predecessor is first', () => {
-    const hiddenPinnedHead = makeBaseContainer({
-      id: 'pinned-head',
-      identityKey: '::local::pinned-head',
-      name: 'pinned-head',
-      tagPinned: true,
-      updateOperation: {
-        id: 'op-pinned-head',
+    seedOperation(
+      pinia,
+      { id: 'pinned-head', identityKey: '::local::pinned-head', name: 'pinned-head' },
+      {
+        operationId: 'op-pinned-head',
         status: 'queued',
         phase: 'queued',
         updatedAt: '2026-04-04T10:00:00.000Z',
         fromVersion: '1.0.0',
         toVersion: '1.1.0',
       },
-    });
-    const visibleQueued = makeBaseContainer({
-      id: 'visible-tail',
-      identityKey: '::local::visible-tail',
-      name: 'visible-tail',
-      updateOperation: {
-        id: 'op-visible-tail',
+    );
+    seedOperation(
+      pinia,
+      { id: 'visible-tail', identityKey: '::local::visible-tail', name: 'visible-tail' },
+      {
+        operationId: 'op-visible-tail',
         status: 'queued',
         phase: 'queued',
         updatedAt: '2026-04-04T10:00:01.000Z',
         fromVersion: '2.0.0',
         toVersion: '2.1.0',
       },
+    );
+    const hiddenPinnedHead = makeBaseContainer({
+      id: 'pinned-head',
+      identityKey: '::local::pinned-head',
+      name: 'pinned-head',
+      tagPinned: true,
+    });
+    const visibleQueued = makeBaseContainer({
+      id: 'visible-tail',
+      identityKey: '::local::visible-tail',
+      name: 'visible-tail',
     });
 
     const state = createState({
@@ -1472,20 +1489,24 @@ describe('useDashboardComputed recent updates', () => {
   });
 
   it('treats a standalone queued update operation as updating when no other active update exists', () => {
+    seedOperation(
+      pinia,
+      { id: 'queued-standalone', identityKey: undefined, name: 'queued-standalone' },
+      {
+        operationId: 'op-queued-standalone',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      },
+    );
     const state = createState({
       containers: [
         makeBaseContainer({
           id: 'queued-standalone',
           name: 'queued-standalone',
           newTag: null,
-          updateOperation: {
-            id: 'op-queued-standalone',
-            status: 'queued',
-            phase: 'queued',
-            updatedAt: '2026-04-04T10:00:00.000Z',
-            fromVersion: '1.0.0',
-            toVersion: '1.1.0',
-          },
         }),
       ],
     });
@@ -1499,33 +1520,41 @@ describe('useDashboardComputed recent updates', () => {
   });
 
   it('keeps a standalone queued update operation queued when another container is already updating', () => {
+    seedOperation(
+      pinia,
+      { id: 'updating-head', identityKey: undefined, name: 'updating-head' },
+      {
+        operationId: 'op-updating-head',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-04T10:00:00.000Z',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      },
+    );
+    seedOperation(
+      pinia,
+      { id: 'queued-tail', identityKey: undefined, name: 'queued-tail' },
+      {
+        operationId: 'op-queued-tail',
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-04-04T10:00:01.000Z',
+        fromVersion: '2.0.0',
+        toVersion: '2.1.0',
+      },
+    );
     const state = createState({
       containers: [
         makeBaseContainer({
           id: 'updating-head',
           name: 'updating-head',
           newTag: null,
-          updateOperation: {
-            id: 'op-updating-head',
-            status: 'in-progress',
-            phase: 'pulling',
-            updatedAt: '2026-04-04T10:00:00.000Z',
-            fromVersion: '1.0.0',
-            toVersion: '1.1.0',
-          },
         }),
         makeBaseContainer({
           id: 'queued-tail',
           name: 'queued-tail',
           newTag: null,
-          updateOperation: {
-            id: 'op-queued-tail',
-            status: 'queued',
-            phase: 'queued',
-            updatedAt: '2026-04-04T10:00:01.000Z',
-            fromVersion: '2.0.0',
-            toVersion: '2.1.0',
-          },
         }),
       ],
     });
@@ -1542,6 +1571,31 @@ describe('useDashboardComputed recent updates', () => {
         }),
       ]),
     );
+  });
+
+  it('takes old and new versions from the operation store when the row has no new tag', () => {
+    seedOperation(
+      pinia,
+      { id: 'versioned', name: 'versioned' },
+      {
+        operationId: 'op-versioned',
+        status: 'in-progress',
+        fromVersion: '3.0.0',
+        toVersion: '3.1.0',
+      },
+    );
+    const state = createState({
+      containers: [makeBaseContainer({ id: 'versioned', name: 'versioned', newTag: null })],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        name: 'versioned',
+        status: 'updating',
+        oldVer: '3.0.0',
+        newVer: '3.1.0',
+      }),
+    ]);
   });
 
   it('maps mature-only suppressed updates to maturity-blocked status', () => {
