@@ -26,7 +26,7 @@ interface UseContainerSsePatchPipelineInput {
   loadContainers: () => Promise<void>;
   loadDetailSecurityData: () => Promise<void>;
   reconcileHoldsAgainstContainers: (
-    containers: readonly Pick<Container, 'id' | 'identityKey' | 'name' | 'updateOperation'>[],
+    containers: readonly Pick<Container, 'id' | 'identityKey' | 'name'>[],
   ) => void;
   refreshServerNames?: () => void;
   schedulePostTerminalReload: () => void;
@@ -414,6 +414,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     return applyUpdateOperationSseToHold({
       parsed,
       resolveContainer: findContainerForOperationTarget,
+      resolvePreviousOperation: (container) => operationStore.getOperationForContainer(container),
       // ContainersView drives row reactivity by mutating updateOperation in
       // place, so the view keeps responsibility for that while the composable
       // owns the hold map + snapshot.

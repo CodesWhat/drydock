@@ -522,8 +522,9 @@ export const useOperationStore = defineStore('operations', () => {
    */
   function getOperationForContainer(
     container: OperationContainerRef,
+    options: { ignoreHold?: boolean } = {},
   ): ContainerUpdateOperation | undefined {
-    const held = getHeldOperation(container);
+    const held = options.ignoreHold ? undefined : getHeldOperation(container);
     if (held) {
       return held;
     }
@@ -535,8 +536,15 @@ export const useOperationStore = defineStore('operations', () => {
     return operation ? toContainerUpdateOperation(operation) : undefined;
   }
 
-  function isContainerUpdateActive(container: OperationContainerRef): boolean {
-    return getOperationForContainer(container) !== undefined;
+  /**
+   * `ignoreHold` reads only the store's own indexes. Hold reconciliation needs it:
+   * the hold would otherwise report every held container as still active.
+   */
+  function isContainerUpdateActive(
+    container: OperationContainerRef,
+    options: { ignoreHold?: boolean } = {},
+  ): boolean {
+    return getOperationForContainer(container, options) !== undefined;
   }
 
   function getActiveOperationStatus(

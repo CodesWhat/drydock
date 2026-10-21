@@ -480,6 +480,27 @@ describe('operations store seeding', () => {
       });
       expect(store.getOperationForContainer({ id: 'c1' })).toEqual(held);
     });
+
+    it('reads only the store indexes when ignoreHold is set', () => {
+      const store = useOperationStore();
+      const held = {
+        id: 'op-held',
+        status: 'in-progress' as const,
+        phase: 'pulling' as const,
+        updatedAt: '2026-04-01T12:10:00.000Z',
+      };
+      useOperationDisplayHold().holdOperationDisplay({
+        operationId: 'op-held',
+        operation: held,
+        containerId: 'c1',
+        now: Date.now(),
+      });
+      expect(store.isContainerUpdateActive({ id: 'c1' })).toBe(true);
+      expect(store.isContainerUpdateActive({ id: 'c1' }, { ignoreHold: true })).toBe(false);
+
+      store.seedFromContainerList([row()], Date.now());
+      expect(store.getOperationForContainer({ id: 'c1' }, { ignoreHold: true })?.id).toBe('op-1');
+    });
   });
 
   describe('prune terminal operations (D6)', () => {

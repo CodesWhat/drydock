@@ -107,32 +107,50 @@ vi.mock('@/utils/container-mapper', () => ({
 }));
 
 const mockSeedFromContainerList = vi.hoisted(() => vi.fn());
+// Stand-in for the operations store's active-operation index, keyed by container id.
+const mockStoreOperations = vi.hoisted(() => new Map<string, any>());
 
-vi.mock('@/stores/operations', () => ({
-  useOperationStore: () => ({
-    displayBatches: new Map(),
-    byId: {},
-    batchSummaries: {},
-    getOperationByContainerId: vi.fn().mockReturnValue(undefined),
-    getOperationForContainer: vi.fn().mockReturnValue(undefined),
-    isContainerUpdateActive: vi.fn().mockReturnValue(false),
-    getBatchProgress: vi.fn().mockReturnValue(undefined),
-    getActiveBatchProgress: vi.fn().mockReturnValue([]),
-    captureDisplayBatch: vi.fn(),
-    clearDisplayBatch: vi.fn(),
-    getDisplayBatch: vi.fn().mockReturnValue(undefined),
-    incrementDisplayBatchFailed: vi.fn(),
-    incrementDisplayBatchSucceeded: vi.fn(),
-    replaceDisplayBatches: vi.fn(),
-    seedFromContainerList: mockSeedFromContainerList,
-    applyOperationChanged: vi.fn(),
-    applyUpdateApplied: vi.fn(),
-    applyUpdateFailed: vi.fn(),
-    applyBatchCompleted: vi.fn(),
-    start: vi.fn(),
-    stop: vi.fn(),
-  }),
-}));
+vi.mock('@/stores/operations', async () => {
+  const hold = await import('@/composables/useOperationDisplayHold');
+  const getOperationForContainer = (container: any, options: { ignoreHold?: boolean } = {}) =>
+    (options.ignoreHold
+      ? undefined
+      : hold.useOperationDisplayHold().getDisplayUpdateOperation(container)) ??
+    mockStoreOperations.get(container.id);
+  return {
+    useOperationStore: () => ({
+      displayBatches: new Map(),
+      byId: {},
+      batchSummaries: {},
+      getOperationByContainerId: vi.fn().mockReturnValue(undefined),
+      getOperationForContainer,
+      isContainerUpdateActive: (container: any, options?: { ignoreHold?: boolean }) =>
+        getOperationForContainer(container, options) !== undefined,
+      getBatchProgress: vi.fn().mockReturnValue(undefined),
+      getActiveBatchProgress: vi.fn().mockReturnValue([]),
+      captureDisplayBatch: vi.fn(),
+      clearDisplayBatch: vi.fn(),
+      getDisplayBatch: vi.fn().mockReturnValue(undefined),
+      incrementDisplayBatchFailed: vi.fn(),
+      incrementDisplayBatchSucceeded: vi.fn(),
+      replaceDisplayBatches: vi.fn(),
+      seedFromContainerList: (rows: any[], requestStartedAt: number) => {
+        mockSeedFromContainerList(rows, requestStartedAt);
+        for (const row of rows) {
+          if (row?.updateOperation) {
+            mockStoreOperations.set(row.id, row.updateOperation);
+          }
+        }
+      },
+      applyOperationChanged: vi.fn(),
+      applyUpdateApplied: vi.fn(),
+      applyUpdateFailed: vi.fn(),
+      applyBatchCompleted: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+    }),
+  };
+});
 
 vi.mock('@/utils/display', async (importOriginal) => ({
   bouncerColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
@@ -440,6 +458,11 @@ async function mountContainersView(
       displayName: c.name,
     }));
   mockGetAllContainers.mockResolvedValue(apiContainers);
+  for (const c of containers) {
+    if (c.updateOperation) {
+      mockStoreOperations.set(c.id, c.updateOperation);
+    }
+  }
 
   const { mapApiContainers } = await import('@/utils/container-mapper');
   (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(containers);
@@ -900,6 +923,7 @@ describe('ContainersView', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mockStoreOperations.clear();
     useToast().toasts.value = [];
     vi.mocked(getAgents).mockResolvedValue([]);
     vi.mocked(getAllWatchers).mockResolvedValue([]);
@@ -1302,30 +1326,13 @@ describe('ContainersView', () => {
       });
 
       it('reassigns containers.value when only nested fields change', async () => {
-        const container = makeContainer({
-          id: 'c1',
-          name: 'nginx',
-          updateOperation: {
-            id: 'op-1',
-            status: 'in-progress',
-            phase: 'pulling',
-            updatedAt: '2026-04-20T12:00:00.000Z',
-          },
-        });
+        const container = makeContainer({ id: 'c1', name: 'nginx', registryError: 'timeout' });
         const wrapper = await mountContainersView([container]);
         const vm = wrapper.vm as any;
 
         const firstRef = vm.containers;
 
-        const updatedContainer = makeContainer({
-          ...container,
-          updateOperation: {
-            id: 'op-1',
-            status: 'in-progress',
-            phase: 'prepare',
-            updatedAt: '2026-04-20T12:00:01.000Z',
-          },
-        });
+        const updatedContainer = makeContainer({ ...container, registryError: 'unauthorized' });
         mockGetAllContainers.mockResolvedValue([
           { ...updatedContainer, displayName: updatedContainer.name },
         ]);
@@ -1336,13 +1343,12 @@ describe('ContainersView', () => {
         await flushPromises();
 
         expect(vm.containers).not.toBe(firstRef);
-        expect(vm.containers[0].updateOperation).toMatchObject({
-          status: 'in-progress',
-          phase: 'prepare',
-        });
+        expect(vm.containers[0].registryError).toBe('unauthorized');
       });
 
-      it('reassigns containers.value when operation queue metadata changes', async () => {
+      it('keeps containers.value when only the operation metadata changes', async () => {
+        // Operation state is read from the operations store, so it no longer
+        // takes part in the row fingerprint.
         const container = makeContainer({
           id: 'c1',
           name: 'nginx',
@@ -1375,12 +1381,7 @@ describe('ContainersView', () => {
         await vm.loadContainers();
         await flushPromises();
 
-        expect(vm.containers).not.toBe(firstRef);
-        expect(vm.containers[0].updateOperation).toMatchObject({
-          batchId: 'batch-1',
-          queuePosition: 2,
-          queueTotal: 4,
-        });
+        expect(vm.containers).toBe(firstRef);
       });
 
       it('preserves an active update operation when a reload omits operation metadata', async () => {
@@ -4621,6 +4622,84 @@ describe('ContainersView', () => {
 
         wrapper.unmount();
       } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    async function mountWithOperationListener() {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const operationListener = addEventListenerSpy.mock.calls.findLast(
+        ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+      )?.[1] as EventListener | undefined;
+      const startUpdate = () =>
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+      return { wrapper, vm: wrapper.vm as any, startUpdate, addEventListenerSpy };
+    }
+
+    it('keeps a container Updating across a list refresh while the store still has its operation', async () => {
+      vi.useFakeTimers();
+      const { wrapper, vm, startUpdate, addEventListenerSpy } = await mountWithOperationListener();
+      try {
+        startUpdate();
+        mockStoreOperations.set('c1', {
+          id: 'op-1',
+          status: 'in-progress',
+          phase: 'pulling',
+          updatedAt: '2026-04-20T12:00:00.000Z',
+        });
+
+        // A refresh returns the row without any operation on it.
+        await vm.loadContainers();
+        await flushPromises();
+        vi.advanceTimersByTime(5000);
+        await flushPromises();
+
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+      } finally {
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears an SSE terminal missed during a disconnect within the settle window after reconcile', async () => {
+      vi.useFakeTimers();
+      const { wrapper, vm, startUpdate, addEventListenerSpy } = await mountWithOperationListener();
+      try {
+        startUpdate();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+
+        // Reconnect: no terminal event ever arrived, the list shows no active
+        // operation and the store no longer indexes one for the container.
+        mockStoreOperations.delete('c1');
+        await vm.loadContainers();
+        await flushPromises();
+
+        vi.advanceTimersByTime(1499);
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
+
+        vi.advanceTimersByTime(1);
+        await flushPromises();
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
+      } finally {
+        wrapper.unmount();
         addEventListenerSpy.mockRestore();
         vi.useRealTimers();
       }

@@ -39,6 +39,23 @@ async function loadComposable() {
   return mod.useOperationDisplayHold();
 }
 
+// Stand-in for the operations store lookup the views inject: a container is
+// active while its fixture row carries a queued or in-progress operation.
+const isRowOperationActive = (container: Partial<Container>) =>
+  container.updateOperation?.status === 'queued' ||
+  container.updateOperation?.status === 'in-progress';
+
+function reconcileByRowOperation(
+  hold: Awaited<ReturnType<typeof loadComposable>>,
+  containers: Parameters<typeof hold.reconcileHoldsAgainstContainers>[0],
+  now?: number,
+  onTerminalResolved?: Parameters<typeof hold.reconcileHoldsAgainstContainers>[2],
+) {
+  hold.reconcileHoldsAgainstContainers(containers, now, onTerminalResolved, (container) =>
+    isRowOperationActive(container as Partial<Container>),
+  );
+}
+
 describe('useOperationDisplayHold', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -291,10 +308,10 @@ describe('useOperationDisplayHold', () => {
     expect(hold.heldOperations.value.size).toBe(0);
   });
 
-  it('falls back to the held operation or the container update operation', async () => {
+  it('returns only the held operation and never reads the container prop', async () => {
     const hold = await loadComposable();
     const held = makeOperation({ id: 'op-held' });
-    const fallback = makeOperation({ id: 'op-fallback' });
+    const propOperation = makeOperation({ id: 'op-prop' });
 
     hold.holdOperationDisplay({
       operationId: held.id,
@@ -306,12 +323,10 @@ describe('useOperationDisplayHold', () => {
 
     expect(hold.getDisplayUpdateOperation('web')).toEqual(held);
     expect(
-      hold.getDisplayUpdateOperation({
-        id: 'container-z',
-        name: 'other',
-        updateOperation: fallback,
-      }),
-    ).toBe(fallback);
+      hold.getDisplayUpdateOperation(
+        makeContainer({ id: 'container-z', name: 'other', updateOperation: propOperation }),
+      ),
+    ).toBeUndefined();
     expect(hold.getDisplayUpdateOperation('missing')).toBeUndefined();
   });
 
@@ -685,7 +700,8 @@ describe('useOperationDisplayHold', () => {
         now: t0,
       });
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
       );
@@ -709,7 +725,8 @@ describe('useOperationDisplayHold', () => {
         now: t0,
       });
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'c1',
@@ -741,7 +758,8 @@ describe('useOperationDisplayHold', () => {
 
       const fullWindow = t0 + 10 * 60 * 1000;
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'c1',
@@ -770,7 +788,8 @@ describe('useOperationDisplayHold', () => {
 
       const fullWindow = t0 + 10 * 60 * 1000;
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined })],
         t0,
       );
@@ -802,7 +821,8 @@ describe('useOperationDisplayHold', () => {
       await vi.advanceTimersByTimeAsync(500);
       const t500 = Date.now(); // t0 + 500
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t500,
       );
@@ -827,7 +847,8 @@ describe('useOperationDisplayHold', () => {
       });
 
       // New container has a different id but the same stable source identity (post-recreate)
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'new-id',
@@ -860,7 +881,8 @@ describe('useOperationDisplayHold', () => {
       const hold = await loadComposable();
 
       expect(() =>
-        hold.reconcileHoldsAgainstContainers(
+        reconcileByRowOperation(
+          hold,
           poisonedContainers('containers must not be touched when there are no holds'),
           Date.now(),
         ),
@@ -883,7 +905,8 @@ describe('useOperationDisplayHold', () => {
       hold.scheduleHeldOperationRelease({ operationId: operation.id, now: t0 });
 
       expect(() =>
-        hold.reconcileHoldsAgainstContainers(
+        reconcileByRowOperation(
+          hold,
           poisonedContainers('containers must not be touched when no hold is eligible'),
           t0,
         ),
@@ -910,7 +933,8 @@ describe('useOperationDisplayHold', () => {
       // index 0 (no active operation → eligible for reconcile); the index-1
       // container is still active. The id map must keep the first occurrence
       // so the reconcile decision matches find's lowest-index behaviour.
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({ id: 'dup-id', name: 'web', updateOperation: undefined }),
           makeContainer({
@@ -945,7 +969,8 @@ describe('useOperationDisplayHold', () => {
         now: t0,
       });
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'id-a',
@@ -998,7 +1023,8 @@ describe('useOperationDisplayHold', () => {
       // Two containers share the same identityKey. The index-0 container has no
       // active operation (eligible), the index-1 one is still active. The
       // identityKey map must keep the first occurrence.
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'container-x',
@@ -1034,7 +1060,8 @@ describe('useOperationDisplayHold', () => {
         now: t0,
       });
 
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'some-other-id', name: 'web', updateOperation: undefined })],
         t0,
       );
@@ -1075,7 +1102,7 @@ describe('useOperationDisplayHold', () => {
       name: 'skip-web',
       updateOperation: fallbackOp,
     });
-    expect(hold.getDisplayUpdateOperation(container)).toBe(fallbackOp);
+    expect(hold.getDisplayUpdateOperation(container)).toBeUndefined();
   });
 
   it('getHeldState skips expired holds so projectContainerDisplayState returns container unchanged (line 247 branch)', async () => {
@@ -1160,6 +1187,85 @@ describe('useOperationDisplayHold', () => {
     expect(projectedVolatile.newTag).toBe('2.0.0');
   });
 
+  describe('reconcileHoldsAgainstContainers — injected resolver', () => {
+    it('releases a missed terminal within the settle window once the resolver reports inactive', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-missed-terminal' });
+      const t0 = Date.now();
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const isContainerActive = vi.fn(() => false);
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web' })],
+        t0,
+        undefined,
+        isContainerActive,
+      );
+
+      expect(isContainerActive).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1' }));
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(true);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+
+    it('keeps the hold while the resolver reports the container active', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-still-active' });
+      const t0 = Date.now();
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c1',
+        containerName: 'web',
+        now: t0,
+      });
+
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'c1', name: 'web' })],
+        t0,
+        undefined,
+        () => true,
+      );
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(hold.heldOperations.value.has(operation.id)).toBe(true);
+    });
+
+    it('matches an agent-owned container by identityKey when the hold tracks no container id', async () => {
+      const hold = await loadComposable();
+      const operation = makeOperation({ id: 'op-agent' });
+      const t0 = Date.now();
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        identityKey: 'agent1::local::web',
+        containerName: 'web',
+        now: t0,
+      });
+
+      const isContainerActive = vi.fn(() => false);
+      hold.reconcileHoldsAgainstContainers(
+        [makeContainer({ id: 'agent-row-id', identityKey: 'agent1::local::web', name: 'web' })],
+        t0,
+        undefined,
+        isContainerActive,
+      );
+
+      expect(isContainerActive).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'agent-row-id', identityKey: 'agent1::local::web' }),
+      );
+      expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
+    });
+  });
+
   describe('reconcileHoldsAgainstContainers — onTerminalResolved callback', () => {
     it('invokes onTerminalResolved when a hold is collapsed due to missing active operation', async () => {
       const hold = await loadComposable();
@@ -1175,7 +1281,8 @@ describe('useOperationDisplayHold', () => {
       });
 
       const callback = vi.fn();
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
         callback,
@@ -1205,7 +1312,8 @@ describe('useOperationDisplayHold', () => {
       });
 
       const callback = vi.fn();
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [
           makeContainer({
             id: 'c1',
@@ -1237,7 +1345,8 @@ describe('useOperationDisplayHold', () => {
       hold.scheduleHeldOperationRelease({ operationId: operation.id, now: t0 });
 
       const callback = vi.fn();
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
         callback,
@@ -1260,7 +1369,8 @@ describe('useOperationDisplayHold', () => {
       });
 
       const callback = vi.fn();
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined })],
         t0,
         callback,
@@ -1283,7 +1393,8 @@ describe('useOperationDisplayHold', () => {
       });
 
       const callback = vi.fn();
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
         callback,
@@ -1312,7 +1423,8 @@ describe('useOperationDisplayHold', () => {
       const callback = vi.fn();
 
       // First reconcile — hold is still in active window → collapses to settle window
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
         callback,
@@ -1320,7 +1432,8 @@ describe('useOperationDisplayHold', () => {
       expect(callback).toHaveBeenCalledOnce();
 
       // Second reconcile with the same hold already in settle window → skip
-      hold.reconcileHoldsAgainstContainers(
+      reconcileByRowOperation(
+        hold,
         [makeContainer({ id: 'c1', name: 'web', updateOperation: undefined })],
         t0,
         callback,
@@ -1492,6 +1605,82 @@ describe('useOperationDisplayHold', () => {
       });
     });
 
+    it('builds the held operation from the store operation with the same id', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-store', name: 'store-web' });
+      const resolvePreviousOperation = vi.fn(() =>
+        makeOperation({
+          id: 'op-store',
+          batchId: 'batch-store',
+          queuePosition: 1,
+          queueTotal: 4,
+          phase: 'health-gate',
+        }),
+      );
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-store',
+          containerId: 'c-store',
+          containerName: 'store-web',
+          status: 'in-progress',
+        },
+        resolveContainer: () => container,
+        resolvePreviousOperation,
+      });
+      expect(resolvePreviousOperation).toHaveBeenCalledWith(container);
+      expect(heldOperations.value.get('op-store')?.operation).toEqual(
+        expect.objectContaining({
+          id: 'op-store',
+          batchId: 'batch-store',
+          queuePosition: 1,
+          queueTotal: 4,
+          phase: 'health-gate',
+        }),
+      );
+    });
+
+    it('ignores a store operation that belongs to a different operation id', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-other', name: 'other-web' });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-new',
+          containerId: 'c-other',
+          containerName: 'other-web',
+          status: 'in-progress',
+        },
+        resolveContainer: () => container,
+        resolvePreviousOperation: () =>
+          makeOperation({ id: 'op-stale', batchId: 'batch-stale', phase: 'health-gate' }),
+      });
+      const operation = heldOperations.value.get('op-new')?.operation;
+      expect(operation?.id).toBe('op-new');
+      expect(operation?.batchId).toBeUndefined();
+      expect(operation?.phase).toBe('pulling');
+    });
+
+    it('reads no previous operation from the container when no resolver is given', async () => {
+      const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
+      const container = makeContainer({
+        id: 'c-bare',
+        name: 'bare-web',
+        updateOperation: makeOperation({ id: 'op-bare', batchId: 'batch-bare' }),
+      });
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-bare',
+          containerId: 'c-bare',
+          containerName: 'bare-web',
+          status: 'in-progress',
+        },
+        resolveContainer: () => container,
+      });
+      expect(heldOperations.value.get('op-bare')?.operation.batchId).toBeUndefined();
+    });
+
     it('short-circuits active-status events when the container cannot be resolved', async () => {
       const mod = await loadModule();
       const { heldOperations } = mod.useOperationDisplayHold();
@@ -1549,11 +1738,7 @@ describe('useOperationDisplayHold', () => {
     it('preserves the previous phase when the payload phase is invalid', async () => {
       const mod = await loadModule();
       const { heldOperations } = mod.useOperationDisplayHold();
-      const container = makeContainer({
-        id: 'c-prev',
-        name: 'svc2',
-        updateOperation: makeOperation({ id: 'op-prev', phase: 'health-gate' }),
-      });
+      const container = makeContainer({ id: 'c-prev', name: 'svc2' });
       mod.applyUpdateOperationSseToHold({
         parsed: {
           operationId: 'op-prev',
@@ -1563,6 +1748,7 @@ describe('useOperationDisplayHold', () => {
           phase: undefined,
         },
         resolveContainer: () => container,
+        resolvePreviousOperation: () => makeOperation({ id: 'op-prev', phase: 'health-gate' }),
       });
       expect(heldOperations.value.get('op-prev')?.operation.phase).toBe('health-gate');
     });
@@ -1586,11 +1772,7 @@ describe('useOperationDisplayHold', () => {
 
     it('keeps a valid previous container operation id when the payload omits operationId', async () => {
       const mod = await loadModule();
-      const container = makeContainer({
-        id: 'c-noid2',
-        name: 'svc3',
-        updateOperation: makeOperation({ id: 'op-existing', phase: 'pulling' }),
-      });
+      const container = makeContainer({ id: 'c-noid2', name: 'svc3' });
       const onActiveOperationComputed = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
@@ -1600,6 +1782,7 @@ describe('useOperationDisplayHold', () => {
           phase: 'pulling',
         },
         resolveContainer: () => container,
+        resolvePreviousOperation: () => makeOperation({ id: 'op-existing', phase: 'pulling' }),
         onActiveOperationComputed,
       });
       // onActiveOperationComputed isn't called because there's no operationId,
@@ -2008,7 +2191,6 @@ describe('useOperationDisplayHold', () => {
         id: 'c-kappa',
         name: 'kappa',
         identityKey: 'ik-kappa',
-        updateOperation: undefined,
       });
       expect(result).toStrictEqual(operation);
     });
@@ -2051,7 +2233,6 @@ describe('useOperationDisplayHold', () => {
       const result = hold.getDisplayUpdateOperation({
         id: 'c-eta',
         name: 'eta',
-        updateOperation: undefined,
       });
       expect(result).toStrictEqual(operation);
     });
