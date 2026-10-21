@@ -1,0 +1,43 @@
+# A dev -> main sync squash carries sub-PR text, and a "Fixes: #N" in it closes
+# an issue that was reopened on purpose (#565 was closed again by three syncs).
+# This fails a PR into main whose title or body holds a GitHub closing keyword.
+# `edited` re-runs it when the body is rewritten to clear the finding. Not a
+# required check, so it adds no required context on main.
+name: Closing Keywords Guard
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize]
+
+permissions: {}
+
+jobs:
+  closing-keywords:
+    name: "Guard: Closing keywords"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Fail on closing keywords in the PR title or body
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n' "${PR_TITLE}" > "${RUNNER_TEMP}/pr-title.txt"
+          printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.txt"
+          node scripts/closing-keywords.mjs \
+            "PR title=${RUNNER_TEMP}/pr-title.txt" \
+            "PR body=${RUNNER_TEMP}/pr-body.txt"
