@@ -32,7 +32,7 @@ The `harbor` registry lets you configure a self-hosted [Harbor](https://goharbor
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.3
+    image: codeswhat/drydock:1.8.0-rc.4
     ...
     environment:
       - DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com
@@ -44,7 +44,7 @@ services:
 docker run \
   -e "DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com" \
   ...
-  codeswhat/drydock:1.8.0-rc.3
+  codeswhat/drydock:1.8.0-rc.4
 ```
 </Tab>
 </Tabs>
@@ -57,7 +57,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.3
+    image: codeswhat/drydock:1.8.0-rc.4
     ...
     environment:
       - DD_REGISTRY_HARBOR_PRIVATE_URL=https://harbor.acme.com
@@ -73,7 +73,7 @@ docker run \
   -e "DD_REGISTRY_HARBOR_PRIVATE_LOGIN=john" \
   -e "DD_REGISTRY_HARBOR_PRIVATE_PASSWORD=doe" \
   ...
-  codeswhat/drydock:1.8.0-rc.3
+  codeswhat/drydock:1.8.0-rc.4
 ```
 </Tab>
 </Tabs>
