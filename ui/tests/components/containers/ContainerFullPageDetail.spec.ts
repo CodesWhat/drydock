@@ -1,6 +1,8 @@
 import { mount } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 import ContainerFullPageDetail from '@/components/containers/ContainerFullPageDetail.vue';
+import { seedOperation } from '../../helpers/operations';
 
 const selectedContainer = ref<any>({
   id: 'container-1',
@@ -68,7 +70,14 @@ function factory() {
   });
 }
 
+let pinia: ReturnType<typeof createPinia>;
+
 describe('ContainerFullPageDetail', () => {
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
   afterEach(() => {
     activeDetailTab.value = 'overview';
     updateMode.value = 'manual';
@@ -166,40 +175,28 @@ describe('ContainerFullPageDetail', () => {
 
   it('shows "Pulling…" when the container is mid-update at the pulling phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'pulling' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'pulling' });
     const wrapper = factory();
     expect(wrapper.text()).toContain('Pulling…');
   });
 
   it('shows "Health-checking…" when the container is at the health-gate phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'health-gate' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'health-gate' });
     const wrapper = factory();
     expect(wrapper.text()).toContain('Health-checking…');
   });
 
   it('shows "Finalizing…" when the container is at the health-gate-passed phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'health-gate-passed' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'health-gate-passed' });
     const wrapper = factory();
     expect(wrapper.text()).toContain('Finalizing…');
   });
 
   it('shows "Rolling back…" when the container is at the rollback-started phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'rollback-started' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'rollback-started' });
     const wrapper = factory();
     expect(wrapper.text()).toContain('Rolling back…');
   });

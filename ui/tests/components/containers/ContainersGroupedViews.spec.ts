@@ -1,5 +1,7 @@
+import { createPinia, setActivePinia } from 'pinia';
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import { i18n } from '@/boot/i18n';
+import AppIconButton from '@/components/AppIconButton.vue';
 import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
 import DataTable from '@/components/DataTable.vue';
@@ -18,6 +20,7 @@ import {
   quickLinkTestIds,
 } from '../../helpers/containerQuickLinks';
 import { mountWithPlugins } from '../../helpers/mount';
+import { seedOperation } from '../../helpers/operations';
 
 const mocked = vi.hoisted(() => ({
   context: null as any,
@@ -467,6 +470,8 @@ function shortDigest(digest: string) {
   return `${digest.slice(0, 'sha256:'.length + 12)}…`;
 }
 
+const pinia = createPinia();
+
 describe('ContainersGroupedViews', () => {
   it.each(['table', 'cards'] as const)(
     'localizes ticking uptime in %s without changing rows or actions',
@@ -562,6 +567,7 @@ describe('ContainersGroupedViews', () => {
   });
 
   beforeEach(() => {
+    setActivePinia(pinia);
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
@@ -2972,21 +2978,89 @@ describe('ContainersGroupedViews', () => {
     vi.useRealTimers();
   });
 
-  describe('phase-aware in-progress badge labels', () => {
-    function mountWithPhase(phase: string | undefined) {
+  describe('cancel update control reads the operations store', () => {
+    // The pinia is shared across this file, so every row gets its own id.
+    let cancelRowCounter = 0;
+    function mountCancelRow(seed?: Parameters<typeof seedOperation>[2]) {
+      cancelRowCounter += 1;
       const container = makeContainer({
-        id: 'c-phase-1',
+        id: `c-cancel-${cancelRowCounter}`,
         name: 'alpha',
         newTag: '2.0.0',
         updateKind: 'major',
         bouncer: 'safe',
         status: 'running',
+      });
+      if (seed) {
+        seedOperation(pinia, container, seed);
+      }
+      const { context, refs } = makeContext({ cancelUpdate: vi.fn() });
+      refs.filteredContainers.value = [container];
+      refs.displayContainers.value = [container];
+      refs.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      return { wrapper: mountSubject(), context, container };
+    }
+
+    function cancelButtons(wrapper: ReturnType<typeof mountSubject>) {
+      return wrapper
+        .findAllComponents(AppIconButton)
+        .filter((button) => button.props('icon') === 'x' && button.props('variant') === 'danger');
+    }
+
+    it('hides the cancel button when the store has no operation for the row', () => {
+      const { wrapper } = mountCancelRow();
+      expect(cancelButtons(wrapper)).toHaveLength(0);
+    });
+
+    it.each(['queued', 'in-progress'] as const)(
+      'shows the cancel button for a %s operation in the store',
+      async (status) => {
+        const { wrapper, context, container } = mountCancelRow({
+          operationId: `op-cancel-${status}`,
+          status,
+        });
+        const buttons = cancelButtons(wrapper);
+        expect(buttons.length).toBeGreaterThan(0);
+        await buttons[0].trigger('click');
+        expect(context.cancelUpdate).toHaveBeenCalledTimes(1);
+        expect(context.cancelUpdate.mock.calls[0][0].id).toBe(container.id);
+      },
+    );
+  });
+
+  describe('phase-aware in-progress badge labels', () => {
+    function mountWithPhase(phase: string | undefined) {
+      const container = makeContainer({
+        id: `c-phase-${phase}`,
+        name: 'alpha',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        bouncer: 'safe',
+        status: 'running',
+        // The status predicates in the mocked context still read the prop;
+        // the phase label must come from the operations store, so the prop
+        // carries a decoy phase.
         updateOperation: {
           id: 'op-1',
           status: 'in-progress',
-          phase: phase as any,
+          phase: 'queued',
           updatedAt: '2026-04-01T12:00:00.000Z',
         },
+      });
+      seedOperation(pinia, container, {
+        operationId: 'op-1',
+        status: 'in-progress',
+        phase: phase as any,
       });
 
       const { context, refs } = makeContext();

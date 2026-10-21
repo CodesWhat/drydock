@@ -24,7 +24,8 @@ import {
   updateContainers as apiUpdateContainers,
 } from '../../services/container-actions';
 import type { UpdateMode } from '../../services/settings';
-import type { Container } from '../../types/container';
+import { type OperationContainerRef, useOperationStore } from '../../stores/operations';
+import type { Container, ContainerUpdateOperation } from '../../types/container';
 import { formatBulkUpdateConfirm } from '../../utils/bulk-update-confirm';
 import { type BulkUpdatePlan, withStaleParents } from '../../utils/bulk-update-plan';
 import type { ContainerActionKind } from '../../utils/container-action-key';
@@ -63,7 +64,11 @@ interface ContainerActionGroup {
 
 type ContainerActionTarget =
   | string
-  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateOperation' | 'updateEligibility'>;
+  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateEligibility'>;
+
+type ResolveUpdateOperation = (
+  container: OperationContainerRef,
+) => ContainerUpdateOperation | undefined;
 
 interface UseContainerActionsInput {
   activeDetailTab: Readonly<Ref<string>>;
@@ -130,11 +135,12 @@ function hasPendingContainerAction(
 
 function hasInProgressUpdateOperationByIdentityKey(
   targetIdentityKey: string,
-  containers: readonly Pick<Container, 'name' | 'updateOperation'>[],
+  containers: readonly Container[],
+  resolveOperation: ResolveUpdateOperation,
 ) {
   return containers.some((container) => {
     return (
-      container.name === targetIdentityKey && container.updateOperation?.status === 'in-progress'
+      container.name === targetIdentityKey && resolveOperation(container)?.status === 'in-progress'
     );
   });
 }
@@ -288,7 +294,7 @@ function getGroupUpdateTargets(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
-  projectContainerDisplayState: (container: Container) => Container;
+  resolveOperation: ResolveUpdateOperation;
   inputError: Ref<string | null>;
   actionInProgress: Ref<Map<string, ContainerActionKind>>;
   group: ContainerActionGroup;
@@ -305,13 +311,9 @@ function getGroupUpdateTargets(args: {
       !hasHardBlocker(container.updateEligibility)
     );
   });
-  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   if (
     updatableContainers.some((container) => {
-      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
-      const operation =
-        liveContainer?.updateOperation ??
-        args.projectContainerDisplayState(container).updateOperation;
+      const operation = args.resolveOperation(container);
       return (
         operation?.status === 'queued' ||
         operation?.status === 'in-progress' ||
@@ -436,7 +438,7 @@ async function runBulkUpdateState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   containers: Readonly<Ref<Container[]>>;
-  projectContainerDisplayState: (container: Container) => Container;
+  resolveOperation: ResolveUpdateOperation;
   inputError: Ref<string | null>;
   actionInProgress: Ref<Map<string, ContainerActionKind>>;
   actionPending: Ref<Map<string, Container>>;
@@ -457,17 +459,13 @@ async function runBulkUpdateState(args: {
     args.inputError.value = args.containerActionsDisabledReason;
     return;
   }
-  const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   // The plan resolved eligibility an instant ago; if any target has since
   // started (or was already mid-flight), abort the whole batch with a
   // warning rather than silently dispatching a subset the user didn't see
   // confirmed. Mirrors updateAllInGroupState's same three-way check.
   if (
     args.targets.some((container) => {
-      const liveContainer = displayContainers.find((entry) => entry.id === container.id);
-      const operation =
-        liveContainer?.updateOperation ??
-        args.projectContainerDisplayState(container).updateOperation;
+      const operation = args.resolveOperation(container);
       return (
         operation?.status === 'queued' ||
         operation?.status === 'in-progress' ||
@@ -840,12 +838,16 @@ export function isPendingUpdateSettled(args: {
   liveContainer?: Container;
   snapshot?: Container;
   actionPendingLifecycleObserved: Ref<Set<string>>;
+  resolveOperation: ResolveUpdateOperation;
 }) {
+  const liveOperationStatus = args.liveContainer
+    ? args.resolveOperation(args.liveContainer)?.status
+    : undefined;
   const expectedStatus = args.snapshot?.status ?? args.liveContainer?.status;
   const observedLifecycleSignal =
     !args.liveContainer ||
-    args.liveContainer.updateOperation?.status === 'in-progress' ||
-    args.liveContainer.updateOperation?.status === 'queued' ||
+    liveOperationStatus === 'in-progress' ||
+    liveOperationStatus === 'queued' ||
     args.liveContainer.status !== expectedStatus;
   if (observedLifecycleSignal) {
     const nextObserved = new Set(args.actionPendingLifecycleObserved.value);
@@ -857,10 +859,7 @@ export function isPendingUpdateSettled(args: {
     return false;
   }
 
-  if (
-    args.liveContainer.updateOperation?.status === 'in-progress' ||
-    args.liveContainer.updateOperation?.status === 'queued'
-  ) {
+  if (liveOperationStatus === 'in-progress' || liveOperationStatus === 'queued') {
     return false;
   }
 
@@ -884,6 +883,7 @@ export function prunePendingActionsState(args: {
   groupUpdateQueue: Ref<Set<string>>;
   pollTimeout: number;
   stopPendingActionsPolling: () => void;
+  resolveOperation: ResolveUpdateOperation;
 }) {
   const liveContainersByActionKey = new Map<string, Container>();
   const liveContainersByIdentityKey = new Map<string, Container>();
@@ -916,6 +916,7 @@ export function prunePendingActionsState(args: {
             liveContainer,
             snapshot,
             actionPendingLifecycleObserved: args.actionPendingLifecycleObserved,
+            resolveOperation: args.resolveOperation,
           })
         : Boolean(liveContainer);
 
@@ -1449,7 +1450,14 @@ function createContainerActionHandlers(args: {
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
   const { t } = useI18n();
-  const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
+  const { projectContainerDisplayState } = useOperationDisplayHold();
+  const operationStore = useOperationStore();
+  // Hold-aware: a container keeps reading as updating through the display hold.
+  const resolveOperation: ResolveUpdateOperation = (container) =>
+    operationStore.getOperationForContainer(container);
+  // Pending-action settling follows the store's real state, not the display hold.
+  const resolveSettledOperation: ResolveUpdateOperation = (container) =>
+    operationStore.getOperationForContainer(container, { ignoreHold: true });
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
   const scanLifecycle = useScanLifecycle();
 
@@ -1575,6 +1583,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       groupUpdateQueue,
       pollTimeout: POLL_TIMEOUT,
       stopPendingActionsPolling,
+      resolveOperation: resolveSettledOperation,
     });
   }
 
@@ -1635,8 +1644,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     }
     const displayContainers = getDisplayContainers();
     if (typeof target !== 'string') {
-      const freshContainer = displayContainers.find((c) => c.id === target.id);
-      const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
+      const liveOperation = resolveOperation(target);
       if (liveOperation?.status === 'in-progress') {
         return true;
       }
@@ -1649,6 +1657,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
           hasExternalActiveHead: hasOtherLocalTrackedAction(target),
           operation: liveOperation,
           targetId: target.id,
+          resolveOperation,
         })
       ) {
         return true;
@@ -1657,7 +1666,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     }
     return (
       hasPendingContainerAction(target, actionPending) ||
-      hasInProgressUpdateOperationByIdentityKey(target, displayContainers)
+      hasInProgressUpdateOperationByIdentityKey(target, displayContainers, resolveOperation)
     );
   }
 
@@ -1678,8 +1687,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       return false;
     }
     const displayContainers = getDisplayContainers();
-    const freshContainer = displayContainers.find((container) => container.id === target.id);
-    const liveOperation = freshContainer?.updateOperation ?? getDisplayUpdateOperation(target);
+    const liveOperation = resolveOperation(target);
     if (liveOperation?.status === 'in-progress') {
       return false;
     }
@@ -1689,6 +1697,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
         hasExternalActiveHead: hasOtherLocalTrackedAction(target),
         operation: liveOperation,
         targetId: target.id,
+        resolveOperation,
       })
     ) {
       return false;
@@ -1776,7 +1785,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       containers: input.containers,
-      projectContainerDisplayState,
+      resolveOperation,
       inputError: input.error,
       actionInProgress,
       actionPending,
@@ -1866,9 +1875,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
     t: t as TranslateFn,
   });
 
-  async function cancelUpdate(target: Pick<Container, 'id' | 'name' | 'updateOperation'>) {
+  async function cancelUpdate(target: Pick<Container, 'id' | 'identityKey' | 'name'>) {
     const { name } = target;
-    const operationId = target.updateOperation?.id;
+    const operationId = operationStore.getOperationForContainer({
+      id: target.id,
+      identityKey: target.identityKey,
+      name,
+    })?.id;
     if (!operationId) {
       return;
     }
@@ -1978,7 +1991,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
           containerActionsEnabled: containerActionsEnabled.value,
           containerActionsDisabledReason: containerActionsDisabledReason.value,
           containers: input.containers,
-          projectContainerDisplayState,
+          resolveOperation,
           inputError: input.error,
           actionInProgress,
           actionPending,

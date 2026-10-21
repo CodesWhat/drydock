@@ -44,9 +44,17 @@ function loadLefthook(): LefthookDefinition {
   return yaml.parse(readFileSync(lefthookPath, 'utf8')) as LefthookDefinition;
 }
 
+// CI-5: the old single test job is split into shard jobs plus the aggregating
+// `test` job that keeps the required check name.
+const testShardJobIds = ['test-repo', 'test-app', 'test-ui', 'test'];
+
 function getTestJobStep(name: string): WorkflowStep | undefined {
   const workflow = loadWorkflow();
-  return workflow.jobs?.test?.steps?.find((step) => step.name === name);
+  for (const jobId of testShardJobIds) {
+    const step = workflow.jobs?.[jobId]?.steps?.find((candidate) => candidate.name === name);
+    if (step) return step;
+  }
+  return undefined;
 }
 
 test('UI coverage captures bounded resource evidence without changing the gate', () => {
@@ -389,9 +397,20 @@ test('ci-verify can dispatch the complete release-candidate matrix manually', ()
     expect(workflow.jobs?.[jobId]?.if).toContain("github.event_name == 'workflow_dispatch'");
   }
 
-  for (const jobId of ['security-actions', 'changes', 'lint', 'test', 'build']) {
+  for (const jobId of [
+    'security-actions',
+    'changes',
+    'lint',
+    'test-repo',
+    'test-app',
+    'test-ui',
+    'build',
+  ]) {
     expect(workflow.jobs?.[jobId]?.if).toBeUndefined();
   }
+  // The aggregating required check must run after a failed shard so it can
+  // report failure itself; a skipped required check counts as passing.
+  expect(workflow.jobs?.test?.if).toBe('always()');
 
   expect(workflow.jobs?.codeql?.needs).toStrictEqual(['security-actions']);
   expect(workflow.jobs?.fuzz?.needs).toStrictEqual(['security-actions']);
@@ -681,4 +700,96 @@ test('the advisory ci-timing job cannot fail the run or gate a release', () => {
     'utf8',
   );
   expect(releaseCut).not.toMatch(/ci-timing|CI timing/);
+});
+
+test('test suites are sharded and a final job keeps the required check name', () => {
+  const workflow = loadWorkflow();
+
+  expect(workflow.jobs?.test?.name).toBe('Quality: Test & Coverage');
+  expect(workflow.jobs?.test?.needs).toStrictEqual(['test-repo', 'test-app', 'test-ui']);
+  for (const jobId of ['test-repo', 'test-app', 'test-ui']) {
+    expect(workflow.jobs?.[jobId]?.needs).toBeUndefined();
+    expect(workflow.jobs?.[jobId]?.name).not.toBe('Quality: Test & Coverage');
+  }
+
+  // Shards run the same commands the pre-push coverage gate runs, so the
+  // per-workspace 100% thresholds stay enforced where the tests execute.
+  expect(getWorkflowStep('test-app', 'Run app tests')).toMatchObject({
+    run: 'npm test',
+    'working-directory': 'app',
+  });
+  expect(getWorkflowStep('test-ui', 'Run ui tests')?.run).toContain(
+    'npm run test:unit -- --maxWorkers=1',
+  );
+  expect(getWorkflowStep('test-ui', 'Typecheck ui')).toMatchObject({
+    run: 'npm run typecheck',
+    'working-directory': 'ui',
+  });
+
+  // build gates on the aggregate, not on individual shards.
+  expect(workflow.jobs?.build?.needs).toStrictEqual(['lint', 'test']);
+});
+
+test('coverage shards hand lcov and gap reports to the aggregating job', () => {
+  for (const [jobId, workspace] of [
+    ['test-app', 'app'],
+    ['test-ui', 'ui'],
+  ]) {
+    const lcov = getWorkflowStep(jobId, 'Upload coverage report');
+    expect(lcov?.if).toBe('always()');
+    expect(lcov?.with).toMatchObject({
+      name: `coverage-shard-${workspace}`,
+      path: `${workspace}/coverage/lcov.info`,
+    });
+
+    const gaps = getWorkflowStep(jobId, 'Write coverage gap report');
+    expect(gaps?.if).toBe('failure()');
+    expect(gaps?.run).toContain(`--workspace ${workspace}`);
+    expect(gaps?.run).toContain('|| true');
+    expect(getWorkflowStep(jobId, 'Upload coverage gap report')?.with).toMatchObject({
+      name: `coverage-gaps-${workspace}`,
+      path: `.coverage-gaps.${workspace}.json`,
+    });
+    // Gap reports are dotfiles; upload-artifact skips hidden files by default.
+    expect(getWorkflowStep(jobId, 'Upload coverage gap report')?.with).toMatchObject({
+      'include-hidden-files': true,
+    });
+  }
+});
+
+test('the aggregating job uploads the merged gap report including hidden files', () => {
+  expect(getWorkflowStep('test', 'Upload coverage gap report')?.with).toMatchObject({
+    name: 'coverage-gaps',
+    path: '.coverage-gaps.json',
+    'include-hidden-files': true,
+  });
+});
+
+test('the aggregating job merges shard coverage and fails closed on any shard result', () => {
+  const merge = getWorkflowStep('test', 'Merge coverage gap reports');
+  expect(merge?.if).toBe('always()');
+  expect(merge?.run).toContain('scripts/merge-coverage-gaps.mjs');
+  expect(merge?.run).toContain('.coverage-gaps.app.json');
+  expect(merge?.run).toContain('.coverage-gaps.ui.json');
+
+  const normalize = getWorkflowStep('test', 'Normalize coverage paths');
+  expect(normalize?.run).toBe('node scripts/prepare-codecov-reports.mjs');
+  expect(normalize?.if).toContain("needs.test-app.result == 'success'");
+  expect(normalize?.if).toContain("needs.test-ui.result == 'success'");
+
+  const gate = getWorkflowStep('test', 'Enforce shard results');
+  expect(gate?.if).toBe('always()');
+  for (const shard of ['test-repo', 'test-app', 'test-ui']) {
+    expect(gate?.env).toHaveProperty(
+      `RESULT_${shard.replace('-', '_').toUpperCase()}`,
+      `\${{ needs.${shard}.result }}`,
+    );
+  }
+  expect(gate?.run).toContain('success');
+  expect(gate?.run).toContain('exit 1');
+
+  // Codecov upload stays advisory.
+  for (const name of ['Upload app coverage to Codecov', 'Upload ui coverage to Codecov']) {
+    expect(getWorkflowStep('test', name)?.['continue-on-error']).toBe(true);
+  }
 });

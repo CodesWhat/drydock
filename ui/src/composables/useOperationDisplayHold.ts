@@ -297,14 +297,9 @@ function clearHeldOperation(args: {
 }
 
 function getDisplayUpdateOperation(
-  target:
-    | string
-    | (Pick<Container, 'id' | 'name' | 'updateOperation'> &
-        Partial<Pick<Container, 'identityKey'>>),
+  target: string | (Pick<Container, 'id' | 'name'> & Partial<Pick<Container, 'identityKey'>>),
 ) {
-  return (
-    getHeldOperation(target) ?? (typeof target === 'string' ? undefined : target.updateOperation)
-  );
+  return getHeldOperation(target);
 }
 
 function getHeldState(
@@ -393,15 +388,19 @@ export interface TerminalResolvedArgs {
  * the replayable dd:update-applied / dd:update-failed path.
  */
 /** Container shape reconcileHoldsAgainstContainers matches holds against. */
-type ReconcileContainerCandidate = Pick<
-  Container,
-  'id' | 'identityKey' | 'name' | 'updateOperation'
->;
+export type ReconcileContainerCandidate = Pick<Container, 'id' | 'identityKey' | 'name'>;
 
+/**
+ * `isContainerActive` decides whether the operations store still sees an active
+ * update for a container. The caller owns the store (this module must not import
+ * it), and the lookup must ignore the display hold itself, otherwise a held
+ * container would always read as active and never release.
+ */
 function reconcileHoldsAgainstContainers(
   containers: readonly ReconcileContainerCandidate[],
-  now?: number,
-  onTerminalResolved?: (args: TerminalResolvedArgs) => void | Promise<void>,
+  now: number | undefined,
+  onTerminalResolved: ((args: TerminalResolvedArgs) => void | Promise<void>) | undefined,
+  isContainerActive: (container: ReconcileContainerCandidate) => boolean,
 ) {
   if (heldOperations.value.size === 0) {
     return;
@@ -426,7 +425,7 @@ function reconcileHoldsAgainstContainers(
   }
 
   // toRaw once, up front: containers is a deep-reactive proxy, and every property
-  // read below (building the maps, then reading match.updateOperation?.status)
+  // read below (building the maps, then handing the match to the resolver)
   // would otherwise cross the proxy trap per field per container.
   const rawContainers = toRaw(containers);
 
@@ -481,9 +480,7 @@ function reconcileHoldsAgainstContainers(
     if (!match) {
       continue;
     }
-    const rawStatus = match.updateOperation?.status;
-    const rawIsActive = rawStatus === 'queued' || rawStatus === 'in-progress';
-    if (rawIsActive) {
+    if (isContainerActive(match)) {
       continue;
     }
     if (onTerminalResolved) {
@@ -607,7 +604,6 @@ export type HoldSourceContainer = Pick<
   | 'image'
   | 'imageCreated'
   | 'updateDetectedAt'
-  | 'updateOperation'
 >;
 
 export interface ApplyUpdateOperationSseArgs {
@@ -620,6 +616,16 @@ export interface ApplyUpdateOperationSseArgs {
    * the hold releases even when the row no longer exists.
    */
   resolveContainer: (target: OperationDisplayHoldTarget) => HoldSourceContainer | undefined;
+  /**
+   * Returns the operations store's current operation for the container, used as
+   * the base for the next held operation (batch and queue fields carry over).
+   * The caller owns the store because this module must not import it. Only an
+   * operation with the event's own id is used, so a previous operation of the
+   * same container never leaks into a new one.
+   */
+  resolvePreviousOperation?: (
+    container: HoldSourceContainer,
+  ) => ContainerUpdateOperation | undefined;
   /**
    * Invoked on active-status events with the computed next operation so the
    * caller can apply view-specific row mutations (ContainersView writes this
@@ -687,9 +693,14 @@ export function applyUpdateOperationSseToHold(
     if (!container) {
       return { terminal: false, releaseScheduled: false };
     }
+    const resolved = args.resolvePreviousOperation?.(container);
+    const previousOperation =
+      resolved && (parsed.operationId === undefined || resolved.id === parsed.operationId)
+        ? resolved
+        : undefined;
     const nextOperation: ContainerUpdateOperation = {
-      ...(container.updateOperation ?? {}),
-      id: parsed.operationId ?? container.updateOperation?.id ?? '',
+      ...(previousOperation ?? {}),
+      id: parsed.operationId ?? previousOperation?.id ?? '',
       ...(parsed.batchId !== undefined ? { batchId: parsed.batchId } : {}),
       ...(parsed.queuePosition !== undefined ? { queuePosition: parsed.queuePosition } : {}),
       ...(parsed.queueTotal !== undefined ? { queueTotal: parsed.queueTotal } : {}),
@@ -697,7 +708,7 @@ export function applyUpdateOperationSseToHold(
       phase: resolveActiveOperationPhase({
         status: parsed.status,
         phase: parsed.phase,
-        previousPhase: container.updateOperation?.phase,
+        previousPhase: previousOperation?.phase,
       }),
       updatedAt: new Date().toISOString(),
     };

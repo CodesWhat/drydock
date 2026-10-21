@@ -4,6 +4,7 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppBadge from '@/components/AppBadge.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { useOperationStore } from '@/stores/operations';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import {
   getUpdateInProgressPhaseLabelKey,
@@ -15,6 +16,7 @@ import ContainerSideTabContent from './ContainerSideTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const { t, te } = useI18n();
+const operationStore = useOperationStore();
 
 function localizeStatus(status: string | undefined): string {
   if (!status) return t('common.unknown');
@@ -77,7 +79,9 @@ function getUpdateBlockedTooltip(container: { updateEligibility?: UpdateEligibil
 
 function getStatusLabel(container: Container) {
   if (isActionInProgress(container)) {
-    const labelKey = getUpdateInProgressPhaseLabelKey(container.updateOperation?.phase);
+    const labelKey = getUpdateInProgressPhaseLabelKey(
+      operationStore.getOperationForContainer(container)?.phase,
+    );
     return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
   }
   if (isActionQueued(container)) {
