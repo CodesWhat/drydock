@@ -13,7 +13,10 @@ import { useContainerFilters } from '../composables/useContainerFilters';
 import { useDependencyGraph } from '../composables/useDependencyGraph';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
-import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
+import {
+  type ReconcileContainerCandidate,
+  useOperationDisplayHold,
+} from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
@@ -66,10 +69,18 @@ const containerMetaMap = ref<Record<string, unknown>>({});
 const {
   clearAllOperationDisplayHolds,
   projectContainerDisplayState,
-  reconcileHoldsAgainstContainers,
+  reconcileHoldsAgainstContainers: reconcileHolds,
 } = useOperationDisplayHold();
 const toast = useToast();
 const operationStore = useOperationStore();
+
+// The store lookup ignores the display hold, otherwise every held container
+// would read as still active and a missed terminal would never release.
+function reconcileHoldsAgainstContainers(candidates: readonly ReconcileContainerCandidate[]) {
+  reconcileHolds(candidates, undefined, undefined, (candidate) =>
+    operationStore.isContainerUpdateActive(candidate, { ignoreHold: true }),
+  );
+}
 const { updateMode } = useUpdateMode();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
@@ -157,7 +168,6 @@ let committedUpdatePolicyMetadataFingerprint = '';
  * unconditionally.
  */
 function containerRowFingerprint(c: Container): string {
-  const op = c.updateOperation;
   return [
     c.id,
     c.name,
@@ -184,17 +194,6 @@ function containerRowFingerprint(c: Container): string {
     c.updatePolicyState ?? '',
     c.noUpdateReason ?? '',
     c.registryError ?? '',
-    op
-      ? [
-          op.id,
-          op.status,
-          op.phase,
-          op.updatedAt,
-          op.batchId ?? '',
-          op.queuePosition ?? '',
-          op.queueTotal ?? '',
-        ].join(':')
-      : '',
   ].join('|');
 }
 
@@ -1269,10 +1268,7 @@ function getGroupMembershipKey(container: Pick<Container, 'id' | 'name'>): strin
 }
 
 function isTransientUpdateGroupMember(container: Container): boolean {
-  return (
-    container.updateOperation?.status === 'queued' ||
-    container.updateOperation?.status === 'in-progress'
-  );
+  return operationStore.isContainerUpdateActive(container);
 }
 
 function preserveTransientUpdateGroupMembership(map: Record<string, string>) {

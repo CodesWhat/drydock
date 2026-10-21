@@ -66,7 +66,7 @@ const {
   clearAllOperationDisplayHolds,
   heldOperations,
   projectContainerDisplayState,
-  reconcileHoldsAgainstContainers,
+  reconcileHoldsAgainstContainers: reconcileHolds,
 } = useOperationDisplayHold();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
@@ -500,28 +500,13 @@ function findDashboardContainerForOperationTarget(target: {
   return undefined;
 }
 
-// A list-seeded row.updateOperation goes stale once its operation ends, so the
-// hold must not inherit batch/queue fields from it. Take the prior operation
-// from the operations store, and only when it is this same operation.
-function resolveHoldSourceContainer(
-  target: { containerId?: string; newContainerId?: string; containerName?: string },
-  operationId: string | undefined,
-): Container | undefined {
-  const container = findDashboardContainerForOperationTarget(target);
-  if (!container) {
-    return undefined;
-  }
-  const previous = operationStore.getOperationForContainer(container);
-  return {
-    ...container,
-    updateOperation: previous && previous.id === operationId ? previous : undefined,
-  };
-}
-
 function applyDashboardParsedOperationSse(parsed: ParsedUpdateOperationSse) {
   return applyUpdateOperationSseToHold({
     parsed,
-    resolveContainer: (target) => resolveHoldSourceContainer(target, parsed.operationId),
+    resolveContainer: findDashboardContainerForOperationTarget,
+    // A list-seeded row.updateOperation goes stale once its operation ends, so
+    // the hold takes its prior operation from the operations store instead.
+    resolvePreviousOperation: (container) => operationStore.getOperationForContainer(container),
     // DashboardView doesn't mutate container rows — the widget projects held
     // containers through projectContainerDisplayState, so reactivity flows from
     // the hold map into the derived computed.
@@ -549,7 +534,11 @@ function applyDashboardOperationSse(event: Event) {
 // display hold here. In-place SSE patches deliberately do not trigger this:
 // operation state no longer lives on the rows.
 watch(containers, () => {
-  reconcileHoldsAgainstContainers(containers.value, Date.now());
+  // The store lookup ignores the display hold, otherwise a held container
+  // would always read as active and a missed terminal would never release.
+  reconcileHolds(containers.value, Date.now(), undefined, (candidate) =>
+    operationStore.isContainerUpdateActive(candidate, { ignoreHold: true }),
+  );
 });
 
 function handleDashboardSseUpdateApplied(event: Event) {

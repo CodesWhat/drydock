@@ -110,7 +110,8 @@ vi.mock('@/stores/operations', () => ({
       return mockStoreOperationsById.value[containerId];
     },
     getOperationForContainer: vi.fn().mockReturnValue(undefined),
-    isContainerUpdateActive: vi.fn().mockReturnValue(false),
+    isContainerUpdateActive: (container: { id: string }) =>
+      mockStoreOperationsById.value[container.id] !== undefined,
     getBatchProgress: vi.fn().mockReturnValue(undefined),
     getActiveBatchProgress: vi.fn().mockReturnValue([]),
     captureDisplayBatch: vi.fn(),
@@ -925,6 +926,8 @@ describe('ContainersView — applyContainerPatch', () => {
         updateOperation: activeOp,
       });
       await mountContainersView([existing]);
+      // The store still indexes the active operation for this container.
+      mockStoreOperationsById.value = { c1: activeOp };
 
       // Seed the hold map via the operation composable so reconcile has something to check
       const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
@@ -956,7 +959,7 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       // The hold must still be present (not transitioned to short release window)
-      // Because the operation was preserved, reconcile saw rawIsActive = true and skipped
+      // Because the store still has the operation, reconcile saw it active and skipped
       const hold = heldOperations.value.get(activeOp.id);
       expect(hold).toBeDefined();
       // displayUntil must still be the long active window (10 minutes from now),
