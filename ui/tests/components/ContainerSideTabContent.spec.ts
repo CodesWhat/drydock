@@ -1,5 +1,6 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import { i18n } from '@/boot/i18n';
 import type AppButton from '@/components/AppButton.vue';
@@ -7,6 +8,7 @@ import ContainerSideTabContent from '@/components/containers/ContainerSideTabCon
 import type { ApiContainerUpdateOperation } from '@/types/api';
 import type { Container } from '@/types/container';
 import { expectContainerQuickLinks } from '../helpers/containerQuickLinks';
+import { seedOperation } from '../helpers/operations';
 
 const mockRevealContainerEnv = vi.fn();
 const mockSetMaturityPolicySelected = vi.fn();
@@ -293,9 +295,10 @@ function mountComponent() {
           template: '<div data-test="label-overrides-panel-stub" :data-id="containerId" />',
         },
         UpdateStatusPanel: {
-          props: ['container', 'mode'],
+          props: ['container', 'mode', 'hasActiveOperationBadge'],
           emits: ['update', 'open-tab'],
-          template: '<div data-test="update-status-panel-stub" :data-mode="mode" />',
+          template:
+            '<div data-test="update-status-panel-stub" :data-mode="mode" :data-active-badge="String(Boolean(hasActiveOperationBadge))" />',
         },
       },
       directives: {
@@ -309,7 +312,14 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
   return wrapper.findAll('button').find((button) => button.text().includes(text));
 }
 
+let pinia: ReturnType<typeof createPinia>;
+
 describe('ContainerSideTabContent - Environment Variables', () => {
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
   it.each([
     ['image', -300_000, '5m', '5min'],
     ['metadata', -90 * 86_400_000, '2 months', '2\u00a0mois'],
@@ -475,6 +485,25 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
     expect(wrapper.find('[data-test="eligibility-badge-full"]').exists()).toBe(false);
+  });
+
+  it('flags the update status panel as active only when the operations store holds an operation', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = createSelectedContainer();
+
+    expect(
+      mountComponent()
+        .find('[data-test="update-status-panel-stub"]')
+        .attributes('data-active-badge'),
+    ).toBe('false');
+
+    seedOperation(pinia, selectedContainer.value, { status: 'in-progress' });
+
+    expect(
+      mountComponent()
+        .find('[data-test="update-status-panel-stub"]')
+        .attributes('data-active-badge'),
+    ).toBe('true');
   });
 
   it('renders a published port with no dd.port.label as a link with the raw port string as text', () => {

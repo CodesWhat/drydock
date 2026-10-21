@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useOperationStore } from '@/stores/operations';
 import AppIconButton from '../AppIconButton.vue';
 import AppSplitButton from '../AppSplitButton.vue';
 import DataTable from '../DataTable.vue';
@@ -104,6 +105,7 @@ const nowMs = useNow(
   () => visibleColumns.value.has('uptime') || containerViewMode.value === 'cards',
 );
 const { t, te, locale } = useI18n();
+const operationStore = useOperationStore();
 const { resolveHost } = useAgentHosts();
 
 function getEnrichedPorts(c: Container) {
@@ -333,13 +335,16 @@ function blockedUpdateTooltip(container: {
   return t('containerComponents.groupedViews.blockedTag', { tag });
 }
 
-function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
-  const status = c.updateOperation?.status;
-  return (status === 'queued' || status === 'in-progress') && Boolean(c.updateOperation?.id);
+function canCancelUpdate(c: Container): boolean {
+  const operation = operationStore.getOperationForContainer(c);
+  const status = operation?.status;
+  return (status === 'queued' || status === 'in-progress') && Boolean(operation?.id);
 }
 
-function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): string {
-  const labelKey = getUpdateInProgressPhaseLabelKey(c.updateOperation?.phase);
+function getInProgressBadgeLabel(c: Container): string {
+  const labelKey = getUpdateInProgressPhaseLabelKey(
+    operationStore.getOperationForContainer(c)?.phase,
+  );
   return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
 }
 

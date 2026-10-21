@@ -1,9 +1,11 @@
 import { mount } from '@vue/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import ContainerSideDetail from '@/components/containers/ContainerSideDetail.vue';
 import DetailPanel from '@/components/DetailPanel.vue';
+import { seedOperation } from '../helpers/operations';
 
 const selectedContainer = ref<any>({
   id: 'container-1',
@@ -62,7 +64,14 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
   }),
 }));
 
+let pinia: ReturnType<typeof createPinia>;
+
 describe('ContainerSideDetail', () => {
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
   afterEach(() => {
     detailPanelOpen.value = true;
     isMobile.value = false;
@@ -298,10 +307,7 @@ describe('ContainerSideDetail', () => {
 
   it('shows "Pulling…" when the container is mid-update at the pulling phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'pulling' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'pulling' });
 
     const wrapper = mount(ContainerSideDetail, {
       global: {
@@ -319,10 +325,7 @@ describe('ContainerSideDetail', () => {
 
   it('shows "Health-checking…" when the container is at the health-gate phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'health-gate' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'health-gate' });
 
     const wrapper = mount(ContainerSideDetail, {
       global: {
@@ -340,10 +343,7 @@ describe('ContainerSideDetail', () => {
 
   it('shows "Finalizing…" when the container is at the health-gate-passed phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'health-gate-passed' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'health-gate-passed' });
 
     const wrapper = mount(ContainerSideDetail, {
       global: {
@@ -361,10 +361,7 @@ describe('ContainerSideDetail', () => {
 
   it('shows "Rolling back…" when the container is at the rollback-started phase', () => {
     isContainerUpdateInProgress.mockReturnValue(true);
-    (selectedContainer as any).value = {
-      ...selectedContainer.value,
-      updateOperation: { phase: 'rollback-started' },
-    };
+    seedOperation(pinia, selectedContainer.value, { phase: 'rollback-started' });
 
     const wrapper = mount(ContainerSideDetail, {
       global: {
