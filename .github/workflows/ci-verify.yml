@@ -578,12 +578,10 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-  test:
-    name: "Quality: Test & Coverage"
+  test-repo:
+    name: "Quality: Test (repo checks)"
     runs-on: ubuntu-24.04
-    # The app and UI coverage shards plus the Codecov upload reached 19 to 20
-    # minutes on dev/v1.8 and the job was cancelled mid-upload twice (#1324).
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
 
@@ -596,10 +594,6 @@ jobs:
             github.com:443
             registry.npmjs.org:443
             nodejs.org:443
-            cli.codecov.io:443
-            api.codecov.io:443
-            ingest.codecov.io:443
-            storage.googleapis.com:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
 
@@ -654,6 +648,135 @@ jobs:
         run: npm test
         working-directory: apps/demo
 
+  test-app:
+    name: "Quality: Test (app)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            *.actions.githubusercontent.com:443
+          disable-sudo: true
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            apps/demo/package-lock.json
+            ui/package-lock.json
+
+      - name: Install repository dependencies
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: npm ci --ignore-scripts
+
+      - name: Install app dependencies
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd app && npm ci
+
+      - name: Run app tests
+        run: npm test
+        working-directory: app
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-shard-app
+          path: app/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Write coverage gap report
+        # Only reached when the tests step failed. Mirrors pre-push-coverage.sh:
+        # the report is built from lcov, which exists when a threshold was missed
+        # and may not when tests crashed, so the fallible command is guarded
+        # here and never masks the shard's own failure.
+        if: failure()
+        run: |
+          if [ -f app/coverage/lcov.info ]; then
+            node scripts/coverage-gaps.mjs --workspace app --write .coverage-gaps.app.json --print || true
+          fi
+
+      - name: Upload coverage gap report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-gaps-app
+          path: .coverage-gaps.app.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test-ui:
+    name: "Quality: Test (ui)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            *.actions.githubusercontent.com:443
+          disable-sudo: true
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: true
+          cache-dependency-path: |
+            package-lock.json
+            app/package-lock.json
+            apps/demo/package-lock.json
+            ui/package-lock.json
+
+      - name: Install repository dependencies
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 3
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: npm ci --ignore-scripts
+
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
@@ -661,10 +784,6 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd ui && npm ci
-
-      - name: Run app tests
-        run: npm test
-        working-directory: app
 
       - name: Typecheck ui
         run: npm run typecheck
@@ -691,9 +810,119 @@ jobs:
           npm run test:unit -- --maxWorkers=1
         working-directory: ui
 
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-shard-ui
+          path: ui/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Write coverage gap report
+        # Only reached when the tests step failed. Mirrors pre-push-coverage.sh:
+        # the report is built from lcov, which exists when a threshold was missed
+        # and may not when tests crashed, so the fallible command is guarded
+        # here and never masks the shard's own failure.
+        if: failure()
+        run: |
+          if [ -f ui/coverage/lcov.info ]; then
+            node scripts/coverage-gaps.mjs --workspace ui --write .coverage-gaps.ui.json --print || true
+          fi
+
+      - name: Upload coverage gap report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-gaps-ui
+          path: .coverage-gaps.ui.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test:
+    # Required check name (rulesets require "Quality: Test & Coverage" exactly).
+    # CI-5: the suites run in the test-repo, test-app and test-ui shard jobs,
+    # which enforce the per-workspace coverage thresholds where the tests run.
+    # This job only aggregates: it merges coverage for Codecov and the gap
+    # report, then fails unless every shard succeeded. always() is required so
+    # a failed shard makes this check fail instead of skipping it, since a
+    # skipped required check counts as passing.
+    name: "Quality: Test & Coverage"
+    needs: [test-repo, test-app, test-ui]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            github.com:443
+            registry.npmjs.org:443
+            nodejs.org:443
+            cli.codecov.io:443
+            api.codecov.io:443
+            ingest.codecov.io:443
+            storage.googleapis.com:443
+            *.actions.githubusercontent.com:443
+          disable-sudo: true
+
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6.5.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Download app coverage report
+        if: needs.test-app.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage-shard-app
+          path: app/coverage
+
+      - name: Download ui coverage report
+        if: needs.test-ui.result == 'success'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: coverage-shard-ui
+          path: ui/coverage
+
+      - name: Download shard coverage gap reports
+        if: always()
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: coverage-gaps-*
+          merge-multiple: true
+          path: .
+
+      - name: Merge coverage gap reports
+        if: always()
+        run: node scripts/merge-coverage-gaps.mjs --out .coverage-gaps.json .coverage-gaps.app.json .coverage-gaps.ui.json
+
+      - name: Upload coverage gap report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: coverage-gaps
+          path: .coverage-gaps.json
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Normalize coverage paths
         # Rewrites lcov SF: paths to be repo-root-relative (app/…, ui/…) so
         # Codecov resolves them against the checkout.
+        if: needs.test-app.result == 'success' && needs.test-ui.result == 'success'
         run: node scripts/prepare-codecov-reports.mjs
 
       - name: Upload app coverage to Codecov
@@ -705,8 +934,8 @@ jobs:
         # secrets anyway); secrets.CODECOV_TOKEN is optional and covers
         # private-context uploads. Advisory (continue-on-error plus
         # fail_ci_if_error: false): an upload hiccup never blocks CI — the
-        # Vitest's configured coverage thresholds enforced in app/ui tests
-        # above are the real gate.
+        # Vitest's configured coverage thresholds enforced in the app and ui
+        # shard jobs are the real gate.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6.0.2
         with:
@@ -723,6 +952,27 @@ jobs:
           files: coverage/codecov-ui.lcov.info
           flags: ui
           fail_ci_if_error: false
+
+      - name: Enforce shard results
+        if: always()
+        env:
+          RESULT_TEST_REPO: ${{ needs.test-repo.result }}
+          RESULT_TEST_APP: ${{ needs.test-app.result }}
+          RESULT_TEST_UI: ${{ needs.test-ui.result }}
+        run: |
+          failed=0
+          for pair in "test-repo:${RESULT_TEST_REPO}" "test-app:${RESULT_TEST_APP}" "test-ui:${RESULT_TEST_UI}"; do
+            name="${pair%%:*}"
+            result="${pair#*:}"
+            if [ "${result}" != "success" ]; then
+              echo "::error::${name} finished with result '${result}', expected 'success'"
+              failed=1
+            fi
+          done
+          if [ "${failed}" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All test shards succeeded."
 
   web:
     name: "Web: Site Build & Scripts Tests"

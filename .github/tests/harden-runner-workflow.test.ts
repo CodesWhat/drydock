@@ -21,6 +21,9 @@ const expectedPolicy: Record<string, EgressPolicy> = {
   'ci-verify.yml/secrets': 'block',
   'ci-verify.yml/fuzz': 'block',
   'ci-verify.yml/test': 'block',
+  'ci-verify.yml/test-repo': 'block',
+  'ci-verify.yml/test-app': 'block',
+  'ci-verify.yml/test-ui': 'block',
   'ci-verify.yml/web': 'block',
   'ci-verify.yml/grype-image': 'block',
   // Required-context rename mirrors. They run one `test` against a `needs`
