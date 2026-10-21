@@ -1,6 +1,7 @@
 # A dev -> main sync squash carries sub-PR text, and a "Fixes: #N" in it closes
 # an issue that was reopened on purpose (#565 was closed again by three syncs).
-# This fails a PR into main whose title or body holds a GitHub closing keyword.
+# This fails a PR into main whose title, body or commit messages hold a GitHub
+# closing keyword (the commits build the squash message).
 # `edited` re-runs it when the body is rewritten to clear the finding. Not a
 # required check, so it adds no required context on main.
 name: Closing Keywords Guard
@@ -30,14 +31,19 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - name: Fail on closing keywords in the PR title or body
+      - name: Fail on closing keywords in the PR title, body or commits
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           printf '%s\n' "${PR_TITLE}" > "${RUNNER_TEMP}/pr-title.txt"
           printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.txt"
+          git log --format=%B "${BASE_SHA}..${HEAD_SHA}" > "${RUNNER_TEMP}/pr-commits.txt"
           node scripts/closing-keywords.mjs \
             "PR title=${RUNNER_TEMP}/pr-title.txt" \
-            "PR body=${RUNNER_TEMP}/pr-body.txt"
+            "PR body=${RUNNER_TEMP}/pr-body.txt" \
+            "PR commits=${RUNNER_TEMP}/pr-commits.txt"
