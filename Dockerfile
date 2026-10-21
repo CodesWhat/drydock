@@ -88,8 +88,19 @@ ENV DD_LOG_FORMAT=text
 # compiled /bin/healthcheck binary since v1.5.0, so nothing in the image
 # depends on curl anymore. User-defined HEALTHCHECK overrides that still shell
 # out to curl will break — see DEPRECATIONS.md.
+# Also strip root from every /etc/group member list (groups and GIDs stay).
+# Docker's supplementary list for a root process is root's /etc/group memberships
+# plus group_add; without this, group_add GIDs are indistinguishable from
+# wheel/disk/adm, and the entrypoint can't safely carry them across the
+# privilege drop.
 RUN rm -f /usr/bin/wget /usr/bin/nc \
-    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && awk -F: 'BEGIN { OFS = ":" } \
+        { n = split($4, m, ","); o = ""; \
+          for (i = 1; i <= n; i++) if (m[i] != "" && m[i] != "root") o = o (o == "" ? "" : ",") m[i]; \
+          $4 = o; print }' /etc/group > /tmp/group.new \
+    && cat /tmp/group.new > /etc/group \
+    && rm /tmp/group.new
 
 # Copy healthcheck binary (65KB static, default HEALTHCHECK probe)
 COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
