@@ -163,6 +163,31 @@ describe('container-update utils', () => {
     ).toBe(false);
   });
 
+  it('reads container operations through resolveOperation instead of the updateOperation prop', () => {
+    const operations: Record<
+      string,
+      { status: 'queued' | 'in-progress'; updatedAt: string | undefined }
+    > = {
+      older: { status: 'queued', updatedAt: '2026-04-01T12:00:00.000Z' },
+      standalone: { status: 'queued', updatedAt: '2026-04-01T12:00:05.000Z' },
+    };
+    const args = {
+      targetId: 'standalone',
+      operation: operations.standalone,
+      // The props carry nothing; only the resolver knows about the operations.
+      containers: [{ id: 'older' }, { id: 'standalone' }],
+      resolveOperation: (container: { id: string }) => operations[container.id],
+    };
+
+    expect(shouldRenderStandaloneQueuedUpdateAsUpdating(args)).toBe(false);
+
+    operations.older = { status: 'in-progress', updatedAt: undefined };
+    expect(shouldRenderStandaloneQueuedUpdateAsUpdating(args)).toBe(false);
+
+    delete operations.older;
+    expect(shouldRenderStandaloneQueuedUpdateAsUpdating(args)).toBe(true);
+  });
+
   it('yields standalone queued updates to external active heads', () => {
     expect(
       shouldRenderStandaloneQueuedUpdateAsUpdating({

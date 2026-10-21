@@ -20,6 +20,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Split the CI test job into parallel app, ui and repo-check shard jobs, so the app and ui coverage runs no longer queue behind each other (CI-5). `Quality: Test & Coverage` stays the required check: it now aggregates the shards, merges their coverage reports for Codecov and `.coverage-gaps.json`, and fails unless every shard succeeded. The per-workspace coverage thresholds are unchanged and still enforced inside each shard.
 - **Website changelog alerts:** the versioned changelog page on the website now renders GitHub alert blocks such as `> [!WARNING]` as callouts instead of showing the marker as literal text inside a blockquote.
+### Changed
+
+- Read update progress in the container list rows, the side and full-page container panels from the operations store instead of the container's `updateOperation` prop (DR-89, slice 2). Row badges, the cancel control, and the update status panel now follow the same store the rest of the UI uses. Behavior is unchanged.
 
 ## [1.8.0-rc.3] - 2026-10-20
 

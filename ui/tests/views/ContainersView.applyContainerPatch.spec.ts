@@ -109,6 +109,8 @@ vi.mock('@/stores/operations', () => ({
       mockGetOperationByContainerId(containerId);
       return mockStoreOperationsById.value[containerId];
     },
+    getOperationForContainer: vi.fn().mockReturnValue(undefined),
+    isContainerUpdateActive: vi.fn().mockReturnValue(false),
     getBatchProgress: vi.fn().mockReturnValue(undefined),
     getActiveBatchProgress: vi.fn().mockReturnValue([]),
     captureDisplayBatch: vi.fn(),

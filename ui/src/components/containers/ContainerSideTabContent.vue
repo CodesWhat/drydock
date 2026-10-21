@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useOperationStore } from '@/stores/operations';
 import ContainerMaturityPolicyEditor from './ContainerMaturityPolicyEditor.vue';
 import { getPreviewUpdateKind } from '../../services/preview';
 import AppBadge from '@/components/AppBadge.vue';
@@ -192,6 +193,7 @@ function openUpdateStatusTab(tab: string, section?: string) {
 }
 
 const { t, locale } = useI18n();
+const operationStore = useOperationStore();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
@@ -357,7 +359,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <UpdateStatusPanel
                 :container="selectedContainer"
                 :mode="updateMode"
-                :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
+                :has-active-operation-badge="operationStore.isContainerUpdateActive(selectedContainer)"
                 :dry-run-trigger-id="dryRunTriggerId"
                 class="mt-2"
                 :busy="isActionInProgress(selectedContainer)"

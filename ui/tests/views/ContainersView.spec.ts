@@ -114,6 +114,8 @@ vi.mock('@/stores/operations', () => ({
     byId: {},
     batchSummaries: {},
     getOperationByContainerId: vi.fn().mockReturnValue(undefined),
+    getOperationForContainer: vi.fn().mockReturnValue(undefined),
+    isContainerUpdateActive: vi.fn().mockReturnValue(false),
     getBatchProgress: vi.fn().mockReturnValue(undefined),
     getActiveBatchProgress: vi.fn().mockReturnValue([]),
     captureDisplayBatch: vi.fn(),
