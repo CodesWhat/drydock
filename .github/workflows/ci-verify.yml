@@ -731,6 +731,7 @@ jobs:
           name: coverage-gaps-app
           path: .coverage-gaps.app.json
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   test-ui:
@@ -837,6 +838,7 @@ jobs:
           name: coverage-gaps-ui
           path: .coverage-gaps.ui.json
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 7
 
   test:
@@ -917,6 +919,7 @@ jobs:
           name: coverage-gaps
           path: .coverage-gaps.json
           if-no-files-found: ignore
+          include-hidden-files: true
           retention-days: 14
 
       - name: Normalize coverage paths

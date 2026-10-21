@@ -750,7 +750,19 @@ test('coverage shards hand lcov and gap reports to the aggregating job', () => {
       name: `coverage-gaps-${workspace}`,
       path: `.coverage-gaps.${workspace}.json`,
     });
+    // Gap reports are dotfiles; upload-artifact skips hidden files by default.
+    expect(getWorkflowStep(jobId, 'Upload coverage gap report')?.with).toMatchObject({
+      'include-hidden-files': true,
+    });
   }
+});
+
+test('the aggregating job uploads the merged gap report including hidden files', () => {
+  expect(getWorkflowStep('test', 'Upload coverage gap report')?.with).toMatchObject({
+    name: 'coverage-gaps',
+    path: '.coverage-gaps.json',
+    'include-hidden-files': true,
+  });
 });
 
 test('the aggregating job merges shard coverage and fails closed on any shard result', () => {

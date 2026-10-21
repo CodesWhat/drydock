@@ -20,6 +20,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Split the CI test job into parallel app, ui and repo-check shard jobs, so the app and ui coverage runs no longer queue behind each other (CI-5). `Quality: Test & Coverage` stays the required check: it now aggregates the shards, merges their coverage reports for Codecov and `.coverage-gaps.json`, and fails unless every shard succeeded. The per-workspace coverage thresholds are unchanged and still enforced inside each shard.
 
+### Fixed
+
+- CI coverage gap reports are now uploaded from the test shards and the aggregating job. The upload step skips dotfiles by default, so a shard that missed its threshold uploaded nothing and `.coverage-gaps.json` came out empty.
+
 ## [1.8.0-rc.3] - 2026-10-20
 
 > [!WARNING]
