@@ -13,6 +13,12 @@ type UpdateOperationContainerLike = {
   updateOperation?: UpdateOperationSequenceLike;
 };
 
+type ResolveUpdateOperation = (
+  container: UpdateOperationContainerLike,
+) => UpdateOperationSequenceLike | undefined;
+
+const resolveOperationFromProp: ResolveUpdateOperation = (container) => container.updateOperation;
+
 function hasPersistedUpdateBatchId(operation?: UpdateOperationSequenceLike): boolean {
   return Boolean(operation?.batchId);
 }
@@ -47,11 +53,12 @@ function isStandaloneQueuedUpdateOperation(operation?: UpdateOperationSequenceLi
 
 function getPersistedBatchHeadIds(
   containers: readonly UpdateOperationContainerLike[],
+  resolveOperation: ResolveUpdateOperation,
 ): Set<string> {
   const queuedHeads = new Map<string, { id: string; position: number }>();
 
   for (const container of containers) {
-    const operation = container.updateOperation;
+    const operation = resolveOperation(container);
     // In-progress operations are handled before this helper runs.
     if (
       operation?.status !== 'queued' ||
@@ -87,7 +94,10 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   operation?: UpdateOperationSequenceLike;
   targetId?: string;
   hasExternalActiveHead?: boolean;
+  /** Where a container's operation comes from. Defaults to the container's updateOperation prop. */
+  resolveOperation?: ResolveUpdateOperation;
 }): boolean {
+  const resolveOperation = args.resolveOperation ?? resolveOperationFromProp;
   if (!isStandaloneQueuedUpdateOperation(args.operation)) {
     return false;
   }
@@ -98,13 +108,13 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
 
   const hasActivePredecessor = args.containers.some(
     (container) =>
-      container.id !== args.targetId && container.updateOperation?.status === 'in-progress',
+      container.id !== args.targetId && resolveOperation(container)?.status === 'in-progress',
   );
   if (hasActivePredecessor) {
     return false;
   }
 
-  const persistedBatchHeadIds = getPersistedBatchHeadIds(args.containers);
+  const persistedBatchHeadIds = getPersistedBatchHeadIds(args.containers, resolveOperation);
   if ([...persistedBatchHeadIds].some((id) => id !== args.targetId)) {
     return false;
   }
@@ -113,11 +123,12 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   let headTimestamp = Number.POSITIVE_INFINITY;
 
   for (const container of args.containers) {
-    if (!isStandaloneQueuedUpdateOperation(container.updateOperation)) {
+    const containerOperation = resolveOperation(container);
+    if (!isStandaloneQueuedUpdateOperation(containerOperation)) {
       continue;
     }
 
-    const candidateTimestamp = parseUpdateOperationTimestamp(container.updateOperation?.updatedAt);
+    const candidateTimestamp = parseUpdateOperationTimestamp(containerOperation?.updatedAt);
     if (candidateTimestamp < headTimestamp) {
       headTimestamp = candidateTimestamp;
       headId = container.id;

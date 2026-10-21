@@ -13,7 +13,7 @@ curl http://drydock:3000/api/v1/app
 {
   "name":"drydock",
   "version":"1.8.0",
-  "build":"1.8.0-rc.3"
+  "build":"1.8.0-rc.4"
 }
 ```
 
@@ -133,7 +133,7 @@ Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. Th
 
 Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
 
-The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. In v1.8.0-rc.3 builds, store statistics report SQLite table row counts under the compatibility field `collections` (each entry has `name` and `documents`). The aggregate `serializedBytes` is SQLite's `page_count` multiplied by `page_size`, not JSON serialization size or per-table byte attribution. Internal migration and store-metadata tables are excluded from the row counts; raw stored rows are not included.
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. In v1.8.0-rc.4 builds, store statistics report SQLite table row counts under the compatibility field `collections` (each entry has `name` and `documents`). The aggregate `serializedBytes` is SQLite's `page_count` multiplied by `page_size`, not JSON serialization size or per-table byte attribution. Internal migration and store-metadata tables are excluded from the row counts; raw stored rows are not included.
 
 Redaction works on the key name, and the exact rule matters — a key that falls outside it is returned verbatim:
 

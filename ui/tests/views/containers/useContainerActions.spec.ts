@@ -1,4 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import { createPinia, getActivePinia, setActivePinia } from 'pinia';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import { i18n, setI18nLocale } from '@/boot/i18n';
 import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
@@ -23,6 +24,7 @@ import {
   useContainerActions,
 } from '@/views/containers/useContainerActions';
 import { useContainerPreview } from '@/views/containers/useContainerPreview';
+import { seedOperation } from '../../helpers/operations';
 
 const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
@@ -141,6 +143,23 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 
 const mountedWrappers: VueWrapper[] = [];
 
+/** Mirror a fixture row's updateOperation into the operations store, which owns update state. */
+function seedRowOperation(container: Container) {
+  const op = container.updateOperation;
+  if (!op) {
+    return;
+  }
+  seedOperation(getActivePinia()!, container, {
+    operationId: op.id,
+    status: op.status,
+    phase: op.phase,
+    updatedAt: op.updatedAt || undefined,
+    batchId: op.batchId,
+    queuePosition: op.queuePosition,
+    queueTotal: op.queueTotal,
+  });
+}
+
 interface ActionsHarnessState {
   activeDetailTab: Ref<string>;
   closeFullPage: ReturnType<typeof vi.fn>;
@@ -167,6 +186,13 @@ async function mountActionsHarness(
   } = {},
 ) {
   let state: ActionsHarnessState | undefined;
+
+  for (const container of options.containers ?? []) {
+    seedRowOperation(container);
+  }
+  if (options.selectedContainer) {
+    seedRowOperation(options.selectedContainer);
+  }
 
   const Harness = defineComponent({
     setup() {
@@ -263,6 +289,7 @@ async function mountPreviewHarness(initialContainerId?: string) {
 
 describe('useContainerActions', () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     setI18nLocale('en');
     vi.useRealTimers();
     vi.resetAllMocks();
@@ -536,6 +563,7 @@ describe('useContainerActions', () => {
         startTime: Date.now(),
         liveContainer: makeContainer({ id: 'container-1', name: 'web', status: 'running' }),
         actionPendingLifecycleObserved: lifecycleObserved,
+        resolveOperation: () => undefined,
       }),
     ).toBe(true);
   });
@@ -1268,12 +1296,11 @@ describe('useContainerActions', () => {
           ],
         };
       if (state === 'queued' || state === 'in-progress')
-        containers.value[0]!.updateOperation = {
-          id: 'op',
+        seedOperation(getActivePinia()!, containers.value[0]!, {
+          operationId: 'op',
           status: state,
-          phase: 'queued',
           updatedAt: '2026-09-08T00:00:00Z',
-        };
+        });
       if (state === 'disabled') mocks.containerActionsEnabled.value = false;
       await dialog.accept();
       expect(mocks.updateContainers).not.toHaveBeenCalled();
@@ -4479,6 +4506,58 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress(queuedTail)).toBe(false);
   });
 
+  it('keeps a container Updating when a list refresh replaces rows that carry no operation prop', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containers } = await mountActionsHarness({ containers: [container] });
+    seedOperation(getActivePinia()!, container, { status: 'in-progress' });
+
+    containers.value = [makeContainer({ id: 'container-1', name: 'web' })];
+    await nextTick();
+
+    expect(composable.isContainerUpdateInProgress(containers.value[0]!)).toBe(true);
+  });
+
+  it('reads an agent-owned update by identityKey when no row shares the operation container id', async () => {
+    const { composable } = await mountActionsHarness({ containers: [] });
+    seedOperation(
+      getActivePinia()!,
+      { id: 'agent-old-id', identityKey: 'agent1::local::web', name: 'web' },
+      { operationId: 'op-agent', status: 'in-progress' },
+    );
+
+    expect(
+      composable.isContainerUpdateInProgress(
+        makeContainer({ id: 'agent-new-id', name: 'web', identityKey: 'agent1::local::web' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('treats a live container with an active store operation as unsettled', () => {
+    const lifecycleObserved = ref(new Set<string>());
+    const settle = (status?: 'queued' | 'in-progress') =>
+      isPendingUpdateSettled({
+        pendingKey: 'web',
+        now: Date.now(),
+        startTime: Date.now(),
+        liveContainer: makeContainer({ id: 'container-1', name: 'web', status: 'running' }),
+        snapshot: makeContainer({ id: 'container-1', name: 'web', status: 'running' }),
+        actionPendingLifecycleObserved: lifecycleObserved,
+        resolveOperation: () =>
+          status
+            ? {
+                id: 'op-1',
+                status,
+                phase: status === 'queued' ? 'queued' : 'pulling',
+                updatedAt: '',
+              }
+            : undefined,
+      });
+
+    expect(settle('in-progress')).toBe(false);
+    expect(settle('queued')).toBe(false);
+    expect(lifecycleObserved.value.has('web')).toBe(true);
+  });
+
   it('treats targets carrying their own in-progress operation as updating', async () => {
     const ghost = makeContainer({
       id: 'ghost-a',
@@ -4490,6 +4569,7 @@ describe('useContainerActions', () => {
         updatedAt: '2026-04-01T12:00:00.000Z',
       },
     });
+    seedRowOperation(ghost);
     const { composable } = await mountActionsHarness({
       containers: [],
     });
@@ -4824,6 +4904,7 @@ describe('useContainerActions', () => {
       groupUpdateQueue,
       pollTimeout: 0,
       stopPendingActionsPolling,
+      resolveOperation: () => undefined,
     });
 
     expect(actionPendingStartTimes.value.has('web')).toBe(false);
@@ -4858,6 +4939,7 @@ describe('useContainerActions', () => {
       groupUpdateQueue,
       pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
       stopPendingActionsPolling,
+      resolveOperation: () => undefined,
     });
 
     expect(actionPending.value.has('web')).toBe(true);
@@ -4885,6 +4967,7 @@ describe('useContainerActions', () => {
       groupUpdateQueue,
       pollTimeout: PENDING_ACTIONS_POLL_INTERVAL_MS,
       stopPendingActionsPolling,
+      resolveOperation: () => undefined,
     });
 
     expect(actionPending.value.has('container-b')).toBe(false);
@@ -5199,6 +5282,62 @@ describe('useContainerActions', () => {
       await flushPromises();
 
       expect(mocks.toastSuccess).toHaveBeenCalledWith('Cancellation requested: web');
+    });
+
+    it('cancels the operation id held by the store, not a stale row prop', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancel-requested');
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-stale', status: 'queued', phase: 'queued', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+      seedOperation(getActivePinia()!, container, {
+        operationId: 'op-live',
+        status: 'in-progress',
+      });
+
+      await composable.cancelUpdate({
+        id: container.id,
+        identityKey: container.identityKey,
+        name: container.name,
+      });
+      await flushPromises();
+
+      expect(mocks.cancelUpdateOperation).toHaveBeenCalledWith('op-live');
+    });
+
+    it('cancels an agent-owned container matched by identityKey when the row id differs', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancelled');
+      const { composable } = await mountActionsHarness({ containers: [] });
+      seedOperation(
+        getActivePinia()!,
+        { id: 'agent-old-id', identityKey: 'agent1::local::web', name: 'web' },
+        { operationId: 'op-agent', status: 'in-progress' },
+      );
+
+      await composable.cancelUpdate({
+        id: 'agent-new-id',
+        identityKey: 'agent1::local::web',
+        name: 'web',
+      });
+      await flushPromises();
+
+      expect(mocks.cancelUpdateOperation).toHaveBeenCalledWith('op-agent');
+    });
+
+    it('does nothing when the store has no operation for the container', async () => {
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-stale', status: 'queued', phase: 'queued', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.cancelUpdateOperation).not.toHaveBeenCalled();
     });
 
     it('does nothing when updateOperation is absent', async () => {

@@ -30,7 +30,7 @@ The `slack` trigger lets you post image update notifications to a Slack channel.
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.3
+    image: codeswhat/drydock:1.8.0-rc.4
     ...
     environment:
         - DD_NOTIFICATION_SLACK_TEST_TOKEN=replace-with-slack-token
@@ -44,7 +44,7 @@ docker run \
     -e DD_NOTIFICATION_SLACK_TEST_TOKEN="replace-with-slack-token" \
     -e DD_NOTIFICATION_SLACK_TEST_CHANNEL="drydock" \
   ...
-  codeswhat/drydock:1.8.0-rc.3
+  codeswhat/drydock:1.8.0-rc.4
 ```
 </Tab>
 </Tabs>

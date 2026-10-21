@@ -40,7 +40,7 @@ The `pushover` trigger lets you send realtime notifications to your devices (And
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.3
+    image: codeswhat/drydock:1.8.0-rc.4
     ...
     environment:
       - DD_NOTIFICATION_PUSHOVER_1_TOKEN=*****************************
@@ -54,7 +54,7 @@ docker run \
   -e DD_NOTIFICATION_PUSHOVER_1_TOKEN="*****************************" \
   -e DD_NOTIFICATION_PUSHOVER_1_USER="******************************" \
   ...
-  codeswhat/drydock:1.8.0-rc.3
+  codeswhat/drydock:1.8.0-rc.4
 ```
 </Tab>
 </Tabs>
@@ -67,7 +67,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.3
+    image: codeswhat/drydock:1.8.0-rc.4
     ...
     environment:
         - DD_NOTIFICATION_PUSHOVER_1_TOKEN=*****************************
@@ -95,7 +95,7 @@ docker run \
     -e DD_NOTIFICATION_PUSHOVER_1_HTML="1" \
     -e DD_NOTIFICATION_PUSHOVER_1_TTL="3600" \
   ...
-  codeswhat/drydock:1.8.0-rc.3
+  codeswhat/drydock:1.8.0-rc.4
 ```
 </Tab>
 </Tabs>
