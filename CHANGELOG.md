@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.4] - 2026-10-21
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1), the [v1.8.0-rc.2 fixes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.2) and the [v1.8.0-rc.3 changes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.3), and retains their upgrade warnings. Supplementary groups added with `group_add` now survive the privilege drop to `node` (#1440), and the container update views finish moving to the operations store (DR-89, slices 2 to 4). CI test jobs now run in parallel shards, pull requests into `main` are checked for closing keywords, the website changelog renders alert callouts, and the vitest dev dependency moves to 4.1.12 for two advisories. v1.8 GA is not released; v1.7.0 (GA 2026-10-19) is the latest stable release. RC4 has its own publication-based soak.
+
 ### Security
 
 - Bump vitest and `@vitest/coverage-v8` to 4.1.12 in app, ui and the demo for GHSA-qxg6-89mg-rqv8 and GHSA-xp26-3454-mjgp in `@vitest/mocker` (dev dependency only, not in the image).
@@ -19,13 +26,11 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Keep the supplementary groups Docker adds with `group_add` after the entrypoint drops from root to `node`. `su-exec` rebuilt the group list from `/etc/group` and lost them, so Compose files writable only through that group (a NAS share GID, or `"0"`) failed with `permission denied`, even though the Compose trigger's own warning recommends `group_add`. The image now removes `root` from every `/etc/group` member list, so the entrypoint can treat the groups on the process as the `group_add` entries and add `node` to them. Without `group_add`, `node` gains no groups it didn't have before. A `group_add` of `"0"` is detected by GID 0 appearing twice in the list, so a runtime that dedupes the list still needs `user: "1000:1000"` with `group_add`. (#1440)
 - Fail a pull request into `main` when its title, body or any commit message holds a GitHub closing keyword (`Fixes: #N`, `closes #N`, `resolved owner/repo#N`), so a dev to main sync can no longer re-close an issue that was reopened on purpose (DR-100). The check is the new Closing Keywords Guard workflow and `scripts/closing-keywords.mjs`; it is not a required status check.
+- **Website changelog alerts:** the versioned changelog page on the website now renders GitHub alert blocks such as `> [!WARNING]` as callouts instead of showing the marker as literal text inside a blockquote.
 
 ### Changed
 
 - Split the CI test job into parallel app, ui and repo-check shard jobs, so the app and ui coverage runs no longer queue behind each other (CI-5). `Quality: Test & Coverage` stays the required check: it now aggregates the shards, merges their coverage reports for Codecov and `.coverage-gaps.json`, and fails unless every shard succeeded. The per-workspace coverage thresholds are unchanged and still enforced inside each shard.
-- **Website changelog alerts:** the versioned changelog page on the website now renders GitHub alert blocks such as `> [!WARNING]` as callouts instead of showing the marker as literal text inside a blockquote.
-- Read update progress in the container list rows, the side and full-page container panels from the operations store instead of the container's `updateOperation` prop (DR-89, slice 2). Row badges, the cancel control, and the update status panel now follow the same store the rest of the UI uses. Behavior is unchanged.
-- Read update progress in the container list rows, the side and full-page container panels from the operations store instead of the container's `updateOperation` prop (DR-89, slices 2 and 3). Row badges, the cancel control, and the update status panel now follow the same store the rest of the UI uses. The dashboard's Recent Updates widget (status, queue labels, from and to versions) reads the same store, and its own operation-event patching is gone; display holds are reconciled after each container-list fetch (slice 3), and a retry's hold no longer inherits the batch ID or queue position from a stale list-seeded row. Behavior is unchanged.
 - Read update progress in the container list rows, the side and full-page container panels from the operations store instead of the container's `updateOperation` prop (DR-89, slices 2 to 4). Row badges, the cancel control, and the update status panel now follow the same store the rest of the UI uses. The dashboard's Recent Updates widget (status, queue labels, from and to versions) reads the same store, and its own operation-event patching is gone; display holds are reconciled after each container-list fetch (slice 3), and a retry's hold no longer inherits the batch ID or queue position from a stale list-seeded row. The Containers view and its actions (cancel, bulk and group update guards, pending-update settling) read the same store too, and the display hold is reconciled against it, so a refresh mid-update keeps the row Updating and a terminal event missed during a disconnect clears within the usual 1.5 s settle window after the next list load (slice 4). Behavior is unchanged.
 
 ## [1.8.0-rc.3] - 2026-10-20
@@ -3520,7 +3525,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.4...HEAD
+[1.8.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...v1.8.0-rc.4
 [1.8.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...v1.8.0-rc.3
 [1.8.0-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.1...v1.8.0-rc.2
 [1.8.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.24...v1.8.0-rc.1

@@ -73,7 +73,7 @@ environment:
 | Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Starts fail-closed — protected API requests return `401`; auth discovery/status stays public; `/health` returns `503` |
 | Upgrade, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
 
-Drydock identifies an existing installation from its saved application metadata. In v1.8.0-rc.3 builds this record lives in SQLite and is carried across by the one-time JSON import; the presence of `dd.json` alone does not determine whether an installation is an upgrade. Both upgrades and fresh installs require configured authentication or explicit anonymous-access confirmation.
+Drydock identifies an existing installation from its saved application metadata. In v1.8.0-rc.4 builds this record lives in SQLite and is carried across by the one-time JSON import; the presence of `dd.json` alone does not determine whether an installation is an upgrade. Both upgrades and fresh installs require configured authentication or explicit anonymous-access confirmation.
 
 ### Upgrading
 
