@@ -19,6 +19,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Changed
 
 - Split the CI test job into parallel app, ui and repo-check shard jobs, so the app and ui coverage runs no longer queue behind each other (CI-5). `Quality: Test & Coverage` stays the required check: it now aggregates the shards, merges their coverage reports for Codecov and `.coverage-gaps.json`, and fails unless every shard succeeded. The per-workspace coverage thresholds are unchanged and still enforced inside each shard.
+- **Website changelog alerts:** the versioned changelog page on the website now renders GitHub alert blocks such as `> [!WARNING]` as callouts instead of showing the marker as literal text inside a blockquote.
 
 ## [1.8.0-rc.3] - 2026-10-20
 
