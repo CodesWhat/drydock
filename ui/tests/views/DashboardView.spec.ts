@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { createPinia, getActivePinia, setActivePinia } from 'pinia';
 import { nextTick, ref } from 'vue';
 import { i18n } from '@/boot/i18n';
 import DataTable from '@/components/DataTable.vue';
@@ -12,6 +13,7 @@ import {
   computeDashboardDragScrollDelta,
 } from '@/views/dashboard/dashboardDragAutoScroll';
 import { mountWithPlugins } from '../helpers/mount';
+import { seedOperation } from '../helpers/operations';
 
 const dashboardViewSource = readFileSync(
   resolve(__dirname, '../../src/views/DashboardView.vue'),
@@ -241,6 +243,7 @@ function mountDashboardView() {
 describe('DashboardView', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    setActivePinia(createPinia());
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
     mockUpdateMode.value = 'manual';
@@ -2244,14 +2247,6 @@ describe('DashboardView', () => {
           newTag: null,
           updateKind: null,
           status: 'stopped',
-          updateOperation: {
-            id: 'op-2',
-            status: 'in-progress',
-            phase: 'old-stopped',
-            updatedAt: '2026-04-01T12:00:02.000Z',
-            fromVersion: '15.0.0',
-            toVersion: '16.1.0',
-          },
         });
         const firstUpdatedContainer = makeContainer({
           id: 'c-success-1',
@@ -2297,6 +2292,20 @@ describe('DashboardView', () => {
         await flushPromises();
 
         vi.advanceTimersByTime(2_000);
+        await flushPromises();
+
+        // The poll refetch has landed; the server now reports the second
+        // container's operation as in progress.
+        seedOperation(
+          getActivePinia()!,
+          { id: 'c-success-2', identityKey: secondUpdatingContainer.identityKey, name: 'postgres' },
+          {
+            operationId: 'op-2',
+            status: 'in-progress',
+            fromVersion: '15.0.0',
+            toVersion: '16.1.0',
+          },
+        );
         await flushPromises();
 
         const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
@@ -2507,17 +2516,15 @@ describe('DashboardView', () => {
         newTag: null,
         updateKind: null,
         status: 'stopped',
-        updateOperation: {
-          id: 'op-1',
-          status: 'in-progress',
-          phase: 'old-stopped',
-          updatedAt: '2026-04-01T12:00:00.000Z',
-          fromVersion: '1.0.0',
-          toVersion: '1.1.0',
-        },
       });
 
       const wrapper = await mountDashboard([updatingContainer]);
+      seedOperation(
+        getActivePinia()!,
+        { id: 'c-pending', identityKey: updatingContainer.identityKey, name: 'nginx' },
+        { operationId: 'op-1', status: 'in-progress', fromVersion: '1.0.0', toVersion: '1.1.0' },
+      );
+      await flushPromises();
 
       const widget = wrapper.find('[data-widget-id="recent-updates"]');
       expect(widget.text()).toContain('Updating');
@@ -2531,17 +2538,6 @@ describe('DashboardView', () => {
         newTag: null,
         updateKind: null,
         status: 'stopped',
-        updateOperation: {
-          id: 'op-1',
-          status: 'queued',
-          phase: 'queued',
-          updatedAt: '2026-04-01T12:00:00.000Z',
-          fromVersion: '1.0.0',
-          toVersion: '1.1.0',
-          batchId: 'batch-1',
-          queuePosition: 1,
-          queueTotal: 2,
-        },
       });
       const queuedSecondContainer = makeContainer({
         id: 'c-second',
@@ -2550,20 +2546,36 @@ describe('DashboardView', () => {
         newTag: null,
         updateKind: null,
         status: 'stopped',
-        updateOperation: {
-          id: 'op-2',
+      });
+
+      const wrapper = await mountDashboard([queuedFirstContainer, queuedSecondContainer]);
+      seedOperation(
+        getActivePinia()!,
+        { id: 'c-first', identityKey: queuedFirstContainer.identityKey, name: 'nginx' },
+        {
+          operationId: 'op-1',
           status: 'queued',
-          phase: 'queued',
-          updatedAt: '2026-04-01T12:00:00.000Z',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+          batchId: 'batch-1',
+          queuePosition: 1,
+          queueTotal: 2,
+        },
+      );
+      seedOperation(
+        getActivePinia()!,
+        { id: 'c-second', identityKey: queuedSecondContainer.identityKey, name: 'postgres' },
+        {
+          operationId: 'op-2',
+          status: 'queued',
           fromVersion: '15.0.0',
           toVersion: '16.1.0',
           batchId: 'batch-1',
           queuePosition: 2,
           queueTotal: 2,
         },
-      });
-
-      const wrapper = await mountDashboard([queuedFirstContainer, queuedSecondContainer]);
+      );
+      await flushPromises();
 
       const widgetText = wrapper.find('[data-widget-id="recent-updates"]').text();
       expect(widgetText).toContain('Queued');
@@ -3109,23 +3121,31 @@ describe('DashboardView', () => {
     });
   });
 
-  describe('operation display hold reconciliation via in-place SSE patches (defect 1, watcher at :556)', () => {
-    it('folds a stale hold once an in-place dd:sse-container-updated patch clears updateOperation, without waiting for a full container-list reload', async () => {
-      const container = makeContainer({ id: 'c1', name: 'nginx', identityKey: '::local::nginx' });
+  describe('operation display hold reconciliation after a container-list fetch', () => {
+    it('does not inherit a list-seeded batch id or queue position into a retry hold', async () => {
+      const container = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        identityKey: '::local::nginx',
+        updateOperation: {
+          id: 'op-old',
+          batchId: 'old-batch',
+          queuePosition: 2,
+          queueTotal: 3,
+          status: 'queued',
+          phase: 'queued',
+          updatedAt: '2026-10-21T00:00:00.000Z',
+        },
+      });
       await mountDashboard([container]);
 
       const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
       const { heldOperations } = useOperationDisplayHold();
 
-      // Active-status SSE creates a ~10-minute hold (OPERATION_ACTIVE_HOLD_MS)
-      // via DashboardView's own applyDashboardOperationSse handler, and
-      // separately writes containers.value[0].updateOperation in place via
-      // useDashboardData's operationPatchListener -- two independent
-      // listeners on the same globalThis event.
       globalThis.dispatchEvent(
         new CustomEvent('dd:sse-update-operation-changed', {
           detail: {
-            operationId: 'op-1',
+            operationId: 'op-retry',
             containerId: 'c1',
             containerName: 'nginx',
             status: 'in-progress',
@@ -3135,32 +3155,86 @@ describe('DashboardView', () => {
       );
       await flushPromises();
 
-      const holdAfterCreate = heldOperations.value.get('op-1');
-      expect(holdAfterCreate).toBeDefined();
-      expect(holdAfterCreate!.displayUntil - Date.now()).toBeGreaterThan(60_000);
+      const hold = heldOperations.value.get('op-retry');
+      expect(hold).toBeDefined();
+      expect(hold!.operation.batchId).toBeUndefined();
+      expect(hold!.operation.queuePosition).toBeUndefined();
+      expect(hold!.operation.queueTotal).toBeUndefined();
+    });
 
-      // A general container-state patch (dd:sse-container-updated -- a
-      // different SSE channel than update-operation, and one DashboardView's
-      // own hold-management code never listens to) resolves the operation to
-      // absent, in place: Object.assign onto the existing containers.value[0]
-      // inside applyDashboardContainerPatch. Never a containers.value =
-      // reassignment, never a length change.
-      const { mapApiContainer } = await import('@/utils/container-mapper');
-      const resolvedContainer = makeContainer({
-        id: 'c1',
-        name: 'nginx',
-        identityKey: '::local::nginx',
-        updateOperation: undefined,
-      });
-      (mapApiContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(resolvedContainer);
+    it('keeps batch and queue fields across events for the same operation', async () => {
+      const container = makeContainer({ id: 'c1', name: 'nginx', identityKey: '::local::nginx' });
+      await mountDashboard([container]);
+
+      const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
+      const { heldOperations } = useOperationDisplayHold();
+      const detail = {
+        operationId: 'op-same',
+        containerId: 'c1',
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+        batchId: 'batch-1',
+        queuePosition: 1,
+        queueTotal: 2,
+      };
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed', { detail }));
+      await flushPromises();
       globalThis.dispatchEvent(
-        new CustomEvent('dd:sse-container-updated', { detail: resolvedContainer }),
+        new CustomEvent('dd:sse-update-operation-changed', {
+          detail: { operationId: 'op-same', containerId: 'c1', status: 'in-progress' },
+        }),
       );
       await flushPromises();
 
-      const holdAfterPatch = heldOperations.value.get('op-1');
-      expect(holdAfterPatch).toBeDefined();
-      expect(holdAfterPatch!.displayUntil - Date.now()).toBeLessThanOrEqual(1_500);
+      const hold = heldOperations.value.get('op-same');
+      expect(hold!.operation.status).toBe('in-progress');
+      expect(hold!.operation.batchId).toBe('batch-1');
+      expect(hold!.operation.queuePosition).toBe(1);
+    });
+
+    it('folds a stale hold when the next fetch reports no active operation for the container', async () => {
+      vi.useFakeTimers();
+      try {
+        const container = makeContainer({ id: 'c1', name: 'nginx', identityKey: '::local::nginx' });
+        await mountDashboard([container]);
+
+        const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
+        const { heldOperations } = useOperationDisplayHold();
+
+        // Active-status SSE creates a ~10-minute hold (OPERATION_ACTIVE_HOLD_MS)
+        // via DashboardView's own applyDashboardOperationSse handler.
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        await flushPromises();
+
+        const holdAfterCreate = heldOperations.value.get('op-1');
+        expect(holdAfterCreate).toBeDefined();
+        expect(holdAfterCreate!.displayUntil - Date.now()).toBeGreaterThan(60_000);
+
+        // A missed terminal event: the list now reports no operation. A
+        // resync-driven refetch must reconcile the hold right after it lands.
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([{ ...container }]);
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-resync-required'));
+        await vi.advanceTimersByTimeAsync(1_100);
+        await flushPromises();
+
+        const holdAfterFetch = heldOperations.value.get('op-1');
+        expect(holdAfterFetch).toBeDefined();
+        expect(holdAfterFetch!.displayUntil - Date.now()).toBeLessThanOrEqual(1_500);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

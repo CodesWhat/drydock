@@ -1,6 +1,7 @@
 import { type ComputedRef, computed, type Ref } from 'vue';
 import { i18n } from '../../boot/i18n';
 import { ROUTES } from '../../router/routes';
+import { useOperationStore } from '../../stores/operations';
 import type { Container } from '../../types/container';
 import { shouldRenderStandaloneQueuedUpdateAsUpdating } from '../../utils/container-update';
 import {
@@ -193,21 +194,26 @@ function getUpdateKindIcon(kind: UpdateKind | null): string {
   }
 }
 
+type ResolveOperation = (container: Container) => Container['updateOperation'];
+
 function deriveRecentUpdateStatus(
   container: Container,
   containers: readonly Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
   recentStatusByIdentity: Record<string, RecentAuditStatus>,
   containerNameCounts: ReadonlyMap<string, number>,
+  resolveOperation: ResolveOperation,
 ): RecentUpdateRow['status'] {
-  if (container.updateOperation?.status === 'in-progress') {
+  const operation = resolveOperation(container);
+  if (operation?.status === 'in-progress') {
     return 'updating';
   }
-  if (container.updateOperation?.status === 'queued') {
+  if (operation?.status === 'queued') {
     return shouldRenderStandaloneQueuedUpdateAsUpdating({
       containers,
-      operation: container.updateOperation,
+      operation,
       targetId: container.id,
+      resolveOperation,
     })
       ? 'updating'
       : 'queued';
@@ -234,16 +240,22 @@ function deriveRecentUpdateStatus(
   return 'pending';
 }
 
-function deriveCurrentVersion(container: Container): string {
-  return container.updateOperation?.fromVersion ?? container.currentTag;
+function deriveCurrentVersion(
+  container: Container,
+  operation: Container['updateOperation'],
+): string {
+  return operation?.fromVersion ?? container.currentTag;
 }
 
-function deriveRecentUpdateVersion(container: Container): string {
+function deriveRecentUpdateVersion(
+  container: Container,
+  operation: Container['updateOperation'],
+): string {
   if (container.newTag) {
     return container.newTag;
   }
-  if (container.updateOperation?.toVersion) {
-    return container.updateOperation.toVersion;
+  if (operation?.toVersion) {
+    return operation.toVersion;
   }
   return container.suppressedUpdateTag ?? '';
 }
@@ -630,10 +642,13 @@ function useStatsComputed(
   });
 }
 
-function isPendingRecentUpdateContainer(container: Container): boolean {
+function isPendingRecentUpdateContainer(
+  container: Container,
+  operation: Container['updateOperation'],
+): boolean {
   return (
-    container.updateOperation?.status === 'queued' ||
-    container.updateOperation?.status === 'in-progress' ||
+    operation?.status === 'queued' ||
+    operation?.status === 'in-progress' ||
     !!container.newTag ||
     !!container.updatePolicyState
   );
@@ -644,6 +659,7 @@ interface PendingRecentUpdateCandidateContext {
   recentStatusByContainer: Record<string, RecentAuditStatus>;
   recentStatusByIdentity: Record<string, RecentAuditStatus>;
   containerNameCounts: ReadonlyMap<string, number>;
+  resolveOperation: ResolveOperation;
 }
 
 function toPendingRecentUpdateCandidate(
@@ -651,9 +667,10 @@ function toPendingRecentUpdateCandidate(
   context: PendingRecentUpdateCandidateContext,
   blocked: boolean,
 ): PendingRecentUpdateCandidate {
-  const batchId = container.updateOperation?.batchId;
-  const queuePosition = container.updateOperation?.queuePosition;
-  const queueTotal = container.updateOperation?.queueTotal;
+  const operation = context.resolveOperation(container);
+  const batchId = operation?.batchId;
+  const queuePosition = operation?.queuePosition;
+  const queueTotal = operation?.queueTotal;
 
   return {
     detectedAt: parseDetectedAt(container.updateDetectedAt),
@@ -663,8 +680,8 @@ function toPendingRecentUpdateCandidate(
       name: container.name,
       image: container.image,
       icon: container.icon,
-      oldVer: deriveCurrentVersion(container),
-      newVer: deriveRecentUpdateVersion(container),
+      oldVer: deriveCurrentVersion(container, operation),
+      newVer: deriveRecentUpdateVersion(container, operation),
       releaseLink: container.releaseLink,
       sourceRepo: container.sourceRepo,
       releaseNotes: container.releaseNotes,
@@ -678,6 +695,7 @@ function toPendingRecentUpdateCandidate(
         context.recentStatusByContainer,
         context.recentStatusByIdentity,
         context.containerNameCounts,
+        context.resolveOperation,
       ),
       updateKind: container.updateKind ?? null,
       running: container.status === 'running',
@@ -715,6 +733,7 @@ function buildRecentUpdateRows(
   allContainers: Container[],
   recentStatusByContainer: Record<string, RecentAuditStatus>,
   recentStatusByIdentity: Record<string, RecentAuditStatus>,
+  resolveOperation: ResolveOperation,
 ): RecentUpdateRow[] {
   // Only show containers with actual available updates — registry failures
   // ("check failed") are surfaced elsewhere and should not appear in the
@@ -726,9 +745,10 @@ function buildRecentUpdateRows(
     recentStatusByContainer,
     recentStatusByIdentity,
     containerNameCounts,
+    resolveOperation,
   };
   for (const container of visibleContainers) {
-    if (!isPendingRecentUpdateContainer(container)) {
+    if (!isPendingRecentUpdateContainer(container, resolveOperation(container))) {
       continue;
     }
 
@@ -749,6 +769,9 @@ function useRecentUpdatesComputed(
   updateContainers: ComputedRef<Container[]>,
   input: UseDashboardComputedInput,
 ) {
+  const operationStore = useOperationStore();
+  const resolveOperation: ResolveOperation = (container) =>
+    operationStore.getOperationForContainer(container);
   return computed<RecentUpdateRow[]>(() => {
     const project = input.projectContainerForRecentUpdates;
     const visibleContainers = project
@@ -762,6 +785,7 @@ function useRecentUpdatesComputed(
       allContainers,
       input.recentStatusByContainer.value,
       input.recentStatusByIdentity.value,
+      resolveOperation,
     );
   });
 }

@@ -15,12 +15,6 @@ import { getAllWatchers } from '../../services/watcher';
 import { useOperationStore } from '../../stores/operations';
 import type { Container } from '../../types/container';
 import {
-  type ActiveContainerUpdateOperationPhase,
-  isActiveContainerUpdateOperationPhaseForStatus,
-  isActiveContainerUpdateOperationStatus,
-  isContainerUpdateOperationStatus,
-} from '../../types/update-operation';
-import {
   type ApiContainerInput,
   mapApiContainer,
   mapApiContainers,
@@ -154,23 +148,6 @@ function hasRenderedDashboardData(state: DashboardStateRefs): boolean {
   );
 }
 
-function resolveActiveOperationPhase(args: {
-  status: 'queued' | 'in-progress';
-  phase: unknown;
-  previousPhase?: unknown;
-}): ActiveContainerUpdateOperationPhase {
-  if (isActiveContainerUpdateOperationPhaseForStatus(args.status, args.phase)) {
-    return args.phase;
-  }
-  if (
-    args.previousPhase !== undefined &&
-    isActiveContainerUpdateOperationPhaseForStatus(args.status, args.previousPhase)
-  ) {
-    return args.previousPhase;
-  }
-  return args.status === 'queued' ? 'queued' : 'pulling';
-}
-
 type DashboardContainerPatchKind = 'added' | 'updated' | 'removed';
 
 // Apply a single-container SSE payload to the dashboard's containers ref in place,
@@ -226,47 +203,6 @@ function applyDashboardContainerPatch(
     Object.assign(state.containers.value[idx]!, mapped);
   }
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
-}
-
-function applyDashboardOperationPatch(state: DashboardStateRefs, event: Event): void {
-  const payload = (event as CustomEvent)?.detail;
-  if (!payload || typeof payload !== 'object') {
-    return;
-  }
-
-  const { operationId, containerId, newContainerId, containerName, status, phase } =
-    payload as Record<string, unknown>;
-  if (!isContainerUpdateOperationStatus(status)) {
-    return;
-  }
-
-  const idx = state.containers.value.findIndex(
-    (container) =>
-      (typeof containerId === 'string' && container.id === containerId) ||
-      (typeof newContainerId === 'string' && container.id === newContainerId) ||
-      (typeof containerName === 'string' && container.name === containerName),
-  );
-  if (idx === -1) {
-    return;
-  }
-
-  const row = state.containers.value[idx]!;
-  if (isActiveContainerUpdateOperationStatus(status)) {
-    row.updateOperation = {
-      ...(row.updateOperation ?? {}),
-      id: typeof operationId === 'string' ? operationId : (row.updateOperation?.id ?? ''),
-      status,
-      phase: resolveActiveOperationPhase({
-        status,
-        phase,
-        previousPhase: row.updateOperation?.phase,
-      }),
-      updatedAt: new Date().toISOString(),
-    };
-    return;
-  }
-
-  row.updateOperation = undefined;
 }
 
 // The approval SSE payload already carries the post-write pending count (see
@@ -427,9 +363,6 @@ export function useDashboardData() {
   const reconnectRefreshListener = (() =>
     realtimeRefreshScheduler.schedule('full-live')) as EventListener;
   const resyncRefreshListener = (() => realtimeRefreshScheduler.schedule('full')) as EventListener;
-  const operationPatchListener = ((event: Event) => {
-    applyDashboardOperationPatch(state, event);
-  }) as EventListener;
   const containerAddedListener = ((event: Event) => {
     applyDashboardContainerPatch(state, event, 'added', () =>
       realtimeRefreshScheduler.schedule('full'),
@@ -468,7 +401,6 @@ export function useDashboardData() {
     globalThis.addEventListener('dd:sse-container-added', containerAddedListener);
     globalThis.addEventListener('dd:sse-container-updated', containerUpdatedListener);
     globalThis.addEventListener('dd:sse-container-removed', containerRemovedListener);
-    globalThis.addEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.addEventListener('dd:sse-connected', reconnectRefreshListener);
     globalThis.addEventListener('dd:sse-resync-required', resyncRefreshListener);
     globalThis.addEventListener('dd:sse-approval-created', approvalCreatedListener);
@@ -516,7 +448,6 @@ export function useDashboardData() {
     globalThis.removeEventListener('dd:sse-container-added', containerAddedListener);
     globalThis.removeEventListener('dd:sse-container-updated', containerUpdatedListener);
     globalThis.removeEventListener('dd:sse-container-removed', containerRemovedListener);
-    globalThis.removeEventListener('dd:sse-update-operation-changed', operationPatchListener);
     globalThis.removeEventListener('dd:sse-connected', reconnectRefreshListener);
     globalThis.removeEventListener('dd:sse-resync-required', resyncRefreshListener);
     globalThis.removeEventListener('dd:sse-approval-created', approvalCreatedListener);
