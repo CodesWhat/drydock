@@ -14,6 +14,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - Keep the supplementary groups Docker adds with `group_add` after the entrypoint drops from root to `node`. `su-exec` rebuilt the group list from `/etc/group` and lost them, so Compose files writable only through that group (a NAS share GID, or `"0"`) failed with `permission denied`, even though the Compose trigger's own warning recommends `group_add`. The image now removes `root` from every `/etc/group` member list, so the entrypoint can treat the groups on the process as the `group_add` entries and add `node` to them. Without `group_add`, `node` gains no groups it didn't have before. A `group_add` of `"0"` is detected by GID 0 appearing twice in the list, so a runtime that dedupes the list still needs `user: "1000:1000"` with `group_add`. (#1440)
+- Fail a pull request into `main` when its title or body holds a GitHub closing keyword (`Fixes: #N`, `closes #N`, `resolved owner/repo#N`), so a dev to main sync can no longer re-close an issue that was reopened on purpose (DR-100). The check is the new Closing Keywords Guard workflow and `scripts/closing-keywords.mjs`; it is not a required status check.
+- Fail a pull request into `main` when its title, body or any commit message holds a GitHub closing keyword (`Fixes: #N`, `closes #N`, `resolved owner/repo#N`), so a dev to main sync can no longer re-close an issue that was reopened on purpose (DR-100). The check is the new Closing Keywords Guard workflow and `scripts/closing-keywords.mjs`; it is not a required status check.
 
 ## [1.8.0-rc.3] - 2026-10-20
 
