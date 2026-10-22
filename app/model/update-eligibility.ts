@@ -11,6 +11,7 @@ import {
   type ActionPolicyState,
   type ActionPolicyTrigger,
   findMatchingGroupExcludeEntries,
+  isTriggerThresholdReached,
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
@@ -757,7 +758,14 @@ export function computeUpdateEligibility(
     } else {
       // manual/auto: no blocker, but still worth reflecting so the UI can show the
       // "Auto" badge (and distinguish it from a manual-only resolution).
-      actionPolicy = { state: selection.state, triggerId: selection.triggerId };
+      // An `auto` resolution only means automatic when the winner's threshold accepts this
+      // candidate; below it the trigger's auto path skips the update, so it needs approval.
+      const belowThreshold =
+        selection.state === 'auto' && !isTriggerThresholdReached(selection.trigger, container);
+      actionPolicy = {
+        state: belowThreshold ? 'manual' : selection.state,
+        triggerId: selection.triggerId,
+      };
     }
   }
 

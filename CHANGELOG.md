@@ -28,6 +28,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Send the `update-pending-approval` notification. The rule existed and could be enabled, but nothing dispatched to it, so enabling it did nothing. It now fires once when an update candidate enters the approval queue (not under update mode `notify` or with container actions disabled, where approving is refused), follows the rule's enabled flag, trigger selection, templates and batch modes like the other rules, and links to the queue row when `DD_PUBLIC_URL` is set. It is deduplicated on the queue row, so a re-seen pending candidate or a restart doesn't notify again. The rule still ships disabled.
 - Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
 - Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
+- Keep a candidate that is below an auto action's threshold in the approval queue. With update mode `auto` and an action trigger set to `AUTO=all` with a `minor` threshold, a major update was marked auto-applied and dropped from the queue, yet the trigger never ran it. It now waits for approval, and the container's action policy reads manual instead of auto.
 
 ### Added
 

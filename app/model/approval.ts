@@ -12,7 +12,11 @@
  * be exercised as a table.
  */
 import type { UpdateMode } from '../store/settings.js';
-import { type ActionPolicyTrigger, selectActionTrigger } from './action-policy.js';
+import {
+  type ActionPolicyTrigger,
+  isTriggerThresholdReached,
+  selectActionTrigger,
+} from './action-policy.js';
 import { type Container, getContainerIdentityKey, hasRawUpdate } from './container.js';
 import { resolveUpdateModeCeiling } from './group-policy.js';
 import {
@@ -119,7 +123,8 @@ export interface ShouldQueueForApprovalOptions {
  * Whether the normal trigger path will apply this candidate on its own. The global
  * `updateMode` ceiling, lowered to the container's group ceiling when that is stricter, is
  * applied here rather than inside the 6.0.1 resolver, which stays mode-agnostic so display,
- * manual admission and auto-dispatch can all reuse it.
+ * manual admission and auto-dispatch can all reuse it. The winning trigger's `threshold` is
+ * applied here too, for the same reason.
  */
 export function isAutoDispatchable(
   container: Container,
@@ -131,7 +136,12 @@ export function isAutoDispatchable(
   if (resolveUpdateModeCeiling(container, updateMode).value !== 'auto') {
     return false;
   }
-  return selectActionTrigger(triggers, container, { requireAuto: true })?.state === 'auto';
+  const winner = selectActionTrigger(triggers, container, { requireAuto: true });
+  // The trigger's auto path skips a candidate below its threshold, and only the winner
+  // dispatches (a lesser action never takes over), so a below-threshold candidate is not
+  // auto-dispatched however the policy resolves. Treating it as such would resolve its
+  // row as `auto-applied` for an update that never runs.
+  return winner?.state === 'auto' && isTriggerThresholdReached(winner.trigger, container);
 }
 
 /**
