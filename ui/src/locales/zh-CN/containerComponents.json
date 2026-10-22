@@ -310,7 +310,8 @@
       "filterHiddenPinned": "已隐藏：已固定",
       "filtersLabel": "筛选器",
       "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器",
-      "clearContainerIdFilter": "清除容器 ID 筛选条件"
+      "clearContainerIdFilter": "清除容器 ID 筛选条件",
+      "groupByDependencyTooltip": "按依赖关系分组"
     },
     "stats": {
       "paused": "已暂停",
@@ -505,7 +506,9 @@
         "failedTitle": "依赖链更新失败",
         "failedDetail": "无法更新 {name} 的依赖链。",
         "staleChainTitle": "依赖链已发生变化",
-        "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。"
+        "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。",
+        "hiddenMarker": "当前筛选未显示",
+        "hiddenNote": "\n\n此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。 | \n\n此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。"
       }
     },
     "actionToasts": {
@@ -672,6 +675,23 @@
     },
     "logViewer": {
       "invalidRegex": "无效的正则表达式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依赖于",
+      "requiredBy": "被以下依赖",
+      "cycle": "属于依赖循环的一部分",
+      "toggle": "显示依赖关系",
+      "updateGroup": "更新依赖组 ({count})",
+      "staleParentsWarning": "{name} 依赖于 {parents}，该容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。 | {name} 依赖于 {parents}，这些容器也有待处理的更新。先更新依赖项可能会导致它针对过期的上级容器运行。",
+      "staleParentsOverflow": "还有 {count} 个",
+      "staleParentsAccept": "仍然更新",
+      "dependsOnCount": "依赖 {count} 个",
+      "requiredByCount": "被 {count} 个依赖",
+      "unresolved": "缺少依赖：{targets}",
+      "dependentsNote": "{dependents} 依赖 {name}，不会随它一起更新或重启。使用“更新依赖组”可按顺序更新整条依赖链。 | {dependents} 依赖 {name}，不会随它一起更新或重启。使用“更新依赖组”可按顺序更新整条依赖链。",
+      "groupStaleHeader": "上游容器有待处理的更新",
+      "groupStaleWarning": "本次更新中的部分容器依赖某个上游容器，该上游容器也有待处理的更新，但不在本次更新范围内。只更新下游而不更新其上游，可能会让它继续运行在过时的上游之上。",
+      "groupStaleLine": "{name} 依赖 {parents}"
     }
   }
 }

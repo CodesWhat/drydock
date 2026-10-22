@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Verborgen: vastgezet",
       "filtersLabel": "Filters",
       "filteredContainers": "Gefilterd naar {count} container | Gefilterd op {count} containers",
-      "clearContainerIdFilter": "Containerid-filter wissen"
+      "clearContainerIdFilter": "Containerid-filter wissen",
+      "groupByDependencyTooltip": "Groeperen op afhankelijkheid"
     },
     "stats": {
       "paused": "Gepauzeerd",
@@ -505,7 +506,9 @@
         "failedTitle": "Update van afhankelijkheidsketen mislukt",
         "failedDetail": "Kan de afhankelijkheidsketen voor {name} niet bijwerken.",
         "staleChainTitle": "Afhankelijkheidsketen is gewijzigd",
-        "staleChainDetail": "De afhankelijkheidsketen voor {name} is gewijzigd sinds het laatste voorbeeld. Open het updatedialoogvenster opnieuw om de huidige keten te bekijken voordat je bevestigt."
+        "staleChainDetail": "De afhankelijkheidsketen voor {name} is gewijzigd sinds het laatste voorbeeld. Open het updatedialoogvenster opnieuw om de huidige keten te bekijken voordat je bevestigt.",
+        "hiddenMarker": "niet getoond door het huidige filter",
+        "hiddenNote": "\n\n{count} container in deze keten is verborgen door het huidige filter en wordt ook bijgewerkt. | \n\n{count} containers in deze keten zijn verborgen door het huidige filter en worden ook bijgewerkt."
       }
     },
     "actionToasts": {
@@ -672,6 +675,23 @@
     },
     "logViewer": {
       "invalidRegex": "Ongeldige reguliere expressie"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Afhankelijk van",
+      "requiredBy": "Vereist door",
+      "cycle": "Onderdeel van een afhankelijkheidscyclus",
+      "toggle": "Afhankelijkheden tonen",
+      "updateGroup": "Afhankelijkheidsgroep bijwerken ({count})",
+      "staleParentsWarning": "{name} is afhankelijk van {parents}, dat ook een update in behandeling heeft. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen een verouderd bovenliggend onderdeel blijven draaien. | {name} is afhankelijk van {parents}, die ook updates in behandeling hebben. Als u het afhankelijke onderdeel eerst bijwerkt, kan het tegen verouderde bovenliggende onderdelen blijven draaien.",
+      "staleParentsOverflow": "en {count} meer",
+      "staleParentsAccept": "Toch bijwerken",
+      "dependsOnCount": "Afhankelijk van {count}",
+      "requiredByCount": "Vereist door {count}",
+      "unresolved": "Ontbrekende afhankelijkheid: {targets}",
+      "dependentsNote": "{dependents} is afhankelijk van {name} en wordt niet samen met die container bijgewerkt of herstart. Gebruik Afhankelijkheidsgroep bijwerken om de hele keten in volgorde bij te werken. | {dependents} zijn afhankelijk van {name} en worden niet samen met die container bijgewerkt of herstart. Gebruik Afhankelijkheidsgroep bijwerken om de hele keten in volgorde bij te werken.",
+      "groupStaleHeader": "Bovenliggende containers hebben updates in afwachting",
+      "groupStaleWarning": "Sommige containers in deze update zijn afhankelijk van een bovenliggende container die ook een update in afwachting heeft maar er geen deel van uitmaakt. Een onderliggende container bijwerken zonder zijn bovenliggende kan hem laten draaien tegen een verouderde bovenliggende container.",
+      "groupStaleLine": "{name} is afhankelijk van {parents}"
     }
   }
 }

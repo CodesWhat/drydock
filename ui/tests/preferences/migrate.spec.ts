@@ -68,6 +68,7 @@ describe('preferences migration', () => {
       const result = mergeDefaults({ containers: { tableActions: 'buttons' } });
       expect(result.containers.tableActions).toBe('buttons');
       expect(result.containers.groupByStack).toBe(false);
+      expect(result.containers.groupByDependency).toBe(false);
       expect(result.containers.manualGroups).toEqual({});
       expect(result.containers.sort).toEqual({ key: 'name', asc: true });
     });

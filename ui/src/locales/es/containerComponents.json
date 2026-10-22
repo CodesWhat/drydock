@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Oculto: fijados",
       "filtersLabel": "Filtros",
       "filteredContainers": "Filtrado a {count} contenedor | Filtrado a {count} contenedores",
-      "clearContainerIdFilter": "Limpiar filtro por ID de contenedor"
+      "clearContainerIdFilter": "Limpiar filtro por ID de contenedor",
+      "groupByDependencyTooltip": "Agrupar por dependencia"
     },
     "stats": {
       "paused": "Pausado",
@@ -505,7 +506,9 @@
         "failedTitle": "Actualización de la cadena de dependencias fallida",
         "failedDetail": "No se pudo actualizar la cadena de dependencias para {name}.",
         "staleChainTitle": "La cadena de dependencias ha cambiado",
-        "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar."
+        "staleChainDetail": "La cadena de dependencias de {name} cambió desde la última vista previa. Vuelve a abrir el diálogo de actualización para revisar la cadena actual antes de confirmar.",
+        "hiddenMarker": "no se muestra con el filtro actual",
+        "hiddenNote": "\n\n{count} contenedor de esta cadena está oculto por el filtro actual y también se actualizará. | \n\n{count} contenedores de esta cadena están ocultos por el filtro actual y también se actualizarán."
       }
     },
     "actionToasts": {
@@ -672,6 +675,23 @@
     },
     "logViewer": {
       "invalidRegex": "Expresión regular no válida"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depende de",
+      "requiredBy": "Requerido por",
+      "cycle": "Forma parte de un ciclo de dependencias",
+      "toggle": "Mostrar dependencias",
+      "updateGroup": "Actualizar grupo de dependencias ({count})",
+      "staleParentsWarning": "{name} depende de {parents}, que también tiene una actualización pendiente. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra un elemento superior desactualizado. | {name} depende de {parents}, que también tienen actualizaciones pendientes. Actualizar primero el elemento dependiente puede dejarlo ejecutándose contra elementos superiores desactualizados.",
+      "staleParentsOverflow": "y {count} más",
+      "staleParentsAccept": "Actualizar de todos modos",
+      "dependsOnCount": "Depende de {count}",
+      "requiredByCount": "Requerido por {count}",
+      "unresolved": "Dependencia ausente: {targets}",
+      "dependentsNote": "{dependents} depende de {name} y no se actualiza ni se reinicia con él. Usa Actualizar grupo de dependencias para actualizar toda la cadena en orden. | {dependents} dependen de {name} y no se actualizan ni se reinician con él. Usa Actualizar grupo de dependencias para actualizar toda la cadena en orden.",
+      "groupStaleHeader": "Hay actualizaciones pendientes en los padres",
+      "groupStaleWarning": "Algunos contenedores de esta actualización dependen de un padre que también tiene una actualización pendiente pero no forma parte de ella. Actualizar un hijo sin su padre puede dejarlo funcionando contra un padre desactualizado.",
+      "groupStaleLine": "{name} depende de {parents}"
     }
   }
 }

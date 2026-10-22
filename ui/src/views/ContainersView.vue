@@ -10,6 +10,7 @@ import { containersViewTemplateContextKey } from '../components/containers/conta
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useColumnVisibility } from '../composables/useColumnVisibility';
 import { useContainerFilters } from '../composables/useContainerFilters';
+import { useDependencyGraph } from '../composables/useDependencyGraph';
 import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailPanel';
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
@@ -22,6 +23,7 @@ import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container, ContainerUpdateOperation } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
+import { buildDependencyTrees } from '../utils/dependency-tree';
 import { hasHardBlocker } from '../utils/update-eligibility';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
@@ -168,6 +170,8 @@ function containerRowFingerprint(c: Container): string {
     c.updatePolicyState ?? '',
     c.noUpdateReason ?? '',
     c.registryError ?? '',
+    c.dependencyCount ?? 0,
+    c.dependentCount ?? 0,
     op
       ? [
           op.id,
@@ -280,6 +284,13 @@ async function loadContainers() {
     if (groupByStack.value) {
       await loadGroups();
     }
+    // Fire-and-forget: the dependency graph is a distinct global resource from
+    // the container list (#219, roadmap 6.1), and useDependencyGraph() keeps
+    // its own error ref rather than surfacing into this view's error state.
+    // Reloaded on every successful list load, not just on mount, so the
+    // dependency rows and the child-before-parent guard never read edges from
+    // before a recheck, an SSE refresh, a delete or a group update.
+    void useDependencyGraph().loadDependencyGraph();
   } catch (e: unknown) {
     error.value = errorMessage(e, t('containersView.error.loadFailed'));
   } finally {
@@ -446,6 +457,7 @@ const {
   clearSkipsSelected,
   confirmClearPolicy,
   confirmDelete,
+  confirmDependencyGroupUpdate,
   confirmForceUpdate,
   confirmUpdate,
   confirmRollback,
@@ -746,10 +758,24 @@ const containerSortAsc = usePreference(
     preferences.containers.sort.asc = value;
   },
 );
+// Stack and dependency grouping are alternative layouts of the same list, so
+// turning one on turns the other off.
 const groupByStack = usePreference(
   () => preferences.containers.groupByStack,
   (value) => {
     preferences.containers.groupByStack = value;
+    if (value) {
+      preferences.containers.groupByDependency = false;
+    }
+  },
+);
+const groupByDependency = usePreference(
+  () => preferences.containers.groupByDependency,
+  (value) => {
+    preferences.containers.groupByDependency = value;
+    if (value) {
+      preferences.containers.groupByStack = false;
+    }
   },
 );
 
@@ -1202,6 +1228,8 @@ interface RenderGroup {
   containerCount: number;
   updatesAvailable: number;
   updatableCount: number;
+  dependencyRootId?: string;
+  dependencyDepths?: Record<string, number>;
 }
 
 const groupedContainers = computed<RenderGroup[]>(() => {
@@ -1266,7 +1294,56 @@ const groupedContainers = computed<RenderGroup[]>(() => {
   return named;
 });
 
+function summarizeContainers(containers: typeof displayContainers.value) {
+  return {
+    containers,
+    containerCount: containers.length,
+    updatesAvailable: containers.filter((container) => container.newTag).length,
+    updatableCount: containers.filter(
+      (container) => container.newTag && !hasHardBlocker(container.updateEligibility),
+    ).length,
+  };
+}
+
+type DisplayContainer = (typeof displayContainers.value)[number];
+const { adjacency: dependencyAdjacency } = useDependencyGraph();
+
+// One group per dependency tree, parents listed before their dependents, then
+// everything with no dependency edges in an unnamed group at the end (the same
+// shape the stack view uses for ungrouped containers).
+const dependencyContainers = computed<RenderGroup[]>(() => {
+  const byId = new Map(sortedContainers.value.map((container) => [container.id, container]));
+  const trees = buildDependencyTrees(
+    dependencyAdjacency.value,
+    sortedContainers.value.map((container) => container.id),
+  );
+  const groups: RenderGroup[] = trees.components.map((component) => {
+    const containers = component.entries.map((entry) => byId.get(entry.id) as DisplayContainer);
+    const rootNames = component.rootIds.map((id) => (byId.get(id) as DisplayContainer).name);
+    return {
+      key: `dependency:${component.rootIds[0]}`,
+      name: rootNames.join(', '),
+      ...summarizeContainers(containers),
+      dependencyRootId: component.rootIds[0],
+      dependencyDepths: Object.fromEntries(
+        component.entries.map((entry) => [entry.id, entry.depth]),
+      ),
+    };
+  });
+  if (trees.ungroupedIds.length > 0) {
+    groups.push({
+      key: '__ungrouped__',
+      name: null,
+      ...summarizeContainers(trees.ungroupedIds.map((id) => byId.get(id) as DisplayContainer)),
+    });
+  }
+  return groups;
+});
+
 const renderGroups = computed<RenderGroup[]>(() => {
+  if (groupByDependency.value) {
+    return dependencyContainers.value;
+  }
   if (!groupByStack.value) {
     return [
       {
@@ -1501,6 +1578,7 @@ provide(containersViewTemplateContextKey, {
   resetColumns,
   tt,
   groupByStack,
+  groupByDependency,
   rechecking,
   recheckAll,
   renderGroups,
@@ -1535,6 +1613,7 @@ provide(containersViewTemplateContextKey, {
   confirmRestart,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,

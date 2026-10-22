@@ -118,6 +118,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const filteredContainers = ref<Container[]>([]);
   const renderGroups = ref<any[]>([]);
   const groupByStack = ref(false);
+  const groupByDependency = ref(false);
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
   const groupUpdateQueue = ref(new Set<string>());
@@ -149,6 +150,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     filteredContainers,
     renderGroups,
     groupByStack,
+    groupByDependency,
     containerViewMode,
     toggleGroupCollapse: vi.fn(),
     collapsedGroups,
@@ -237,6 +239,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       filteredContainers,
       renderGroups,
       groupByStack,
+      groupByDependency,
       groupUpdateInProgress,
       groupUpdateQueue,
       containerViewMode,

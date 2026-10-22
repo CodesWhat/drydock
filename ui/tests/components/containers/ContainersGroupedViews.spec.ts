@@ -2,9 +2,10 @@ import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
 import DataTable from '@/components/DataTable.vue';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
-import type { Container } from '@/types/container';
+import type { Container, DependencyGraph } from '@/types/container';
 import {
   expectContainerQuickLinks,
   QUICK_LINK_SELECTOR,
@@ -138,6 +139,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const filteredContainers = ref<Container[]>([]);
   const renderGroups = ref<any[]>([]);
   const groupByStack = ref(false);
+  const groupByDependency = ref(false);
   const collapsedGroups = ref(new Set<string>());
   const groupUpdateInProgress = ref(new Set<string>());
   const groupUpdateQueue = ref(new Set<string>());
@@ -203,6 +205,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     recheckContainer: vi.fn(),
     scanContainer: vi.fn(),
     confirmForceUpdate: vi.fn(),
+    confirmDependencyGroupUpdate: vi.fn(),
     skipUpdate: vi.fn(),
     closeActionsMenu: vi.fn(() => {
       openActionsMenu.value = null;
@@ -216,6 +219,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     filteredContainers,
     renderGroups,
     groupByStack,
+    groupByDependency,
     containerViewMode,
     containerCardReflowForced,
     toggleGroupCollapse: spies.toggleGroupCollapse,
@@ -274,6 +278,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     recheckContainer: spies.recheckContainer,
     scanContainer: spies.scanContainer,
     confirmForceUpdate: spies.confirmForceUpdate,
+    confirmDependencyGroupUpdate: spies.confirmDependencyGroupUpdate,
     skipUpdate: spies.skipUpdate,
     closeActionsMenu: spies.closeActionsMenu,
     confirmDelete: spies.confirmDelete,
@@ -318,6 +323,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       filteredContainers,
       renderGroups,
       groupByStack,
+      groupByDependency,
       groupUpdateInProgress,
       groupUpdateQueue,
       containerViewMode,
@@ -474,6 +480,7 @@ describe('ContainersGroupedViews', () => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
+    resetDependencyGraphState();
   });
 
   it('passes tableColumns and hiddenColumnKeys straight through to DataTable', () => {
@@ -3579,5 +3586,298 @@ describe('ContainersGroupedViews', () => {
       expect.objectContaining({ id: 'c-recheck', name: 'recheck-me' }),
     );
     expect(spies.closeActionsMenu).toHaveBeenCalled();
+  });
+
+  describe('dependency expansion row (#219)', () => {
+    function makeDependencyGraph(): DependencyGraph {
+      return {
+        nodes: [
+          { id: 'c-web', name: 'web', displayName: 'web' },
+          { id: 'c-db', name: 'db', displayName: 'db' },
+        ],
+        edges: [{ from: 'c-web', to: 'c-db', action: 'update', source: 'label' }],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    it('shows the dependency toggle only for containers with a dependency or dependent count', async () => {
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const plain = makeContainer({ id: 'c-plain', name: 'plain' });
+      const { context } = makeContext();
+      context.filteredContainers.value = [web, plain];
+      context.displayContainers.value = [web, plain];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web, plain],
+          containerCount: 2,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(
+        rowByName(wrapper, 'web').find('[data-test="container-dependency-toggle"]').exists(),
+      ).toBe(true);
+      expect(
+        rowByName(wrapper, 'plain').find('[data-test="container-dependency-toggle"]').exists(),
+      ).toBe(false);
+    });
+
+    it('inserts a dependency row directly after the container when expanded, and removes it on collapse', async () => {
+      useDependencyGraph().graph.value = makeDependencyGraph();
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const { context } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="container-dependency-row"]').exists()).toBe(false);
+
+      const toggle = () =>
+        rowByName(wrapper, 'web').find('[data-test="container-dependency-toggle"]');
+      await toggle().trigger('click');
+      await nextTick();
+
+      const dependencyRow = wrapper.find('[data-test="container-dependency-row"]');
+      expect(dependencyRow.exists()).toBe(true);
+      expect(dependencyRow.text()).toContain('Depends on');
+      expect(dependencyRow.text()).toContain('db');
+
+      await toggle().trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-test="container-dependency-row"]').exists()).toBe(false);
+    });
+
+    it('never selects the container when the dependency row or its toggle is clicked', async () => {
+      useDependencyGraph().graph.value = makeDependencyGraph();
+      useDependencyGraph().toggleExpanded('c-web');
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      // The stub's DataTable auto-fires a row-click for the first clickable
+      // (non-full-width) row on mount — that's the container row itself, not
+      // this test's concern, so the assertions below compare call counts
+      // rather than asserting zero calls.
+      const callsAfterMount = spies.selectContainer.mock.calls.length;
+
+      const dependencyRow = wrapper.find('[data-test="container-dependency-row"]');
+      expect(dependencyRow.exists()).toBe(true);
+      await dependencyRow.trigger('click');
+      expect(spies.selectContainer.mock.calls.length).toBe(callsAfterMount);
+
+      await rowByName(wrapper, 'web')
+        .find('[data-test="container-dependency-toggle"]')
+        .trigger('click');
+      expect(spies.selectContainer.mock.calls.length).toBe(callsAfterMount);
+    });
+
+    it('wires the dependency row update-group event to confirmDependencyGroupUpdate', async () => {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'c-web', name: 'web', displayName: 'web' },
+          { id: 'c-db', name: 'db', displayName: 'db' },
+          { id: 'c-cache', name: 'cache', displayName: 'cache' },
+        ],
+        edges: [
+          { from: 'c-web', to: 'c-db', action: 'update', source: 'label' },
+          { from: 'c-web', to: 'c-cache', action: 'update', source: 'label' },
+        ],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      useDependencyGraph().toggleExpanded('c-web');
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 2 });
+      const { context, spies } = makeContext();
+      context.filteredContainers.value = [web];
+      context.displayContainers.value = [web];
+      context.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [web],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const updateGroupButton = wrapper.find('[data-test="container-dependency-update-group"]');
+      expect(updateGroupButton.exists()).toBe(true);
+      await updateGroupButton.trigger('click');
+
+      expect(spies.confirmDependencyGroupUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-web', name: 'web' }),
+        new Set(['c-web']),
+      );
+    });
+  });
+
+  describe('dependency view (#219)', () => {
+    function setupDependencyView(options: { rootInList?: boolean } = {}) {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'c-db', name: 'db', displayName: 'db' },
+          { id: 'c-web', name: 'web', displayName: 'web' },
+          { id: 'c-job', name: 'job', displayName: 'job' },
+        ],
+        edges: [{ from: 'c-web', to: 'c-db', action: 'update', source: 'label' }],
+        cycles: [['c-job', 'c-job']],
+        unresolved: [{ nodeId: 'c-job', missingTarget: 'queue' }],
+        crossHostIgnored: [],
+      };
+      const db = makeContainer({
+        id: 'c-db',
+        name: 'db',
+        newTag: '2.0.0',
+        dependentCount: 1,
+      });
+      const web = makeContainer({ id: 'c-web', name: 'web', dependencyCount: 1 });
+      const job = makeContainer({ id: 'c-job', name: 'job' });
+      const { context, spies } = makeContext();
+      context.groupByDependency.value = true;
+      const containers = [db, web, job];
+      context.filteredContainers.value = containers;
+      context.displayContainers.value = containers;
+      context.renderGroups.value = [
+        {
+          key: 'dependency:c-db',
+          name: 'db',
+          containers: [db, web],
+          containerCount: 2,
+          updatesAvailable: 1,
+          updatableCount: 1,
+          dependencyRootId: options.rootInList === false ? 'c-missing' : 'c-db',
+          dependencyDepths: { 'c-db': 0, 'c-web': 1 },
+        },
+        {
+          key: '__ungrouped__',
+          name: null,
+          containers: [job],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      return { context, spies };
+    }
+
+    it('renders group headers and indents dependents under their parent', async () => {
+      setupDependencyView();
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(true);
+      const dbCell = rowByName(wrapper, 'db').get('[data-test="container-name-cell"]');
+      const webCell = rowByName(wrapper, 'web').get('[data-test="container-name-cell"]');
+      expect(dbCell.attributes('style') ?? '').not.toContain('padding-inline-start');
+      expect(webCell.attributes('style')).toContain('padding-inline-start: 1.25rem');
+    });
+
+    it('shows dependency and dependent count badges, cycle and unresolved markers', async () => {
+      setupDependencyView();
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      expect(rowByName(wrapper, 'web').get('[data-test="container-dependency-count"]').text()).toBe(
+        'Depends on 1',
+      );
+      expect(rowByName(wrapper, 'db').get('[data-test="container-dependent-count"]').text()).toBe(
+        'Required by 1',
+      );
+      expect(
+        rowByName(wrapper, 'db').find('[data-test="container-dependency-count"]').exists(),
+      ).toBe(false);
+      expect(rowByName(wrapper, 'job').get('[data-test="container-cycle-badge"]').exists()).toBe(
+        true,
+      );
+      expect(rowByName(wrapper, 'job').get('[data-test="container-unresolved-badge"]').text()).toBe(
+        'Missing dependency: queue',
+      );
+      expect(rowByName(wrapper, 'web').find('[data-test="container-cycle-badge"]').exists()).toBe(
+        false,
+      );
+      expect(
+        rowByName(wrapper, 'web').find('[data-test="container-unresolved-badge"]').exists(),
+      ).toBe(false);
+    });
+
+    it('routes the group Update All through the dependency chain confirmation', async () => {
+      const { spies } = setupDependencyView();
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const updateAll = wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Update all'));
+      await updateAll!.trigger('click');
+
+      expect(spies.confirmDependencyGroupUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c-db', name: 'db' }),
+        new Set(['c-db', 'c-web', 'c-job']),
+      );
+      expect(spies.updateAllInGroup).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the plain bulk update when the anchor container is not in the group', async () => {
+      const { spies } = setupDependencyView({ rootInList: false });
+
+      const wrapper = mountSubject();
+      await nextTick();
+
+      const updateAll = wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('Update all'));
+      await updateAll!.trigger('click');
+
+      expect(spies.confirmDependencyGroupUpdate).not.toHaveBeenCalled();
+      expect(spies.updateAllInGroup).toHaveBeenCalled();
+    });
   });
 });

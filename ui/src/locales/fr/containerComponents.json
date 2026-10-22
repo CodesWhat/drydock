@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Masqués : épinglés",
       "filtersLabel": "Filtres",
       "filteredContainers": "Filtré à {count} conteneur | Filtré à {count} conteneurs",
-      "clearContainerIdFilter": "Effacer le filtre par ID de conteneur"
+      "clearContainerIdFilter": "Effacer le filtre par ID de conteneur",
+      "groupByDependencyTooltip": "Grouper par dépendance"
     },
     "stats": {
       "paused": "En pause",
@@ -505,7 +506,9 @@
         "failedTitle": "Échec de la mise à jour de la chaîne de dépendances",
         "failedDetail": "Impossible de mettre à jour la chaîne de dépendances pour {name}.",
         "staleChainTitle": "La chaîne de dépendances a changé",
-        "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer."
+        "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer.",
+        "hiddenMarker": "non affiché par le filtre actuel",
+        "hiddenNote": "\n\n{count} conteneur de cette chaîne est masqué par le filtre actuel et sera aussi mis à jour. | \n\n{count} conteneurs de cette chaîne sont masqués par le filtre actuel et seront aussi mis à jour."
       }
     },
     "actionToasts": {
@@ -672,6 +675,23 @@
     },
     "logViewer": {
       "invalidRegex": "Expression régulière invalide"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Dépend de",
+      "requiredBy": "Requis par",
+      "cycle": "Fait partie d'un cycle de dépendances",
+      "toggle": "Afficher les dépendances",
+      "updateGroup": "Mettre à jour le groupe de dépendances ({count})",
+      "staleParentsWarning": "{name} dépend de {parents}, qui a également une mise à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec un parent obsolète. | {name} dépend de {parents}, qui ont également des mises à jour en attente. Mettre à jour l'élément dépendant en premier peut le laisser fonctionner avec des parents obsolètes.",
+      "staleParentsOverflow": "et {count} de plus",
+      "staleParentsAccept": "Mettre à jour quand même",
+      "dependsOnCount": "Dépend de {count}",
+      "requiredByCount": "Requis par {count}",
+      "unresolved": "Dépendance manquante : {targets}",
+      "dependentsNote": "{dependents} dépend de {name} et n'est ni mis à jour ni redémarré avec lui. Utilisez Mettre à jour le groupe de dépendances pour mettre à jour toute la chaîne dans l'ordre. | {dependents} dépendent de {name} et ne sont ni mis à jour ni redémarrés avec lui. Utilisez Mettre à jour le groupe de dépendances pour mettre à jour toute la chaîne dans l'ordre.",
+      "groupStaleHeader": "Des mises à jour sont en attente sur les parents",
+      "groupStaleWarning": "Certains conteneurs de cette mise à jour dépendent d'un parent qui a aussi une mise à jour en attente mais n'en fait pas partie. Mettre à jour un enfant sans son parent peut le laisser fonctionner avec un parent obsolète.",
+      "groupStaleLine": "{name} dépend de {parents}"
     }
   }
 }

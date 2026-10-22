@@ -1,6 +1,7 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, type Ref, ref } from 'vue';
 import { setI18nLocale } from '@/boot/i18n';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
@@ -257,6 +258,7 @@ describe('useContainerActions', () => {
     _resetScanLifecycleStateForTests();
     useOperationDisplayHold().clearAllOperationDisplayHolds();
     useUpdateBatches().batches.value = new Map();
+    resetDependencyGraphState();
     mocks.containerActionsEnabled.value = true;
     mocks.getBackups.mockResolvedValue([]);
     mocks.rollback.mockResolvedValue({});
@@ -1962,6 +1964,220 @@ describe('useContainerActions', () => {
     expect(confirmCall.message).toBe(
       'Update web now? This will apply the latest discovered image.',
     );
+  });
+
+  describe('child-before-parent stale-parent guard (#219)', () => {
+    function seedGraph() {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'web', displayName: 'web' },
+          { id: 'container-2', name: 'db', displayName: 'db' },
+        ],
+        edges: [{ from: 'container-1', to: 'container-2', action: 'update', source: 'label' }],
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    it('appends the stale-parent warning and switches the accept label when a parent has a pending update', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('db');
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('does not warn when the parent has no pending update', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('does not warn when the parent is not present in the current container list', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('skips the guard when the target name has no container id', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: {},
+        containers: [web, db],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).not.toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update');
+    });
+
+    it('caps the named parents at five and reports how many more there are', async () => {
+      const parentIds = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7'];
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'web', displayName: 'web' },
+          ...parentIds.map((id) => ({ id, name: id, displayName: id })),
+        ],
+        edges: parentIds.map((id) => ({
+          from: 'container-1',
+          to: id,
+          action: 'update',
+          source: 'label',
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const parents = parentIds.map((id) => makeContainer({ id, name: id, newTag: '2.0.0' }));
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1' },
+        containers: [web, ...parents],
+      });
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('p1, p2, p3, p4, p5');
+      expect(confirmCall.message).not.toContain('p6');
+      expect(confirmCall.message).toContain('and 2 more');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('also appends the stale-parent warning to the force-update confirmation', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web', bouncer: 'blocked' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: '2.0.0' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      composable.confirmForceUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+    });
+
+    it('re-evaluates the warning against a reactive containers list for confirmUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
+
+    it('re-evaluates the warning against a reactive containers list for confirmForceUpdate', async () => {
+      seedGraph();
+      const web = makeContainer({ id: 'container-1', name: 'web' });
+      const db = makeContainer({ id: 'container-2', name: 'db', newTag: null });
+      const { composable, containers } = await mountActionsHarness({
+        selectedContainer: web,
+        selectedContainerId: web.id,
+        containerIdMap: { web: 'container-1', db: 'container-2' },
+        containers: [web, db],
+      });
+
+      containers.value = [web, { ...db, newTag: '2.0.0' }];
+
+      composable.confirmForceUpdate('web');
+
+      const confirmCall = mocks.confirmRequire.mock.calls[0][0] as {
+        message: string;
+        acceptLabel: string;
+        accept?: () => Promise<unknown>;
+      };
+      expect(confirmCall.message).toContain('which also has an update pending');
+      expect(confirmCall.acceptLabel).toBe('Update anyway');
+
+      await confirmCall.accept?.();
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
+    });
   });
 
   it('wires rollback confirmation dialog to rollback accept handler', async () => {
@@ -4178,6 +4394,223 @@ describe('useContainerActions', () => {
     expect(composable.actionInProgress.value.has('container-1')).toBe(false);
   });
 
+  describe('dependents note on the single Update confirmation (#219)', () => {
+    function seed(childIds: string[], overrides: Record<string, { displayName?: string }> = {}) {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'db', displayName: 'db' },
+          ...childIds.map((id) => ({
+            id,
+            name: id,
+            displayName: overrides[id]?.displayName ?? '',
+          })),
+        ],
+        edges: childIds.map((id) => ({
+          from: id,
+          to: 'container-1',
+          action: 'update' as const,
+          source: 'label' as const,
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    async function confirmDb() {
+      const db = makeContainer({ id: 'container-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: db,
+        selectedContainerId: db.id,
+        containerIdMap: { db: 'container-1' },
+        containers: [db],
+      });
+      composable.confirmUpdate('db');
+      return mocks.confirmRequire.mock.calls[0][0] as { message: string; acceptLabel: string };
+    }
+
+    it('lists a single dependent and says it is not updated with the container', async () => {
+      seed(['web']);
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('web depends on db and is not updated or restarted with it');
+      expect(call.message).toContain('Update dependency group');
+      expect(call.acceptLabel).toBe('Update');
+    });
+
+    it('lists several dependents with the plural wording and falls back through display name, name, id', async () => {
+      seed(['web', 'api'], { web: { displayName: 'Web App' } });
+      useDependencyGraph().graph.value = {
+        ...useDependencyGraph().graph.value!,
+        edges: [
+          ...useDependencyGraph().graph.value!.edges,
+          { from: 'ghost', to: 'container-1', action: 'update', source: 'label' },
+        ],
+      };
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('Web App, api, ghost depend on db');
+    });
+
+    it('caps the listed dependents at five and counts the rest', async () => {
+      seed(['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7']);
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('d1, d2, d3, d4, d5');
+      expect(call.message).not.toContain('d6,');
+      expect(call.message).toContain('and 2 more');
+    });
+
+    it('adds nothing when no container depends on it', async () => {
+      seed([]);
+
+      const call = await confirmDb();
+
+      expect(call.message).not.toContain('Update dependency group');
+    });
+
+    it('adds nothing when the target has no container id', async () => {
+      seed(['web']);
+      const db = makeContainer({ id: 'container-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: db,
+        selectedContainerId: db.id,
+        containerIdMap: {},
+        containers: [db],
+      });
+
+      composable.confirmUpdate('db');
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).not.toContain('Update dependency group');
+    });
+  });
+
+  describe('child-before-parent guard on group Update All (#219)', () => {
+    function seed(edges: Array<[string, string]>) {
+      const ids = new Set(edges.flat());
+      useDependencyGraph().graph.value = {
+        nodes: [...ids].map((id) => ({ id, name: id, displayName: id })),
+        edges: edges.map(([from, to]) => ({
+          from,
+          to,
+          action: 'update' as const,
+          source: 'label' as const,
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    async function mountWith(all: Container[]) {
+      mocks.updateContainers.mockResolvedValue({
+        message: 'ok',
+        accepted: all.map((c) => ({ containerId: c.id, containerName: c.name, operationId: 'op' })),
+        rejected: [],
+      });
+      return mountActionsHarness({
+        selectedContainer: all[0],
+        selectedContainerId: all[0].id,
+        containerIdMap: Object.fromEntries(all.map((c) => [c.name, c.id])),
+        containers: all,
+      });
+    }
+
+    it('asks first when a child is updated without its pending parent, then updates on accept', async () => {
+      seed([['web', 'db']]);
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0', bouncer: 'safe' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0', bouncer: 'safe' });
+      const { composable } = await mountWith([web, db]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+
+      expect(mocks.updateContainers).not.toHaveBeenCalled();
+      const call = mocks.confirmRequire.mock.calls[0][0] as {
+        header: string;
+        message: string;
+        acceptLabel: string;
+        accept: () => Promise<void>;
+      };
+      expect(call.header).toBe('Parents have updates pending');
+      expect(call.message).toContain('- web depends on db');
+      expect(call.acceptLabel).toBe('Update anyway');
+
+      await call.accept();
+
+      expect(mocks.updateContainers).toHaveBeenCalledWith(['web']);
+    });
+
+    it('does not ask when the parent is part of the same update', async () => {
+      seed([['web', 'db']]);
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0', bouncer: 'safe' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0', bouncer: 'safe' });
+      const { composable } = await mountWith([web, db]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: [web, db] });
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
+      expect(mocks.updateContainers).toHaveBeenCalledWith(['web', 'db']);
+    });
+
+    it('does not ask when the parent has nothing pending or is not listed', async () => {
+      seed([
+        ['web', 'db'],
+        ['web', 'gone'],
+      ]);
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0', bouncer: 'safe' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: null });
+      const { composable } = await mountWith([web, db]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
+      expect(mocks.updateContainers).toHaveBeenCalledWith(['web']);
+    });
+
+    it('skips the guard while container actions are disabled', async () => {
+      seed([['web', 'db']]);
+      mocks.containerActionsEnabled.value = false;
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0', bouncer: 'safe' });
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0', bouncer: 'safe' });
+      const { composable } = await mountWith([web, db]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    });
+
+    it('lists at most five children and counts the rest', async () => {
+      const kids = ['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7'];
+      seed(kids.map((id) => [id, 'db'] as [string, string]));
+      const children = kids.map((id) =>
+        makeContainer({ id, name: id, newTag: '2.0.0', bouncer: 'safe' }),
+      );
+      const db = makeContainer({ id: 'db', name: 'db', newTag: '2.0.0', bouncer: 'safe' });
+      const { composable } = await mountWith([...children, db]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: children });
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).toContain('- k5 depends on db');
+      expect(call.message).not.toContain('- k6');
+      expect(call.message).toContain('and 2 more');
+    });
+
+    it('does not ask for a group with no dependencies', async () => {
+      seed([]);
+      const web = makeContainer({ id: 'web', name: 'web', newTag: '2.0.0', bouncer: 'safe' });
+      const { composable } = await mountWith([web]);
+
+      await composable.updateAllInGroup({ key: 'stack', containers: [web] });
+
+      expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    });
+  });
+
   describe('cancelUpdate', () => {
     it('calls cancel endpoint and shows cancelled toast for queued ops', async () => {
       mocks.cancelUpdateOperation.mockResolvedValueOnce('cancelled');
@@ -4381,6 +4814,89 @@ describe('useContainerActions', () => {
   });
 
   describe('confirmDependencyGroupUpdate (#219)', () => {
+    it('labels chain members hidden by the current filter and says they will be updated too', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          {
+            index: 1,
+            containers: [
+              { id: 'web-1', name: 'web', actionKind: 'update' },
+              { id: 'api-1', name: 'api', actionKind: 'restart' },
+            ],
+          },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1', 'web-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).toContain('2. web, api (restart) (not shown by the current filter)');
+      expect(call.message).not.toContain('web (not shown');
+      expect(call.message).toContain(
+        '1 container in this chain is hidden by the current filter and will be updated too.',
+      );
+    });
+
+    it('uses the plural note when several members are hidden', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          {
+            index: 1,
+            containers: [
+              { id: 'web-1', name: 'web', actionKind: 'update' },
+              { id: 'api-1', name: 'api', actionKind: 'update' },
+            ],
+          },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).toContain('2 containers in this chain are hidden');
+    });
+
+    it('adds no hidden note when every chain member is shown', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).not.toContain('not shown');
+      expect(call.message).not.toContain('hidden by the current filter');
+    });
+
     it('previews the update chain and opens a confirm dialog listing the resolved waves', async () => {
       const container = makeContainer({ id: 'db-1', name: 'db' });
       const { composable } = await mountActionsHarness({

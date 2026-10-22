@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Ausgeblendet: Gepinnt",
       "filtersLabel": "Filter",
       "filteredContainers": "Auf {count} Container gefiltert | Auf {count} Container gefiltert",
-      "clearContainerIdFilter": "Container-ID-Filter löschen"
+      "clearContainerIdFilter": "Container-ID-Filter löschen",
+      "groupByDependencyTooltip": "Nach Abhängigkeit gruppieren"
     },
     "stats": {
       "paused": "Pausiert",
@@ -505,7 +506,9 @@
         "failedTitle": "Aktualisierung der Abhängigkeitskette fehlgeschlagen",
         "failedDetail": "Die Abhängigkeitskette für {name} konnte nicht aktualisiert werden.",
         "staleChainTitle": "Abhängigkeitskette hat sich geändert",
-        "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen."
+        "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen.",
+        "hiddenMarker": "vom aktuellen Filter nicht angezeigt",
+        "hiddenNote": "\n\n{count} Container dieser Kette wird durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert. | \n\n{count} Container dieser Kette werden durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert."
       }
     },
     "actionToasts": {
@@ -672,6 +675,23 @@
     },
     "logViewer": {
       "invalidRegex": "Ungültiger regulärer Ausdruck"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Abhängig von",
+      "requiredBy": "Benötigt von",
+      "cycle": "Teil eines Abhängigkeitszyklus",
+      "toggle": "Abhängigkeiten anzeigen",
+      "updateGroup": "Abhängigkeitsgruppe aktualisieren ({count})",
+      "staleParentsWarning": "{name} hängt von {parents} ab, das ebenfalls ein ausstehendes Update hat. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen ein veraltetes übergeordnetes Element. | {name} hängt von {parents} ab, die ebenfalls ausstehende Updates haben. Wird das abhängige Element zuerst aktualisiert, läuft es möglicherweise gegen veraltete übergeordnete Elemente.",
+      "staleParentsOverflow": "und {count} weitere",
+      "staleParentsAccept": "Trotzdem aktualisieren",
+      "dependsOnCount": "Hängt von {count} ab",
+      "requiredByCount": "Benötigt von {count}",
+      "unresolved": "Fehlende Abhängigkeit: {targets}",
+      "dependentsNote": "{dependents} hängt von {name} ab und wird nicht mit aktualisiert oder neu gestartet. Mit „Abhängigkeitsgruppe aktualisieren“ lässt sich die ganze Kette der Reihe nach aktualisieren. | {dependents} hängen von {name} ab und werden nicht mit aktualisiert oder neu gestartet. Mit „Abhängigkeitsgruppe aktualisieren“ lässt sich die ganze Kette der Reihe nach aktualisieren.",
+      "groupStaleHeader": "Übergeordnete Elemente haben ausstehende Updates",
+      "groupStaleWarning": "Einige Container in diesem Update hängen von einem übergeordneten Container ab, der ebenfalls ein ausstehendes Update hat, aber nicht Teil davon ist. Wird ein abhängiger Container ohne sein übergeordnetes Element aktualisiert, läuft er möglicherweise gegen eine veraltete Version.",
+      "groupStaleLine": "{name} hängt von {parents} ab"
     }
   }
 }
