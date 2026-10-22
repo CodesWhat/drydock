@@ -91,7 +91,9 @@ const MAX_MANIFEST_INDEX_DEPTH = 3;
  * Page bound for tag listing. At the 1000-per-page default this allows 50k
  * tags, far past any real repository, and stops a registry that returns a
  * `Link` header on every response from looping forever and growing the tag
- * array without limit.
+ * array without limit. Registries that list oldest first (GHCR) put the newest
+ * tags on the final pages of a huge repository, so a truncated listing is
+ * continued from the container's current tag (see `getTags`).
  */
 const MAX_TAG_PAGES = 50;
 
@@ -338,6 +340,7 @@ class Registry<
     let hasNext = true;
     let link: string | undefined = undefined;
     let pageCount = 0;
+    let truncated = false;
     while (hasNext) {
       const lastItem = page?.data?.tags?.slice(-1)?.[0];
 
@@ -348,16 +351,71 @@ class Registry<
       tags.push(...pageTags);
       pageCount += 1;
       if (hasNext && pageCount >= MAX_TAG_PAGES) {
-        this.log.warn(
-          `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more`,
-        );
+        truncated = true;
         hasNext = false;
       }
     }
 
+    const currentTag = image.tag?.value;
+    if (!truncated) {
+      this.sortTagsDescending(tags);
+      return tags;
+    }
+    if (!currentTag) {
+      this.log.warn(
+        `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more`,
+      );
+      this.sortTagsDescending(tags);
+      return tags;
+    }
+
+    this.log.warn(
+      `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more, continuing from tag ${currentTag}`,
+    );
+    const headFirstTag = tags[0];
+    const seen = new Set(tags);
+    try {
+      let tailPage: AxiosResponse<RegistryTagsList> | undefined = undefined;
+      let tailLink: string | undefined = undefined;
+      let tailHasNext = true;
+      let tailPageCount = 0;
+      while (tailHasNext) {
+        const tailLastItem: string | undefined = tailPage
+          ? tailPage.data?.tags?.slice(-1)?.[0]
+          : currentTag;
+        tailPage = await this.getTagsPage(image, tailLastItem, tailLink);
+        const tailTags = tailPage.data?.tags ?? [];
+        tailLink = tailPage.headers?.link;
+        tailHasNext = tailLink !== undefined;
+        tailPageCount += 1;
+        const newTags = tailTags.filter((tag) => !seen.has(tag));
+        for (const tag of newTags) {
+          seen.add(tag);
+          tags.push(tag);
+        }
+        if (tailHasNext && tailTags[0] === headFirstTag) {
+          // The registry ignored the cursor and restarted from the first page.
+          tailHasNext = false;
+        } else if (tailHasNext && tailPageCount >= MAX_TAG_PAGES) {
+          this.log.warn(
+            `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} more pages from tag ${currentTag}; the registry is still reporting more`,
+          );
+          tailHasNext = false;
+        }
+      }
+    } catch (e) {
+      this.log.warn(
+        `Unable to continue listing ${image.name} tags from tag ${currentTag} (${e instanceof Error ? e.message : e})`,
+      );
+    }
+
+    this.sortTagsDescending(tags);
+    return tags;
+  }
+
+  private sortTagsDescending(tags: string[]) {
     // Sort tags alphabetically, highest first
     tags.sort((left, right) => right.localeCompare(left));
-    return tags;
   }
 
   /**
