@@ -10,7 +10,7 @@ import {
 import { _resetScanLifecycleStateForTests } from '@/composables/useScanLifecycle';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { ApiContainerTrigger, ApiContainerUpdateOperation } from '@/types/api';
-import type { Container } from '@/types/container';
+import type { Container, ContainerUpdateOperation } from '@/types/container';
 import type { BulkUpdatePlan } from '@/utils/bulk-update-plan';
 import { ApiError } from '@/utils/error';
 import { daysToMs } from '@/utils/maturity-policy';
@@ -119,7 +119,11 @@ vi.mock('@/composables/useServerFeatures', () => ({
   }),
 }));
 
-function makeContainer(overrides: Partial<Container> = {}): Container {
+// Test-only: fixture rows carry the operation they should be seeded with
+// (see seedRowOperation). The real Container type has no such field.
+type FixtureContainer = Container & { updateOperation?: ContainerUpdateOperation };
+
+function makeContainer(overrides: Partial<FixtureContainer> = {}): FixtureContainer {
   const defaultId = overrides.id ?? 'container-1';
   const defaultName = overrides.name ?? 'web';
   return {
@@ -143,8 +147,8 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 
 const mountedWrappers: VueWrapper[] = [];
 
-/** Mirror a fixture row's updateOperation into the operations store, which owns update state. */
-function seedRowOperation(container: Container) {
+/** Mirror a fixture row's operation into the operations store, which owns update state. */
+function seedRowOperation(container: FixtureContainer) {
   const op = container.updateOperation;
   if (!op) {
     return;
@@ -4295,7 +4299,6 @@ describe('useContainerActions', () => {
         id: '',
         name: '',
         server: '',
-        updateOperation: undefined,
       } as Container),
     ).toBe(false);
   });

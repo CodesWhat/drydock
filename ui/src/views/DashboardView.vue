@@ -249,8 +249,8 @@ const pendingUpdates = computed(() =>
 );
 
 // recentUpdates is projected through projectContainerDisplayState in
-// useDashboardComputed so held containers retain their in-progress
-// updateOperation + sortSnapshot across the full hold window, including the
+// useDashboardComputed so held containers retain their
+// in-progress operation + sortSnapshot across the full hold window, including the
 // 1.5s settle window after a terminal SSE arrives. The dashboardPendingUpdateRows
 // ghost merge below is the rc.9-era fallback for when the container drops out
 // of containers.value entirely mid-recreate; the hold-based projection
@@ -504,7 +504,7 @@ function applyDashboardParsedOperationSse(parsed: ParsedUpdateOperationSse) {
   return applyUpdateOperationSseToHold({
     parsed,
     resolveContainer: findDashboardContainerForOperationTarget,
-    // A list-seeded row.updateOperation goes stale once its operation ends, so
+    // A list-seeded row operation goes stale once its operation ends, so
     // the hold takes its prior operation from the operations store instead.
     resolvePreviousOperation: (container) => operationStore.getOperationForContainer(container),
     // DashboardView doesn't mutate container rows — the widget projects held

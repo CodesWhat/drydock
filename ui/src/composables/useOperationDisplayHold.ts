@@ -341,7 +341,6 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
 
   return {
     ...container,
-    updateOperation: held.operation,
     ...(needsSortFields
       ? {
           status: sortSnapshot.status,
@@ -627,21 +626,10 @@ export interface ApplyUpdateOperationSseArgs {
     container: HoldSourceContainer,
   ) => ContainerUpdateOperation | undefined;
   /**
-   * Invoked on active-status events with the computed next operation so the
-   * caller can apply view-specific row mutations (ContainersView writes this
-   * back onto containers.value[idx].updateOperation to drive its reactivity).
-   * Skip providing this if the view re-derives from heldOperations only.
-   */
-  onActiveOperationComputed?: (args: {
-    operationId: string;
-    container: HoldSourceContainer;
-    nextOperation: ContainerUpdateOperation;
-  }) => void;
-  /**
    * Invoked on every terminal-status event (succeeded / failed / rolled-back)
    * regardless of whether a hold was tracked. Fires IMMEDIATELY when the
    * terminal SSE arrives so callers can apply view-specific row cleanup
-   * (e.g. clearing containers.value[idx].updateOperation). This fires before
+   * (e.g. recording lastUpdateFailureReason). This fires before
    * the hold's settle timer expires — the hold still masks the row.
    */
   onTerminalEvent?: (args: {
@@ -681,7 +669,7 @@ export interface ApplyUpdateOperationSseResult {
 export function applyUpdateOperationSseToHold(
   args: ApplyUpdateOperationSseArgs,
 ): ApplyUpdateOperationSseResult {
-  const { parsed, resolveContainer, onActiveOperationComputed, onTerminalEvent } = args;
+  const { parsed, resolveContainer, onTerminalEvent } = args;
   const target: OperationDisplayHoldTarget = {
     containerId: parsed.containerId,
     newContainerId: parsed.newContainerId,
@@ -713,11 +701,6 @@ export function applyUpdateOperationSseToHold(
       updatedAt: new Date().toISOString(),
     };
     if (parsed.operationId && parsed.operationId.length > 0) {
-      onActiveOperationComputed?.({
-        operationId: parsed.operationId,
-        container,
-        nextOperation,
-      });
       holdOperationDisplay({
         operationId: parsed.operationId,
         operation: nextOperation,
@@ -772,7 +755,7 @@ export function applyUpdateOperationSseToHold(
       operationId: parsed.operationId,
     };
     // Fire onTerminalEvent immediately so callers can apply view-specific state
-    // mutations (e.g. clearing container.updateOperation) before the hold releases.
+    // mutations (e.g. recording lastUpdateFailureReason) before the hold releases.
     onTerminalEvent?.(terminalEventArgs);
     // Schedule the hold release. The onComplete callback fires after the row's
     // settle timer expires so callers that need to act after the row visually

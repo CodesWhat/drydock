@@ -390,7 +390,7 @@ async function updateAllInGroupState(
       if (isMultiContainerBatch && container.id !== headTargetId) {
         // Mark containers waiting behind the batch head as queued right away:
         // a client-side signal so they render a "Queued" state immediately,
-        // rather than looking stalled until their own updateOperation is next
+        // rather than looking stalled until their own operation is next
         // observed. It clears itself via prunePendingActionsState once that
         // container's pending action settles.
         nextGroupUpdateQueue.add(container.id);
@@ -538,7 +538,7 @@ async function runBulkUpdateState(args: {
       if (isMultiContainerBatch && container.id !== headTargetId) {
         // Mark containers waiting behind the batch head as queued right away:
         // a client-side signal so they render a "Queued" state immediately,
-        // rather than looking stalled until their own updateOperation is next
+        // rather than looking stalled until their own operation is next
         // observed. It clears itself via prunePendingActionsState once that
         // container's pending action settles.
         nextGroupUpdateQueue.add(container.id);

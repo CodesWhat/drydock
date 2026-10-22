@@ -243,21 +243,6 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
     if (match.lastUpdateFailureAt !== undefined) {
       c.lastUpdateFailureAt = match.lastUpdateFailureAt;
     }
-    const previousOperation = match.updateOperation;
-    if (c.updateOperation && previousOperation && c.updateOperation.id === previousOperation.id) {
-      c.updateOperation = {
-        ...previousOperation,
-        ...c.updateOperation,
-        batchId: c.updateOperation.batchId ?? previousOperation.batchId,
-        queuePosition: c.updateOperation.queuePosition ?? previousOperation.queuePosition,
-        queueTotal: c.updateOperation.queueTotal ?? previousOperation.queueTotal,
-      };
-    } else if (
-      c.updateOperation === undefined &&
-      (previousOperation?.status === 'queued' || previousOperation?.status === 'in-progress')
-    ) {
-      c.updateOperation = previousOperation;
-    }
   }
   return next;
 }
@@ -1527,7 +1512,7 @@ function handleGlobalScroll() {
   }
 }
 
-const { hasPendingOperationWatcher } = useContainerSsePatchPipeline({
+useContainerSsePatchPipeline({
   containers,
   containerIdMap,
   containerMetaMap,

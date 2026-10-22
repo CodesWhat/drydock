@@ -17,6 +17,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 > **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
 
 This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1), the [v1.8.0-rc.2 fixes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.2), and the [v1.8.0-rc.3](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.3) and [v1.8.0-rc.4](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.4) changes, and retains their upgrade warnings. Registries that list tags oldest first, such as GHCR, no longer hide new releases of very large repositories behind the 50-page listing limit (#1453). v1.8 GA is not released; v1.7.0 (GA 2026-10-19) is the latest stable release. RC5 has its own publication-based soak.
+### Changed
+
+- Delete the container's `updateOperation` field and the SSE bridge that kept it in sync with the operations store (DR-89, slice 5). Every view already reads update progress from the store, and a new architecture test fails on any new use of the field. Behavior is unchanged.
 
 ### Fixed
 

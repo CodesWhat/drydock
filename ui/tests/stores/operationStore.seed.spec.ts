@@ -5,7 +5,6 @@ vi.mock('@/services/image-icon', () => ({
 import { createPinia, setActivePinia } from 'pinia';
 import { useOperationDisplayHold } from '@/composables/useOperationDisplayHold';
 import { useOperationStore } from '@/stores/operations';
-import { mapApiContainer } from '@/utils/container-mapper';
 import { seedOperation } from '../helpers/operations';
 
 function row(overrides: Record<string, unknown> = {}, operation?: Record<string, unknown> | null) {
@@ -628,89 +627,6 @@ describe('operations store seeding', () => {
       );
       expect(done.status).toBe('succeeded');
       expect(store.getOperationForContainer({ id: 'd' })).toBeUndefined();
-    });
-  });
-
-  describe('parity with the mapper-derived updateOperation', () => {
-    const fixtures: Array<[string, Record<string, unknown>]> = [
-      [
-        'minimal in-progress',
-        { id: 'op-1', status: 'in-progress', phase: 'pulling', updatedAt: 't' },
-      ],
-      ['queued', { id: 'op-2', status: 'queued', phase: 'queued', updatedAt: 't' }],
-      [
-        'with versions',
-        {
-          id: 'op-3',
-          status: 'in-progress',
-          phase: 'old-stopped',
-          updatedAt: 't',
-          fromVersion: '1.0.0',
-          toVersion: '1.1.0',
-        },
-      ],
-      [
-        'with a valid batch',
-        {
-          id: 'op-4',
-          status: 'queued',
-          phase: 'queued',
-          updatedAt: 't',
-          batchId: 'b',
-          queuePosition: 2,
-          queueTotal: 4,
-        },
-      ],
-      [
-        'with an inconsistent batch',
-        {
-          id: 'op-5',
-          status: 'in-progress',
-          phase: 'pulling',
-          updatedAt: 't',
-          batchId: 'b',
-          queuePosition: 9,
-          queueTotal: 4,
-        },
-      ],
-      ['terminal status', { id: 'op-6', status: 'succeeded', phase: 'succeeded', updatedAt: 't' }],
-      [
-        'phase invalid for status',
-        { id: 'op-7', status: 'queued', phase: 'pulling', updatedAt: 't' },
-      ],
-      ['missing updatedAt', { id: 'op-8', status: 'in-progress', phase: 'pulling' }],
-      ['missing id', { status: 'in-progress', phase: 'pulling', updatedAt: 't' }],
-    ];
-
-    it.each(fixtures)('%s', (_label, updateOperation) => {
-      const apiRow = {
-        id: 'c1',
-        name: 'web',
-        displayName: '',
-        status: 'running',
-        watcher: 'local',
-        agent: null,
-        image: { registry: { name: 'hub', url: 'u' }, name: 'nginx', tag: { value: '1.0' } },
-        result: null,
-        updateAvailable: true,
-        updateKind: null,
-        security: null,
-        labels: null,
-        displayIcon: '',
-        updateOperation,
-      };
-      const mapped = mapApiContainer(apiRow as never);
-      const store = useOperationStore();
-      store.seedFromContainerList([apiRow], Date.now());
-
-      const fromStore = store.getOperationForContainer({
-        id: mapped.id,
-        identityKey: mapped.identityKey,
-        name: mapped.name,
-      });
-      // kind and targetImage have no readers and are intentionally not carried.
-      const { kind: _kind, targetImage: _targetImage, ...expected } = mapped.updateOperation ?? {};
-      expect(fromStore).toEqual(mapped.updateOperation ? expected : undefined);
     });
   });
 });
