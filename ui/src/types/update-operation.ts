@@ -119,15 +119,6 @@ export function isContainerUpdateOperationStatus(
   );
 }
 
-export function isContainerUpdateOperationKind(
-  value: unknown,
-): value is ContainerUpdateOperationKind {
-  return (
-    typeof value === 'string' &&
-    (CONTAINER_UPDATE_OPERATION_KINDS as readonly string[]).includes(value)
-  );
-}
-
 export function isActiveContainerUpdateOperationStatus(
   value: unknown,
 ): value is ActiveContainerUpdateOperationStatus {

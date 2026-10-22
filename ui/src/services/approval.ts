@@ -115,7 +115,7 @@ interface ApprovalBulkRejected {
   message: string;
 }
 
-export interface ApprovalBulkResponse {
+interface ApprovalBulkResponse {
   accepted: ApprovalBulkAccepted[];
   rejected: ApprovalBulkRejected[];
 }
