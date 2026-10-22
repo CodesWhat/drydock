@@ -21,7 +21,7 @@ const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
+  'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c';
 const DEFAULT_GRYPE_WORKER_IMAGE =
   'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
 const DEFAULT_SYFT_WORKER_IMAGE =

@@ -897,7 +897,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',
@@ -987,7 +987,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',

@@ -15,6 +15,11 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - OIDC bearer tokens are now opt-in and must be issued for Drydock's client. An `Authorization: Bearer` access token is only accepted when `DD_AUTH_OIDC_{name}_BEARER=true`, and then only if its `aud` contains the client ID (or a `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` entry) or its `azp`/`client_id` equals it, or, for opaque tokens, RFC 7662 introspection returns an active token for this client. Setups that send OIDC access tokens to the API must set the variable. The browser login flow is unchanged (DR-10). See DEPRECATIONS.md.
 
+### Fixed
+
+- The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR.
+- The Security view now shows the scanner version, image digest, and vulnerability database or cache update time in each scanner's tooltip, using the asset details the API already returned.
+
 ## [1.8.0-rc.5] - 2026-10-22
 
 > [!WARNING]
