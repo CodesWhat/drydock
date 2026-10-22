@@ -97,7 +97,14 @@
       "updatesAvailable": "Mevcut Güncellemeler",
       "updateDetail": "{fresh} yeni · {mature} mevcut",
       "securityIssues": "Güvenlik Sorunları",
-      "registries": "Kayıt Defterleri"
+      "registries": "Kayıt Defterleri",
+      "images": "İmajlar",
+      "imageDetail": "{count} güncellemeli",
+      "triggers": "Tetikleyiciler",
+      "triggerDetail": "{actions} eylem · {notifications} bildirim",
+      "watchers": "İzleyiciler",
+      "watcherDetailHealthy": "Tümü bağlı",
+      "watcherDetailDisconnected": "{healthy} bağlı · {disconnected} bağlantısı kopuk"
     },
     "updateKind": {
       "major": "Ana",
@@ -120,7 +127,19 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "İmajlar",
+      "statTriggers": "Tetikleyiciler",
+      "statWatchers": "İzleyiciler",
+      "recentActivity": "Son etkinlik"
+    },
+    "recentActivity": {
+      "title": "Son etkinlik",
+      "viewAudit": "Denetim günlüğünü görüntüle →",
+      "loading": "Etkinlik yükleniyor...",
+      "loadFailed": "Son etkinlik yüklenemedi",
+      "empty": "Yakın zamanda etkinlik yok",
+      "system": "Sistem"
     }
   }
 }

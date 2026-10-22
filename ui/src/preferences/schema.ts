@@ -69,7 +69,7 @@ export interface PreferencesSchema {
   sync: { enabled: boolean };
 }
 
-export const CURRENT_SCHEMA_VERSION = 12;
+export const CURRENT_SCHEMA_VERSION = 13;
 
 /**
  * Table-mode column keys for the five views that share the `DataTableColumnPicker`
@@ -146,8 +146,12 @@ export const DEFAULTS: PreferencesSchema = {
       'resource-usage',
       'host-status',
       'update-breakdown',
+      'stat-images',
+      'stat-triggers',
+      'stat-watchers',
+      'recent-activity',
     ],
-    hiddenWidgets: [],
+    hiddenWidgets: ['stat-images', 'stat-triggers', 'stat-watchers', 'recent-activity'],
     gridLayout: [],
     gridLayouts: {
       xxs: undefined,

@@ -97,7 +97,14 @@
       "updatesAvailable": "Updates beschikbaar",
       "updateDetail": "{fresh} nieuw · {mature} volwassen",
       "securityIssues": "Beveiligingsproblemen",
-      "registries": "Registers"
+      "registries": "Registers",
+      "images": "Images",
+      "imageDetail": "{count} met updates",
+      "triggers": "Triggers",
+      "triggerDetail": "{actions} acties · {notifications} meldingen",
+      "watchers": "Watchers",
+      "watcherDetailHealthy": "Allemaal verbonden",
+      "watcherDetailDisconnected": "{healthy} verbonden · {disconnected} verbroken"
     },
     "updateKind": {
       "major": "Major",
@@ -120,7 +127,19 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "Images",
+      "statTriggers": "Triggers",
+      "statWatchers": "Watchers",
+      "recentActivity": "Recente activiteit"
+    },
+    "recentActivity": {
+      "title": "Recente activiteit",
+      "viewAudit": "Auditlog bekijken →",
+      "loading": "Activiteit laden...",
+      "loadFailed": "Recente activiteit kon niet worden geladen",
+      "empty": "Geen recente activiteit",
+      "system": "Systeem"
     }
   }
 }

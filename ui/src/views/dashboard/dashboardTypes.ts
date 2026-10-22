@@ -11,9 +11,24 @@ export const DASHBOARD_WIDGET_IDS = [
   'resource-usage',
   'host-status',
   'update-breakdown',
+  'stat-images',
+  'stat-triggers',
+  'stat-watchers',
+  'recent-activity',
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+/**
+ * Widgets that ship hidden. They appear in the customize panel and are opt-in,
+ * so users with a saved layout see no change until they tick them.
+ */
+export const DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS = [
+  'stat-images',
+  'stat-triggers',
+  'stat-watchers',
+  'recent-activity',
+] as const satisfies readonly DashboardWidgetId[];
 
 interface DashboardWidgetMeta {
   id: DashboardWidgetId;
@@ -83,6 +98,34 @@ export const DASHBOARD_WIDGET_META: DashboardWidgetMeta[] = [
   {
     id: 'update-breakdown',
     labelKey: 'dashboardView.widgets.updateBreakdown',
+    category: 'widget',
+    canStretch: true,
+    defaultSpan: 2,
+  },
+  {
+    id: 'stat-images',
+    labelKey: 'dashboardView.widgets.statImages',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-triggers',
+    labelKey: 'dashboardView.widgets.statTriggers',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'stat-watchers',
+    labelKey: 'dashboardView.widgets.statWatchers',
+    category: 'stat',
+    canStretch: false,
+    defaultSpan: 1,
+  },
+  {
+    id: 'recent-activity',
+    labelKey: 'dashboardView.widgets.recentActivity',
     category: 'widget',
     canStretch: true,
     defaultSpan: 2,

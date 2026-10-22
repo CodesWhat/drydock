@@ -1,6 +1,10 @@
 import { onScopeDispose, ref, watch } from 'vue';
 import { preferences } from '../../preferences/store';
-import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from './dashboardTypes';
+import {
+  DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS,
+  DASHBOARD_WIDGET_IDS,
+  type DashboardWidgetId,
+} from './dashboardTypes';
 import {
   _rebuildLayoutsForOrderForTests,
   createResponsiveLayoutsMemo,
@@ -22,7 +26,7 @@ function arraysEqual<T>(left: readonly T[], right: readonly T[]): boolean {
 
 function sanitizeHiddenWidgets(rawHidden: unknown): DashboardWidgetId[] {
   if (!Array.isArray(rawHidden)) {
-    return [];
+    return [...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS];
   }
   return rawHidden.filter(isDashboardWidgetId);
 }
@@ -286,7 +290,7 @@ export function useDashboardWidgetOrder() {
 
   function resetAll() {
     syncing = true;
-    hiddenWidgets.value = [];
+    hiddenWidgets.value = [...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS];
     widgetOrder.value = [...DASHBOARD_WIDGET_IDS];
     resetLayoutsToDefaults();
     persistHiddenWidgets();

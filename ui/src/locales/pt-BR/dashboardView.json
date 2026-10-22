@@ -97,7 +97,14 @@
       "updatesAvailable": "Atualizações disponíveis",
       "updateDetail": "{fresh} novas · {mature} maduras",
       "securityIssues": "Problemas de segurança",
-      "registries": "Registries"
+      "registries": "Registries",
+      "images": "Imagens",
+      "imageDetail": "{count} com atualizações",
+      "triggers": "Triggers",
+      "triggerDetail": "{actions} ações · {notifications} notificações",
+      "watchers": "Watchers",
+      "watcherDetailHealthy": "Todos conectados",
+      "watcherDetailDisconnected": "{healthy} conectados · {disconnected} desconectados"
     },
     "updateKind": {
       "major": "Principal",
@@ -120,7 +127,19 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "Imagens",
+      "statTriggers": "Triggers",
+      "statWatchers": "Watchers",
+      "recentActivity": "Atividade recente"
+    },
+    "recentActivity": {
+      "title": "Atividade recente",
+      "viewAudit": "Ver log de auditoria →",
+      "loading": "Carregando atividade...",
+      "loadFailed": "Falha ao carregar a atividade recente",
+      "empty": "Nenhuma atividade recente",
+      "system": "Sistema"
     }
   }
 }

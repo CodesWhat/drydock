@@ -97,7 +97,14 @@
       "updatesAvailable": "Доступные обновления",
       "updateDetail": "{fresh} новых · {mature} зрелых",
       "securityIssues": "Проблемы безопасности",
-      "registries": "Реестры"
+      "registries": "Реестры",
+      "images": "Образы",
+      "imageDetail": "{count} с обновлениями",
+      "triggers": "Триггеры",
+      "triggerDetail": "{actions} действий · {notifications} уведомлений",
+      "watchers": "Наблюдатели",
+      "watcherDetailHealthy": "Все подключены",
+      "watcherDetailDisconnected": "{healthy} подключено · {disconnected} отключено"
     },
     "updateKind": {
       "major": "Мажорное",
@@ -120,7 +127,19 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "Образы",
+      "statTriggers": "Триггеры",
+      "statWatchers": "Наблюдатели",
+      "recentActivity": "Недавняя активность"
+    },
+    "recentActivity": {
+      "title": "Недавняя активность",
+      "viewAudit": "Открыть журнал аудита →",
+      "loading": "Загрузка активности...",
+      "loadFailed": "Не удалось загрузить недавнюю активность",
+      "empty": "Нет недавней активности",
+      "system": "Система"
     }
   }
 }

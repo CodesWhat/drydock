@@ -97,7 +97,14 @@
       "updatesAvailable": "التحديثات المتاحة",
       "updateDetail": "{fresh} جديدة · {mature} ناضجة",
       "securityIssues": "مشكلات الأمان",
-      "registries": "السجلات"
+      "registries": "السجلات",
+      "images": "الصور",
+      "imageDetail": "{count} لديها تحديثات",
+      "triggers": "المشغّلات",
+      "triggerDetail": "{actions} إجراءات · {notifications} إشعارات",
+      "watchers": "المراقبون",
+      "watcherDetailHealthy": "الكل متصل",
+      "watcherDetailDisconnected": "{healthy} متصل · {disconnected} غير متصل"
     },
     "updateKind": {
       "major": "رئيسي",
@@ -120,7 +127,19 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "الصور",
+      "statTriggers": "المشغّلات",
+      "statWatchers": "المراقبون",
+      "recentActivity": "النشاط الأخير"
+    },
+    "recentActivity": {
+      "title": "النشاط الأخير",
+      "viewAudit": "عرض سجل التدقيق →",
+      "loading": "جارٍ تحميل النشاط...",
+      "loadFailed": "فشل تحميل النشاط الأخير",
+      "empty": "لا يوجد نشاط حديث",
+      "system": "النظام"
     }
   }
 }

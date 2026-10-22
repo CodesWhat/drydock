@@ -774,6 +774,27 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
     };
   }
 
+  if (data.schemaVersion === 12) {
+    // The Images, Triggers and Watchers stat cards and the Recent Activity
+    // widget are opt-in. Hide them once for saved layouts so upgrading never
+    // changes what a user already sees; unhiding them later is preserved.
+    const dashboard = isRecord(data.dashboard) ? data.dashboard : undefined;
+    if (dashboard && Array.isArray(dashboard.hiddenWidgets)) {
+      const hidden = dashboard.hiddenWidgets as unknown[];
+      data = {
+        ...data,
+        dashboard: {
+          ...dashboard,
+          hiddenWidgets: [
+            ...hidden,
+            ...DEFAULTS.dashboard.hiddenWidgets.filter((id) => !hidden.includes(id)),
+          ],
+        },
+      };
+    }
+    data = { ...data, schemaVersion: 13 };
+  }
+
   if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {
     data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
