@@ -908,4 +908,40 @@ describe('Dockercompose Trigger', () => {
 
     expect(updated).toBeUndefined();
   });
+
+  test('recreateReplacementContainerWithCleanup should reattach anonymous volumes via cloneContainer', async () => {
+    const cloneSpy = vi.spyOn(trigger, 'cloneContainer');
+    const createSpy = vi.spyOn(trigger, 'createContainer').mockResolvedValue({ id: 'new' });
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue();
+    const currentContainerSpec = {
+      Name: '/db',
+      Id: 'old',
+      State: { Running: false },
+      Config: { Image: 'postgres:16', Volumes: { '/var/lib/postgresql/data': {} } },
+      HostConfig: { Binds: [] },
+      Mounts: [
+        {
+          Type: 'volume',
+          Name: 'anon-data',
+          Destination: '/var/lib/postgresql/data',
+          RW: true,
+        },
+      ],
+      NetworkSettings: { Networks: {} },
+    };
+
+    await trigger.recreateReplacementContainerWithCleanup(
+      mockDockerApi,
+      currentContainerSpec,
+      'postgres:17',
+      { name: 'db' },
+      mockLog,
+      {},
+    );
+
+    expect(cloneSpy).toHaveBeenCalledTimes(1);
+    expect(createSpy.mock.calls[0][1].HostConfig.Binds).toEqual([
+      'anon-data:/var/lib/postgresql/data',
+    ]);
+  });
 });

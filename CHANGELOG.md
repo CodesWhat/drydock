@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 - `/api/v1/triggers` is deprecated in favor of `/api/v1/actions` and `/api/v1/notification-triggers`. It keeps working and now sends `Deprecation: true` and a `Link: <successor>; rel="successor-version"` header, and logs a one-time warning per process. Removal is planned no earlier than v1.9.0 (see DEPRECATIONS.md).
+- Keep anonymous volumes when recreating a container. Containers whose image declares a `VOLUME` with no named volume or bind mount, such as a default `postgres` or `mysql` setup, came back from an update with a fresh empty volume while the old one, with the data on it, was left orphaned. The docker and dockercompose actions, and self-update, now reattach the existing volume at the same path, as `docker compose up` does.
 
 ### Security
 
