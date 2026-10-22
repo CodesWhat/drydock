@@ -26,7 +26,8 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
 | `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
-| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Allowed automatic-update schedule (checks outside this window are skipped; manual updates are never gated). Matched per minute, so use `*` in the minute field — see [Maintenance window](#maintenance-window) | [Valid CRON expression](https://crontab.guru/) | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Schedule during which drydock may install updates on its own (manual updates are never gated). Matched per minute, so use `*` in the minute field, see [Maintenance window](#maintenance-window) | [Valid CRON expression](https://crontab.guru/) | |
+| `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_SCOPE` | ⚪ | What the window holds back: the whole scheduled scan, or only automatic installs, see [Maintenance window](#maintenance-window) | `scan`, `install` | `scan` |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
 | `DD_WATCHER_{watcher_name}_MATURITY_MODE` | ⚪ | Default maturity policy for containers discovered by this watcher; a container label or UI/API override can replace it | `all`, `mature` | `all` (no gate) |
 | `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
@@ -53,7 +54,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`. On the next restart the controller drops the container records its own watchers used to own, so a container that has moved to an agent is reported by that agent instead of staying stuck on what the controller last saw. Anything set on those records from the UI travels with the container: a snooze, a maturity mode and skipped tags or digests are stashed under the container's Docker id and land on the agent's copy when it reports in.
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
-- When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens. The window gates drydock's own automatic behavior only — manual updates from the UI or API always run. See [Maintenance window](#maintenance-window).
+- When `MAINTENANCE_WINDOW` is configured, drydock skips the scheduled scan outside the window and runs one queued scan when it opens (`MAINTENANCE_WINDOW_SCOPE=scan`, the default). Set `MAINTENANCE_WINDOW_SCOPE=install` to keep scanning on the `CRON` and defer only the automatic install, which drydock then applies as soon as the window opens. Either way the window gates drydock's own automatic behavior only. Manual updates from the UI or API always run. See [Maintenance window](#maintenance-window).
 - `wud.*` labels are ignored as of v1.6. To rewrite old compose files, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 - The watcher fan-out is capped at **10 concurrent `watchContainer` invocations** per cron cycle. On inventories with 40–200 containers this prevents a burst of simultaneous registry calls that would trigger rate limits despite the token bucket.
@@ -685,16 +686,29 @@ docker run \
 
 ### Maintenance window
 
-A maintenance window restricts **when drydock is allowed to act on its own**. Outside the window, scheduled checks are skipped and automatic updates are deferred until the window next opens. Detection is not lost: drydock queues one pending check and runs it as soon as the window opens.
+A maintenance window restricts **when drydock is allowed to act on an update by itself**. That covers every action trigger, not only the ones that install an image: `docker` and `dockercompose` apply the update, and `command` runs the shell command you attached to it. Notification triggers are never gated, so drydock still tells you about an update the moment it finds one.
+
+Outside the window the action is deferred rather than dropped, and drydock arms a catch-up that checks once a minute. When the window opens the catch-up re-runs the watcher's scan, so a trigger in `simple` or `batch` mode acts on that scan. A trigger in `digest` mode is told the window opened and flushes the updates it deferred right then, rather than holding them until its next `DIGESTCRON`.
+
+By default the window gates the whole scheduled scan. `MAINTENANCE_WINDOW_SCOPE=install` is opt-in: scheduled scans then keep running on the watcher's own `CRON`, so new containers still appear, container state in the UI stays current, and update notifications still go out at the moment an update is found rather than hours later. `MAINTENANCE_WINDOW_SCOPE` chooses between the two:
+
+| `MAINTENANCE_WINDOW_SCOPE` | What the window holds back |
+| --- | --- |
+| `install` (opt-in) | Automatic installs only. Discovery, registry checks, container-state refresh and update notifications all run on the watcher's `CRON` regardless of the window. A deferred install is applied when the window opens. |
+| `scan` (default) | The whole scheduled scan. Outside the window nothing is looked at: no discovery, no state refresh, no notifications. One pending scan is queued and replayed when the window opens. |
+
+The default is unchanged from earlier releases. Set `MAINTENANCE_WINDOW_SCOPE=install` to opt in to install-only gating.
+
+The hold applies to containers on the controller's own watchers. A container watched by a remote agent is not deferred yet: the container list and the update dialog show the window state the agent reports, but the controller does not hold its automatic updates back.
 
 <Callout type="warn" title="The window gates the whole scheduled scan, not just installing an update">
-Today, `MAINTENANCE_WINDOW` gates the entire scheduled watcher cycle, container discovery and registry checks, not only the step that installs an update. A closed window means the watcher does not run at all on its schedule, with consequences beyond deferred updates:
+With the default `MAINTENANCE_WINDOW_SCOPE=scan`, `MAINTENANCE_WINDOW` gates the entire scheduled watcher cycle, container discovery and registry checks, not only the step that installs an update. A closed window means the watcher does not run at all on its schedule, with consequences beyond deferred updates:
 
 - **New containers don't show up.** A container created outside the window is invisible in the UI and API until the next window opens and the queued check runs.
 - **Container state goes stale.** The UI shows whatever the last scan saw. If a container was stopped during the last window and you stop or start it again outside the window, drydock's records don't reflect the change until the next scan, a container drydock still thinks is stopped, but that's actually running, will fail a **Start** action because Docker refuses to start a container that's already running.
 - **Update notifications are deferred too**, along with the update itself, since they fire from the same scan.
 
-Separating detection from the installation step, so discovery and registry checks keep running on schedule and only the actual install waits for the window, is planned but not shipped.
+To keep discovery and registry checks running on schedule so only the actual install waits for the window, set `MAINTENANCE_WINDOW_SCOPE=install`.
 </Callout>
 
 The window never applies to you. **Manual updates from the UI or API are not gated by it** — the container's Update action stays available at any hour. When you use it outside the window, the confirm dialog notes that the update is currently policy-blocked with _"Outside maintenance window — auto update deferred until the window opens"_ and the button reads **Update anyway**. That is a heads-up, not a refusal. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility#maintenance-window-closed-in-the-update-dialog).
@@ -744,6 +758,8 @@ A minute-precise expression still works if your watcher `CRON` ticks on exactly 
 </Callout>
 
 The evaluated timezone is `MAINTENANCE_WINDOW_TZ`, defaulting to `UTC` — not the host clock or your browser. The dashboard shows which watchers have a window and when the next one opens.
+
+`dd_watcher_maintenance_deferred_updates_total{type,name}` counts the automatic updates the window held back, one per container per dispatch evaluation, including a container held back because something it depends on was. `dd_watcher_maintenance_skip_total{type,name}` keeps its old meaning, one per skipped scan cycle, so it only moves under `MAINTENANCE_WINDOW_SCOPE=scan` (the default).
 
 ## Image Set Presets
 

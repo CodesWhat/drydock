@@ -38,6 +38,7 @@ import {
   fixableColor,
   fixablePercent,
   highestSeverity,
+  providerTooltip as buildProviderTooltip,
   severityColor,
   severityIcon,
   severityLabel,
@@ -90,6 +91,13 @@ function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): st
 }
 
 type SecurityAsset = SecurityRuntimeStatus['assets'][number];
+
+function providerTooltip(
+  provider: SecurityRuntimeStatus['providers'][number],
+  assets: SecurityAsset[],
+): string {
+  return buildProviderTooltip(provider, assets, t);
+}
 
 function assetLifecycleOperation(asset: SecurityAsset): 'pull' | 'warm' {
   return asset.state === 'ready' ? 'warm' : 'pull';
@@ -719,7 +727,7 @@ onUnmounted(() => {
                   :tone="runtimeToolTone(provider.status)"
                   :label="provider.provider"
                   size="xs"
-                  v-tooltip.top="provider.message" />
+                  v-tooltip.top="providerTooltip(provider, runtimeStatus.assets)" />
                 <AppButton
                   v-for="asset in runtimeStatus.assets"
                   :key="`asset-${asset.provider}`"

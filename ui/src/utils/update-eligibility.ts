@@ -123,6 +123,30 @@ export function findBackendMaturityBlocked(
   );
 }
 
+/**
+ * Earliest `liftableAt` among the age maturity blockers, or undefined when
+ * none carries a parseable timestamp. Drives the list/card/dashboard unlock countdowns.
+ */
+export function findMaturityLiftableAt(
+  container: { updateEligibility?: unknown } | Record<string, unknown>,
+): string | undefined {
+  const eligibility = (container as { updateEligibility?: unknown }).updateEligibility;
+  if (!eligibility || typeof eligibility !== 'object') return undefined;
+  const blockers = (eligibility as { blockers?: unknown }).blockers;
+  if (!Array.isArray(blockers)) return undefined;
+  let earliest: { raw: string; ms: number } | undefined;
+  for (const blocker of blockers) {
+    if (!blocker || typeof blocker !== 'object') continue;
+    const { reason, liftableAt } = blocker as { reason?: unknown; liftableAt?: unknown };
+    if (reason !== 'maturity-not-reached') continue;
+    if (typeof liftableAt !== 'string') continue;
+    const ms = Date.parse(liftableAt);
+    if (!Number.isFinite(ms)) continue;
+    if (!earliest || ms < earliest.ms) earliest = { raw: liftableAt, ms };
+  }
+  return earliest?.raw;
+}
+
 export type UpdateButtonState = 'none' | 'ready' | 'soft' | 'hard';
 
 /**

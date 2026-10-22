@@ -291,6 +291,31 @@ test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () =
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ;
 });
 
+test('getWatcherConfiguration should map the MAINTENANCE_WINDOW_SCOPE alias', async () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '* 2-3 * * *';
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE = 'scan';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations.local.maintenancewindowscope).toStrictEqual('scan');
+  expect(watcherConfigurations.local.maintenancewindow).toStrictEqual('* 2-3 * * *');
+  // The nested parser would otherwise leave dd.watcher.local.maintenance.window.scope behind.
+  expect(watcherConfigurations.local.maintenance).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW;
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_SCOPE;
+});
+
+test('getWatcherConfiguration should ignore a MAINTENANCE_WINDOW_SCOPE alias without a watcher name', async () => {
+  configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_SCOPE = 'scan';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations.maintenancewindowscope).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_MAINTENANCE_WINDOW_SCOPE;
+});
+
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases regardless of insertion order', async () => {
   configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW_TZ = 'UTC';
   configuration.ddEnvVars.DD_WATCHER_REVERSE_MAINTENANCE_WINDOW = '30 1 * * *';
@@ -805,7 +830,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',
@@ -895,7 +920,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',

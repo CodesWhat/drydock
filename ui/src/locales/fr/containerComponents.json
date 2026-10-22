@@ -545,6 +545,7 @@
         "snoozed": "Mises à jour reportées",
         "maturityBlockedSingular": "La politique Mature-only bloque les mises à jour plus récentes que {days} jour",
         "maturityBlockedPlural": "La politique Mature-only bloque les mises à jour plus récentes que {days} jours",
+        "maturityCountdown": "{message}. Débloqué dans {countdown} ({date})",
         "maturityActiveSingular": "Politique Mature-only active ({days} jour d'âge minimal)",
         "maturityActivePlural": "Politique Mature-only active ({days} jours d'âge minimal)",
         "maturityAllowAll": "La politique de maturité autorise les mises à jour",

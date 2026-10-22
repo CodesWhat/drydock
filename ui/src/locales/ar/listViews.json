@@ -272,7 +272,11 @@
       "scannerTooltipServer": "Trivy: {message} · الخادم: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "إنشاء SBOM مُفعَّل ({formats})",
-      "sbomDisabled": "إنشاء SBOM مُعطَّل"
+      "sbomDisabled": "إنشاء SBOM مُعطَّل",
+      "assetVersion": "الإصدار {version}",
+      "assetDigest": "الصورة {digest}",
+      "assetDatabaseUpdated": "تحديث قاعدة البيانات {updatedAt}",
+      "assetCacheUpdated": "تحديث ذاكرة التخزين المؤقت {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "لا توجد بيانات ثغرات بعد",

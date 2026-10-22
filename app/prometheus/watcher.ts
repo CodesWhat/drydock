@@ -2,6 +2,7 @@ import { Counter, Gauge, register } from 'prom-client';
 
 let watchContainerGauge;
 let maintenanceSkipCounter;
+let maintenanceDeferredUpdateCounter;
 let loggerInitFailureCounter;
 
 export function init() {
@@ -24,6 +25,15 @@ export function init() {
     labelNames: ['type', 'name'],
   });
 
+  if (maintenanceDeferredUpdateCounter) {
+    register.removeSingleMetric(maintenanceDeferredUpdateCounter.name);
+  }
+  maintenanceDeferredUpdateCounter = new Counter({
+    name: 'dd_watcher_maintenance_deferred_updates_total',
+    help: 'The number of automatic updates deferred by a maintenance window, one per container per dispatch evaluation, including containers deferred because a dependency was deferred',
+    labelNames: ['type', 'name'],
+  });
+
   if (loggerInitFailureCounter) {
     register.removeSingleMetric(loggerInitFailureCounter.name);
   }
@@ -40,6 +50,10 @@ export function getWatchContainerGauge() {
 
 export function getMaintenanceSkipCounter() {
   return maintenanceSkipCounter;
+}
+
+export function getMaintenanceDeferredUpdateCounter() {
+  return maintenanceDeferredUpdateCounter;
 }
 
 export function getLoggerInitFailureCounter() {

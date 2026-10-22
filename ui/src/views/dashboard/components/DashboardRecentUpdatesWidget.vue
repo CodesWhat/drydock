@@ -5,6 +5,9 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useNow } from '@/composables/useNow';
+import { formatLiftCountdown } from '@/composables/useUpdateStatus';
+import { findMaturityLiftableAt } from '@/utils/update-eligibility';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
 const { t } = useI18n();
@@ -136,6 +139,28 @@ const dashboardUpdateSequenceHeadPosition = computed<number | null>(() => {
   }
   return headPosition;
 });
+
+const nowMs = useNow(60_000, () =>
+  props.recentUpdates.some((row) => getRowMaturityLiftableAt(row)),
+);
+
+function getRowMaturityLiftableAt(row: object): string | undefined {
+  return (row as { status?: unknown }).status === 'maturity-blocked'
+    ? findMaturityLiftableAt(row as Record<string, unknown>)
+    : undefined;
+}
+
+function getRowMaturityCountdown(row: object): string | undefined {
+  const liftableAt = getRowMaturityLiftableAt(row);
+  if (!liftableAt) {
+    return undefined;
+  }
+  return t('dashboardView.recentUpdates.maturityCountdown', {
+    // liftableAt was validated as parseable by findMaturityLiftableAt, so a countdown always exists.
+    countdown: formatLiftCountdown(liftableAt, nowMs.value),
+    date: new Date(liftableAt).toLocaleString(),
+  });
+}
 
 const isDashboardBulkUpdateLocked = computed(
   () =>
@@ -366,6 +391,13 @@ function updateKindInitial(kind?: string): string {
                   <div class="font-medium dd-text leading-tight truncate">{{ row.name }}</div>
                 </div>
                 <div class="text-2xs dd-text-muted mt-0.5 truncate">{{ row.image }}</div>
+                <div v-if="getRowMaturityCountdown(row)"
+                     class="text-2xs mt-0.5 truncate"
+                     style="color: var(--dd-primary);"
+                     data-test="dashboard-maturity-countdown"
+                     v-tooltip.top="getRowMaturityCountdown(row)">
+                  {{ getRowMaturityCountdown(row) }}
+                </div>
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
                   {{ row.registryError }}
                 </div>

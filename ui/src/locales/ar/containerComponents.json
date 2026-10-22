@@ -545,6 +545,7 @@
         "snoozed": "التحديثات مؤجلة",
         "maturityBlockedSingular": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} يوم",
         "maturityBlockedPlural": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} أيام",
+        "maturityCountdown": "{message}. يُفتح خلال {countdown} ({date})",
         "maturityActiveSingular": "سياسة الناضج فقط نشطة (الحد الأدنى للعمر {days} يوم)",
         "maturityActivePlural": "سياسة الناضج فقط نشطة (الحد الأدنى للعمر {days} أيام)",
         "maturityAllowAll": "سياسة النضج تسمح بجميع التحديثات",

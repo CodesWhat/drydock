@@ -43,6 +43,7 @@
       "updateAll": "すべて更新",
       "noUpdates": "利用可能な更新はありません",
       "securityBlocked": "セキュリティによりブロック",
+      "maturityCountdown": "{countdown} 後に解除 ({date})",
       "updateContainer": "コンテナを更新",
       "compactSingle": "{count} 件の更新が利用可能",
       "compactPlural": "{count} 件の更新が利用可能",

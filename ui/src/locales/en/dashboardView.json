@@ -43,6 +43,7 @@
       "updateAll": "Update all",
       "noUpdates": "No updates available",
       "securityBlocked": "Security blocked",
+      "maturityCountdown": "Unlocks in {countdown} ({date})",
       "updateContainer": "Update container",
       "compactSingle": "{count} update available",
       "compactPlural": "{count} updates available",

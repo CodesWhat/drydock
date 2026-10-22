@@ -43,6 +43,7 @@
       "updateAll": "Tümünü güncelle",
       "noUpdates": "Güncelleme yok",
       "securityBlocked": "Güvenlik engellendi",
+      "maturityCountdown": "{countdown} sonra açılır ({date})",
       "updateContainer": "Kapsayıcıyı güncelle",
       "compactSingle": "{count} güncellemesi mevcut",
       "compactPlural": "{count} güncellemeleri mevcut",

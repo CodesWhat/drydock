@@ -545,6 +545,7 @@
         "snoozed": "Оновлення відкладено",
         "maturityBlockedSingular": "Політика «лише зрілі» блокує оновлення, молодші за {days} день",
         "maturityBlockedPlural": "Політика «лише зрілі» блокує оновлення, молодші за {days} днів",
+        "maturityCountdown": "{message}. Розблокується через {countdown} ({date})",
         "maturityActiveSingular": "Політика «лише зрілі» активна (мінімальний вік {days} день)",
         "maturityActivePlural": "Політика «лише зрілі» активна (мінімальний вік {days} днів)",
         "maturityAllowAll": "Політика зрілості дозволяє всі оновлення",

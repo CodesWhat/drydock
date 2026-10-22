@@ -272,7 +272,11 @@
       "scannerTooltipServer": "Trivy：{message} · 伺服器：{server}",
       "cosignTooltip": "Cosign：{message}",
       "sbomEnabled": "SBOM 產生已啟用（{formats}）",
-      "sbomDisabled": "SBOM 產生已停用"
+      "sbomDisabled": "SBOM 產生已停用",
+      "assetVersion": "版本 {version}",
+      "assetDigest": "映像 {digest}",
+      "assetDatabaseUpdated": "資料庫更新於 {updatedAt}",
+      "assetCacheUpdated": "快取更新於 {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "尚無漏洞資料",

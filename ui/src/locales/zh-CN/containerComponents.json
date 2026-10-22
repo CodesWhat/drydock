@@ -545,6 +545,7 @@
         "snoozed": "更新已推迟",
         "maturityBlockedSingular": "仅成熟策略会阻止低于 {days} 天的更新",
         "maturityBlockedPlural": "仅成熟策略会阻止低于 {days} 天的更新",
+        "maturityCountdown": "{message}。{countdown} 后解锁 ({date})",
         "maturityActiveSingular": "仅成熟策略已启用（最低 {days} 天）",
         "maturityActivePlural": "仅成熟策略已启用（最低 {days} 天）",
         "maturityAllowAll": "成熟度策略允许所有更新",

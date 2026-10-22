@@ -212,6 +212,18 @@ export interface MaturityGateClearedEventPayload {
   clockSource?: string;
 }
 
+/**
+ * A watcher's maintenance window has opened and its catch-up scan has finished, so the
+ * containers whose automatic install was deferred are back in the store with fresh state.
+ *
+ * `watcherId` is the component-registry key of the watcher (`docker.local`,
+ * `my-agent.docker.remote`), which is what a trigger recorded when it deferred, so it can
+ * tell its own window opening from an unrelated watcher's.
+ */
+export interface MaintenanceWindowOpenedEventPayload {
+  watcherId: string;
+}
+
 export interface AgentConnectedEventPayload {
   agentName: string;
   reconnected: boolean;
@@ -268,6 +280,10 @@ const maturityGateClearedHandlers = new Map<
 const securityScanCycleCompleteHandlers = new Map<
   number,
   OrderedEventHandler<SecurityScanCycleCompleteEventPayload>
+>();
+const maintenanceWindowOpenedHandlers = new Map<
+  number,
+  OrderedEventHandler<MaintenanceWindowOpenedEventPayload>
 >();
 const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnectedEventPayload>>();
 const agentDisconnectedHandlers = new Map<
@@ -569,6 +585,31 @@ export function registerSecurityScanCycleComplete(
 }
 
 /**
+ * Emit MaintenanceWindowOpened event. Fired by whichever scan consumed the watcher's armed
+ * catch-up queue, once that scan has finished: the queued catch-up itself when the 60s poll
+ * gets there first, an ordinary cron tick when the cron matches inside the open window. A
+ * digest-mode action trigger holding installs deferred for that watcher can then flush them
+ * into the window instead of waiting for its next digest cron.
+ * @param payload
+ */
+export async function emitMaintenanceWindowOpened(
+  payload: MaintenanceWindowOpenedEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(maintenanceWindowOpenedHandlers, payload);
+}
+
+/**
+ * Register to MaintenanceWindowOpened event.
+ * @param handler
+ */
+export function registerMaintenanceWindowOpened(
+  handler: OrderedEventHandlerFn<MaintenanceWindowOpenedEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(maintenanceWindowOpenedHandlers, handler, options);
+}
+
+/**
  * Emit AgentConnected event.
  * @param payload
  */
@@ -789,6 +830,7 @@ export function clearAllListenersForTests(): void {
   containerHealthTransitionHandlers.clear();
   maturityGateClearedHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
+  maintenanceWindowOpenedHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
   agentStatsChangedHandlers.clear();

@@ -545,6 +545,7 @@
         "snoozed": "Updates snoozed",
         "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
         "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
+        "maturityCountdown": "{message}. Unlocks in {countdown} ({date})",
         "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
         "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
         "maturityAllowAll": "Maturity policy allows all updates",

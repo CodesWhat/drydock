@@ -43,6 +43,7 @@
       "updateAll": "Alle aktualisieren",
       "noUpdates": "Keine Updates verfügbar",
       "securityBlocked": "Durch Sicherheit blockiert",
+      "maturityCountdown": "Entsperrt in {countdown} ({date})",
       "updateContainer": "Container aktualisieren",
       "compactSingle": "{count} Update verfügbar",
       "compactPlural": "{count} Updates verfügbar",

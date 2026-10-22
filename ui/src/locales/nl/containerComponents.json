@@ -545,6 +545,7 @@
         "snoozed": "Updates gesnoozed",
         "maturityBlockedSingular": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dag",
         "maturityBlockedPlural": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dagen",
+        "maturityCountdown": "{message}. Ontgrendelt over {countdown} ({date})",
         "maturityActiveSingular": "Alleen-rijp-beleid actief (minimumleeftijd {days} dag)",
         "maturityActivePlural": "Alleen-rijp-beleid actief (minimumleeftijd {days} dagen)",
         "maturityAllowAll": "Volwassenheidsbeleid staat alle updates toe",

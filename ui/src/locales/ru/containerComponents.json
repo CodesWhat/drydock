@@ -545,6 +545,7 @@
         "snoozed": "Обновления отложены",
         "maturityBlockedSingular": "Политика «Только зрелые» блокирует обновления младше {days} дня",
         "maturityBlockedPlural": "Политика «Только зрелые» блокирует обновления младше {days} дней",
+        "maturityCountdown": "{message}. Разблокируется через {countdown} ({date})",
         "maturityActiveSingular": "Активна политика «Только зрелые» (минимальный возраст — {days} день)",
         "maturityActivePlural": "Активна политика «Только зрелые» (минимальный возраст — {days} дней)",
         "maturityAllowAll": "Политика зрелости разрешает все обновления",

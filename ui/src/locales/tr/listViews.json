@@ -272,7 +272,11 @@
       "scannerTooltipServer": "Trivy: {message} · sunucu: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM oluşturma etkin ({formats})",
-      "sbomDisabled": "SBOM oluşturma devre dışı"
+      "sbomDisabled": "SBOM oluşturma devre dışı",
+      "assetVersion": "Sürüm {version}",
+      "assetDigest": "İmaj {digest}",
+      "assetDatabaseUpdated": "Veritabanı güncellendi {updatedAt}",
+      "assetCacheUpdated": "Önbellek güncellendi {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Henüz güvenlik açığı verisi yok",

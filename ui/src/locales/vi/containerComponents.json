@@ -545,6 +545,7 @@
         "snoozed": "Cập nhật đã hoãn",
         "maturityBlockedSingular": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
         "maturityBlockedPlural": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
+        "maturityCountdown": "{message}. Mở khóa sau {countdown} ({date})",
         "maturityActiveSingular": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityActivePlural": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityAllowAll": "Chính sách độ chín cho phép tất cả cập nhật",

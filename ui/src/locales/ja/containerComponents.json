@@ -545,6 +545,7 @@
         "snoozed": "更新はスヌーズされています",
         "maturityBlockedSingular": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
         "maturityBlockedPlural": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
+        "maturityCountdown": "{message}。{countdown} 後に解除 ({date})",
         "maturityActiveSingular": "成熟のみポリシーが有効です（最低経過日数 {days} 日）",
         "maturityActivePlural": "成熟のみポリシーが有効です（最低経過日数 {days} 日）",
         "maturityAllowAll": "成熟度ポリシーはすべての更新を許可しています",

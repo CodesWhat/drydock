@@ -545,6 +545,7 @@
         "snoozed": "업데이트 일시 중지됨",
         "maturityBlockedSingular": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
         "maturityBlockedPlural": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
+        "maturityCountdown": "{message}. {countdown} 후 잠금 해제 ({date})",
         "maturityActiveSingular": "기존만 정책 활성화됨 (최소 {days}일 경과)",
         "maturityActivePlural": "기존만 정책 활성화됨 (최소 {days}일 경과)",
         "maturityAllowAll": "성숙도 정책이 모든 업데이트를 허용합니다",
