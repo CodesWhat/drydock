@@ -5,7 +5,8 @@
       "detailLoadFailed": "Échec du chargement de l’approbation",
       "approveFailed": "Échec de l’approbation de la mise à jour",
       "rejectFailed": "Échec du rejet de la mise à jour",
-      "deferFailed": "Échec du report de la mise à jour"
+      "deferFailed": "Échec du report de la mise à jour",
+      "bulkFailed": "Échec du traitement des mises à jour sélectionnées"
     },
     "ofCount": "{count} affichée | {count} affichées",
     "refresh": "Actualiser",
@@ -70,6 +71,18 @@
         "header": "Reporter la mise à jour",
         "message": "Reporter la mise à jour de {name} de {days} jours ?",
         "acceptLabel": "Reporter"
+      },
+      "bulkApprove": {
+        "header": "Approuver les mises à jour sélectionnées",
+        "message": "Approuver les mises à jour sélectionnées ({count}) ? Chacune est revérifiée et lancée comme avec le bouton Approuver, donc une mise à jour que ce bouton refuserait est signalée au lieu d’être appliquée.",
+        "acceptLabel": "Approuver la sélection",
+        "holdsSuffix": "\n\nCes mises à jour ont des motifs de mise en attente non résolus que l’approbation outrepasse :\n{list}",
+        "excludedSuffix": "\n\nBloquées et ignorées ({count}) :\n{list}"
+      },
+      "bulkReject": {
+        "header": "Rejeter les mises à jour sélectionnées",
+        "message": "Rejeter les mises à jour sélectionnées ({count}) ? Elles ne seront pas appliquées automatiquement.",
+        "acceptLabel": "Rejeter la sélection"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Mise à jour rejetée pour {name}",
       "rejectFailed": "Impossible de rejeter {name}",
       "deferred": "Mise à jour reportée pour {name}",
-      "deferFailed": "Impossible de reporter {name}"
+      "deferFailed": "Impossible de reporter {name}",
+      "bulkApproved": "Approbation demandée pour les mises à jour sélectionnées : {count}",
+      "bulkRejected": "Mises à jour sélectionnées rejetées : {count}",
+      "bulkPartialFailure": "Certaines mises à jour n’ont pas pu être traitées ({count}) : {list}",
+      "bulkFailed": "Échec du traitement des mises à jour sélectionnées"
+    },
+    "bulk": {
+      "selectRow": "Sélectionner {name}",
+      "selectAll": "Sélectionner toutes les approbations visibles",
+      "barLabel": "Approbations sélectionnées",
+      "count": "Sélection : {count}",
+      "approveSelected": "Approuver la sélection",
+      "rejectSelected": "Rejeter la sélection",
+      "clear": "Effacer la sélection"
     }
   }
 }

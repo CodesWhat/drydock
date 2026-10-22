@@ -5,7 +5,8 @@
       "detailLoadFailed": "승인을 불러오지 못했습니다",
       "approveFailed": "업데이트를 승인하지 못했습니다",
       "rejectFailed": "업데이트를 거부하지 못했습니다",
-      "deferFailed": "업데이트를 연기하지 못했습니다"
+      "deferFailed": "업데이트를 연기하지 못했습니다",
+      "bulkFailed": "선택한 업데이트를 처리하지 못했습니다"
     },
     "ofCount": "{count}개 표시",
     "refresh": "새로 고침",
@@ -70,6 +71,18 @@
         "header": "업데이트 연기",
         "message": "{name}의 업데이트를 {days}일 동안 연기하시겠습니까?",
         "acceptLabel": "연기"
+      },
+      "bulkApprove": {
+        "header": "선택한 업데이트 승인",
+        "message": "선택한 업데이트({count})를 승인하시겠습니까? 각 업데이트는 다시 확인되어 승인 버튼과 같은 방식으로 실행되므로, 승인 버튼이 거부했을 업데이트는 적용되지 않고 보고됩니다.",
+        "acceptLabel": "선택 항목 승인",
+        "holdsSuffix": "\n\n이 업데이트에는 승인 시 무시되는 미해결 보류 사유가 있습니다:\n{list}",
+        "excludedSuffix": "\n\n차단되어 건너뜀({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "선택한 업데이트 거부",
+        "message": "선택한 업데이트({count})를 거부하시겠습니까? 자동으로 적용되지 않습니다.",
+        "acceptLabel": "선택 항목 거부"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "{name}의 업데이트를 거부했습니다",
       "rejectFailed": "{name}을(를) 거부하지 못했습니다",
       "deferred": "{name}의 업데이트를 연기했습니다",
-      "deferFailed": "{name}을(를) 연기하지 못했습니다"
+      "deferFailed": "{name}을(를) 연기하지 못했습니다",
+      "bulkApproved": "선택한 업데이트의 승인을 요청했습니다: {count}",
+      "bulkRejected": "선택한 업데이트를 거부했습니다: {count}",
+      "bulkPartialFailure": "일부 업데이트를 처리하지 못했습니다({count}): {list}",
+      "bulkFailed": "선택한 업데이트를 처리하지 못했습니다"
+    },
+    "bulk": {
+      "selectRow": "{name} 선택",
+      "selectAll": "표시된 승인 모두 선택",
+      "barLabel": "선택한 승인",
+      "count": "선택됨: {count}",
+      "approveSelected": "선택 항목 승인",
+      "rejectSelected": "선택 항목 거부",
+      "clear": "선택 해제"
     }
   }
 }

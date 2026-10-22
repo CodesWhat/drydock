@@ -5,7 +5,8 @@
       "detailLoadFailed": "Onay yüklenemedi",
       "approveFailed": "Güncelleme onaylanamadı",
       "rejectFailed": "Güncelleme reddedilemedi",
-      "deferFailed": "Güncelleme ertelenemedi"
+      "deferFailed": "Güncelleme ertelenemedi",
+      "bulkFailed": "Seçili güncellemeler karara bağlanamadı"
     },
     "ofCount": "Gösterilen: {count}",
     "refresh": "Yenile",
@@ -70,6 +71,18 @@
         "header": "Güncellemeyi ertele",
         "message": "{name} güncellemesi {days} gün ertelensin mi?",
         "acceptLabel": "Ertele"
+      },
+      "bulkApprove": {
+        "header": "Seçili güncellemeleri onayla",
+        "message": "Seçili güncellemeler ({count}) onaylansın mı? Her biri yeniden denetlenir ve Onayla düğmesiyle aynı şekilde başlatılır; bu düğmenin reddedeceği bir güncelleme uygulanmaz, bildirilir.",
+        "acceptLabel": "Seçilenleri onayla",
+        "holdsSuffix": "\n\nBu güncellemelerin, onaylamanın geçersiz kılacağı açık bekletme nedenleri var:\n{list}",
+        "excludedSuffix": "\n\nEngellendi ve atlandı ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Seçili güncellemeleri reddet",
+        "message": "Seçili güncellemeler ({count}) reddedilsin mi? Otomatik olarak uygulanmayacak.",
+        "acceptLabel": "Seçilenleri reddet"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "{name} güncellemesi reddedildi",
       "rejectFailed": "{name} reddedilemedi",
       "deferred": "{name} güncellemesi ertelendi",
-      "deferFailed": "{name} ertelenemedi"
+      "deferFailed": "{name} ertelenemedi",
+      "bulkApproved": "Seçili güncellemeler için onay istendi: {count}",
+      "bulkRejected": "Seçili güncellemeler reddedildi: {count}",
+      "bulkPartialFailure": "Bazı güncellemeler karara bağlanamadı ({count}): {list}",
+      "bulkFailed": "Seçili güncellemeler karara bağlanamadı"
+    },
+    "bulk": {
+      "selectRow": "{name} öğesini seç",
+      "selectAll": "Görünen tüm onayları seç",
+      "barLabel": "Seçili onaylar",
+      "count": "Seçili: {count}",
+      "approveSelected": "Seçilenleri onayla",
+      "rejectSelected": "Seçilenleri reddet",
+      "clear": "Seçimi temizle"
     }
   }
 }

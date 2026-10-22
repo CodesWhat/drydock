@@ -5,7 +5,8 @@
       "detailLoadFailed": "承認を読み込めませんでした",
       "approveFailed": "更新を承認できませんでした",
       "rejectFailed": "更新を拒否できませんでした",
-      "deferFailed": "更新を延期できませんでした"
+      "deferFailed": "更新を延期できませんでした",
+      "bulkFailed": "選択した更新を処理できませんでした。"
     },
     "ofCount": "{count} 件表示",
     "refresh": "再読み込み",
@@ -70,6 +71,18 @@
         "header": "更新を延期",
         "message": "{name} の更新を {days} 日間延期しますか？",
         "acceptLabel": "延期"
+      },
+      "bulkApprove": {
+        "header": "選択した更新を承認",
+        "message": "選択した更新 ({count}) を承認しますか？各更新は再確認され、承認ボタンと同じ方法で実行されます。承認ボタンが拒否する更新は、適用されずに報告されます。",
+        "acceptLabel": "選択を承認",
+        "holdsSuffix": "\n\nこれらの更新には未解決の保留理由があり、承認するとそれらを上書きします:\n{list}",
+        "excludedSuffix": "\n\nブロックされたためスキップ ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "選択した更新を拒否",
+        "message": "選択した更新 ({count}) を拒否しますか？これらは自動的には適用されなくなります。",
+        "acceptLabel": "選択を拒否"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "{name} の更新を拒否しました",
       "rejectFailed": "{name} を拒否できませんでした",
       "deferred": "{name} の更新を延期しました",
-      "deferFailed": "{name} を延期できませんでした"
+      "deferFailed": "{name} を延期できませんでした",
+      "bulkApproved": "選択した更新の承認をリクエストしました: {count}",
+      "bulkRejected": "選択した更新を拒否しました: {count}",
+      "bulkPartialFailure": "一部の更新を処理できませんでした ({count}): {list}",
+      "bulkFailed": "選択した更新を処理できませんでした"
+    },
+    "bulk": {
+      "selectRow": "{name} を選択",
+      "selectAll": "表示中の承認をすべて選択",
+      "barLabel": "選択した承認",
+      "count": "選択中: {count}",
+      "approveSelected": "選択を承認",
+      "rejectSelected": "選択を拒否",
+      "clear": "選択を解除"
     }
   }
 }

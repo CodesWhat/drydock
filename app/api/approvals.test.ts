@@ -141,7 +141,7 @@ function getHandler(path: string) {
 
 function getPostHandler(path: string) {
   approvalsRouter.init();
-  return mockRouter.post.mock.calls.find((call) => call[0] === path)?.[1];
+  return mockRouter.post.mock.calls.find((call) => call[0] === path)?.at(-1);
 }
 
 const DECISION_PATHS = ['/:id/approve', '/:id/reject', '/:id/defer'] as const;
@@ -216,7 +216,17 @@ describe('init', () => {
   test('registers the three decision routes', () => {
     approvalsRouter.init();
 
-    expect(mockRouter.post.mock.calls.map(([path]) => path)).toStrictEqual([...DECISION_PATHS]);
+    expect(mockRouter.post.mock.calls.map(([path]) => path)).toStrictEqual([
+      '/bulk',
+      ...DECISION_PATHS,
+    ]);
+  });
+
+  test('puts the bulk confirmation guard ahead of the scoped bulk handler', () => {
+    approvalsRouter.init();
+
+    const bulkCall = mockRouter.post.mock.calls.find(([path]) => path === '/bulk');
+    expect(bulkCall).toHaveLength(3);
   });
 });
 
@@ -940,6 +950,372 @@ describe('POST /:id/defer', () => {
 // Edge case 15. `notify` means Drydock will not apply updates, so the admission path 409s
 // every approve and the queue does not pretend otherwise. Reject and defer are pure policy
 // writes that touch no container, so both stay live.
+describe('POST /bulk', () => {
+  const NEXT_IDS = ['approval-1', 'approval-2'];
+
+  function getGuard() {
+    approvalsRouter.init();
+    return mockRouter.post.mock.calls.find(([path]) => path === '/bulk')?.[1];
+  }
+
+  async function callBulk(body: unknown, user?: unknown) {
+    const res = createMockResponse();
+    await getPostHandler('/bulk')({ body, user }, res);
+    return {
+      res,
+      status: vi.mocked(res.status).mock.calls[0]?.[0],
+      body: vi.mocked(res.json).mock.calls[0]?.[0],
+    };
+  }
+
+  beforeEach(() => {
+    mockGetApprovalById.mockImplementation((id: string) =>
+      id.startsWith('approval-') ? createRecord({ id, containerId: `container-${id}` }) : undefined,
+    );
+    mockGetContainer.mockImplementation((id: string) => createContainer({ id, name: id }));
+    mockDecideApprovalIfPending.mockImplementation(
+      (id: string, patch: Partial<ApprovalRecord>) => ({
+        status: 'decided',
+        record: { ...createRecord({ id, containerId: `container-${id}` }), ...patch },
+      }),
+    );
+  });
+
+  describe('confirmation guard', () => {
+    function runGuard(body: unknown, header?: string) {
+      const res = createMockResponse();
+      const next = vi.fn();
+      getGuard()(
+        { body, headers: header === undefined ? {} : { 'x-dd-confirm-action': header } },
+        res,
+        next,
+      );
+      return { res, next };
+    }
+
+    test('demands the confirmation header for approve', () => {
+      const { res, next } = runGuard({ action: 'approve', ids: ['a'] });
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(428);
+      expect(vi.mocked(res.json).mock.calls[0][0]).toStrictEqual({
+        error: 'Confirmation required: X-DD-Confirm-Action=approvals-bulk-approve',
+      });
+    });
+
+    test('lets a confirmed approve through', () => {
+      const { next } = runGuard({ action: 'approve' }, 'approvals-bulk-approve');
+
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    test.each(['reject', 'defer', undefined])('does not demand it for %s', (action) => {
+      const { next } = runGuard({ action });
+
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not demand it when there is no body', () => {
+      const { next } = runGuard(undefined);
+
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('validation', () => {
+    test.each([
+      ['no body', undefined],
+      ['an array body', []],
+      ['missing ids', { action: 'reject' }],
+      ['ids not an array', { ids: 'approval-1', action: 'reject' }],
+      ['empty ids', { ids: [], action: 'reject' }],
+      ['a non-string id', { ids: ['approval-1', 7], action: 'reject' }],
+      ['a blank id', { ids: ['  '], action: 'reject' }],
+      [
+        'more than 200 ids',
+        { ids: Array.from({ length: 201 }, (_, i) => `a-${i}`), action: 'reject' },
+      ],
+    ])('400s on %s', async (_label, body) => {
+      const { status } = await callBulk(body);
+
+      expect(status).toBe(400);
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+    });
+
+    test('names the id bounds in the message', async () => {
+      const { body } = await callBulk({ ids: [], action: 'reject' });
+
+      expect(body).toStrictEqual({
+        error: 'Invalid ids; expected a non-empty array of at most 200 approval ids',
+      });
+    });
+
+    test('accepts exactly 200 ids', async () => {
+      const ids = Array.from({ length: 200 }, (_, i) => `approval-${i}`);
+
+      const { status, body } = await callBulk({ ids, action: 'reject' });
+
+      expect(status).toBe(200);
+      expect(body.accepted).toHaveLength(200);
+    });
+
+    test.each([undefined, 'delete', 4])('400s on action %s', async (action) => {
+      const { status, body } = await callBulk({ ids: ['approval-1'], action });
+
+      expect(status).toBe(400);
+      expect(body).toStrictEqual({ error: 'Invalid action; expected approve, reject, or defer' });
+    });
+
+    test('400s on a property the route does not read', async () => {
+      const { status } = await callBulk({ ids: ['approval-1'], action: 'reject', extra: 1 });
+
+      expect(status).toBe(400);
+    });
+
+    test('400s on a bad note', async () => {
+      const { status } = await callBulk({ ids: ['approval-1'], action: 'reject', note: 3 });
+
+      expect(status).toBe(400);
+    });
+
+    test.each([{ until: '2999-01-01T00:00:00Z' }, { days: 3 }])(
+      '400s on %j with an action other than defer',
+      async (extra) => {
+        const { status, body } = await callBulk({
+          ids: ['approval-1'],
+          action: 'reject',
+          ...extra,
+        });
+
+        expect(status).toBe(400);
+        expect(body.error).toContain('only valid with action defer');
+      },
+    );
+
+    test('400s on a bad defer expiry before touching any row', async () => {
+      const { status } = await callBulk({ ids: ['approval-1'], action: 'defer', days: 0 });
+
+      expect(status).toBe(400);
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+    });
+
+    test('403s an approve when container actions are disabled, before touching any row', async () => {
+      mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: false } });
+
+      const { status } = await callBulk({ ids: ['approval-1'], action: 'approve' });
+
+      expect(status).toBe(403);
+      expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+    });
+
+    test('lets reject and defer run when container actions are disabled, as the single routes do', async () => {
+      mockGetServerConfiguration.mockReturnValue({ feature: { containeractions: false } });
+
+      expect((await callBulk({ ids: ['approval-1'], action: 'reject' })).status).toBe(200);
+      expect((await callBulk({ ids: ['approval-1'], action: 'defer' })).status).toBe(200);
+    });
+  });
+
+  describe('approve', () => {
+    test('dispatches every row and reports an operation per id', async () => {
+      mockRequestContainerUpdate
+        .mockResolvedValueOnce({ operationId: 'op-1' })
+        .mockResolvedValueOnce({ operationId: 'op-2' });
+
+      const { status, body } = await callBulk(
+        { ids: NEXT_IDS, action: 'approve', note: 'batch' },
+        { username: 'scott' },
+      );
+
+      expect(status).toBe(200);
+      expect(body).toStrictEqual({
+        message: 'Approval decisions processed',
+        accepted: [
+          {
+            id: 'approval-1',
+            containerId: 'container-approval-1',
+            containerName: 'nginx',
+            decision: 'approved',
+            operationId: 'op-1',
+          },
+          {
+            id: 'approval-2',
+            containerId: 'container-approval-2',
+            containerName: 'nginx',
+            decision: 'approved',
+            operationId: 'op-2',
+          },
+        ],
+        rejected: [],
+      });
+      expect(mockRequestContainerUpdate).toHaveBeenCalledTimes(2);
+    });
+
+    test('records one audit entry and one event per decided row, attributed to the caller', async () => {
+      await callBulk({ ids: NEXT_IDS, action: 'approve', note: 'batch' }, { username: 'scott' });
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(2);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'update-approved', status: 'success' }),
+      );
+      expect(getAuditDetails()).toMatchObject({ decidedBy: 'scott', note: 'batch' });
+      expect(mockAnnounceApprovalEvent).toHaveBeenCalledTimes(2);
+      expect(mockDecideApprovalIfPending).toHaveBeenCalledWith(
+        'approval-1',
+        expect.objectContaining({
+          decision: 'approved',
+          decidedBy: 'scott',
+          decisionNote: 'batch',
+        }),
+      );
+    });
+
+    test('records anonymous when the request carries no user', async () => {
+      await callBulk({ ids: ['approval-1'], action: 'approve' });
+
+      expect(getReservedPatch()).toMatchObject({ decidedBy: 'anonymous' });
+    });
+
+    test("reports a per-id rejection with the admission path's own status and message", async () => {
+      mockRequestContainerUpdate
+        .mockRejectedValueOnce(new UpdateRequestError(409, 'Update mode is notify'))
+        .mockResolvedValueOnce({ operationId: 'op-2' });
+
+      const { status, body } = await callBulk({ ids: NEXT_IDS, action: 'approve' });
+
+      expect(status).toBe(200);
+      expect(body.rejected).toStrictEqual([
+        { id: 'approval-1', statusCode: 409, message: 'Update mode is notify' },
+      ]);
+      expect(body.accepted).toHaveLength(1);
+      expect(body.accepted[0]).toMatchObject({ id: 'approval-2', operationId: 'op-2' });
+      expect(mockRestoreApproval).toHaveBeenCalledTimes(1);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test('rejects an unknown id, an already decided row and a superseded candidate individually', async () => {
+      mockGetApprovalById.mockImplementation((id: string) =>
+        id === 'gone'
+          ? undefined
+          : createRecord({ id, candidateRef: id === 'moved' ? 'old' : '1.2.4' }),
+      );
+      mockDecideApprovalIfPending.mockImplementation((id: string) =>
+        id === 'taken'
+          ? { status: 'already-decided', record: createRecord({ decision: 'approved' }) }
+          : { status: 'decided', record: createRecord({ id, decision: 'approved' }) },
+      );
+
+      const { body } = await callBulk({
+        ids: ['gone', 'taken', 'moved', 'approval-1'],
+        action: 'approve',
+      });
+
+      expect(body.rejected).toStrictEqual([
+        { id: 'gone', statusCode: 404, message: 'Approval not found' },
+        { id: 'taken', statusCode: 409, message: 'Approval already decided' },
+        { id: 'moved', statusCode: 409, message: 'Approval candidate superseded' },
+      ]);
+      expect(body.accepted.map((entry: { id: string }) => entry.id)).toStrictEqual(['approval-1']);
+    });
+
+    test('collapses duplicate ids so a row is decided once', async () => {
+      const { body } = await callBulk({ ids: ['approval-1', 'approval-1'], action: 'approve' });
+
+      expect(body.accepted).toHaveLength(1);
+      expect(mockDecideApprovalIfPending).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('reject', () => {
+    test('writes the skip policy for each row and reports it', async () => {
+      const { status, body } = await callBulk({ ids: NEXT_IDS, action: 'reject' });
+
+      expect(status).toBe(200);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledTimes(2);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(
+        expect.anything(),
+        'skip-current',
+        {},
+      );
+      expect(body.accepted.map((entry: { decision: string }) => entry.decision)).toStrictEqual([
+        'rejected',
+        'rejected',
+      ]);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(2);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'update-rejected' }),
+      );
+    });
+
+    test('rolls back and reports a row whose policy write is refused, without stopping the rest', async () => {
+      mockApplyContainerUpdatePolicyAction
+        .mockReturnValueOnce({ error: 'No current update available to skip' })
+        .mockImplementation((container: Container) => ({ container }));
+
+      const { body } = await callBulk({ ids: NEXT_IDS, action: 'reject' });
+
+      expect(body.rejected).toStrictEqual([
+        { id: 'approval-1', statusCode: 400, message: 'No current update available to skip' },
+      ]);
+      expect(body.accepted).toHaveLength(1);
+      expect(mockRestoreApproval).toHaveBeenCalledTimes(1);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('defer', () => {
+    test('resolves one expiry and writes it to every row and container', async () => {
+      const until = new Date(Date.now() + 3 * 86_400_000).toISOString();
+      const { status, body } = await callBulk({ ids: NEXT_IDS, action: 'defer', until });
+
+      expect(status).toBe(200);
+      expect(body.accepted).toHaveLength(2);
+      for (const entry of body.accepted) {
+        expect(entry).toMatchObject({ decision: 'deferred', deferredUntil: until });
+      }
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(
+        expect.anything(),
+        'snooze',
+        { snoozeUntil: until },
+      );
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'update-deferred' }),
+      );
+    });
+
+    test('defaults to seven days from now', async () => {
+      const before = Date.now();
+      const { body } = await callBulk({ ids: ['approval-1'], action: 'defer' });
+
+      const deferred = Date.parse(body.accepted[0].deferredUntil);
+      expect(deferred).toBeGreaterThanOrEqual(before + 7 * 86_400_000);
+      expect(deferred).toBeLessThan(Date.now() + 7 * 86_400_000 + 1);
+    });
+  });
+
+  test('the response matches its documented schema', async () => {
+    mockRequestContainerUpdate.mockResolvedValue({ operationId: 'op-1' });
+    const { body } = await callBulk({ ids: ['approval-1', 'gone'], action: 'approve' });
+
+    const validation = validateOpenApiJsonResponse({
+      path: '/api/v1/approvals/bulk',
+      method: 'post',
+      statusCode: '200',
+      payload: body,
+    });
+    expect(validation.errors).toStrictEqual([]);
+    expect(validation.valid).toBe(true);
+  });
+
+  test('is documented with the confirmation header and a 428', () => {
+    const post = openApiDocument.paths['/api/v1/approvals/bulk'].post;
+
+    expect(post.operationId).toBe('bulkDecideApprovals');
+    expect(post.parameters[0].name).toBe('X-DD-Confirm-Action');
+    expect(post.responses[428]).toBeDefined();
+  });
+});
+
 describe('under updateMode notify', () => {
   beforeEach(() => {
     mockGetApprovalById.mockReturnValue(createRecord());

@@ -1364,6 +1364,14 @@ function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
   return parsedUrl;
 }
 
+/**
+ * The validated `DD_PUBLIC_URL` origin, or undefined when it is unset or unsafe. Request-free,
+ * for notifications that have no inbound request to infer a host from.
+ */
+export function getConfiguredPublicUrl(): string | undefined {
+  return parseSafePublicUrlCandidate(ddEnvVars.DD_PUBLIC_URL)?.origin;
+}
+
 export function getPublicUrl(req: Request) {
   const publicUrl = ddEnvVars.DD_PUBLIC_URL;
   const configuredPublicUrl = parseSafePublicUrlCandidate(publicUrl);

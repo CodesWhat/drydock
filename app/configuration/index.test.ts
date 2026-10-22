@@ -1428,6 +1428,27 @@ describe('getSecurityConfiguration', () => {
   });
 });
 
+describe('getConfiguredPublicUrl', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('returns the validated DD_PUBLIC_URL origin', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com/base/';
+    expect(configuration.getConfiguredPublicUrl()).toBe('https://dd.example.com');
+  });
+
+  test('returns undefined when unset', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
+  });
+
+  test('returns undefined when the value is unsafe', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
+  });
+});
+
 describe('getPublicUrl', () => {
   test('should return DD_PUBLIC_URL when set', () => {
     configuration.ddEnvVars.DD_PUBLIC_URL = 'https://my.public.url';

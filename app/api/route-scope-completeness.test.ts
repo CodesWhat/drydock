@@ -124,6 +124,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/approvals/:id/approve → containers:update',
   'POST /api/v1/approvals/:id/defer → containers:update',
   'POST /api/v1/approvals/:id/reject → containers:update',
+  'POST /api/v1/approvals/bulk → containers:update',
   'POST /api/v1/auth/totp-enrollments → session-only',
   'POST /api/v1/auth/totp-recovery-code-sets → session-only',
   'POST /api/v1/config/reload → admin',

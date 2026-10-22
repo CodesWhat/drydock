@@ -5,7 +5,8 @@
       "detailLoadFailed": "Không thể tải phê duyệt",
       "approveFailed": "Không thể phê duyệt bản cập nhật",
       "rejectFailed": "Không thể từ chối bản cập nhật",
-      "deferFailed": "Không thể hoãn bản cập nhật"
+      "deferFailed": "Không thể hoãn bản cập nhật",
+      "bulkFailed": "Không thể xử lý các bản cập nhật đã chọn"
     },
     "ofCount": "Đã hiển thị: {count}",
     "refresh": "Làm mới",
@@ -70,6 +71,18 @@
         "header": "Hoãn cập nhật",
         "message": "Hoãn cập nhật {name} trong {days} ngày?",
         "acceptLabel": "Hoãn"
+      },
+      "bulkApprove": {
+        "header": "Phê duyệt các bản cập nhật đã chọn",
+        "message": "Phê duyệt các bản cập nhật đã chọn ({count})? Mỗi bản được kiểm tra lại và chạy giống như nút Phê duyệt, nên bản cập nhật mà nút đó sẽ từ chối sẽ được báo lại thay vì được áp dụng.",
+        "acceptLabel": "Phê duyệt mục đã chọn",
+        "holdsSuffix": "\n\nCác bản cập nhật này có lý do tạm giữ chưa giải quyết mà việc phê duyệt sẽ bỏ qua:\n{list}",
+        "excludedSuffix": "\n\nBị chặn và bỏ qua ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Từ chối các bản cập nhật đã chọn",
+        "message": "Từ chối các bản cập nhật đã chọn ({count})? Chúng sẽ không được áp dụng tự động.",
+        "acceptLabel": "Từ chối mục đã chọn"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Đã từ chối cập nhật {name}",
       "rejectFailed": "Không thể từ chối {name}",
       "deferred": "Đã hoãn cập nhật {name}",
-      "deferFailed": "Không thể hoãn {name}"
+      "deferFailed": "Không thể hoãn {name}",
+      "bulkApproved": "Đã yêu cầu phê duyệt các bản cập nhật đã chọn: {count}",
+      "bulkRejected": "Đã từ chối các bản cập nhật đã chọn: {count}",
+      "bulkPartialFailure": "Một số bản cập nhật không thể xử lý ({count}): {list}",
+      "bulkFailed": "Không thể xử lý các bản cập nhật đã chọn"
+    },
+    "bulk": {
+      "selectRow": "Chọn {name}",
+      "selectAll": "Chọn tất cả mục phê duyệt đang hiển thị",
+      "barLabel": "Các mục phê duyệt đã chọn",
+      "count": "Đã chọn: {count}",
+      "approveSelected": "Phê duyệt mục đã chọn",
+      "rejectSelected": "Từ chối mục đã chọn",
+      "clear": "Bỏ chọn"
     }
   }
 }

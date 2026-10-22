@@ -22,10 +22,13 @@
  * watch cycle, and the update lifecycle awaits the same emit chain, so a store error here
  * must never propagate into the cycle that produced the report.
  */
+import { redactContainerRuntimeEnv } from '../api/container/shared.js';
+import { getConfiguredPublicUrl, getServerConfiguration } from '../configuration/index.js';
 import {
   type ContainerLifecycleEventPayload,
   type ContainerUpdateAppliedEvent,
   type ContainerUpdateFailedEventPayload,
+  emitApprovalPendingNotification,
   registerContainerRemoved,
   registerContainerReport,
   registerContainerReports,
@@ -157,8 +160,37 @@ function reconcileContainer(reported: Container | undefined): void {
   }
 
   if (findApprovalByContainerAndCandidate(input.containerId, input.candidateRef) === undefined) {
-    announceApprovalEvent('created', insertApproval(input));
+    const inserted = insertApproval(input);
+    announceApprovalEvent('created', inserted);
+    notifyApprovalPending(container, inserted);
   }
+}
+
+/**
+ * Tell the notification system a candidate entered the queue. Called on row insert only, so
+ * the ledger row is the dedupe key and a restart cannot re-notify for a queued candidate.
+ * Dispatched rather than awaited, like the SSE announce: the row is already written and a
+ * notification failure must not become the watch cycle's.
+ */
+function notifyApprovalPending(container: Container, record: ApprovalRecord): void {
+  // A notification asks an operator to act, so it is withheld where approving is refused by
+  // policy: notify mode answers every approve with a 409, and disabled container actions with
+  // a 403. The row still exists for review, and `update-available` still reports the candidate.
+  if (getUpdateMode() === 'notify' || !getServerConfiguration().feature.containeractions) {
+    return;
+  }
+  const publicUrl = getConfiguredPublicUrl();
+  void emitApprovalPendingNotification({
+    container: redactContainerRuntimeEnv({ ...container }),
+    approvalId: record.id,
+    fromRef: record.fromRef,
+    toRef: record.toRef,
+    ...(publicUrl === undefined
+      ? {}
+      : { approvalUrl: `${publicUrl}/approvals?id=${encodeURIComponent(record.id)}` }),
+  }).catch((error) => {
+    log.warn(`Approval pending notification failed: ${getErrorMessage(error)}`);
+  });
 }
 
 function stampOutcome(operationId: string | undefined, outcome: ApprovalOutcome): void {

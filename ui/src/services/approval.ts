@@ -98,6 +98,31 @@ interface ApprovalUpdateAcceptedResponse {
   message?: string;
 }
 
+type ApprovalBulkAction = 'approve' | 'reject';
+
+interface ApprovalBulkAccepted {
+  id: string;
+  containerId: string;
+  containerName: string;
+  decision: Exclude<ApprovalDecision, 'pending'>;
+  operationId?: string;
+  deferredUntil?: string;
+}
+
+interface ApprovalBulkRejected {
+  id: string;
+  statusCode: number;
+  message: string;
+}
+
+export interface ApprovalBulkResponse {
+  accepted: ApprovalBulkAccepted[];
+  rejected: ApprovalBulkRejected[];
+}
+
+/** The server's per-call cap on `ids`; larger selections are sent in several calls. */
+const APPROVAL_BULK_MAX_IDS = 200;
+
 export class ApprovalApiError extends Error {
   statusCode: number;
 
@@ -246,8 +271,59 @@ async function deferApproval(
   );
 }
 
+async function postBulkChunk(
+  ids: string[],
+  action: ApprovalBulkAction,
+  note: string | undefined,
+): Promise<ApprovalBulkResponse> {
+  const response = await fetch(`${APPROVALS_API_BASE}/bulk`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(action === 'approve' ? { 'X-DD-Confirm-Action': 'approvals-bulk-approve' } : {}),
+    },
+    body: JSON.stringify({ ids, action, ...(note !== undefined ? { note } : {}) }),
+  });
+  if (!response.ok) {
+    await throwForResponse(response, 'Bulk approval API', 'approvalsView.httpErrors.bulkFailed');
+  }
+  return readJsonResponse<ApprovalBulkResponse>(response, 'Bulk approval API');
+}
+
+/**
+ * Approve or reject several rows. The server caps one call at 200 ids, so a larger selection
+ * is sent in order as several calls and the results are merged. A failure on the first call
+ * throws, because nothing has been decided yet. A failure on a later call cannot undo the
+ * earlier ones, so its ids are reported as rejected instead of throwing away their result.
+ */
+async function bulkDecideApprovals(
+  ids: string[],
+  action: ApprovalBulkAction,
+  options: { note?: string } = {},
+): Promise<ApprovalBulkResponse> {
+  const merged: ApprovalBulkResponse = { accepted: [], rejected: [] };
+  for (let start = 0; start < ids.length; start += APPROVAL_BULK_MAX_IDS) {
+    const chunk = ids.slice(start, start + APPROVAL_BULK_MAX_IDS);
+    try {
+      const result = await postBulkChunk(chunk, action, options.note);
+      merged.accepted.push(...result.accepted);
+      merged.rejected.push(...result.rejected);
+    } catch (error: unknown) {
+      if (start === 0) {
+        throw error;
+      }
+      const statusCode = error instanceof ApprovalApiError ? error.statusCode : 0;
+      const message = error instanceof Error ? error.message : String(error);
+      merged.rejected.push(...chunk.map((id) => ({ id, statusCode, message })));
+    }
+  }
+  return merged;
+}
+
 export {
   approveApproval,
+  bulkDecideApprovals,
   deferApproval,
   getApproval,
   getApprovalSummary,

@@ -5,7 +5,8 @@
       "detailLoadFailed": "Failed to load approval",
       "approveFailed": "Failed to approve update",
       "rejectFailed": "Failed to reject update",
-      "deferFailed": "Failed to defer update"
+      "deferFailed": "Failed to defer update",
+      "bulkFailed": "Failed to decide selected updates"
     },
     "ofCount": "{count} shown",
     "refresh": "Refresh",
@@ -70,6 +71,18 @@
         "header": "Defer update",
         "message": "Defer the update for {name} for {days} days?",
         "acceptLabel": "Defer"
+      },
+      "bulkApprove": {
+        "header": "Approve selected updates",
+        "message": "Approve the selected updates ({count})? Each one is checked again and dispatched the same way as the Approve button, so an update that button would refuse is reported instead of applied.",
+        "acceptLabel": "Approve selected",
+        "holdsSuffix": "\n\nThese updates have open hold reasons that approving overrides:\n{list}",
+        "excludedSuffix": "\n\nBlocked and skipped ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Reject selected updates",
+        "message": "Reject the selected updates ({count})? They will not be applied automatically.",
+        "acceptLabel": "Reject selected"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Rejected update for {name}",
       "rejectFailed": "Failed to reject {name}",
       "deferred": "Deferred update for {name}",
-      "deferFailed": "Failed to defer {name}"
+      "deferFailed": "Failed to defer {name}",
+      "bulkApproved": "Approve requested for selected updates: {count}",
+      "bulkRejected": "Rejected selected updates: {count}",
+      "bulkPartialFailure": "Some updates could not be decided ({count}): {list}",
+      "bulkFailed": "Failed to decide the selected updates"
+    },
+    "bulk": {
+      "selectRow": "Select {name}",
+      "selectAll": "Select all visible approvals",
+      "barLabel": "Selected approvals",
+      "count": "Selected: {count}",
+      "approveSelected": "Approve selected",
+      "rejectSelected": "Reject selected",
+      "clear": "Clear selection"
     }
   }
 }
