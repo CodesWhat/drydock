@@ -6163,6 +6163,310 @@ describe('additional direct wrapper coverage', () => {
     expect(waitSpy).toHaveBeenCalledTimes(1);
   });
 
+  describe('shared namespace dependents', () => {
+    const dependentSpec = {
+      Id: 'dep-id',
+      Name: '/app',
+      Image: 'sha256:running',
+      Config: { Image: 'repo/app:1' },
+      State: { Running: true },
+      HostConfig: { NetworkMode: 'container:old-owner' },
+    } as any;
+    const followingHostConfig = { NetworkMode: 'container:new-owner' };
+
+    function createDependentApi(taggedImageId = 'sha256:running') {
+      const oldContainer = {
+        rename: vi.fn().mockResolvedValue(undefined),
+        start: vi.fn().mockResolvedValue(undefined),
+      };
+      return {
+        oldContainer,
+        dockerApi: {
+          getContainer: vi.fn(() => oldContainer),
+          getImage: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Id: taggedImageId }) })),
+        } as any,
+      };
+    }
+
+    test('recreateSharedNamespaceDependents delegates to the dependents walker with a recreate callback', async () => {
+      const inspectDependent = vi.fn().mockResolvedValue(dependentSpec);
+      const dockerApi = {
+        listContainers: vi.fn().mockResolvedValue([{ Id: 'dep-id' }]),
+        getContainer: vi.fn((identifier: string) => ({
+          inspect:
+            identifier === 'vpn'
+              ? vi.fn().mockResolvedValue({ Id: 'new-owner', Name: '/vpn', HostConfig: {} })
+              : inspectDependent,
+        })),
+      } as any;
+      const recreateSpy = vi
+        .spyOn(docker, 'recreateSharedNamespaceDependent')
+        .mockRejectedValue(new Error('create failed'));
+      const auditSpy = vi.spyOn(docker, 'recordAudit').mockReturnValue(undefined as never);
+      const logContainer = createMockLog('info', 'warn', 'debug');
+      const container = { name: 'vpn', watcher: 'local', image: { name: 'vpn' } } as any;
+
+      const failures = await docker.recreateSharedNamespaceDependents(
+        dockerApi,
+        'old-owner',
+        'vpn',
+        logContainer,
+        container,
+      );
+
+      expect(recreateSpy).toHaveBeenCalledWith(
+        dockerApi,
+        dependentSpec,
+        followingHostConfig,
+        logContainer,
+      );
+      expect(failures).toEqual(['Unable to recreate app (create failed)']);
+      expect(auditSpy).toHaveBeenCalledWith(
+        'container-update',
+        container,
+        'error',
+        expect.stringContaining('Unable to recreate app (create failed)'),
+      );
+    });
+
+    test('recreateSharedNamespaceDependents records no audit entry on success or without a container', async () => {
+      const dockerApi = {
+        listContainers: vi.fn().mockResolvedValue([]),
+        getContainer: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({ Id: 'new-owner', Name: '/vpn', HostConfig: {} }),
+        })),
+      } as any;
+      const auditSpy = vi.spyOn(docker, 'recordAudit').mockReturnValue(undefined as never);
+
+      await expect(
+        docker.recreateSharedNamespaceDependents(
+          dockerApi,
+          'old-owner',
+          'vpn',
+          createMockLog('info', 'warn', 'debug'),
+        ),
+      ).resolves.toEqual([]);
+      dockerApi.listContainers.mockRejectedValue(new Error('list failed'));
+      await docker.recreateSharedNamespaceDependents(
+        dockerApi,
+        'old-owner',
+        'vpn',
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(auditSpy).not.toHaveBeenCalled();
+    });
+
+    test('recreateSharedNamespaceDependent renames, stops, recreates and removes the old dependent', async () => {
+      const { dockerApi, oldContainer } = createDependentApi();
+      const stopSpy = vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      const removeSpy = vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        dependentSpec,
+        followingHostConfig,
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(oldContainer.rename).toHaveBeenCalledWith({
+        name: expect.stringMatching(/^app-old-/),
+      });
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+      expect(cloneSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ HostConfig: followingHostConfig }),
+        'repo/app:1',
+        expect.anything(),
+      );
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      expect(removeSpy).toHaveBeenCalledWith(
+        oldContainer,
+        expect.stringMatching(/^app-old-/),
+        'dep-id',
+        expect.anything(),
+      );
+    });
+
+    test('recreateSharedNamespaceDependent recreates from the running image id when the tag was repointed', async () => {
+      const { dockerApi } = createDependentApi('sha256:newer-pull');
+      vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        dependentSpec,
+        followingHostConfig,
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(cloneSpy).toHaveBeenCalledWith(expect.anything(), 'sha256:running', expect.anything());
+    });
+
+    test('recreateSharedNamespaceDependent falls back to the image id when the tag cannot be resolved or is missing', async () => {
+      const { dockerApi } = createDependentApi();
+      dockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockRejectedValue(new Error('no image')),
+      }));
+      vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      vi.spyOn(docker, 'startContainer').mockResolvedValue();
+      const log = createMockLog('info', 'warn', 'debug');
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        dependentSpec,
+        followingHostConfig,
+        log,
+      );
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        { ...dependentSpec, Config: {} },
+        followingHostConfig,
+        log,
+      );
+
+      expect(cloneSpy).toHaveBeenNthCalledWith(
+        1,
+        expect.anything(),
+        'sha256:running',
+        expect.anything(),
+      );
+      expect(cloneSpy).toHaveBeenNthCalledWith(
+        2,
+        expect.anything(),
+        'sha256:running',
+        expect.anything(),
+      );
+    });
+
+    test('recreateSharedNamespaceDependent skips stop and start for a stopped dependent', async () => {
+      const { dockerApi } = createDependentApi();
+      const stopSpy = vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        { ...dependentSpec, State: { Running: false } },
+        followingHostConfig,
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(stopSpy).not.toHaveBeenCalled();
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
+    test('recreateSharedNamespaceDependent refuses an AutoRemove dependent before touching it', async () => {
+      const { dockerApi, oldContainer } = createDependentApi();
+      const stopSpy = vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+
+      await expect(
+        docker.recreateSharedNamespaceDependent(
+          dockerApi,
+          { ...dependentSpec, HostConfig: { AutoRemove: true } },
+          followingHostConfig,
+          createMockLog('info', 'warn', 'debug'),
+        ),
+      ).rejects.toThrow('has AutoRemove set');
+
+      expect(oldContainer.rename).not.toHaveBeenCalled();
+      expect(stopSpy).not.toHaveBeenCalled();
+    });
+
+    test('recreateSharedNamespaceDependent removes the candidate, restores the name and restarts the original when start fails', async () => {
+      const { dockerApi, oldContainer } = createDependentApi();
+      vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      const removeSpy = vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      const candidate = {
+        start: vi.fn(),
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.spyOn(docker, 'createContainer').mockResolvedValue(candidate as any);
+      const startError = new Error('start failed');
+      vi.spyOn(docker, 'startContainer').mockRejectedValue(startError);
+
+      await expect(
+        docker.recreateSharedNamespaceDependent(
+          dockerApi,
+          dependentSpec,
+          followingHostConfig,
+          createMockLog('info', 'warn', 'debug'),
+        ),
+      ).rejects.toBe(startError);
+
+      expect(candidate.remove).toHaveBeenCalled();
+      expect(oldContainer.rename).toHaveBeenLastCalledWith({ name: 'app' });
+      expect(oldContainer.start).toHaveBeenCalledTimes(1);
+      expect(removeSpy).not.toHaveBeenCalled();
+    });
+
+    test('recreateSharedNamespaceDependent does not restart a dependent that was stopped, and still throws the original error when restoring fails', async () => {
+      const { dockerApi, oldContainer } = createDependentApi();
+      oldContainer.rename
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('rename back failed'));
+      vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockRejectedValue(new Error('create failed'));
+      const logContainer = createMockLog('info', 'warn', 'debug');
+
+      await expect(
+        docker.recreateSharedNamespaceDependent(
+          dockerApi,
+          { ...dependentSpec, State: { Running: false } },
+          followingHostConfig,
+          logContainer,
+        ),
+      ).rejects.toThrow('create failed');
+
+      expect(oldContainer.start).not.toHaveBeenCalled();
+      expect(logContainer.warn).toHaveBeenCalledWith(expect.stringContaining('rename back failed'));
+    });
+
+    test('recreateSharedNamespaceDependent keeps the same anonymous volume for a dependent with an anonymous /data volume', async () => {
+      const { dockerApi } = createDependentApi();
+      vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      vi.spyOn(docker, 'startContainer').mockResolvedValue();
+      vi.spyOn(docker.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({});
+      const volumeName = 'a'.repeat(64);
+      const spec = {
+        ...dependentSpec,
+        Name: '/app',
+        Config: { Image: 'repo/app:1', Volumes: { '/data': {} } },
+        HostConfig: { NetworkMode: 'container:old-owner', Binds: ['/host/cfg:/cfg'] },
+        Mounts: [{ Type: 'volume', Name: volumeName, Destination: '/data', RW: true }],
+        NetworkSettings: { Networks: {} },
+      };
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        spec,
+        { NetworkMode: 'container:new-owner', Binds: ['/host/cfg:/cfg'] },
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(createSpy.mock.calls[0][1].HostConfig.NetworkMode).toBe('container:new-owner');
+      expect(createSpy.mock.calls[0][1].HostConfig.Binds).toEqual([
+        '/host/cfg:/cfg',
+        `${volumeName}:/data`,
+      ]);
+    });
+  });
+
   test('recreateContainer should create and start new container when previous one was running', async () => {
     const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
     const createSpy = vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);

@@ -252,6 +252,18 @@ type ContainerUpdateExecutorDependencies = {
     newImage: string,
     cloneRuntimeConfigOptions: unknown,
   ) => unknown;
+  /**
+   * Recreate containers that share the replaced container's namespace or
+   * volumes so they follow the new container. Optional so executors built
+   * without it keep working.
+   */
+  recreateSharedNamespaceDependents?: (
+    dockerApi: DockerApiLike,
+    previousContainerId: string,
+    containerName: string,
+    logContainer: ContainerUpdateLogger,
+    container?: unknown,
+  ) => Promise<string[] | undefined>;
   getCloneRuntimeConfigOptions: (
     dockerApi: DockerApiLike,
     currentContainerSpec: ContainerSpecLike,
@@ -384,6 +396,8 @@ class ContainerUpdateExecutor {
   buildRuntimeConfigCompatibilityError: ContainerUpdateExecutorDependencies['buildRuntimeConfigCompatibilityError'];
 
   bindPulledImageIdentity?: ContainerUpdateExecutorDependencies['bindPulledImageIdentity'];
+
+  recreateSharedNamespaceDependents?: ContainerUpdateExecutorDependencies['recreateSharedNamespaceDependents'];
 
   hasHealthcheckConfigured: ContainerUpdateExecutorDependencies['hasHealthcheckConfigured'];
 
@@ -751,6 +765,11 @@ class ContainerUpdateExecutor {
         attemptState,
       );
       await this.cleanupRenamedContainer(preparedExecution, logContainer);
+      await this.recreateSharedNamespaceDependentsBestEffort(
+        preparedExecution,
+        logContainer,
+        container,
+      );
       this.markOperationSucceeded(preparedExecution.operationId);
       this.persistRollbackState?.(container.id, 'succeeded');
       return true;
@@ -1170,6 +1189,44 @@ class ContainerUpdateExecutor {
           `Unable to record the failed cleanup of ${preparedExecution.tempName} on operation ${preparedExecution.operationId}`,
         );
       }
+    }
+  }
+
+  private recordDependentFailures(operationId: string, failures: string) {
+    try {
+      updateOperationStore.updateOperation(operationId, {
+        lastError: `dependents_recreate_failed: ${failures}`,
+      });
+    } catch {
+      // Only a record of what happened; the active-TTL sweep may have closed the row.
+    }
+  }
+
+  private async recreateSharedNamespaceDependentsBestEffort(
+    preparedExecution: PreparedContainerUpdateExecution,
+    logContainer: ContainerUpdateLogger,
+    container: ContainerForUpdate,
+  ) {
+    if (!this.recreateSharedNamespaceDependents || !preparedExecution.wasRunning) {
+      return;
+    }
+    try {
+      const failures = await this.recreateSharedNamespaceDependents(
+        preparedExecution.dockerApi,
+        preparedExecution.currentContainerSpec.Id,
+        preparedExecution.oldName,
+        logContainer,
+        container,
+      );
+      if (failures && failures.length > 0) {
+        this.recordDependentFailures(preparedExecution.operationId, failures.join('; '));
+      }
+    } catch (error: unknown) {
+      // The replacement is already running and verified; a dependent that could
+      // not be recreated must not send a finished update into rollback.
+      logContainer.warn(
+        `Unable to recreate containers sharing the namespace of ${preparedExecution.oldName} (${getErrorMessage(error)})`,
+      );
     }
   }
 

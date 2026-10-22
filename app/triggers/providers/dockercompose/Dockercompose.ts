@@ -34,6 +34,7 @@ import ComposeFileParser, {
   updateComposeServiceImagesInText,
   YAML_MAX_ALIAS_COUNT,
 } from './ComposeFileParser.js';
+import { expandComposeFilesWithIncludes } from './ComposeIncludes.js';
 import {
   getSelfContainerIdentifier as getRuntimeSelfContainerIdentifier,
   getSelfContainerBindMounts,
@@ -1542,6 +1543,23 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   }
 
   /**
+   * Append the files the chain includes with compose `include:`, which the
+   * `config_files` label never lists. See ComposeIncludes.ts.
+   */
+  async expandComposeFilesWithIncludes(composeFiles: string[]): Promise<string[]> {
+    const allowedRoots = this.getAllowedComposeLabelPathRoots();
+    return expandComposeFilesWithIncludes({
+      composeFiles,
+      readCompose: (composeFile) => this.getComposeFileAsObject(composeFile),
+      mapPath: (composeFilePath) => this.mapComposePathToContainerBindMount(composeFilePath),
+      isAllowed: (composeFilePath) =>
+        allowedRoots.length === 0 ||
+        allowedRoots.some((allowedRoot) => isPathWithinAllowedRoot(composeFilePath, allowedRoot)),
+      warn: (message) => this.log.warn(message),
+    });
+  }
+
+  /**
    * @param container the container
    * @param runtimeDefaultComposeFilePath the already-resolved default compose
    * file when the caller has one (triggerBatch resolves it once per batch);
@@ -1569,12 +1587,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       context,
     });
     if (composeFilesFromConfiguration.length > 0) {
-      return composeFilesFromConfiguration;
+      return this.expandComposeFilesWithIncludes(composeFilesFromConfiguration);
     }
 
     const composeFilesFromInspect = await this.getComposeFilesFromInspect(container, context);
     if (composeFilesFromInspect.length > 0) {
-      return composeFilesFromInspect;
+      return this.expandComposeFilesWithIncludes(composeFilesFromInspect);
     }
 
     // See getConfiguredComposeFilesForContainer(): a contained-out label leaves
@@ -1588,7 +1606,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     if (!composeFileFromDefault) {
       return [];
     }
-    return [composeFileFromDefault];
+    return this.expandComposeFilesWithIncludes([composeFileFromDefault]);
   }
 
   async resolveComposeFilePathFromDirectory(composePath: string): Promise<string | null> {
@@ -4432,6 +4450,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         expectedImageId,
         preflightedServiceIdentity,
       );
+      if (serviceShouldStart) {
+        // Never throws: the replacement is already running, so a dependent that
+        // cannot follow it is logged rather than rolled back.
+        await this.recreateSharedNamespaceDependents(
+          dockerApi,
+          currentContainerSpec.Id,
+          container.name,
+          logContainer,
+          container,
+        );
+      }
       if (keptMovedTagAudit) {
         // Recorded only now that the recreate above has actually succeeded:
         // recording it earlier, inside the assert, would leave a

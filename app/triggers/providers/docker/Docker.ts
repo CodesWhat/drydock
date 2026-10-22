@@ -47,7 +47,11 @@ import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { syncComposeFileTag } from './compose-file-sync.js';
-import { attachCreatedContainerCandidate } from './created-container-candidate.js';
+import {
+  attachCreatedContainerCandidate,
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from './created-container-candidate.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -55,6 +59,7 @@ import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
 import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
+import { recreateSharedNamespaceDependents } from './SharedNamespaceDependents.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
@@ -305,6 +310,7 @@ const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
   'startContainer',
   'pullImage',
   'cloneContainer',
+  'recreateSharedNamespaceDependents',
   'isContainerNotFoundError',
   'recordRollbackTelemetry',
   'hasHealthcheckConfigured',
@@ -1526,6 +1532,120 @@ class Docker<
       })
       .map((mount) => `${mount.Name}:${mount.Destination}${mount.RW === false ? ':ro' : ''}`);
     return { binds, mounts: pinnedMounts };
+  }
+
+  /**
+   * Recreate every container that shares the namespace or volumes of a
+   * container that was just replaced under the same name, so it follows the
+   * new container instead of the removed one. Returns one message per
+   * borrower that could not be recreated, and records them as an error audit
+   * entry on the owner when the owner container is known, so a half-updated
+   * stack is visible beyond the log.
+   */
+  async recreateSharedNamespaceDependents(
+    dockerApi,
+    previousContainerId,
+    containerName,
+    logContainer,
+    container?,
+  ): Promise<string[]> {
+    const { failures } = await recreateSharedNamespaceDependents({
+      dockerApi,
+      previousContainerId,
+      containerName,
+      logContainer,
+      recreateDependent: (dependentSpec, hostConfig) =>
+        this.recreateSharedNamespaceDependent(dockerApi, dependentSpec, hostConfig, logContainer),
+    });
+    if (failures.length > 0 && container?.image) {
+      this.recordAudit(
+        'container-update',
+        container,
+        'error',
+        `Updated ${containerName}, but containers sharing its namespace or volumes were not all recreated: ${failures.join('; ')}`,
+      );
+    }
+    return failures;
+  }
+
+  /**
+   * The image to recreate a borrower from: the image it is running now, not
+   * whatever its tag points at today. The tag is kept when it still names the
+   * running image so the container keeps its readable reference; when the tag
+   * was repointed by a later pull, the running image id is used, so updating the
+   * owner never silently upgrades the borrower past its own update gates.
+   */
+  private async resolveRunningImageReference(dockerApi, dependentSpec): Promise<string> {
+    const tag = dependentSpec.Config?.Image;
+    if (tag) {
+      try {
+        const tagged = await dockerApi.getImage(tag).inspect();
+        if (tagged?.Id === dependentSpec.Image) {
+          return tag;
+        }
+      } catch {
+        // Tag no longer resolves locally: fall back to the running image id.
+      }
+    }
+    return dependentSpec.Image ?? tag;
+  }
+
+  /**
+   * Replace one container that borrows its owner's namespace or volumes: same
+   * image and config, host config rewritten to follow the new owner. The old
+   * container is renamed out of the way first and removed once the replacement
+   * runs. On failure the half-created replacement is removed, the old name
+   * restored and the old container started again when it had been running.
+   * AutoRemove containers are refused up front: stopping one deletes it, which
+   * would leave nothing to fall back to.
+   */
+  async recreateSharedNamespaceDependent(dockerApi, dependentSpec, hostConfig, logContainer) {
+    const dependentName = dependentSpec.Name.replace(/^\//, '');
+    if (dependentSpec.HostConfig?.AutoRemove === true) {
+      throw new Error(
+        `${dependentName} has AutoRemove set, so stopping it to recreate it would delete it; recreate it manually`,
+      );
+    }
+    const tempName = `${dependentName}-old-${Date.now()}`;
+    const oldContainer = dockerApi.getContainer(dependentSpec.Id);
+    const image = await this.resolveRunningImageReference(dockerApi, dependentSpec);
+    const wasRunning = dependentSpec.State?.Running === true;
+
+    logContainer.info(`Rename container ${dependentName} to ${tempName}`);
+    await oldContainer.rename({ name: tempName });
+    try {
+      if (wasRunning) {
+        await this.stopContainer(oldContainer, tempName, dependentSpec.Id, logContainer);
+      }
+      // Always the plain Docker recreate: a compose-managed dependent must not
+      // go through Dockercompose.recreateContainer, which rewrites the compose file.
+      await Docker.prototype.recreateContainer.call(
+        this,
+        dockerApi,
+        { ...dependentSpec, HostConfig: hostConfig },
+        image,
+        { name: dependentName },
+        logContainer,
+      );
+    } catch (error: unknown) {
+      await cleanupCreatedContainerCandidate(
+        getCreatedContainerCandidate(error),
+        dependentName,
+        logContainer,
+      );
+      try {
+        await oldContainer.rename({ name: dependentName });
+        if (wasRunning) {
+          await oldContainer.start();
+        }
+      } catch (restoreError: unknown) {
+        logContainer.warn(
+          `Unable to restore ${dependentName} after a failed recreate (${getErrorMessage(restoreError)})`,
+        );
+      }
+      throw error;
+    }
+    await this.removeContainer(oldContainer, tempName, dependentSpec.Id, logContainer);
   }
 
   /**
