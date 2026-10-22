@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- OIDC bearer tokens are now opt-in and must be issued for Drydock's client. An `Authorization: Bearer` access token is only accepted when `DD_AUTH_OIDC_{name}_BEARER=true`, and then only if its `aud` contains the client ID (or a `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` entry) or its `azp`/`client_id` equals it, or, for opaque tokens, RFC 7662 introspection returns an active token for this client. Setups that send OIDC access tokens to the API must set the variable. The browser login flow is unchanged (DR-10). See DEPRECATIONS.md.
+
 ## [1.8.0-rc.5] - 2026-10-22
 
 > [!WARNING]

@@ -198,6 +198,7 @@ beforeEach(() => {
   oidc.name = '';
   oidc.log = {
     debug: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
   };
   mockRecordAuthLogin.mockClear();
@@ -210,6 +211,7 @@ test('validateConfiguration should return validated configuration when valid', a
   try {
     const validatedConfiguration = oidc.validateConfiguration(configurationValid);
     expect(validatedConfiguration).toStrictEqual({
+      bearer: false,
       ...configurationValid,
       insecure: false,
     });
@@ -255,6 +257,7 @@ test('validateConfiguration should allow optional logouturl override', async () 
     };
     const validatedConfiguration = oidc.validateConfiguration(configWithLogoutUrl);
     expect(validatedConfiguration).toStrictEqual({
+      bearer: false,
       ...configWithLogoutUrl,
       insecure: false,
     });
@@ -296,6 +299,7 @@ test('validateConfiguration should allow cafile and insecure TLS options', async
       insecure: true,
     });
     expect(validatedConfiguration).toStrictEqual({
+      bearer: false,
       ...configurationValid,
       cafile: '/certs/private-ca.pem',
       insecure: true,
@@ -339,6 +343,7 @@ describe('getAuthenticator / authenticateBearer', () => {
   beforeEach(() => {
     oidc.type = 'oidc';
     oidc.name = 'default';
+    oidc.configuration = { ...configurationValid, bearer: true };
   });
 
   test('declares its registry id and refuses to persist a session', () => {
@@ -421,6 +426,68 @@ describe('getAuthenticator / authenticateBearer', () => {
     await expect(
       oidc.authenticateBearer({ headers: { authorization: 'Bearer abcdef' } }),
     ).resolves.toBeUndefined();
+  });
+
+  describe('with bearer disabled (default)', () => {
+    beforeEach(() => {
+      oidc.configuration = { ...configurationValid };
+    });
+
+    test('rejects a Bearer token without verifying it and names the env var', async () => {
+      const verifySpy = vi.spyOn(oidc, 'verify');
+
+      await expect(
+        oidc.authenticateBearer({ headers: { authorization: 'Bearer abcdef' } }),
+      ).resolves.toBeUndefined();
+      expect(verifySpy).not.toHaveBeenCalled();
+      expect(oidc.log.warn).toHaveBeenCalledWith(
+        'OIDC bearer authentication is disabled; set DD_AUTH_OIDC_DEFAULT_BEARER=true',
+      );
+    });
+
+    test('rate-limits the disabled warning', async () => {
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      const headers = { authorization: 'Bearer abcdef' };
+
+      await oidc.authenticateBearer({ headers });
+      await oidc.authenticateBearer({ headers });
+      expect(oidc.log.warn).toHaveBeenCalledTimes(1);
+
+      nowSpy.mockReturnValue(1_000_000 + 5 * 60 * 1000);
+      await oidc.authenticateBearer({ headers });
+      expect(oidc.log.warn).toHaveBeenCalledTimes(2);
+      nowSpy.mockRestore();
+    });
+
+    test('stays quiet when no Bearer header is sent', async () => {
+      await expect(oidc.authenticateBearer({ headers: {} })).resolves.toBeUndefined();
+      expect(oidc.log.warn).not.toHaveBeenCalled();
+    });
+
+    test('schema defaults bearer to false and accepts true', () => {
+      expect(oidc.getConfigurationSchema().validate(configurationValid).value.bearer).toBe(false);
+      expect(
+        oidc.getConfigurationSchema().validate({ ...configurationValid, bearer: true }).value
+          .bearer,
+      ).toBe(true);
+    });
+
+    test('startup logs only when bearer is enabled', async () => {
+      oidc.ensureClientInitialized = vi.fn().mockResolvedValue(undefined);
+      await oidc.initAuthentication();
+      expect(oidc.log.info).not.toHaveBeenCalledWith(expect.stringContaining('bearer'));
+
+      oidc.configuration = { ...configurationValid, bearer: true };
+      await oidc.initAuthentication();
+      expect(oidc.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('OIDC bearer authentication is enabled'),
+      );
+    });
+
+    test('maskConfiguration reports the bearer flag', () => {
+      oidc.configuration = { ...configurationValid, bearer: false };
+      expect(oidc.maskConfiguration()).toEqual(expect.objectContaining({ bearer: false }));
+    });
   });
 
   test('resolves a validated bearer token to an oidc principal through the chain entry', async () => {
@@ -3978,7 +4045,7 @@ describe('bearer token binding', () => {
       'dd-secret',
       ClientSecretPost('dd-secret'),
     );
-    oidc.configuration = { ...configurationValid, clientid: 'dd-client' };
+    oidc.configuration = { ...configurationValid, clientid: 'dd-client', bearer: true };
   }
 
   function signToken(claims: Record<string, unknown>, issuer = ISSUER) {
@@ -4043,6 +4110,7 @@ describe('bearer token binding', () => {
     oidc.configuration = {
       ...configurationValid,
       clientid: 'dd-client',
+      bearer: true,
       beareraudiences: ' api://drydock, ,other ',
     };
     const token = await signToken({ aud: 'api://drydock' });
