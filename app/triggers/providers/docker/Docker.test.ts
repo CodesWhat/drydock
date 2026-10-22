@@ -1005,6 +1005,101 @@ describe('cloneContainer anonymous volumes', () => {
     expect(hostConfig.Mounts[0]).not.toHaveProperty('Source');
   });
 
+  test('should create HostConfig when the inspected spec has none and Config declares no volumes', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        Mounts: [{ Type: 'volume', Name: 'f'.repeat(64), Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    // no Config.Volumes means the daemon will not mint a new volume, so nothing to rebind
+    expect(clone.HostConfig?.Binds).toBeUndefined();
+  });
+
+  test('should rebind a volume when the inspected spec has no HostConfig', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'volume', Name: 'g'.repeat(64), Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual([`${'g'.repeat(64)}:/data`]);
+  });
+
+  test('should leave HostConfig alone when the container has no volume mounts', () => {
+    const hostConfig = { Binds: ['/host/path:/bound'] };
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: hostConfig,
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'bind', Source: '/host/path', Destination: '/bound', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig).toBe(hostConfig);
+  });
+
+  test('should ignore volume mounts with a missing or empty destination', () => {
+    const hostConfig = {};
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: hostConfig,
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [
+          { Type: 'volume', Name: 'j'.repeat(64), Destination: '', RW: true },
+          { Type: 'volume', Name: 'k'.repeat(64), RW: true },
+        ],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig).toBe(hostConfig);
+  });
+
+  test('should leave HostConfig alone when Mounts is not reported', () => {
+    const hostConfig = {};
+    const clone = docker.cloneContainer(
+      { ...baseSpec, HostConfig: hostConfig, Config: { Volumes: { '/data': {} } } },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig).toBe(hostConfig);
+  });
+
+  test('should keep a root destination as "/" and skip non-string binds', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: { Binds: [42, 'myvol:/named'] },
+        Config: { Volumes: { '/': {}, '/named': {} } },
+        Mounts: [
+          { Type: 'volume', Name: 'h'.repeat(64), Destination: '/', RW: true },
+          { Type: 'volume', Name: 'myvol', Destination: '/named', RW: true },
+        ],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual([42, 'myvol:/named', `${'h'.repeat(64)}:/`]);
+  });
+
+  test('should keep a source-less volume mount as-is when no inspected volume matches its target', () => {
+    const orphanMount = { Type: 'volume', Target: '/elsewhere' };
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: { Mounts: [orphanMount] },
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'volume', Name: 'i'.repeat(64), Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Mounts).toEqual([orphanMount]);
+    expect(clone.HostConfig.Binds).toEqual([`${'i'.repeat(64)}:/data`]);
+  });
+
   test('should leave HostConfig alone when there are no anonymous volumes', () => {
     const hostConfig = { Binds: ['myvol:/named'] };
     const clone = docker.cloneContainer(
@@ -6346,6 +6441,45 @@ describe('additional direct wrapper coverage', () => {
         'sha256:running',
         expect.anything(),
       );
+    });
+
+    test('recreateSharedNamespaceDependent falls back to the tag when the running image id is unknown and the tag cannot be resolved', async () => {
+      const { dockerApi } = createDependentApi();
+      dockerApi.getImage = vi.fn(() => ({
+        inspect: vi.fn().mockRejectedValue(new Error('no image')),
+      }));
+      vi.spyOn(docker, 'stopContainer').mockResolvedValue();
+      vi.spyOn(docker, 'removeContainer').mockResolvedValue();
+      const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockResolvedValue({} as any);
+      vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+      await docker.recreateSharedNamespaceDependent(
+        dockerApi,
+        { ...dependentSpec, Image: undefined, Config: { Image: 'repo/app:1' } },
+        followingHostConfig,
+        createMockLog('info', 'warn', 'debug'),
+      );
+
+      expect(cloneSpy).toHaveBeenCalledWith(expect.anything(), 'repo/app:1', expect.anything());
+    });
+
+    test('recreateSharedNamespaceDependent leaves a stopped dependent stopped after restoring its name', async () => {
+      const { dockerApi, oldContainer } = createDependentApi();
+      vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+      vi.spyOn(docker, 'createContainer').mockRejectedValue(new Error('create failed'));
+
+      await expect(
+        docker.recreateSharedNamespaceDependent(
+          dockerApi,
+          { ...dependentSpec, State: { Running: false } },
+          followingHostConfig,
+          createMockLog('info', 'warn', 'debug'),
+        ),
+      ).rejects.toThrow('create failed');
+
+      expect(oldContainer.rename).toHaveBeenLastCalledWith({ name: 'app' });
+      expect(oldContainer.start).not.toHaveBeenCalled();
     });
 
     test('recreateSharedNamespaceDependent skips stop and start for a stopped dependent', async () => {

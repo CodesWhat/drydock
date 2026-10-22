@@ -409,6 +409,35 @@ describe('setI18nLocale', () => {
     }
   });
 
+  it('reads the textInfo property when getTextInfo is not implemented', () => {
+    const original = Object.getOwnPropertyDescriptor(Intl, 'Locale') as PropertyDescriptor;
+    try {
+      Object.defineProperty(Intl, 'Locale', {
+        configurable: true,
+        value: class {
+          textInfo = { direction: 'rtl' };
+        },
+      });
+      expect(getLocaleDirection('en')).toBe('rtl');
+    } finally {
+      Object.defineProperty(Intl, 'Locale', original);
+    }
+  });
+
+  it('falls back to the static list when Intl.Locale exposes no direction info', () => {
+    const original = Object.getOwnPropertyDescriptor(Intl, 'Locale') as PropertyDescriptor;
+    try {
+      Object.defineProperty(Intl, 'Locale', {
+        configurable: true,
+        value: class {},
+      });
+      expect(getLocaleDirection('ar')).toBe('rtl');
+      expect(getLocaleDirection('en')).toBe('ltr');
+    } finally {
+      Object.defineProperty(Intl, 'Locale', original);
+    }
+  });
+
   it('updates the vue-i18n global locale when document is unavailable', () => {
     const originalDocument = globalThis.document;
     try {
