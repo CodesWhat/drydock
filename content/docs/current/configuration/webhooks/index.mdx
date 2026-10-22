@@ -83,7 +83,7 @@ Registry webhooks accept four auth modes, chosen per provider with `DD_SERVER_WE
 
 `:provider` is `dockerhub`, `ghcr`, `harbor`, `quay`, `acr` or `ecr`. A provider that sets no modes accepts `hmac` only, exactly as before. A credential for a mode the provider doesn't allow is treated as if it weren't sent. The payload must also parse as that provider's format, or the request gets a `400`.
 
-The bare `/api/v1/webhooks/registry` endpoint stays HMAC-only. Signature values may be the 64-character hex digest or use the `sha256=` prefix, and the supported headers are `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature` and `x-drydock-signature`.
+`POST /api/v1/webhooks/registry` does not use Bearer authentication and stays HMAC-only. Bearer applies only to `/api/v1/webhooks/registry/:provider` when that provider allows the `bearer` mode. For HMAC, configure `DD_SERVER_WEBHOOK_SECRET=your-registry-webhook-secret`, then sign the exact raw request body with HMAC-SHA256. Signature values may be the 64-character hex digest or use the `sha256=` prefix, and the supported headers are `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature` and `x-drydock-signature`.
 
 ```bash
 payload='{"repository":{"repo_name":"library/nginx"},"push_data":{"tag":"latest"}}'

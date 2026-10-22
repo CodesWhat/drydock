@@ -164,6 +164,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
+  'POST /api/v1/webhooks/registry/:provider → session-only',
+  'POST /api/v1/webhooks/registry/:provider/:secret → session-only',
   'PUT /api/v1/auth/totp-enrollments/:id → session-only',
   'PUT /api/v1/config/:section → admin',
   'PUT /api/v1/group-policies/:id → admin',
