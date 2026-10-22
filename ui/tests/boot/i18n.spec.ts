@@ -1,4 +1,11 @@
-import { buildMessages, i18n, LOCALE_OPTIONS, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
+import {
+  buildMessages,
+  getLocaleDirection,
+  i18n,
+  LOCALE_OPTIONS,
+  SUPPORTED_LOCALES,
+  setI18nLocale,
+} from '@/boot/i18n';
 
 function getMessagePath(source: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce<unknown>((current, key) => {
@@ -373,6 +380,33 @@ describe('setI18nLocale', () => {
 
     expect(i18n.global.locale.value).toBe('zh-CN');
     expect(document.documentElement.lang).toBe('zh-CN');
+  });
+
+  it('sets dir=rtl for Arabic and ltr when switching back', () => {
+    setI18nLocale('ar');
+    expect(document.documentElement.dir).toBe('rtl');
+
+    setI18nLocale('en');
+    expect(document.documentElement.dir).toBe('ltr');
+  });
+
+  it('falls back to the static RTL list when Intl.Locale text info is unavailable', () => {
+    const original = Object.getOwnPropertyDescriptor(Intl, 'Locale') as PropertyDescriptor;
+    try {
+      Object.defineProperty(Intl, 'Locale', {
+        configurable: true,
+        value: class {
+          constructor() {
+            throw new RangeError('unsupported');
+          }
+        },
+      });
+      expect(getLocaleDirection('he')).toBe('rtl');
+      expect(getLocaleDirection('fa-IR')).toBe('rtl');
+      expect(getLocaleDirection('de')).toBe('ltr');
+    } finally {
+      Object.defineProperty(Intl, 'Locale', original);
+    }
   });
 
   it('updates the vue-i18n global locale when document is unavailable', () => {

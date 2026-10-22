@@ -330,25 +330,30 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 <tr><td>镜像摘要监控</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>更新阈值过滤（major/minor/patch/digest）</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>依赖感知的更新排序</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>Swarm / Kubernetes / Nomad 监视器</td><td align="center">❌</td><td align="center">⚠️</td><td align="center">✅</td><td align="center">❌</td></tr>
 <tr><td>待审批队列（v1.8 RC）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>镜像备份与回滚</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>生命周期钩子（更新前/后）</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>镜像备份与回滚</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>生命周期钩子（更新前/后）</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>漏洞扫描</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>审计日志</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>RBAC / 多用户角色</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>RBAC / 多用户角色</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>OIDC / SSO 身份验证</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>触发器 / 通知渠道</td><td align="center">21</td><td align="center">17</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>触发器 / 通知渠道</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>镜像仓库提供商</td><td align="center">23</td><td align="center">12</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>镜像仓库提供商</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
-<tr><td>用于 CI/CD 的 Webhook API</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>用于 CI/CD 的 Webhook API</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
+<tr><td>受限范围的 API 令牌 / 密钥</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>一次性模式（运行一次后退出）</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Prometheus 指标</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>分布式代理（远程）</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">⚠️</td></tr>
 <tr><td>容器分组 / 堆栈</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>启动/停止/重启/更新容器</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
+<tr><td>启动/停止/重启/更新容器</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>容器日志查看器</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 </tbody>
 </table>
+
+> WUD 9.0 至 9.5（2026 年 9 月至 10 月）新增了带管理员、读写和只读角色的 RBAC、受限范围的个人 API 令牌、SQLite、Swarm、Kubernetes 和 Nomad 监视器（除 Nomad 外仅监视）、CI 一次性模式、支持 exec 的更新前后及生命周期钩子、HEALTHCHECK 失败时自动回滚，以及带认证的镜像仓库 Webhook。部分支持说明：WUD 的回滚会在 HEALTHCHECK 失败时撤销更新，但不保留镜像备份；其 Webhook 是镜像仓库推送触发的检查，而非通用的 CI API；其手动更新按钮仅涵盖更新。 只有 WUD 的一次性模式可通过退出码控制 CI（`--fail-on-update`）；Diun 在未设置计划时运行一次后退出，Watchtower 用 `--run-once` 也是如此，但两者都不会按是否有更新返回退出码。Watchtower 的 HTTP API 使用单一共享令牌，因此没有受限范围的令牌。
 
 > Watchtower 已于 2025 年 12 月存档，最后一个版本是 v1.7.1（2023 年 11 月）。非官方社区分支 nicholas-fedor/watchtower 仍在持续发布。
 
@@ -388,7 +393,9 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 </tbody>
 </table>
 
-> 数据整理自各项目的公开文档与代码仓库，截至 2026 年 8 月 29 日。
+> 另外对比：Dozzle v11 新增了基于摘要的更新检查、批量和定时自动更新、安全替换与清理，但它首先是日志查看器，因此此处没有单独的列。Komodo 一列涵盖仅基于摘要的轮询和自动更新、Swarm、权限和告警器。
+>
+> 数据整理自各项目的公开文档与代码仓库，截至 2026 年 8 月 29 日。WUD、Dozzle 和 Komodo 已于 2026 年 10 月 22 日重新核对。
 > 如果有任何信息不准确，欢迎贡献。
 
 </details>
@@ -424,6 +431,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 | **v1.6.0** ✅ | 通知、策略与发布情报 | 每规则/每触发器通知模板，具有实时预览、通知铃声首选项、跨设备首选项同步、零依赖自定义仪表板网格 ([#281](https://github.com/CodesWhat/drydock/issues/281))、声明性更新策略 ([#320](https://github.com/CodesWhat/drydock/issues/320))、成熟稳定倒计时 + 即时候选人可见性 + 手动覆盖 ([#406](https://github.com/CodesWhat/drydock/discussions/406))、可操作更新状态面板和全局`notify` / `manual` / `auto` 更新模式 ([#325](https://github.com/CodesWhat/drydock/discussions/325))、观察者/imgset/容器标签策略继承以及堆叠当前 → 较新的固定标签可见性 ([#498](https://github.com/CodesWhat/drydock/issues/498))、标准化 44px 跨表、卡片和详细信息的源/发行说明/注册表资源操作([#295](https://github.com/CodesWhat/drydock/discussions/295))、运行状况事件通知 ([#198](https://github.com/CodesWhat/drydock/discussions/198))、双向 Home Assistant MQTT、响应式表/卡列表视图、通过命令或固定 Docker-worker 后端执行 Trivy、Grype 或两者扫描、扫描器资产拉取/热控制、堆外重复数据删除SBOM 存储、Trivy 长扫描正确性 ([#490](https://github.com/CodesWhat/drydock/issues/490))、触发分类迁移警告、v1.6 兼容性删除、文档/API 卫生以及 `/api` → `/api/v1` 迁移完成，并选择加入 wud-card/Homepage 兼容性填充程序 (`DD_COMPAT_WUDCARD`)。 |
 | **v1.7.0** ✅ | 智能更新和用户体验 | 依赖感知的更新排序（[#219](https://github.com/CodesWhat/drydock/discussions/219)）、每次操作更新策略（[#511](https://github.com/CodesWhat/drydock/discussions/511)）、统一的成熟度/更新时间时钟、可点击端口链接、键盘快捷键、PWA、深色主题对比度改进（WCAG 2.2）（[#850](https://github.com/CodesWhat/drydock/issues/850)、[#865](https://github.com/CodesWhat/drydock/discussions/865)）、`DD_TRIGGER_*` 删除（v1.5.0 弃用窗口结束）、从镜像中删除了 curl |
 | **v1.8.0** | 集群管理与实时配置 | **已在 v1.8.0-rc.5 中提供测试，GA 尚未发布：** SQLite 存储、审批队列、YAML 配置、限定范围的监视器/通知/操作策略编辑器及安全摘要模板、并行更新、选择性批量更新（[#232](https://github.com/CodesWhat/drydock/discussions/232)）、依赖顺序界面、镜像清单与清理、集群健康状态与清单刷新、可分享的标签分组、 仅用于通知的精确分组路由 ([#1251](https://github.com/CodesWhat/drydock/pull/1251))、带有限制性操作规则的持久分组策略、有效策略视图与编辑器、Drydock 对容器标签设置的覆盖、带恢复码的 TOTP 双因素登录、仅限制安装的维护窗口 ([#946](https://github.com/CodesWhat/drydock/discussions/946))、第一方身份验证、限定范围的 API 密钥 ([#469](https://github.com/CodesWhat/drydock/discussions/469))，以及 Home Assistant 更新进度与设备 ([#210](https://github.com/CodesWhat/drydock/discussions/210))。**待完成：** 更广泛的实时配置仍需确定设置归属；静态镜像列表监视器暂缓至 GA 之后。 |
+| **v1.9.0** | 策略深度与生态 | **计划中：** 按更新类型选择候选版本并设置运行版本上限、按版本的成熟度及回退、监视器包含/排除过滤器、审计操作者与导出、OIDC 登录允许列表、容器状态告警、无需 healthcheck 的回滚、定时清理策略、Home Assistant 和 Homepage 集成、生命周期钩子 v2、分阶段多主机发布。 |
 | **v2.0+** | 平台扩展及其他 | Swarm/Kubernetes 观察者、GitOps 同步、卷浏览器、根据声明的上游基础监控本地构建的镜像（[#897](https://github.com/CodesWhat/drydock/discussions/897)）、健康门、金丝雀部署、Web 终端、RBAC、LDAP/AD、通过其 Docker 兼容 API 提供的基础 Podman 支持、CLI、Wolfi 强化映像、套接字代理 |
 
 **发布与升级状态：** v1.7.0 是最新稳定版（2026-10-19 GA，由 v1.7.0-rc.24 晋升）。v1.8.0-rc.5 供自愿测试，已发布的 1.7 文档与当前的 1.8 文档分开保存。

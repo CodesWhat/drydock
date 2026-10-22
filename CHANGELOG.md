@@ -29,6 +29,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
 - Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
 - Keep a candidate that is below an auto action's threshold in the approval queue. With update mode `auto` and an action trigger set to `AUTO=all` with a `minor` threshold, a major update was marked auto-applied and dropped from the queue, yet the trigger never ran it. It now waits for approval, and the container's action policy reads manual instead of auto.
+- Set the document direction for right-to-left locales. Arabic now sets `dir="rtl"` on the page at boot and when you switch language (and back to `ltr` for the rest), and the app shell, tab bar, notification bell, detail panel and table headers use logical start/end spacing so the layout mirrors instead of staying left-anchored.
 
 ### Added
 

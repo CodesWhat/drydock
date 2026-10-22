@@ -323,14 +323,14 @@ describe('DetailPanel', () => {
   });
 
   describe('layout spacing', () => {
-    it('applies mr-[15px] on desktop to center in the scrollbar gap', () => {
+    it('applies me-[15px] on desktop to center in the scrollbar gap', () => {
       const w = factory({ open: true, isMobile: false });
-      expect(w.find('aside').classes()).toContain('mr-[15px]');
+      expect(w.find('aside').classes()).toContain('me-[15px]');
     });
 
-    it('does not apply mr-[15px] on mobile', () => {
+    it('does not apply me-[15px] on mobile', () => {
       const w = factory({ open: true, isMobile: true });
-      expect(w.find('aside').classes()).not.toContain('mr-[15px]');
+      expect(w.find('aside').classes()).not.toContain('me-[15px]');
     });
 
     // ────────────────────────────────────────────────────────────────────────
