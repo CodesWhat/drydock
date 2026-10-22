@@ -5,6 +5,13 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.5 Highlights - October 22, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Registries that list tags oldest first no longer hide new releases.** On very large repositories such as GHCR's `immich-machine-learning`, Drydock now continues the tag listing from the container's current tag instead of stopping at the 50-page listing limit.
+- RC5 includes the RC1, RC2, RC3 and RC4 changes below and starts its own soak when published. v1.7.0 (GA 2026-10-19) is the latest stable release.
+
 ## v1.8.0-rc.4 Highlights - October 21, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
