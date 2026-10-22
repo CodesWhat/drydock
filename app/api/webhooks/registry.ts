@@ -2,8 +2,12 @@ import type { Request, Response } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
-import { getWebhookConfiguration } from '../../configuration/index.js';
+import {
+  getRegistryWebhookAuthConfiguration,
+  getWebhookConfiguration,
+} from '../../configuration/index.js';
 import logger from '../../log/index.js';
+import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { markContainerFreshForScheduledPollSkip } from '../../watchers/registry-webhook-fresh.js';
@@ -11,6 +15,7 @@ import { sendErrorResponse } from '../error-response.js';
 import { getFirstHeaderValue } from '../header-value.js';
 import { SESSION_ONLY, scoped } from '../route-scopes.js';
 import { parseRegistryWebhookPayload } from './parsers/index.js';
+import { authenticateRegistryWebhook, redactRegistryWebhookPath } from './registry-auth.js';
 import { runRegistryWebhookDispatch } from './registry-dispatch.js';
 import { verifyRegistryWebhookSignature } from './signature.js';
 
@@ -76,9 +81,17 @@ async function handleRegistryWebhook(req: Request, res: Response) {
     return;
   }
 
+  await processRegistryWebhook(req, res);
+}
+
+async function processRegistryWebhook(req: Request, res: Response, expectedProvider?: string) {
   const parseResult = parseRegistryWebhookPayload(req.body);
   if (!parseResult) {
     sendErrorResponse(res, 400, 'Unsupported registry webhook payload');
+    return;
+  }
+  if (expectedProvider && parseResult.provider !== expectedProvider) {
+    sendErrorResponse(res, 400, 'Registry webhook payload does not match the provider in the URL');
     return;
   }
 
@@ -98,6 +111,54 @@ async function handleRegistryWebhook(req: Request, res: Response) {
   });
 }
 
+/**
+ * Provider-scoped endpoint: `POST /:provider` (bearer, query secret, HMAC) and
+ * `POST /:provider/:secret` (secret in the path). Which of those a provider
+ * accepts is per-provider configuration; the bare `POST /` stays HMAC-only.
+ */
+async function handleProviderRegistryWebhook(req: Request, res: Response) {
+  const webhookConfiguration = getWebhookConfiguration();
+  if (!webhookConfiguration.enabled) {
+    sendErrorResponse(res, 403, 'Registry webhooks are disabled');
+    return;
+  }
+
+  const provider = String(req.params.provider ?? '').toLowerCase();
+  const providerAuthByName = getRegistryWebhookAuthConfiguration();
+  if (!Object.hasOwn(providerAuthByName, provider)) {
+    sendErrorResponse(res, 404, 'Unknown registry webhook provider');
+    return;
+  }
+  const providerAuth = providerAuthByName[provider as keyof typeof providerAuthByName];
+
+  const result = authenticateRegistryWebhook({
+    modes: providerAuth.modes,
+    staticSecret: providerAuth.staticSecret,
+    hmacSecret: webhookConfiguration.secret || '',
+    payload: getRawPayload(req),
+    signature: getRequestSignature(req),
+    pathSecret: typeof req.params.secret === 'string' ? req.params.secret : undefined,
+    querySecret: req.query?.secret,
+    authorizationHeader: getFirstHeaderValue(req.headers.authorization),
+  });
+
+  if (result.status !== 'ok') {
+    log.warn(
+      `Registry webhook authentication failed (provider=${sanitizeLogParam(provider)}, reason=${result.status}, path=${sanitizeLogParam(redactRegistryWebhookPath(req.originalUrl))})`,
+    );
+    sendErrorResponse(
+      res,
+      401,
+      result.status === 'missing'
+        ? 'Missing registry webhook credentials'
+        : 'Invalid registry webhook credentials',
+    );
+    return;
+  }
+
+  await processRegistryWebhook(req, res, provider);
+}
+
 export function init() {
   const webhookLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -107,8 +168,22 @@ export function init() {
     validate: { xForwardedForHeader: false },
   });
 
+  // Failed authentication attempts get a tighter budget than the shared one,
+  // so a guessed static secret costs the caller far more than a signed push.
+  const failedAuthLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    skipSuccessfulRequests: true,
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false },
+  });
+
   router.use(webhookLimiter);
+  router.use(failedAuthLimiter);
   router.use(nocache());
   router.post('/', scoped(SESSION_ONLY, handleRegistryWebhook));
+  router.post('/:provider', scoped(SESSION_ONLY, handleProviderRegistryWebhook));
+  router.post('/:provider/:secret', scoped(SESSION_ONLY, handleProviderRegistryWebhook));
   return router;
 }

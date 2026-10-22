@@ -878,6 +878,59 @@ export function getPrometheusConfiguration() {
   return configurationToValidate.value;
 }
 
+export const REGISTRY_WEBHOOK_PROVIDERS = [
+  'dockerhub',
+  'ghcr',
+  'harbor',
+  'quay',
+  'acr',
+  'ecr',
+] as const;
+export type RegistryWebhookProvider = (typeof REGISTRY_WEBHOOK_PROVIDERS)[number];
+
+export const REGISTRY_WEBHOOK_AUTH_MODES = ['hmac', 'path', 'query', 'bearer'] as const;
+export type RegistryWebhookAuthMode = (typeof REGISTRY_WEBHOOK_AUTH_MODES)[number];
+
+export interface RegistryWebhookProviderAuth {
+  modes: RegistryWebhookAuthMode[];
+  /** Effective static secret: the provider's own, else the shared one. Empty when none. */
+  staticSecret: string;
+}
+
+interface RegistryWebhookAuthSource {
+  staticsecret?: string;
+  registries?: Partial<Record<RegistryWebhookProvider, { modes?: string; secret?: string }>>;
+}
+
+function normalizeRegistryWebhookAuth(
+  source: RegistryWebhookAuthSource,
+): Record<RegistryWebhookProvider, RegistryWebhookProviderAuth> {
+  const result = {} as Record<RegistryWebhookProvider, RegistryWebhookProviderAuth>;
+  for (const provider of REGISTRY_WEBHOOK_PROVIDERS) {
+    const providerSource = source.registries?.[provider];
+    const rawModes = (providerSource?.modes ?? '')
+      .split(',')
+      .map((mode) => mode.trim().toLowerCase())
+      .filter((mode) => mode !== '');
+    const modes: RegistryWebhookAuthMode[] = [];
+    for (const rawMode of rawModes) {
+      if (!(REGISTRY_WEBHOOK_AUTH_MODES as readonly string[]).includes(rawMode)) {
+        throw new Error(
+          `Invalid registry webhook auth mode "${rawMode}" for ${provider} (DD_SERVER_WEBHOOK_REGISTRIES_${provider.toUpperCase()}_MODES). Allowed values: ${REGISTRY_WEBHOOK_AUTH_MODES.join(', ')}`,
+        );
+      }
+      if (!modes.includes(rawMode as RegistryWebhookAuthMode)) {
+        modes.push(rawMode as RegistryWebhookAuthMode);
+      }
+    }
+    result[provider] = {
+      modes: modes.length > 0 ? modes : ['hmac'],
+      staticSecret: providerSource?.secret || source.staticsecret || '',
+    };
+  }
+  return result;
+}
+
 /**
  * Get Webhook configurations.
  */
@@ -886,6 +939,19 @@ export function getWebhookConfiguration() {
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(false),
     secret: joi.string().allow('').default(''),
+    // Static secret for registries that cannot sign (Docker Hub, Quay, Harbor, ACR).
+    staticsecret: joi.string().min(16).allow(''),
+    registries: joi.object(
+      Object.fromEntries(
+        REGISTRY_WEBHOOK_PROVIDERS.map((provider) => [
+          provider,
+          joi.object({
+            modes: joi.string().allow(''),
+            secret: joi.string().min(16).allow(''),
+          }),
+        ]),
+      ),
+    ),
     token: joi.string().allow('').default(''),
     tokens: joi
       .object({
@@ -911,7 +977,15 @@ export function getWebhookConfiguration() {
     configuration.tokens?.watch,
     configuration.tokens?.update,
   ].some((token) => typeof token === 'string' && token.length > 0);
-  const hasSecret = typeof configuration.secret === 'string' && configuration.secret.length > 0;
+  const registryAuth = normalizeRegistryWebhookAuth(configuration);
+  const hasStaticSecret =
+    Boolean(configuration.staticsecret) ||
+    REGISTRY_WEBHOOK_PROVIDERS.some((provider) =>
+      Boolean(configuration.registries?.[provider]?.secret),
+    );
+  const hasSecret =
+    (typeof configuration.secret === 'string' && configuration.secret.length > 0) ||
+    hasStaticSecret;
 
   const endpointTokens = [
     configuration.tokens?.watchall,
@@ -933,11 +1007,31 @@ export function getWebhookConfiguration() {
 
   if (configuration.enabled && !hasAnyToken && !hasSecret) {
     throw new Error(
-      'At least one webhook auth mechanism (DD_SERVER_WEBHOOK_SECRET, DD_SERVER_WEBHOOK_TOKEN, or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
+      'At least one webhook auth mechanism (DD_SERVER_WEBHOOK_SECRET, DD_SERVER_WEBHOOK_STATICSECRET, DD_SERVER_WEBHOOK_TOKEN, or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
     );
   }
 
+  if (configuration.enabled) {
+    for (const provider of REGISTRY_WEBHOOK_PROVIDERS) {
+      const { modes, staticSecret } = registryAuth[provider];
+      if (!staticSecret && modes.some((mode) => mode !== 'hmac')) {
+        throw new Error(
+          `Registry webhook ${provider} allows static-secret auth but no secret is configured (DD_SERVER_WEBHOOK_STATICSECRET or DD_SERVER_WEBHOOK_REGISTRIES_${provider.toUpperCase()}_SECRET)`,
+        );
+      }
+    }
+  }
+
   return configuration;
+}
+
+/**
+ * Per-provider registry webhook auth: the allowed modes (default `hmac`, the
+ * pre-1.8 behaviour) and the static secret that path, query and bearer modes
+ * compare against.
+ */
+export function getRegistryWebhookAuthConfiguration() {
+  return normalizeRegistryWebhookAuth(getWebhookConfiguration());
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
