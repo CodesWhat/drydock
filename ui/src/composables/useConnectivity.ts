@@ -2,7 +2,7 @@ import { computed, readonly, ref, watch } from 'vue';
 import { i18n } from '../boot/i18n';
 import { clearLastKnown } from '../utils/last-known';
 
-export type ConnectivityStatus = 'online' | 'offline' | 'server-unreachable';
+type ConnectivityStatus = 'online' | 'offline' | 'server-unreachable';
 
 export const CONNECTIVITY_PROBE_INTERVAL_MS = 15_000;
 const PROBE_URL = '/api/v1/auth/status';
