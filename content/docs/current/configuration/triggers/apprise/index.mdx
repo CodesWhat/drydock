@@ -33,7 +33,7 @@ The `apprise` trigger lets you send container update notifications via the [Appr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_NOTIFICATION_APPRISE_LOCAL_URL=http://apprise:8000
@@ -47,7 +47,7 @@ docker run \
   -e DD_NOTIFICATION_APPRISE_LOCAL_URL="http://apprise:8000" \
   -e DD_NOTIFICATION_APPRISE_LOCAL_URLS="mailto://john.doe:secret@gmail.com,sns://replace-with-sns-access-key/replace-with-sns-secret/us-east-2/+1(800)555-1223" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 </Tab>
 </Tabs>
@@ -69,7 +69,7 @@ urls:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_NOTIFICATION_APPRISE_LOCAL_URL=http://apprise:8000
@@ -85,7 +85,7 @@ docker run \
   -e DD_NOTIFICATION_APPRISE_LOCAL_CONFIG="drydock" \
   -e DD_NOTIFICATION_APPRISE_LOCAL_TAG="devops" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 </Tab>
 </Tabs>

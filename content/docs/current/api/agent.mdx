@@ -24,7 +24,7 @@ curl http://drydock:3000/api/v1/agents
       "port": 3000,
       "connected": true,
       "version": "1.8.0",
-      "build": "1.8.0-rc.4",
+      "build": "1.8.0-rc.5",
       "os": "linux",
       "arch": "amd64",
       "cpus": 4,
@@ -76,7 +76,7 @@ curl http://drydock:3000/api/v1/agents/roster
 ### Rotate a Portwing signing key (Drydock RC, Portwing development) {#rotate-a-portwing-signing-key-development}
 
 Controller-assisted Ed25519 rotation first shipped in Drydock v1.8.0-rc.1
-and remains available in v1.8.0-rc.4 with compatible Portwing development
+and remains available in v1.8.0-rc.5 with compatible Portwing development
 builds. Published Portwing v1.0.0-rc.1 does not include the companion feature;
 no compatible published Portwing version is assigned yet.
 See [Agent configuration](/docs/configuration/agents#controller-assisted-key-rotation-development)
@@ -213,7 +213,7 @@ Sent immediately upon connection to confirm the handshake.
   "type": "dd:ack",
   "data": {
     "version": "1.8.0",
-    "build": "1.8.0-rc.4",
+    "build": "1.8.0-rc.5",
     "os": "linux",
     "arch": "amd64",
     "cpus": 4,
