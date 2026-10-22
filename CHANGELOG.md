@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- Find new tags on registries that list oldest first. When a repository has more tags than the 50-page listing limit, as `ghcr.io/immich-app/immich-machine-learning` does, Drydock now continues the listing from the container's current tag instead of stopping, so newer releases are no longer missed ([#1453](https://github.com/CodesWhat/drydock/issues/1453)).
+
 ## [1.8.0-rc.4] - 2026-10-21
 
 > [!WARNING]
