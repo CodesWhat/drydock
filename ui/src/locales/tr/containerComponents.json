@@ -141,6 +141,7 @@
         "recently-applied": "Atlandı: güncelleme az önce uygulandı, watcher onayı bekleniyor.",
         "digest-buffered": "Sonraki özet için bekletiliyor."
       },
+      "notificationSkipAt": "Son atlanma {date}",
       "backupsRollback": "Yedeklemeler ve Geri Alma",
       "rollingBack": "Geri dönüyor...",
       "rollbackLatest": "En son sürüme geri al",
@@ -653,6 +654,7 @@
         "snoozed": "Güncellemeler ertelendi",
         "maturityBlockedSingular": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
         "maturityBlockedPlural": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
+        "maturityCountdown": "{message}. {countdown} sonra açılır ({date})",
         "maturityActiveSingular": "Yalnızca olgun politikası etkin ({days} gün minimum yaş)",
         "maturityActivePlural": "Yalnızca olgun politikası etkin ({days} gün minimum yaş)",
         "maturityAllowAll": "Olgunluk politikası tüm güncellemelere izin veriyor",

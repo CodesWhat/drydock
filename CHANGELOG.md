@@ -19,6 +19,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR.
 - The Security view now shows the scanner version, image digest, and vulnerability database or cache update time in each scanner's tooltip, using the asset details the API already returned.
+- Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
+- Show when a notification was last skipped. The container detail notification section already named the reason, and now also shows the local date and time of the last skip for each trigger.
 
 ## [1.8.0-rc.5] - 2026-10-22
 

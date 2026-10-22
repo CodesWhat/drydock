@@ -43,6 +43,7 @@
       "updateAll": "Cập nhật tất cả",
       "noUpdates": "Không có cập nhật nào",
       "securityBlocked": "Bị chặn do bảo mật",
+      "maturityCountdown": "Mở khóa sau {countdown} ({date})",
       "updateContainer": "Cập nhật container",
       "compactSingle": "{count} bản cập nhật có sẵn",
       "compactPlural": "{count} bản cập nhật có sẵn",

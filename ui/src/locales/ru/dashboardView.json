@@ -43,6 +43,7 @@
       "updateAll": "Обновить все",
       "noUpdates": "Обновлений нет",
       "securityBlocked": "Заблокировано безопасностью",
+      "maturityCountdown": "Разблокируется через {countdown} ({date})",
       "updateContainer": "Обновить контейнер",
       "compactSingle": "Доступно {count} обновление",
       "compactPlural": "Доступно {count} обновлений",

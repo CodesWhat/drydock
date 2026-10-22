@@ -141,6 +141,7 @@
         "recently-applied": "تم التخطي: تم تطبيق التحديث للتو، بانتظار تأكيد المراقب.",
         "digest-buffered": "محتجز للملخص التالي."
       },
+      "notificationSkipAt": "آخر تخطٍّ {date}",
       "backupsRollback": "النسخ الاحتياطية والتراجع",
       "rollingBack": "جارٍ التراجع...",
       "rollbackLatest": "التراجع إلى الأحدث",
@@ -653,6 +654,7 @@
         "snoozed": "التحديثات مؤجلة",
         "maturityBlockedSingular": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} يوم",
         "maturityBlockedPlural": "سياسة الناضج فقط تحظر التحديثات الأصغر من {days} أيام",
+        "maturityCountdown": "{message}. يُفتح خلال {countdown} ({date})",
         "maturityActiveSingular": "سياسة الناضج فقط نشطة (الحد الأدنى للعمر {days} يوم)",
         "maturityActivePlural": "سياسة الناضج فقط نشطة (الحد الأدنى للعمر {days} أيام)",
         "maturityAllowAll": "سياسة النضج تسمح بجميع التحديثات",

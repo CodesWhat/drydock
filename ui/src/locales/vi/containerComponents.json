@@ -141,6 +141,7 @@
         "recently-applied": "Đã bỏ qua: bản cập nhật vừa được áp dụng, đang chờ watcher xác nhận.",
         "digest-buffered": "Đang giữ lại cho bản tổng hợp tiếp theo."
       },
+      "notificationSkipAt": "Lần bỏ qua gần nhất {date}",
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",
@@ -653,6 +654,7 @@
         "snoozed": "Cập nhật đã hoãn",
         "maturityBlockedSingular": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
         "maturityBlockedPlural": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
+        "maturityCountdown": "{message}. Mở khóa sau {countdown} ({date})",
         "maturityActiveSingular": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityActivePlural": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityAllowAll": "Chính sách độ chín cho phép tất cả cập nhật",

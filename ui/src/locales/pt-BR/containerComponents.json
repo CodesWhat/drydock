@@ -141,6 +141,7 @@
         "recently-applied": "Ignorada: a atualização acabou de ser aplicada, aguardando confirmação do watcher.",
         "digest-buffered": "Retida para o próximo resumo."
       },
+      "notificationSkipAt": "Última omissão {date}",
       "backupsRollback": "Backups e rollback",
       "rollingBack": "Fazendo rollback...",
       "rollbackLatest": "Rollback do mais recente",
@@ -653,6 +654,7 @@
         "snoozed": "Atualizações adiadas",
         "maturityBlockedSingular": "A policy somente maduras bloqueia atualizações com menos de {days} dia",
         "maturityBlockedPlural": "A policy somente maduras bloqueia atualizações com menos de {days} dias",
+        "maturityCountdown": "{message}. Desbloqueia em {countdown} ({date})",
         "maturityActiveSingular": "Policy somente maduras ativa (idade mínima de {days} dia)",
         "maturityActivePlural": "Policy somente maduras ativa (idade mínima de {days} dias)",
         "maturityAllowAll": "A policy de maturidade permite todas as atualizações",

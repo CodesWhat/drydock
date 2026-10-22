@@ -124,6 +124,51 @@ describe('useContainerPolicy', () => {
     );
     harness.wrapper.unmount();
   });
+  it('adds the remaining time and local unlock date to the maturity tooltip', () => {
+    const liftableAt = new Date(Date.now() + 90 * 60_000).toISOString();
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+          updateEligibility: {
+            blockers: [{ reason: 'maturity-not-reached', message: 'Waiting', liftableAt }],
+          },
+        },
+      },
+    });
+    expect(harness.composable.getContainerListPolicyState('container-1').liftableAt).toBe(
+      liftableAt,
+    );
+    const nowMs = Date.parse(liftableAt) - 90 * 60_000;
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity', nowMs)).toBe(
+      `Mature-only policy blocks updates younger than 5 days. Unlocks in 1h 30m (${new Date(liftableAt).toLocaleString()})`,
+    );
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity')).toBe(
+      'Mature-only policy blocks updates younger than 5 days',
+    );
+    harness.wrapper.unmount();
+  });
+
+  it('skips the countdown when the liftableAt timestamp is unparseable', () => {
+    const harness = createPolicyHarness({
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 5 },
+          updateEligibility: {
+            blockers: [{ reason: 'maturity-not-reached', message: 'Waiting', liftableAt: 'bad' }],
+          },
+        },
+      },
+    });
+    expect(harness.composable.getContainerListPolicyState('container-1').liftableAt).toBe(
+      undefined,
+    );
+    expect(harness.composable.containerPolicyTooltip('container-1', 'maturity', Date.now())).toBe(
+      'Mature-only policy blocks updates younger than 5 days',
+    );
+    harness.wrapper.unmount();
+  });
+
   it('compares release overrides against group values and retains explicit zero ownership', async () => {
     const baseline = { maturitySkipReleases: 2, maturityReleaseFallbackDays: 10 };
     const meta = {

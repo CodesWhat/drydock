@@ -141,6 +141,7 @@
         "recently-applied": "Saltata: l'aggiornamento è stato appena applicato, in attesa della conferma del watcher.",
         "digest-buffered": "Trattenuta per il prossimo riepilogo."
       },
+      "notificationSkipAt": "Ultimo salto {date}",
       "backupsRollback": "Backup e rollback",
       "rollingBack": "Rollback in corso...",
       "rollbackLatest": "Rollback ultimo",
@@ -653,6 +654,7 @@
         "snoozed": "Aggiornamenti posticipati",
         "maturityBlockedSingular": "La policy solo maturi blocca gli aggiornamenti più recenti di {days} giorno",
         "maturityBlockedPlural": "La policy solo maturi blocca gli aggiornamenti più recenti di {days} giorni",
+        "maturityCountdown": "{message}. Si sblocca tra {countdown} ({date})",
         "maturityActiveSingular": "Policy solo maturi attiva (età minima {days} giorno)",
         "maturityActivePlural": "Policy solo maturi attiva (età minima {days} giorni)",
         "maturityAllowAll": "La policy di maturità consente tutti gli aggiornamenti",

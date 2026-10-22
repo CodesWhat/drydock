@@ -343,6 +343,53 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(updateBtn.attributes('disabled')).toBeUndefined();
   });
 
+  it('shows the remaining time and unlock date on a maturity-blocked row', async () => {
+    const liftableAt = new Date(Date.now() + 2 * 60 * 60_000 + 30_000).toISOString();
+    const row = makeRecentUpdate({
+      id: 'c-countdown',
+      status: 'maturity-blocked',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T12:00:00.000Z',
+        blockers: [
+          {
+            reason: 'maturity-not-reached',
+            severity: 'soft',
+            message: 'Update is still maturing.',
+            actionable: true,
+            liftableAt,
+          },
+        ],
+      },
+    });
+    const bad = makeRecentUpdate({
+      id: 'c-bad',
+      name: 'bad',
+      status: 'maturity-blocked',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T12:00:00.000Z',
+        blockers: [
+          {
+            reason: 'maturity-not-reached',
+            severity: 'soft',
+            message: 'x',
+            actionable: true,
+            liftableAt: 'not-a-date',
+          },
+        ],
+      },
+    });
+    const pending = makeRecentUpdate({ id: 'c-pending', name: 'pending' });
+    const wrapper = mountWidget({ recentUpdates: [row, bad, pending] });
+    await nextTick();
+
+    const labels = wrapper.findAll('[data-test="dashboard-maturity-countdown"]');
+    expect(labels).toHaveLength(1);
+    expect(labels[0].text()).toMatch(/^Unlocks in 2h \d+m \(/);
+    expect(labels[0].text()).toContain(new Date(liftableAt).toLocaleString());
+  });
+
   it('offers a manual Update Now action for a maturity-blocked row', async () => {
     const row = makeRecentUpdate({
       id: 'c-maturing',

@@ -20,6 +20,7 @@ import { formatShortDigest } from '../../utils/digest-format';
 import { formatUptimeFromIso } from '../../utils/uptime';
 import { updateInsightColor } from '../../utils/display';
 import { useNow } from '../../composables/useNow';
+import { formatLiftCountdown } from '../../composables/useUpdateStatus';
 import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
   getPrimaryHardBlocker,
@@ -102,11 +103,19 @@ const { isSelected, toggle, selectAllVisible, clearVisible, selectAllState, prun
 const { visibleColumns } = useColumnVisibility();
 const nowMs = useNow(
   30_000,
-  () => visibleColumns.value.has('uptime') || containerViewMode.value === 'cards',
+  () =>
+    visibleColumns.value.has('uptime') ||
+    containerViewMode.value === 'cards' ||
+    displayContainers.value.some((c) => Boolean(getContainerListPolicyState(c).liftableAt)),
 );
 const { t, te, locale } = useI18n();
 const operationStore = useOperationStore();
 const { resolveHost } = useAgentHosts();
+
+function getMaturityCountdownLabel(c: Container): string | undefined {
+  const liftableAt = getContainerListPolicyState(c).liftableAt;
+  return liftableAt ? formatLiftCountdown(liftableAt, nowMs.value) : undefined;
+}
 
 function getEnrichedPorts(c: Container) {
   return enrichContainerPorts(
@@ -878,9 +887,12 @@ onScopeDispose(() => {
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity', nowMs))">
                 <AppIcon name="clock" :size="14" />
               </span>
+              <span v-if="getContainerListPolicyState(c).maturityBlocked && getMaturityCountdownLabel(c)"
+                    class="text-2xs dd-text-muted"
+                    data-test="maturity-countdown-label">{{ getMaturityCountdownLabel(c) }}</span>
             </div>
           </div>
           </div>
@@ -1224,9 +1236,12 @@ onScopeDispose(() => {
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity', nowMs))">
                 <AppIcon name="clock" :size="12" />
               </span>
+              <span v-if="getContainerListPolicyState(c).maturityBlocked && getMaturityCountdownLabel(c)"
+                    class="text-2xs dd-text-muted"
+                    data-test="maturity-countdown-label">{{ getMaturityCountdownLabel(c) }}</span>
             </div>
           </div>
 

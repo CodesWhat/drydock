@@ -141,6 +141,7 @@
         "recently-applied": "Пропущено: обновление только что применено, ждём подтверждения от watcher.",
         "digest-buffered": "Удержано до следующего дайджеста."
       },
+      "notificationSkipAt": "Последний пропуск {date}",
       "backupsRollback": "Резервные копии и откат",
       "rollingBack": "Откат...",
       "rollbackLatest": "Откат к последней копии",
@@ -653,6 +654,7 @@
         "snoozed": "Обновления отложены",
         "maturityBlockedSingular": "Политика «Только зрелые» блокирует обновления младше {days} дня",
         "maturityBlockedPlural": "Политика «Только зрелые» блокирует обновления младше {days} дней",
+        "maturityCountdown": "{message}. Разблокируется через {countdown} ({date})",
         "maturityActiveSingular": "Активна политика «Только зрелые» (минимальный возраст — {days} день)",
         "maturityActivePlural": "Активна политика «Только зрелые» (минимальный возраст — {days} дней)",
         "maturityAllowAll": "Политика зрелости разрешает все обновления",

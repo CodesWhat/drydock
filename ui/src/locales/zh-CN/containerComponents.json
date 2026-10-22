@@ -141,6 +141,7 @@
         "recently-applied": "已跳过：更新刚刚应用，正在等待 watcher 确认。",
         "digest-buffered": "已留待下一次摘要发送。"
       },
+      "notificationSkipAt": "最近一次跳过 {date}",
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",
@@ -653,6 +654,7 @@
         "snoozed": "更新已推迟",
         "maturityBlockedSingular": "仅成熟策略会阻止低于 {days} 天的更新",
         "maturityBlockedPlural": "仅成熟策略会阻止低于 {days} 天的更新",
+        "maturityCountdown": "{message}。{countdown} 后解锁 ({date})",
         "maturityActiveSingular": "仅成熟策略已启用（最低 {days} 天）",
         "maturityActivePlural": "仅成熟策略已启用（最低 {days} 天）",
         "maturityAllowAll": "成熟度策略允许所有更新",

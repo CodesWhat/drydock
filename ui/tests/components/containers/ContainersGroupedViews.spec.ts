@@ -191,13 +191,19 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 
   const policyMap: Record<
     string,
-    { snoozed: boolean; skipped: boolean; maturityBlocked: boolean }
+    { snoozed: boolean; skipped: boolean; maturityBlocked: boolean; liftableAt?: string }
   > = {
     alpha: { snoozed: false, skipped: false, maturityBlocked: false },
     beta: { snoozed: true, skipped: false, maturityBlocked: false },
     gamma: { snoozed: false, skipped: true, maturityBlocked: false },
     delta: { snoozed: true, skipped: true, maturityBlocked: false },
     epsilon: { snoozed: false, skipped: false, maturityBlocked: true },
+    zeta: {
+      snoozed: false,
+      skipped: false,
+      maturityBlocked: true,
+      liftableAt: new Date(Date.now() + 3 * 60 * 60_000 + 30_000).toISOString(),
+    },
   };
   const resolvePolicyName = (target: string | { name?: string }) =>
     typeof target === 'string' ? target : (target.name ?? '');
@@ -1991,6 +1997,59 @@ describe('ContainersGroupedViews', () => {
     await nextTick();
 
     expect(wrapper.find('[aria-label="Maturity-blocked updates"]').exists()).toBe(true);
+  });
+
+  it('shows a live countdown label next to the maturity icon in list and card views', async () => {
+    const maturing = makeContainer({ id: 'c-zeta', name: 'zeta', newTag: null, updateKind: null });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [maturing];
+    refs.displayContainers.value = [maturing];
+    refs.renderGroups.value = [
+      {
+        key: 'group-zeta',
+        name: 'group-zeta',
+        containers: [maturing],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const labels = wrapper.findAll('[data-test="maturity-countdown-label"]');
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels[0].text()).toMatch(/^3h \d+m$/);
+  });
+
+  it('omits the countdown label when the maturity block has no liftableAt', async () => {
+    const maturing = makeContainer({
+      id: 'c-eps',
+      name: 'epsilon',
+      newTag: null,
+      updateKind: null,
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [maturing];
+    refs.displayContainers.value = [maturing];
+    refs.renderGroups.value = [
+      {
+        key: 'group-eps',
+        name: 'group-eps',
+        containers: [maturing],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="maturity-countdown-label"]').exists()).toBe(false);
   });
 
   it('keeps the stack Update all button visible when all updates are security-blocked', async () => {
