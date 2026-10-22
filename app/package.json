@@ -1,7 +1,7 @@
 {
   "name": "drydock-app",
   "version": "1.7.0",
-  "description": "Drydock backend \u2014 Docker container update manager",
+  "description": "Drydock backend — Docker container update manager",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -50,7 +50,7 @@
     "mqtt": "5.15.2",
     "nocache": "4.0.0",
     "node-cron": "4.6.0",
-    "nodemailer": "10.0.9",
+    "nodemailer": "10.0.10",
     "openid-client": "6.8.7",
     "p-limit": "7.3.2",
     "parse-docker-image-name": "3.0.0",
@@ -76,7 +76,7 @@
     "brace-expansion": "5.0.12",
     "fast-uri": "4.1.5",
     "fast-xml-parser": "5.11.1",
-    "ip-address": "10.7.1",
+    "ip-address": "10.7.4",
     "picomatch": "4.0.7",
     "postcss": "8.5.28",
     "qs": "6.16.0",
