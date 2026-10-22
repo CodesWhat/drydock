@@ -24,10 +24,17 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Key the config `sources` map by the setting name for a secret-file entry. A `_file` (`DD_X__FILE`) entry was listed under `DD_X__FILE` at boot and under `DD_X` after a reload, while the docs showed `DD_X`; both now use `DD_X`. `POST /api/v1/config/validate` no longer reports an unchanged `_file` entry as changed, and the editors label a field set by an environment variable as environment-owned even when the file also has a `_file` entry for it. (CFG-1)
 - With `watchall` on, a slow replacement no longer leaves the renamed old container as a duplicate row that could take the replacement's retained update policy. The old container is skipped while its replacement stands, so the policy stays on the replacement (DR-147).
 - Send the `update-pending-approval` notification. The rule existed and could be enabled, but nothing dispatched to it, so enabling it did nothing. It now fires once when an update candidate enters the approval queue (not under update mode `notify` or with container actions disabled, where approving is refused), follows the rule's enabled flag, trigger selection, templates and batch modes like the other rules, and links to the queue row when `DD_PUBLIC_URL` is set. It is deduplicated on the queue row, so a re-seen pending candidate or a restart doesn't notify again. The rule still ships disabled.
+- Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
+- Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
 
 ### Added
 
 - Decide several queued updates at once. The approval queue gets row checkboxes, a select-all box and a selection bar with **Approve selected** and **Reject selected**, backed by the new `POST /api/v1/approvals/bulk` (up to 200 ids, with `approve`, `reject` or `defer` as the action). Each id is decided exactly as its single-row route would decide it, so a row that would be refused on its own is reported in the `rejected` list with the same status and message and the rest still go through, and every decided row writes its own audit entry. Bulk approve requires the `X-DD-Confirm-Action: approvals-bulk-approve` header and a confirmation dialog in the UI that lists the hold reasons it overrides and skips hard-blocked rows, and uses the same `containers:update` scope as the single decisions.
+
+### Changed
+
+- Delete the container's `updateOperation` field and the SSE bridge that kept it in sync with the operations store (DR-89, slice 5). Every view already reads update progress from the store, and a new architecture test fails on any new use of the field. Behavior is unchanged.
+- Add an architecture test that fails on toast calls outside the update lifecycle layer (DR-90). Existing feedback toasts are allowlisted per file with a count that can only go down, update outcome toasts can only come from the operations store, and a toast binding can't be handed to a helper. Also drops an unused `useToast()` binding from `ContainersView`.
 
 ## [1.8.0-rc.5] - 2026-10-22
 
@@ -35,15 +42,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 > **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
 
 This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1), the [v1.8.0-rc.2 fixes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.2), and the [v1.8.0-rc.3](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.3) and [v1.8.0-rc.4](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.4) changes, and retains their upgrade warnings. Registries that list tags oldest first, such as GHCR, no longer hide new releases of very large repositories behind the 50-page listing limit (#1453). v1.8 GA is not released; v1.7.0 (GA 2026-10-19) is the latest stable release. RC5 has its own publication-based soak.
-### Changed
-
-- Delete the container's `updateOperation` field and the SSE bridge that kept it in sync with the operations store (DR-89, slice 5). Every view already reads update progress from the store, and a new architecture test fails on any new use of the field. Behavior is unchanged.
-- Add an architecture test that fails on toast calls outside the update lifecycle layer (DR-90). Existing feedback toasts are allowlisted per file with a count that can only go down, update outcome toasts can only come from the operations store, and a toast binding can't be handed to a helper. Also drops an unused `useToast()` binding from `ContainersView`.
 
 ### Fixed
 
-- Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
-- Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
 - Find new tags on registries that list oldest first. When a repository has more tags than the 50-page listing limit, as `ghcr.io/immich-app/immich-machine-learning` does, Drydock now continues the listing from the container's current tag instead of stopping, so newer releases are no longer missed ([#1453](https://github.com/CodesWhat/drydock/issues/1453)).
 
 ## [1.8.0-rc.4] - 2026-10-21
