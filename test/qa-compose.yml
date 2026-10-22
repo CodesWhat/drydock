@@ -13,6 +13,9 @@ services:
       # api-config.feature can assert GET /api/v1/config reports a present
       # file, a real section value, and that key's source as "file".
       - ./qa-drydock.yml:/config/drydock.yml:ro
+      # Throwaway TOTP key ring so the Playwright two-factor spec can enroll the
+      # dedicated totp-e2e account. Test-only key, never used outside this stack.
+      - ./qa-totp-keyring.json:/config/totp-keyring.json:ro
     # Optional gitignored credentials file (Docker Hub / GHCR tokens). See
     # test/.env.qa-creds.example. Compose silently no-ops when the file is
     # absent so CI / fresh checkouts still work without it.
@@ -40,6 +43,12 @@ services:
       - DD_NOTIFICATION_HTTP_MYWEBHOOK_METHOD=POST
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$zUAK9+ktVWNHyQdv3SaOSgMv3T02F1Zj8D+t1un7D98=$$KEmn6d94w03YxIlw7U7l/ikD9lW+H3IC1N7xbAhOB9yKofA3HoxUBmuvBawvShhv337zDv4+g9hobNWeQEWwkQ=="
+      # Dedicated account for totp.spec.ts. Enrolling TOTP ends every session of
+      # the account, so the spec must never touch admin's shared storageState.
+      - DD_AUTH_BASIC_TOTPE2E_USER=totp-e2e
+      - "DD_AUTH_BASIC_TOTPE2E_HASH=argon2id$$19456$$2$$4$$EMmBuKKZakqxY7+rqR9OUega2sAx0gRYszpIan23z5Q=$$NiD24IC9IiuDPwQc2N0fHW55SfftnWRKMGRq38JUDmlvwvqbTE/V9IKT9XAlySvXLGf4EFDgYhpLTVym4idbUg=="
+      - DD_AUTH_TOTP_KEYRING__FILE=/config/totp-keyring.json
+      - DD_AUTH_TOTP_ACTIVE_KEY_ID=qa-e2e
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
       # The complete Playwright release gate intentionally exercises dozens
