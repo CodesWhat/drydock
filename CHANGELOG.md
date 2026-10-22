@@ -21,6 +21,7 @@ This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/
 ### Fixed
 
 - Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
+- Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
 - Find new tags on registries that list oldest first. When a repository has more tags than the 50-page listing limit, as `ghcr.io/immich-app/immich-machine-learning` does, Drydock now continues the listing from the container's current tag instead of stopping, so newer releases are no longer missed ([#1453](https://github.com/CodesWhat/drydock/issues/1453)).
 
 ## [1.8.0-rc.4] - 2026-10-21
