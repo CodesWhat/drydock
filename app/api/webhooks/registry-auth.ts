@@ -68,15 +68,16 @@ export function authenticateRegistryWebhook(
     check('bearer', bearer),
   ];
 
-  if (input.modes.includes('hmac') && input.signature) {
-    presented = true;
-    const verification = verifyRegistryWebhookSignature({
-      payload: input.payload,
-      secret: input.hmacSecret,
-      signature: input.signature,
-    });
-    results.push(verification.valid);
-  }
+  // Always run the verifier when hmac is allowed. It returns invalid for a
+  // missing or empty signature, so the outcome never branches on request data.
+  const hmacAllowed = input.modes.includes('hmac');
+  const verification = verifyRegistryWebhookSignature({
+    payload: input.payload,
+    secret: input.hmacSecret,
+    signature: input.signature ?? '',
+  });
+  results.push(hmacAllowed && verification.valid);
+  presented = presented || (hmacAllowed && Boolean(input.signature));
 
   const matchedIndex = results.indexOf(true);
   if (matchedIndex !== -1) {

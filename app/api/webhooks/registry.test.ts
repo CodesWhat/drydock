@@ -420,6 +420,10 @@ describe('api/webhooks/registry', () => {
 
     test('returns 401 missing when the provider is HMAC-only and no signature is sent', async () => {
       mockParseRegistryWebhookPayload.mockClear();
+      mockVerifyRegistryWebhookSignature.mockReturnValue({
+        valid: false,
+        reason: 'missing-signature',
+      });
       const res = createMockResponse();
       await getProviderHandler('/:provider')(
         createMockRequest({ params: { provider: 'quay' }, body: {}, headers: {} }) as any,

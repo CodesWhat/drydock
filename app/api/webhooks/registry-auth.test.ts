@@ -127,6 +127,59 @@ describe('api/webhooks/registry-auth', () => {
       ).toEqual({ status: 'invalid' });
     });
 
+    test('reports missing for hmac mode with no signature and no other credential', () => {
+      expect(authenticateRegistryWebhook(buildInput())).toEqual({ status: 'missing' });
+      expect(authenticateRegistryWebhook(buildInput({ signature: '' }))).toEqual({
+        status: 'missing',
+      });
+    });
+
+    test('reports invalid for a non-hex or whitespace signature in hmac mode', () => {
+      expect(authenticateRegistryWebhook(buildInput({ signature: 'not-hex!' }))).toEqual({
+        status: 'invalid',
+      });
+      expect(authenticateRegistryWebhook(buildInput({ signature: '   ' }))).toEqual({
+        status: 'invalid',
+      });
+    });
+
+    test('never accepts an hmac signature when no hmac secret is configured', () => {
+      const signature = createHmac('sha256', '').update('{"a":1}').digest('hex');
+      expect(authenticateRegistryWebhook(buildInput({ hmacSecret: '', signature }))).toEqual({
+        status: 'invalid',
+      });
+    });
+
+    test('ignores a valid signature when hmac mode is not allowed', () => {
+      const signature = createHmac('sha256', HMAC_SECRET).update('{"a":1}').digest('hex');
+      expect(authenticateRegistryWebhook(buildInput({ modes: ['path'], signature }))).toEqual({
+        status: 'missing',
+      });
+    });
+
+    test('mixed modes: a valid signature wins over a wrong path secret', () => {
+      const signature = createHmac('sha256', HMAC_SECRET).update('{"a":1}').digest('hex');
+      expect(
+        authenticateRegistryWebhook(
+          buildInput({ modes: ['path', 'hmac'], pathSecret: 'wrong', signature }),
+        ),
+      ).toEqual({ status: 'ok', mode: 'hmac' });
+    });
+
+    test('mixed modes: a valid static secret wins over a bad signature', () => {
+      expect(
+        authenticateRegistryWebhook(
+          buildInput({ modes: ['path', 'hmac'], pathSecret: STATIC_SECRET, signature: 'deadbeef' }),
+        ),
+      ).toEqual({ status: 'ok', mode: 'path' });
+    });
+
+    test('mixed modes: a bad signature alone is invalid, not missing', () => {
+      expect(
+        authenticateRegistryWebhook(buildInput({ modes: ['path', 'hmac'], signature: 'deadbeef' })),
+      ).toEqual({ status: 'invalid' });
+    });
+
     test('a valid credential wins even when another presented credential is wrong', () => {
       expect(
         authenticateRegistryWebhook(
