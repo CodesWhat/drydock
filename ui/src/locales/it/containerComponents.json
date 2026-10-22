@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "In coda",
+      "updateFailed": "Aggiornamento non riuscito",
       "statusScanning": "Scansione",
       "statusUpdating": "Aggiornamento",
       "statusPulling": "Pull in corso…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Apri impostazioni registry",
         "openTriggerSettings": "Apri impostazioni trigger"
       },
+      "requestFailed": "Impossibile preparare l'anteprima di questo aggiornamento ({status})",
       "toasts": {
         "failedTitle": "Anteprima non riuscita",
         "failedDetail": "Impossibile generare l'anteprima dell'aggiornamento"

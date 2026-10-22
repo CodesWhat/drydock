@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "In Warteschlange",
+      "updateFailed": "Update fehlgeschlagen",
       "statusScanning": "Scan läuft",
       "statusUpdating": "Aktualisiert",
       "statusPulling": "Pull läuft…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Registry-Einstellungen öffnen",
         "openTriggerSettings": "Trigger-Einstellungen öffnen"
       },
+      "requestFailed": "Die Vorschau für dieses Update konnte nicht erstellt werden ({status})",
       "toasts": {
         "failedTitle": "Vorschau fehlgeschlagen",
         "failedDetail": "Update-Vorschau konnte nicht erstellt werden"

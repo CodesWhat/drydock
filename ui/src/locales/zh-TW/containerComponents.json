@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "排隊中",
+      "updateFailed": "更新失敗",
       "statusScanning": "掃描中",
       "statusUpdating": "更新中",
       "statusPulling": "拉取中…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "開啟登錄設定",
         "openTriggerSettings": "開啟觸發器設定"
       },
+      "requestFailed": "無法準備此更新的預覽 ({status})",
       "toasts": {
         "failedTitle": "預覽失敗",
         "failedDetail": "無法產生更新預覽"

@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "Queued",
+      "updateFailed": "Update failed",
       "statusScanning": "Scanning",
       "statusUpdating": "Updating",
       "statusPulling": "Pulling…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Open registry settings",
         "openTriggerSettings": "Open trigger settings"
       },
+      "requestFailed": "Unable to prepare this update preview ({status})",
       "toasts": {
         "failedTitle": "Preview failed",
         "failedDetail": "Failed to generate update preview"

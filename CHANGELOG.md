@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The update-status panel now shows the Manual and Blocked action policy badges, not only Auto, and the full-page associated-triggers rows carry the per-trigger policy tooltip and Auto badge like the other trigger lists.
+- Translate the remaining hard-coded UI strings and gate against new ones. Seven English literals are now localized in all 17 locales: the yes/no values in the container preview and compose-write rows, the "Page" and "unknown image" search subtitles, the preview-request fallback error, and a missing `containerComponents.groupedViews.updateFailed` key that rendered its raw key path when an update failed over SSE. New i18n specs fail CI when a key used in `ui/src` is absent from the English locale files (including dynamic `t(\`prefix.${x}\`)` keys) and when a user-facing literal reaches a template expression, toast, dialog or label property outside a documented allowlist.
 
 ### Added
 

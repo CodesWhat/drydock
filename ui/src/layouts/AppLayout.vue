@@ -194,7 +194,7 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
     group.items.map((item) => ({
       id: `page:${item.route}`,
       title: item.label,
-      subtitle: `Page · ${item.route}`,
+      subtitle: t('appShell.layout.search.pageSubtitle', { route: item.route }),
       icon: item.icon,
       route: item.route,
       kind: 'page',
@@ -1150,7 +1150,9 @@ function buildSidebarContainerEntry(container: Record<string, unknown>): SearchC
   const displayIcon = String(container.displayIcon || '');
   const imageName = String(container.image?.name || '');
   const imageTag = String(container.image?.tag?.value || '');
-  const image = imageName ? `${imageName}${imageTag ? `:${imageTag}` : ''}` : 'unknown image';
+  const image = imageName
+    ? `${imageName}${imageTag ? `:${imageTag}` : ''}`
+    : t('appShell.layout.search.unknownImage');
   return {
     id: String(container.id || displayName),
     name: String(container.name || displayName),

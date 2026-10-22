@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "В очереди",
+      "updateFailed": "Не удалось обновить",
       "statusScanning": "Сканирование",
       "statusUpdating": "Обновляется",
       "statusPulling": "Загрузка образа…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Открыть настройки реестра",
         "openTriggerSettings": "Открыть настройки триггера"
       },
+      "requestFailed": "Не удалось подготовить предпросмотр этого обновления ({status})",
       "toasts": {
         "failedTitle": "Ошибка предпросмотра",
         "failedDetail": "Не удалось создать предпросмотр обновления"

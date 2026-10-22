@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "キュー済み",
+      "updateFailed": "アップデートに失敗しました",
       "statusScanning": "スキャン中",
       "statusUpdating": "更新中",
       "statusPulling": "プル中…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "レジストリ設定を開く",
         "openTriggerSettings": "トリガー設定を開く"
       },
+      "requestFailed": "このアップデートのプレビューを準備できません ({status})",
       "toasts": {
         "failedTitle": "プレビューに失敗しました",
         "failedDetail": "更新プレビューの生成に失敗しました"

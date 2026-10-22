@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "Sıraya alındı",
+      "updateFailed": "Güncelleme başarısız oldu",
       "statusScanning": "Tarama",
       "statusUpdating": "Güncelleniyor",
       "statusPulling": "Çekiliyor…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Registry ayarlarını aç",
         "openTriggerSettings": "Tetikleyici ayarlarını aç"
       },
+      "requestFailed": "Bu güncellemenin önizlemesi hazırlanamadı ({status})",
       "toasts": {
         "failedTitle": "Önizleme başarısız oldu",
         "failedDetail": "Güncelleme önizlemesi oluşturulamadı"

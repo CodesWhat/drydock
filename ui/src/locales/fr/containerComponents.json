@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "En file",
+      "updateFailed": "Échec de la mise à jour",
       "statusScanning": "Scan",
       "statusUpdating": "Mise à jour",
       "statusPulling": "Pull en cours…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Ouvrir les paramètres du registre",
         "openTriggerSettings": "Ouvrir les paramètres du trigger"
       },
+      "requestFailed": "Impossible de préparer l'aperçu de cette mise à jour ({status})",
       "toasts": {
         "failedTitle": "Échec de la prévisualisation",
         "failedDetail": "Impossible de générer la prévisualisation de la mise à jour"
