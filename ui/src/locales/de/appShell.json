@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Sie sind offline",
+      "offlineBody": "Es werden die zuletzt bekannten Daten angezeigt. Änderungen sind deaktiviert, bis die Verbindung wieder steht.",
+      "unreachableTitle": "Drydock-Server nicht erreichbar",
+      "unreachableBody": "Es werden die zuletzt bekannten Daten angezeigt. Änderungen sind deaktiviert und Drydock versucht es weiter.",
+      "lastUpdated": "Zuletzt aktualisiert: {time}.",
+      "actionsDisabledOffline": "Offline nicht verfügbar",
+      "actionsDisabledUnreachable": "Nicht verfügbar, solange der Drydock-Server nicht erreichbar ist"
+    },
     "toast": {
       "dismiss": "Ausblenden"
     },
@@ -145,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Verbindung verloren",
         "applyingUpdateTitle": "Update wird angewendet",
-        "lostMessage": "Der Server ist nicht erreichbar. Warten auf Wiederverbindung...",
         "restartingMessage": "Drydock startet nach einem Self-Update neu{opId}. Verbindung wird hergestellt, sobald der Dienst wieder verfügbar ist...",
-        "reconnecting": "Verbindet neu",
         "restartingService": "Dienst wird neu gestartet"
       },
       "shortcuts": {

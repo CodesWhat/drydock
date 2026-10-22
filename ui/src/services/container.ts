@@ -5,6 +5,8 @@ import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
 import { normalizeReleaseNotes } from '../utils/container-mapper';
 import { ApiError, errorMessage } from '../utils/error';
+import type { LastKnownKey } from '../utils/last-known';
+import { withLastKnown } from './last-known';
 
 interface ContainerGroupMember {
   id: string;
@@ -126,39 +128,55 @@ function buildContainerQueryString(options: GetAllContainersOptions): string {
   return queryString.length > 0 ? `?${queryString}` : '';
 }
 
+const LAST_KNOWN_CONTAINER_LIST_KEYS: Record<string, LastKnownKey | undefined> = {
+  '': 'containers',
+  '?includeVulnerabilities=true': 'containers-vulnerabilities',
+};
+
 async function getAllContainers(
   optionsOrSignal: GetAllContainersOptions | AbortSignal = {},
 ): Promise<ApiContainerInput[]> {
   const options = isAbortSignal(optionsOrSignal) ? { signal: optionsOrSignal } : optionsOrSignal;
-  const response = await fetch(`/api/v1/containers${buildContainerQueryString(options)}`, {
-    credentials: 'include',
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to get containers: ${response.statusText}`);
-  }
-  const payload = await readJsonResponse(response, 'Containers API');
-  return extractCollectionData<ApiContainerInput>(payload);
+  const queryString = buildContainerQueryString(options);
+  const load = async () => {
+    const response = await fetch(`/api/v1/containers${queryString}`, {
+      credentials: 'include',
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get containers: ${response.statusText}`);
+    }
+    const payload = await readJsonResponse(response, 'Containers API');
+    return extractCollectionData<ApiContainerInput>(payload);
+  };
+  // Paged or otherwise parameterised lists are not remembered: only the two
+  // whole-list shapes the views render are.
+  const lastKnownKey = LAST_KNOWN_CONTAINER_LIST_KEYS[queryString];
+  return lastKnownKey ? withLastKnown(lastKnownKey, load) : load();
 }
 
 async function getContainerSummary(): Promise<ContainerSummary> {
-  const response = await fetch('/api/v1/containers/summary', {
-    credentials: 'include',
+  return withLastKnown('container-summary', async () => {
+    const response = await fetch('/api/v1/containers/summary', {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get container summary: ${response.statusText}`);
+    }
+    return readJsonResponse<ContainerSummary>(response, 'Container summary API');
   });
-  if (!response.ok) {
-    throw new Error(`Failed to get container summary: ${response.statusText}`);
-  }
-  return readJsonResponse<ContainerSummary>(response, 'Container summary API');
 }
 
 async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse> {
-  const response = await fetch('/api/v1/containers/recent-status', {
-    credentials: 'include',
+  return withLastKnown('container-recent-status', async () => {
+    const response = await fetch('/api/v1/containers/recent-status', {
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to get container recent status: ${response.statusText}`);
+    }
+    return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
   });
-  if (!response.ok) {
-    throw new Error(`Failed to get container recent status: ${response.statusText}`);
-  }
-  return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
 }
 
 async function refreshAllContainers() {
@@ -322,12 +340,14 @@ async function updateContainerPolicy(
 }
 
 async function getContainerGroups(): Promise<ContainerGroup[]> {
-  const response = await fetch('/api/v1/containers/groups', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(`Failed to get container groups: ${response.statusText}`);
-  }
-  const payload = await readJsonResponse(response, 'Container groups API');
-  return extractCollectionData<ContainerGroup>(payload);
+  return withLastKnown('container-groups', async () => {
+    const response = await fetch('/api/v1/containers/groups', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to get container groups: ${response.statusText}`);
+    }
+    const payload = await readJsonResponse(response, 'Container groups API');
+    return extractCollectionData<ContainerGroup>(payload);
+  });
 }
 
 /**

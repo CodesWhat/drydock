@@ -155,4 +155,38 @@ describe('useServerFeatures', () => {
     expect(features.featureFlags.value).toEqual({});
     expect(features.containerActionsEnabled.value).toBe(false);
   });
+
+  it('disables actions and delete with the connectivity reason while offline', async () => {
+    mockGetServer.mockResolvedValueOnce({
+      configuration: { feature: { containeractions: true, delete: true } },
+    });
+    const { useServerFeatures } = await loadComposable();
+    const { installConnectivityMonitor, useConnectivity } = await import(
+      '@/composables/useConnectivity'
+    );
+    const features = useServerFeatures({ autoLoad: false });
+    await features.loadServerFeatures();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({ status: 200 }) as unknown as typeof fetch;
+    const uninstall = installConnectivityMonitor();
+
+    try {
+      expect(features.containerActionsEnabled.value).toBe(true);
+      expect(features.containerActionsDisabledReason.value).toBe('');
+
+      globalThis.dispatchEvent(new Event('offline'));
+      expect(features.containerActionsEnabled.value).toBe(false);
+      expect(features.deleteEnabled.value).toBe(false);
+      expect(features.containerActionsDisabledReason.value).toBe('Unavailable while offline');
+
+      useConnectivity().markServerUnreachable();
+      globalThis.dispatchEvent(new Event('online'));
+      expect(features.containerActionsDisabledReason.value).toBe(
+        'Unavailable while the Drydock server is unreachable',
+      );
+    } finally {
+      uninstall();
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

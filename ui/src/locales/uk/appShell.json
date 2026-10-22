@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Немає підключення до мережі",
+      "offlineBody": "Показано останні відомі дані. Зміни вимкнено до відновлення зв'язку.",
+      "unreachableTitle": "Сервер Drydock недоступний",
+      "unreachableBody": "Показано останні відомі дані. Зміни вимкнено, Drydock продовжує спроби підключення.",
+      "lastUpdated": "Останнє оновлення: {time}.",
+      "actionsDisabledOffline": "Недоступно без мережі",
+      "actionsDisabledUnreachable": "Недоступно, поки сервер Drydock недоступний"
+    },
     "toast": {
       "dismiss": "Закрити"
     },
@@ -145,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "З'єднання перервано",
         "applyingUpdateTitle": "Застосування оновлення",
-        "lostMessage": "Сервер недоступний. Очікування відновлення зв'язку...",
         "restartingMessage": "Drydock перезапускається після самооновлення{opId}. Підключення буде відновлено після запуску сервісу...",
-        "reconnecting": "Підключення",
         "restartingService": "Перезапуск сервісу"
       },
       "shortcuts": {

@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Bạn đang ngoại tuyến",
+      "offlineBody": "Đang hiển thị dữ liệu đã biết gần nhất. Các thay đổi bị tắt cho đến khi kết nối lại.",
+      "unreachableTitle": "Không thể kết nối máy chủ Drydock",
+      "unreachableBody": "Đang hiển thị dữ liệu đã biết gần nhất. Các thay đổi bị tắt và Drydock vẫn tiếp tục thử lại.",
+      "lastUpdated": "Cập nhật lần cuối: {time}.",
+      "actionsDisabledOffline": "Không khả dụng khi ngoại tuyến",
+      "actionsDisabledUnreachable": "Không khả dụng khi không kết nối được máy chủ Drydock"
+    },
     "toast": {
       "dismiss": "Đóng"
     },
@@ -145,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Mất kết nối",
         "applyingUpdateTitle": "Đang áp dụng cập nhật",
-        "lostMessage": "Máy chủ không thể truy cập. Đang chờ máy chủ trở lại...",
         "restartingMessage": "Drydock đang khởi động lại sau khi tự cập nhật{opId}. Đang kết nối lại khi dịch vụ trở lại...",
-        "reconnecting": "Đang kết nối lại",
         "restartingService": "Đang khởi động lại dịch vụ"
       },
       "shortcuts": {

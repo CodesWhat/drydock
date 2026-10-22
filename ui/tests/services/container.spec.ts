@@ -52,6 +52,33 @@ describe('Container Service', () => {
       expect(containers).toEqual(mockContainers);
     });
 
+    it('serves the last known list only after a network failure', async () => {
+      localStorage.clear();
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: '1' }], total: 1 }),
+      } as any);
+      await getAllContainers();
+
+      vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      expect(await getAllContainers()).toEqual([{ id: '1' }]);
+
+      vi.mocked(fetch).mockResolvedValueOnce({ ok: false, statusText: 'Bad Gateway' } as any);
+      await expect(getAllContainers()).rejects.toThrow('Failed to get containers: Bad Gateway');
+    });
+
+    it('does not remember paged lists', async () => {
+      localStorage.clear();
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: '1' }], total: 1 }),
+      } as any);
+      await getAllContainers({ limit: 10 });
+
+      vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      await expect(getAllContainers({ limit: 10 })).rejects.toThrow('Failed to fetch');
+    });
+
     it('includes vulnerability details when requested', async () => {
       const mockContainers = [{ id: '1', name: 'container1' }];
       vi.mocked(fetch).mockResolvedValueOnce({

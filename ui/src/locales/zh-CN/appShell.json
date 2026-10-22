@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "您已离线",
+      "offlineBody": "正在显示最近一次已知的数据。重新连接前无法进行更改。",
+      "unreachableTitle": "无法连接 Drydock 服务器",
+      "unreachableBody": "正在显示最近一次已知的数据。更改已禁用，Drydock 会持续重试。",
+      "lastUpdated": "最后更新：{time}。",
+      "actionsDisabledOffline": "离线时不可用",
+      "actionsDisabledUnreachable": "Drydock 服务器无法连接时不可用"
+    },
     "toast": {
       "dismiss": "关闭"
     },
@@ -145,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "连接丢失",
         "applyingUpdateTitle": "正在应用更新",
-        "lostMessage": "服务器无法访问。正在等待其重新上线...",
         "restartingMessage": "Drydock 正在重新启动{opId}。服务恢复后将重新连接...",
-        "reconnecting": "重新连接中",
         "restartingService": "重启服务中"
       },
       "shortcuts": {

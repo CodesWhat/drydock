@@ -1,4 +1,5 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { withLastKnown } from './last-known';
 
 interface WatcherDetailPathOptions {
   type: string;
@@ -21,12 +22,14 @@ function getWatcherProviderColor(type: string) {
 }
 
 async function getAllWatchers() {
-  const response = await fetch('/api/v1/watchers', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(`Failed to get watchers: ${response.statusText}`);
-  }
-  const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return withLastKnown('watchers', async () => {
+    const response = await fetch('/api/v1/watchers', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to get watchers: ${response.statusText}`);
+    }
+    const payload = await readJsonResponse(response);
+    return extractCollectionData(payload);
+  });
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {

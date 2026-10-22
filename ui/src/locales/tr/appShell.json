@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Çevrimdışısınız",
+      "offlineBody": "Bilinen son veriler gösteriliyor. Yeniden bağlanana kadar değişiklikler devre dışı.",
+      "unreachableTitle": "Drydock sunucusuna ulaşılamıyor",
+      "unreachableBody": "Bilinen son veriler gösteriliyor. Değişiklikler devre dışı ve Drydock yeniden denemeye devam ediyor.",
+      "lastUpdated": "Son güncelleme: {time}.",
+      "actionsDisabledOffline": "Çevrimdışıyken kullanılamaz",
+      "actionsDisabledUnreachable": "Drydock sunucusuna ulaşılamıyorken kullanılamaz"
+    },
     "toast": {
       "dismiss": "Reddet"
     },
@@ -145,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Bağlantı Kesildi",
         "applyingUpdateTitle": "Güncelleme Uygulanıyor",
-        "lostMessage": "Sunucuya ulaşılamıyor. Tekrar internete dönmesini bekliyorum...",
         "restartingMessage": "Drydock, kendi kendine güncelleme{opId} sonrasında yeniden başlatılıyor. Hizmet geri geldiğinde yeniden bağlanılıyor...",
-        "reconnecting": "Yeniden bağlanılıyor",
         "restartingService": "Hizmet yeniden başlatılıyor"
       },
       "shortcuts": {

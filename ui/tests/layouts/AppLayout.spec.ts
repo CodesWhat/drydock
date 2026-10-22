@@ -321,6 +321,30 @@ describe('AppLayout', () => {
     }
   });
 
+  it('flags the server unreachable and shows no blocking overlay unless a self-update is running', async () => {
+    const { useConnectivity } = await import('@/composables/useConnectivity');
+    const wrapper = mountLayout({ teleport: false, Transition: false });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+      event: string,
+      payload?: unknown,
+    ) => void;
+
+    emit('connection-lost');
+    await flushPromises();
+    expect(useConnectivity().status.value).toBe('server-unreachable');
+    expect(document.body.innerHTML).not.toContain('disconnect-bounce');
+
+    emit('sse:connected');
+    await flushPromises();
+    expect(useConnectivity().status.value).toBe('online');
+
+    emit('self-update', { opId: 'abc12345' });
+    await flushPromises();
+    expect(document.body.innerHTML).toContain('disconnect-bounce');
+  });
+
   it('stops connectivity polling when connectivity check succeeds', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
@@ -328,7 +352,7 @@ describe('AppLayout', () => {
     mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
 
     try {
-      const wrapper = mountLayout();
+      const wrapper = mountLayout({ teleport: false });
       mountedWrappers.push(wrapper);
       await flushPromises();
 

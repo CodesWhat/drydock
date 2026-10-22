@@ -1,9 +1,13 @@
+import { withLastKnown } from './last-known';
+
 async function getServer() {
-  const response = await fetch('/api/v1/server', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(`Failed to get server: ${response.statusText}`);
-  }
-  return response.json();
+  return withLastKnown('server', async () => {
+    const response = await fetch('/api/v1/server', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to get server: ${response.statusText}`);
+    }
+    return response.json();
+  });
 }
 
 async function apiErrorDetails(response: Response): Promise<string> {
