@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
 - Show when a notification was last skipped. The container detail notification section already named the reason, and now also shows the local date and time of the last skip for each trigger.
 - Key the config `sources` map by the setting name for a secret-file entry. A `_file` (`DD_X__FILE`) entry was listed under `DD_X__FILE` at boot and under `DD_X` after a reload, while the docs showed `DD_X`; both now use `DD_X`. `POST /api/v1/config/validate` no longer reports an unchanged `_file` entry as changed, and the editors label a field set by an environment variable as environment-owned even when the file also has a `_file` entry for it. (CFG-1)
+- With `watchall` on, a slow replacement no longer leaves the renamed old container as a duplicate row that could take the replacement's retained update policy. The old container is skipped while its replacement stands, so the policy stays on the replacement (DR-147).
 
 ## [1.8.0-rc.5] - 2026-10-22
 
