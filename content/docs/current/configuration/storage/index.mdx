@@ -23,6 +23,14 @@ Published v1.6.1 and v1.7.0 builds (including its rc.24 candidate) already store
 
 After import, the main JSON file is renamed to `<DD_STORE_FILE>.pre-1.8.bak` unless that backup already exists. An existing backup is never overwritten: Drydock logs a warning and leaves the imported JSON file in place. These are pre-upgrade snapshots, not live copies of the SQLite store.
 
+## Migration snapshots and downgrade protection
+
+Before applying a pending schema migration to an existing database, Drydock writes a consistent snapshot next to it, `dd.sqlite.pre-migration-v<schema version>-<timestamp>` (readable by the owner only), and logs its path. The newest three are kept; older ones are deleted. A fresh database gets no snapshot, and neither does a start with nothing to migrate. If the snapshot can't be written, for example because the volume is full, startup stops with an error instead of migrating without a restore point. Free space or fix permissions on the store directory and restart.
+
+A database that a newer Drydock build already migrated is not opened by an older one. The older build logs one error naming both schema versions and exits with status 1, so a downgrade (or a self-update rollback to the previous image) can't corrupt it. To go back, either run a build at least as new as the one that last ran, or stop Drydock, copy the `dd.sqlite.pre-migration-*` snapshot taken before that migration over `dd.sqlite`, delete any `dd.sqlite-wal` and `dd.sqlite-shm` files beside it, and start the older build. Anything written after the snapshot is not in it.
+
+Builds up to v1.8.0-rc.5 have neither the snapshot nor the check, so a guarded build protects against downgrades only to builds that also include it.
+
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |

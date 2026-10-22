@@ -12,6 +12,7 @@ interface EntryPointOptions {
   migrateExitCode?: number | null;
   triggerState?: Record<string, unknown>;
   configurationValidationErrors?: Array<{ path: string; envKey: string; message: string }>;
+  storeInitError?: 'schema-too-new' | 'snapshot' | 'other';
 }
 
 async function loadEntryPoint({
@@ -21,6 +22,7 @@ async function loadEntryPoint({
   migrateExitCode = null,
   triggerState = {},
   configurationValidationErrors = [],
+  storeInitError,
 }: EntryPointOptions = {}) {
   vi.resetModules();
   vi.clearAllMocks();
@@ -53,7 +55,20 @@ async function loadEntryPoint({
   const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
     throw new Error('process.exit(1) called');
   });
-  const storeInit = vi.fn(async () => undefined);
+  class StoreSchemaTooNewError extends Error {}
+  class StoreSnapshotError extends Error {}
+  const storeInitFailures = {
+    'schema-too-new': new StoreSchemaTooNewError('database is from a newer build'),
+    snapshot: new StoreSnapshotError('snapshot could not be written'),
+    other: new Error('unrelated store failure'),
+  };
+  const storeInit = vi.fn(async () => {
+    if (storeInitError) {
+      throw storeInitFailures[storeInitError];
+    }
+  });
+  vi.doMock('./store/db/migrations.js', () => ({ StoreSchemaTooNewError }));
+  vi.doMock('./store/db/pre-migration.js', () => ({ StoreSnapshotError }));
   const prometheusInit = vi.fn();
   const registryState = { trigger: triggerState };
   const registryInit = vi.fn(async () => undefined);
@@ -390,6 +405,30 @@ describe('entrypoint', () => {
     );
     expect(harness.exitSpy).toHaveBeenCalledWith(1);
     expect(harness.storeInit).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['schema-too-new', 'database is from a newer build'],
+    ['snapshot', 'snapshot could not be written'],
+  ] as const)(
+    'logs a %s store failure as one error line and exits 1',
+    async (storeInitError, message) => {
+      const harness = await loadEntryPoint({ storeInitError });
+
+      await expect(harness.imported).rejects.toThrow('process.exit(1) called');
+
+      expect(harness.logError).toHaveBeenCalledWith(message);
+      expect(harness.exitSpy).toHaveBeenCalledWith(1);
+      expect(harness.registryInit).not.toHaveBeenCalled();
+    },
+  );
+
+  test('rethrows an unrelated store init failure untouched', async () => {
+    const harness = await loadEntryPoint({ storeInitError: 'other' });
+
+    await expect(harness.imported).rejects.toThrow('unrelated store failure');
+
+    expect(harness.exitSpy).not.toHaveBeenCalled();
   });
 
   test('does not start the config file watch when DD_CONFIG_WATCH is unset', async () => {
