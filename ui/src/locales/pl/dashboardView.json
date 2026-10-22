@@ -140,6 +140,7 @@
       "loadFailed": "Nie udało się załadować ostatniej aktywności",
       "empty": "Brak ostatniej aktywności",
       "system": "System"
-    }
+    },
+    "recentActivityLoadFailed": "Nie udało się wczytać ostatniej aktywności"
   }
 }

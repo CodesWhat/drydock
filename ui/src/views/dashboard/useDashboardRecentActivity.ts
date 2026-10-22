@@ -1,4 +1,5 @@
 import { onScopeDispose, type Ref, ref, watch } from 'vue';
+import { i18n } from '../../boot/i18n';
 import { getAuditLog } from '../../services/audit';
 import type { AuditEntry } from '../../utils/audit-helpers';
 import { errorMessage } from '../../utils/error';
@@ -49,7 +50,7 @@ export function useDashboardRecentActivity(options: { enabled: Ref<boolean> }) {
       error.value = null;
     } catch (e: unknown) {
       if (current !== requestId) return;
-      error.value = errorMessage(e, 'Failed to load recent activity');
+      error.value = errorMessage(e, i18n.global.t('dashboardView.recentActivityLoadFailed'));
     } finally {
       if (current === requestId) loading.value = false;
     }

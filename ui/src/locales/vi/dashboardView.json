@@ -140,6 +140,7 @@
       "loadFailed": "Không thể tải hoạt động gần đây",
       "empty": "Chưa có hoạt động gần đây",
       "system": "Hệ thống"
-    }
+    },
+    "recentActivityLoadFailed": "Không thể tải hoạt động gần đây"
   }
 }

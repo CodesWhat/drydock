@@ -140,6 +140,7 @@
       "loadFailed": "최근 활동을 불러오지 못했습니다",
       "empty": "최근 활동이 없습니다",
       "system": "시스템"
-    }
+    },
+    "recentActivityLoadFailed": "최근 활동을 불러오지 못했습니다"
   }
 }

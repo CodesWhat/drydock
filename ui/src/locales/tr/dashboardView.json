@@ -140,6 +140,7 @@
       "loadFailed": "Son etkinlik yüklenemedi",
       "empty": "Yakın zamanda etkinlik yok",
       "system": "Sistem"
-    }
+    },
+    "recentActivityLoadFailed": "Son etkinlik yüklenemedi"
   }
 }

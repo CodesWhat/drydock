@@ -140,6 +140,7 @@
       "loadFailed": "無法載入最近活動",
       "empty": "尚無最近活動",
       "system": "系統"
-    }
+    },
+    "recentActivityLoadFailed": "無法載入最近活動"
   }
 }

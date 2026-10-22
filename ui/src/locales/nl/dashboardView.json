@@ -140,6 +140,7 @@
       "loadFailed": "Recente activiteit kon niet worden geladen",
       "empty": "Geen recente activiteit",
       "system": "Systeem"
-    }
+    },
+    "recentActivityLoadFailed": "Recente activiteit kon niet worden geladen"
   }
 }

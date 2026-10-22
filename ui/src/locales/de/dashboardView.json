@@ -140,6 +140,7 @@
       "loadFailed": "Letzte Aktivität konnte nicht geladen werden",
       "empty": "Keine aktuelle Aktivität",
       "system": "System"
-    }
+    },
+    "recentActivityLoadFailed": "Letzte Aktivitäten konnten nicht geladen werden"
   }
 }

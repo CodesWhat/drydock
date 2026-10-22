@@ -140,6 +140,7 @@
       "loadFailed": "Impossible de charger l'activité récente",
       "empty": "Aucune activité récente",
       "system": "Système"
-    }
+    },
+    "recentActivityLoadFailed": "Impossible de charger l'activité récente"
   }
 }

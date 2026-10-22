@@ -140,6 +140,7 @@
       "loadFailed": "Failed to load recent activity",
       "empty": "No recent activity",
       "system": "System"
-    }
+    },
+    "recentActivityLoadFailed": "Failed to load recent activity"
   }
 }
