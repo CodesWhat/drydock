@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "オフラインです",
+      "offlineBody": "最後に取得したデータを表示しています。再接続するまで変更はできません。",
+      "unreachableTitle": "Drydock サーバーに接続できません",
+      "unreachableBody": "最後に取得したデータを表示しています。変更は無効で、Drydock は再接続を試行し続けています。",
+      "lastUpdated": "最終更新: {time}",
+      "actionsDisabledOffline": "オフライン中は利用できません",
+      "actionsDisabledUnreachable": "Drydock サーバーに接続できない間は利用できません"
+    },
     "toast": {
       "dismiss": "閉じる"
     },
@@ -115,7 +124,9 @@
         "openHint": "開く",
         "recentGroup": "最近",
         "unknownHost": "不明なホスト",
+        "unknownImage": "不明なイメージ",
         "containerSubtitle": "コンテナ · {image} · {status} · {host}",
+        "pageSubtitle": "ページ · {route}",
         "agentSubtitle": "エージェント · {status} · {host}",
         "triggerSubtitle": "トリガー · {type}",
         "watcherSubtitle": "ウォッチャー · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "接続が切断されました",
         "applyingUpdateTitle": "更新を適用中",
-        "lostMessage": "サーバーに接続できません。オンラインに戻るまでお待ちください...",
         "restartingMessage": "Drydock は自己更新後に再起動中です{opId}。サービスが復帰したら再接続します...",
-        "reconnecting": "再接続中",
         "restartingService": "サービスを再起動中"
       },
       "shortcuts": {

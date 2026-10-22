@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Jesteś offline",
+      "offlineBody": "Wyświetlane są ostatnie znane dane. Zmiany są wyłączone do czasu ponownego połączenia.",
+      "unreachableTitle": "Serwer Drydock jest niedostępny",
+      "unreachableBody": "Wyświetlane są ostatnie znane dane. Zmiany są wyłączone, a Drydock ponawia próby.",
+      "lastUpdated": "Ostatnia aktualizacja: {time}.",
+      "actionsDisabledOffline": "Niedostępne w trybie offline",
+      "actionsDisabledUnreachable": "Niedostępne, gdy serwer Drydock jest nieosiągalny"
+    },
     "toast": {
       "dismiss": "Odrzuć"
     },
@@ -115,7 +124,9 @@
         "openHint": "otwarte",
         "recentGroup": "Ostatnie",
         "unknownHost": "nieznany host",
+        "unknownImage": "nieznany obraz",
         "containerSubtitle": "Kontener · {image} · {status} · {host}",
+        "pageSubtitle": "Strona · {route}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Wyzwalacz · {type}",
         "watcherSubtitle": "Obserwator · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Połączenie utracone",
         "applyingUpdateTitle": "Stosowanie aktualizacji",
-        "lostMessage": "Serwer jest nieosiągalny. Czekam, aż znów będzie online...",
         "restartingMessage": "Drydock uruchamia się ponownie po samodzielnej aktualizacji{opId}. Ponowne łączenie po przywróceniu usługi...",
-        "reconnecting": "Ponowne łączenie",
         "restartingService": "Ponowne uruchomienie usługi"
       },
       "shortcuts": {

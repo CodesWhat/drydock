@@ -10,9 +10,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pin `musl-dev` to `1.2.6-r3` in the healthcheck build stage. Alpine 3.24 retired `1.2.6-r2`, so the image build failed at `apk add`.
+- The update-status panel now shows the Manual and Blocked action policy badges, not only Auto, and the full-page associated-triggers rows carry the per-trigger policy tooltip and Auto badge like the other trigger lists.
+- Translate the remaining hard-coded UI strings and gate against new ones. Seven English literals are now localized in all 17 locales: the yes/no values in the container preview and compose-write rows, the "Page" and "unknown image" search subtitles, the preview-request fallback error, and a missing `containerComponents.groupedViews.updateFailed` key that rendered its raw key path when an update failed over SSE. New i18n specs fail CI when a key used in `ui/src` is absent from the English locale files (including dynamic `t(\`prefix.${x}\`)` keys) and when a user-facing literal reaches a template expression, toast, dialog or label property outside a documented allowlist.
+
+### Added
+
+- Prometheus lockout counters `drydock_auth_account_lockout_total` and `drydock_auth_ip_lockout_total`, labelled by provider, increment once each time a login lockout starts. The existing `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` gauges only show lockouts active at scrape time. The monitoring docs list the new counters and add an alert example and dashboard panel.
+- Category-specific trigger API routes that match the `DD_ACTION_*` / `DD_NOTIFICATION_*` split: `/api/v1/actions` (`docker`, `dockercompose`, `command`) and `/api/v1/notification-triggers` (every other provider). They list, get and run triggers with the same auth and response shapes as `/api/v1/triggers`, and a trigger of the other category returns 404. `/api/v1/notifications` stays the notification rules collection. The UI trigger service now uses the new routes, and the OpenAPI spec and API docs cover them.
+- **Optional dashboard cards and a Recent Activity widget.** The dashboard Customize panel now lists Images, Triggers and Watchers stat cards and a Recent Activity widget, all hidden by default so saved layouts look exactly as before. Images counts distinct images and how many have updates, Triggers splits configured actions from notifications, and Watchers shows the count with a red state when an agent-backed watcher is disconnected. Each card links to its view. Recent Activity shows the latest 10 audit entries (time, actor, action, target), links each row to the Audit view filtered to that container, fetches only while shown, and refreshes on container and update events plus a 60 second interval. Preferences schema moves to version 13 to hide the new widgets once for existing layouts.
+- The UI now shows a banner when the browser is offline or the Drydock server is unreachable, and clears it and refreshes the open views when the connection returns. While it's up, the dashboard and container views render the last known data with a "last updated" time, and update, start/stop, policy, rollback and delete actions are disabled with a tooltip. A 502, 503 or 504 from a reverse proxy counts as unreachable once a confirming request agrees, so one transient 503 doesn't flash the banner. The saved copy covers only a short list of safe read endpoints, is used only after the server can't be reached, expires after 24 hours, and is wiped on sign-out, sign-in and any 401. Also adds the missing `apple-mobile-web-app-status-bar-style` meta tag for the installed iOS app.
+
+### Deprecated
+
+- `/api/v1/triggers` is deprecated in favor of `/api/v1/actions` and `/api/v1/notification-triggers`. It keeps working and now sends `Deprecation: true` and a `Link: <successor>; rel="successor-version"` header, and logs a one-time warning per process. Removal is planned no earlier than v1.9.0 (see DEPRECATIONS.md).
+
 ### Security
 
+- Bump `nodemailer` to 10.0.10 (GHSA-39m8-27wv-hr27, used by the SMTP notification trigger) and the `ip-address` override to 10.7.4 (GHSA-rxp7-6hxx-x8q5), and the website's `dompurify` to 3.4.17 (GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr).
+- Bump the website and docs app to `next` 16.4.2 for GHSA-p3m5-59mp-jv5r and GHSA-2464-fhr4-w9xw (website only, not in the Drydock image).
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
+- Bump `vite` to 8.2.4 (app, ui) and 7.3.7 (demo), and vitest and `@vitest/coverage-v8` to 4.1.12, for GHSA-587h-7wmj-h5pm, GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg (vite) and GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp (`@vitest/mocker`). Dev dependencies only, not in the image. The app lockfile also moves `follow-redirects` to 1.16.1 for GHSA-8r9p-f939-6h3c and GHSA-q3jh-wrc6-jgq8.
 
 ### Changed
 

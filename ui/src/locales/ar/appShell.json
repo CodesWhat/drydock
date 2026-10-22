@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "أنت غير متصل بالإنترنت",
+      "offlineBody": "يتم عرض آخر البيانات المعروفة. التغييرات معطّلة حتى تعيد الاتصال.",
+      "unreachableTitle": "تعذّر الوصول إلى خادم Drydock",
+      "unreachableBody": "يتم عرض آخر البيانات المعروفة. التغييرات معطّلة وDrydock يواصل إعادة المحاولة.",
+      "lastUpdated": "آخر تحديث: {time}.",
+      "actionsDisabledOffline": "غير متاح أثناء عدم الاتصال",
+      "actionsDisabledUnreachable": "غير متاح أثناء تعذّر الوصول إلى خادم Drydock"
+    },
     "toast": {
       "dismiss": "إغلاق"
     },
@@ -115,7 +124,9 @@
         "openHint": "فتح",
         "recentGroup": "الأخيرة",
         "unknownHost": "مضيف غير معروف",
+        "unknownImage": "صورة غير معروفة",
         "containerSubtitle": "حاوية · {image} · {status} · {host}",
+        "pageSubtitle": "صفحة · {route}",
         "agentSubtitle": "وكيل · {status} · {host}",
         "triggerSubtitle": "مشغّل · {type}",
         "watcherSubtitle": "مراقب · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "انقطع الاتصال",
         "applyingUpdateTitle": "جارٍ تطبيق التحديث",
-        "lostMessage": "الخادم غير قابل للوصول. في انتظار عودته...",
         "restartingMessage": "Drydock يُعيد تشغيله بعد تحديث ذاتي{opId}. جارٍ إعادة الاتصال عند عودة الخدمة...",
-        "reconnecting": "جارٍ إعادة الاتصال",
         "restartingService": "جارٍ إعادة تشغيل الخدمة"
       },
       "shortcuts": {

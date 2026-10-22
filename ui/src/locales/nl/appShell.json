@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Je bent offline",
+      "offlineBody": "De laatst bekende gegevens worden getoond. Wijzigingen zijn uitgeschakeld tot je weer verbinding hebt.",
+      "unreachableTitle": "Drydock-server onbereikbaar",
+      "unreachableBody": "De laatst bekende gegevens worden getoond. Wijzigingen zijn uitgeschakeld en Drydock blijft het proberen.",
+      "lastUpdated": "Laatst bijgewerkt: {time}.",
+      "actionsDisabledOffline": "Niet beschikbaar offline",
+      "actionsDisabledUnreachable": "Niet beschikbaar zolang de Drydock-server onbereikbaar is"
+    },
     "toast": {
       "dismiss": "Negeren"
     },
@@ -115,7 +124,9 @@
         "openHint": "geopend",
         "recentGroup": "Onlangs",
         "unknownHost": "onbekende host",
+        "unknownImage": "onbekende image",
         "containerSubtitle": "Container · {image} · {status} · {host}",
+        "pageSubtitle": "Pagina · {route}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Verbinding verloren",
         "applyingUpdateTitle": "Update toepassen",
-        "lostMessage": "De server is onbereikbaar. Wachten tot hij weer online komt...",
         "restartingMessage": "Drydock start opnieuw op na een zelfupdate{opId}. Opnieuw verbinding maken wanneer de service terug is...",
-        "reconnecting": "Opnieuw verbinding maken",
         "restartingService": "Dienst opnieuw opstarten"
       },
       "shortcuts": {

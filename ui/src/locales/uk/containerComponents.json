@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "В черзі",
+      "updateFailed": "Не вдалося оновити",
       "statusScanning": "Сканування",
       "statusUpdating": "Оновлення",
       "statusPulling": "Завантаження…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Відкрити налаштування реєстру",
         "openTriggerSettings": "Відкрити налаштування тригера"
       },
+      "requestFailed": "Не вдалося підготувати попередній перегляд цього оновлення ({status})",
       "toasts": {
         "failedTitle": "Попередній перегляд не вдався",
         "failedDetail": "Не вдалося створити попередній перегляд оновлення"

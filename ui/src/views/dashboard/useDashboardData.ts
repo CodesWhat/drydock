@@ -10,6 +10,7 @@ import {
   getStatsSummary,
   type StatsSummaryStreamController,
 } from '../../services/stats';
+import { getAllTriggers } from '../../services/trigger';
 import { getAllWatchers } from '../../services/watcher';
 import type { Container } from '../../types/container';
 import {
@@ -60,6 +61,7 @@ interface DashboardStateRefs {
   agents: Ref<DashboardAgent[]>;
   watchers: Ref<unknown[]>;
   registries: Ref<unknown[]>;
+  triggers: Ref<unknown[]>;
   recentStatusByContainer: Ref<Record<string, RecentAuditStatus>>;
   recentStatusByIdentity: Ref<Record<string, RecentAuditStatus>>;
 }
@@ -72,6 +74,7 @@ interface DashboardDataResponse {
   agentsRes?: DashboardAgent[];
   watchersRes?: unknown;
   registriesRes?: unknown;
+  triggersRes?: unknown;
   recentStatusRes: unknown;
 }
 
@@ -282,6 +285,9 @@ function applyFetchedDashboardData(state: DashboardStateRefs, response: Dashboar
   if (response.registriesRes !== undefined) {
     state.registries.value = Array.isArray(response.registriesRes) ? response.registriesRes : [];
   }
+  if (response.triggersRes !== undefined) {
+    state.triggers.value = Array.isArray(response.triggersRes) ? response.triggersRes : [];
+  }
   const normalizedRecentStatuses = normalizeRecentStatuses(response.recentStatusRes);
   state.recentStatusByContainer.value = normalizedRecentStatuses.byContainer;
   state.recentStatusByIdentity.value = normalizedRecentStatuses.byIdentity;
@@ -309,16 +315,27 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
       const livePromises = Promise.all([getAllContainers(), getContainerRecentStatus()]);
 
       const staticPromises = staticFresh
-        ? Promise.resolve([undefined, undefined, undefined, undefined] as [
+        ? Promise.resolve([undefined, undefined, undefined, undefined, undefined] as [
             DashboardServerInfo | undefined,
             DashboardAgent[] | undefined,
             unknown,
             unknown,
+            unknown,
           ])
-        : Promise.all([getServer(), getAgents(), getAllWatchers(), getAllRegistries()]);
+        : Promise.all([
+            getServer(),
+            getAgents(),
+            getAllWatchers(),
+            getAllRegistries(),
+            // Only feeds the opt-in Triggers card, so a failure here must not
+            // take the whole dashboard down. undefined leaves the last value.
+            getAllTriggers().catch((): unknown => undefined),
+          ]);
 
-      const [[containersRes, recentStatusRes], [serverRes, agentsRes, watchersRes, registriesRes]] =
-        await Promise.all([livePromises, staticPromises]);
+      const [
+        [containersRes, recentStatusRes],
+        [serverRes, agentsRes, watchersRes, registriesRes, triggersRes],
+      ] = await Promise.all([livePromises, staticPromises]);
 
       if (!staticFresh) {
         lastStaticFetchAt = Date.now();
@@ -330,6 +347,7 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
         agentsRes,
         watchersRes,
         registriesRes,
+        triggersRes,
         recentStatusRes,
       });
     } catch (e: unknown) {
@@ -359,6 +377,7 @@ export function useDashboardData() {
   const agents = ref<DashboardAgent[]>([]);
   const watchers = ref<unknown[]>([]);
   const registries = ref<unknown[]>([]);
+  const triggers = ref<unknown[]>([]);
   const recentStatusByContainer = ref<Record<string, RecentAuditStatus>>({});
   const recentStatusByIdentity = ref<Record<string, RecentAuditStatus>>({});
   const maintenanceCountdownNow = ref(Date.now());
@@ -372,6 +391,7 @@ export function useDashboardData() {
     agents,
     watchers,
     registries,
+    triggers,
     recentStatusByContainer,
     recentStatusByIdentity,
   };
@@ -498,6 +518,7 @@ export function useDashboardData() {
     recentStatusByIdentity,
     registries,
     serverInfo,
+    triggers,
     watchers,
   };
 }

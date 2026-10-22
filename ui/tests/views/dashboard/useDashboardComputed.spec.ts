@@ -99,6 +99,7 @@ interface DashboardComputedOverrides {
   recentStatusByIdentity?: Record<string, RecentAuditStatus>;
   registries?: unknown[];
   serverInfo?: DashboardServerInfo | null;
+  triggers?: unknown[];
   watchers?: unknown[];
 }
 
@@ -113,6 +114,7 @@ function createState(overrides: DashboardComputedOverrides = {}) {
     recentStatusByIdentity: ref(overrides.recentStatusByIdentity ?? {}),
     registries: ref(overrides.registries ?? []),
     serverInfo: ref(overrides.serverInfo ?? null),
+    ...(overrides.triggers ? { triggers: ref(overrides.triggers) } : {}),
     watchers: ref(overrides.watchers ?? []),
   });
 }
@@ -425,6 +427,90 @@ describe('useDashboardComputed update summary', () => {
     const updateStat = state.stats.value.find((card) => card.id === 'stat-updates');
 
     expect(updateStat?.detail).toBeUndefined();
+  });
+
+  it('counts distinct images and the ones with updates for the Images card', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({ id: 'a', name: 'a', image: 'nginx:1' }),
+        makeBaseContainer({ id: 'b', name: 'b', image: 'nginx:1', updateKind: 'minor' }),
+        makeBaseContainer({ id: 'c', name: 'c', image: 'redis:7', updateKind: 'patch' }),
+        makeBaseContainer({ id: 'd', name: 'd', image: '  ' }),
+      ],
+    });
+    const stat = state.stats.value.find((card) => card.id === 'stat-images');
+
+    expect(stat).toMatchObject({
+      value: '2',
+      icon: 'images',
+      route: '/containers',
+      detail: expect.stringContaining('2'),
+    });
+  });
+
+  it('omits the Images detail when no image has an update', () => {
+    const state = createState({ containers: [makeBaseContainer()] });
+    const stat = state.stats.value.find((card) => card.id === 'stat-images');
+
+    expect(stat?.value).toBe('1');
+    expect(stat?.detail).toBeUndefined();
+  });
+
+  it('splits triggers into actions and notifications for the Triggers card', () => {
+    const state = createState({
+      triggers: [
+        { type: 'docker', name: 'update' },
+        { type: 'DockerCompose', name: 'compose' },
+        { type: 'command', name: 'run' },
+        { type: 'slack', name: 'ops' },
+        { type: 'smtp', name: 'mail' },
+        null,
+        { name: 'typeless' },
+      ],
+    });
+    const stat = state.stats.value.find((card) => card.id === 'stat-triggers');
+
+    expect(stat).toMatchObject({ value: '7', icon: 'triggers', route: '/triggers' });
+    expect(stat?.detail).toContain('3');
+    expect(stat?.detail).toContain('4');
+  });
+
+  it('shows zero triggers when none were loaded', () => {
+    const state = createState();
+    const stat = state.stats.value.find((card) => card.id === 'stat-triggers');
+
+    expect(stat?.value).toBe('0');
+  });
+
+  it('reports watcher count and health for the Watchers card', () => {
+    const healthy = createState({
+      watchers: [{ name: 'local' }, { name: 'remote', agent: 'edge-a' }],
+      agents: [{ name: 'edge-a', connected: true }],
+    }).stats.value.find((card) => card.id === 'stat-watchers');
+    expect(healthy).toMatchObject({
+      value: '2',
+      icon: 'watchers',
+      route: '/watchers',
+      color: 'var(--dd-success)',
+      colorMuted: 'var(--dd-success-muted)',
+    });
+    expect(healthy?.detail).toBeTruthy();
+
+    const degraded = createState({
+      watchers: [{ name: 'local' }, { name: 'remote', agent: 'edge-a' }, null],
+      agents: [{ name: 'edge-a', connected: false }],
+    }).stats.value.find((card) => card.id === 'stat-watchers');
+    expect(degraded).toMatchObject({
+      value: '3',
+      color: 'var(--dd-danger)',
+      colorMuted: 'var(--dd-danger-muted)',
+    });
+    expect(degraded?.detail).toContain('2');
+    expect(degraded?.detail).toContain('1');
+
+    const none = createState().stats.value.find((card) => card.id === 'stat-watchers');
+    expect(none).toMatchObject({ value: '0', color: 'var(--dd-neutral)' });
+    expect(none?.detail).toBeUndefined();
   });
 
   it('reports registry totals from loaded registries in the stat cards', () => {

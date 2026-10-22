@@ -297,6 +297,8 @@ interface UseDashboardComputedInput {
   recentStatusByIdentity: Ref<Record<string, RecentAuditStatus>>;
   registries: Ref<unknown[]>;
   serverInfo: Ref<DashboardServerInfo | null>;
+  /** Configured triggers; feeds the opt-in Triggers card. Absent means none loaded. */
+  triggers?: Ref<unknown[]>;
   watchers: Ref<unknown[]>;
   /**
    * Optional per-container projection, applied only to the Updates Available
@@ -534,6 +536,39 @@ function getUpdatesStatMutedColor(updatesAvailable: number, total: number): stri
   return 'var(--dd-caution-muted)';
 }
 
+// Mirrors NotificationsView: these provider types execute updates (actions),
+// every other trigger type sends a message (notification).
+const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
+
+function countTriggersByKind(triggers: readonly unknown[]): {
+  actions: number;
+  notifications: number;
+} {
+  let actions = 0;
+  for (const trigger of triggers) {
+    const type =
+      trigger && typeof trigger === 'object' ? (trigger as Record<string, unknown>).type : '';
+    if (typeof type === 'string' && ACTION_TRIGGER_TYPES.has(type.toLowerCase())) {
+      actions += 1;
+    }
+  }
+  return { actions, notifications: triggers.length - actions };
+}
+
+function countDisconnectedWatchers(
+  watchers: readonly unknown[],
+  agents: readonly DashboardAgent[],
+) {
+  const disconnectedAgents = new Set(
+    agents.filter((agent) => !agent.connected).map((agent) => agent.name),
+  );
+  return watchers.filter((watcher) => {
+    const agent =
+      watcher && typeof watcher === 'object' ? (watcher as Record<string, unknown>).agent : '';
+    return typeof agent === 'string' && disconnectedAgents.has(agent);
+  }).length;
+}
+
 function useStatsComputed(
   input: UseDashboardComputedInput,
   containerMetrics: ComputedRef<DashboardContainerMetrics>,
@@ -542,6 +577,7 @@ function useStatsComputed(
   return computed<DashboardStatCard[]>(() => {
     // Register dep on the i18n locale so labels reactively update on switch.
     void i18n.global.locale.value;
+    const t = i18n.global.t;
     const summary = input.containerSummary.value;
     const total = summary?.containers.total ?? containerMetrics.value.totalContainers;
     const running = summary?.containers.running ?? containerMetrics.value.runningContainers;
@@ -550,6 +586,33 @@ function useStatsComputed(
     const freshUpdates = containerMetrics.value.freshUpdates;
     const securityIssues = containerMetrics.value.securityIssueImageCount;
     const registryCount = input.registries.value.length;
+    const imageKeys = new Set<string>();
+    const updatableImageKeys = new Set<string>();
+    for (const container of input.containers.value) {
+      const image = container.image.trim();
+      if (image.length === 0) continue;
+      imageKeys.add(image);
+      if (container.updateKind) updatableImageKeys.add(image);
+    }
+    const triggerCounts = countTriggersByKind(input.triggers?.value ?? []);
+    const watcherCount = input.watchers.value.length;
+    const disconnectedWatchers = countDisconnectedWatchers(
+      input.watchers.value,
+      input.agents.value,
+    );
+    const watcherTone =
+      watcherCount === 0 ? 'neutral' : disconnectedWatchers > 0 ? 'danger' : 'success';
+    const watcherStatColor = `var(--dd-${watcherTone})`;
+    const watcherStatMutedColor = `var(--dd-${watcherTone}-muted)`;
+    const watcherDetail =
+      watcherCount === 0
+        ? undefined
+        : disconnectedWatchers > 0
+          ? t('dashboardView.stats.watcherDetailDisconnected', {
+              healthy: watcherCount - disconnectedWatchers,
+              disconnected: disconnectedWatchers,
+            })
+          : t('dashboardView.stats.watcherDetailHealthy');
 
     const updatesStatColor = getUpdatesStatColor(updatesAvailable, total);
     const updatesStatMutedColor = getUpdatesStatMutedColor(updatesAvailable, total);
@@ -566,7 +629,6 @@ function useStatsComputed(
           ? 'var(--dd-success-muted)'
           : 'var(--dd-neutral-muted)';
 
-    const t = i18n.global.t;
     return [
       {
         id: 'stat-containers',
@@ -611,6 +673,39 @@ function useStatsComputed(
         color: 'var(--dd-primary)',
         colorMuted: 'var(--dd-primary-muted)',
         route: ROUTES.REGISTRIES,
+      },
+      {
+        id: 'stat-images',
+        label: t('dashboardView.stats.images'),
+        value: String(imageKeys.size),
+        icon: 'images',
+        color: 'var(--dd-primary)',
+        colorMuted: 'var(--dd-primary-muted)',
+        route: ROUTES.CONTAINERS,
+        detail:
+          updatableImageKeys.size > 0
+            ? t('dashboardView.stats.imageDetail', { count: updatableImageKeys.size })
+            : undefined,
+      },
+      {
+        id: 'stat-triggers',
+        label: t('dashboardView.stats.triggers'),
+        value: String(triggerCounts.actions + triggerCounts.notifications),
+        icon: 'triggers',
+        color: 'var(--dd-primary)',
+        colorMuted: 'var(--dd-primary-muted)',
+        route: ROUTES.TRIGGERS,
+        detail: t('dashboardView.stats.triggerDetail', triggerCounts),
+      },
+      {
+        id: 'stat-watchers',
+        label: t('dashboardView.stats.watchers'),
+        value: String(watcherCount),
+        icon: 'watchers',
+        color: watcherStatColor,
+        colorMuted: watcherStatMutedColor,
+        route: ROUTES.WATCHERS,
+        detail: watcherDetail,
       },
     ];
   });

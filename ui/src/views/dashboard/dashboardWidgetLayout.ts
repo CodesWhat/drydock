@@ -68,6 +68,10 @@ export const WIDGET_CONSTRAINTS: Record<DashboardWidgetId, WidgetLayoutConstrain
   'resource-usage': { minW: 3, minH: 7, maxW: 12, maxH: 20, defaultW: 4, defaultH: 14 },
   'host-status': { minW: 3, minH: 3, maxW: 12, maxH: 20, defaultW: 4, defaultH: 6 },
   'update-breakdown': { minW: 3, minH: 3, maxW: 12, maxH: 8, defaultW: 4, defaultH: 6 },
+  'stat-images': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
+  'stat-triggers': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
+  'stat-watchers': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
+  'recent-activity': { minW: 4, minH: 4, maxW: 12, maxH: 16, defaultW: 12, defaultH: 10 },
 };
 
 const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
@@ -80,6 +84,12 @@ const DEFAULT_LAYOUT: WidgetLayoutItem[] = [
   { i: 'host-status', x: 8, y: 3, w: 4, h: 6 },
   { i: 'update-breakdown', x: 8, y: 9, w: 4, h: 6 },
   { i: 'recent-updates', x: 0, y: 15, w: 12, h: 10 },
+  // Opt-in widgets ship hidden (DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS) and sit
+  // below the default grid so showing one never reflows the established layout.
+  { i: 'stat-images', x: 0, y: 25, w: 3, h: 3 },
+  { i: 'stat-triggers', x: 3, y: 25, w: 3, h: 3 },
+  { i: 'stat-watchers', x: 6, y: 25, w: 3, h: 3 },
+  { i: 'recent-activity', x: 0, y: 28, w: 12, h: 10 },
 ];
 
 const DEFAULT_LAYOUT_BY_ID = new Map(DEFAULT_LAYOUT.map((item) => [item.i, item] as const));

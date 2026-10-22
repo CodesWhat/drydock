@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "排队中",
+      "updateFailed": "更新失败",
       "statusScanning": "扫描中",
       "statusUpdating": "更新中",
       "statusPulling": "拉取中…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "打开注册表设置",
         "openTriggerSettings": "打开触发器设置"
       },
+      "requestFailed": "无法准备此更新的预览 ({status})",
       "toasts": {
         "failedTitle": "预览失败",
         "failedDetail": "无法生成更新预览"

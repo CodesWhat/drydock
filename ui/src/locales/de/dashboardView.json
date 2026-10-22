@@ -97,7 +97,14 @@
       "updatesAvailable": "Updates verfügbar",
       "updateDetail": "{fresh} neu · {mature} reif",
       "securityIssues": "Sicherheitsprobleme",
-      "registries": "Registries"
+      "registries": "Registries",
+      "images": "Images",
+      "imageDetail": "{count} mit Updates",
+      "triggers": "Trigger",
+      "triggerDetail": "{actions} Aktionen · {notifications} Benachrichtigungen",
+      "watchers": "Watcher",
+      "watcherDetailHealthy": "Alle verbunden",
+      "watcherDetailDisconnected": "{healthy} verbunden · {disconnected} getrennt"
     },
     "updateKind": {
       "major": "Major",
@@ -120,7 +127,20 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
-    }
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "Images",
+      "statTriggers": "Trigger",
+      "statWatchers": "Watcher",
+      "recentActivity": "Letzte Aktivität"
+    },
+    "recentActivity": {
+      "title": "Letzte Aktivität",
+      "viewAudit": "Audit-Log anzeigen →",
+      "loading": "Aktivität wird geladen...",
+      "loadFailed": "Letzte Aktivität konnte nicht geladen werden",
+      "empty": "Keine aktuelle Aktivität",
+      "system": "System"
+    },
+    "recentActivityLoadFailed": "Letzte Aktivitäten konnten nicht geladen werden"
   }
 }

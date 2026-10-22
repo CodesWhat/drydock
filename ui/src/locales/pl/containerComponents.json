@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "W kolejce",
+      "updateFailed": "Aktualizacja nie powiodła się",
       "statusScanning": "Skanowanie",
       "statusUpdating": "Aktualizowanie",
       "statusPulling": "Ciągnięcie…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Otwórz ustawienia rejestru",
         "openTriggerSettings": "Otwórz ustawienia wyzwalacza"
       },
+      "requestFailed": "Nie można przygotować podglądu tej aktualizacji ({status})",
       "toasts": {
         "failedTitle": "Podgląd nie powiódł się",
         "failedDetail": "Nie udało się wygenerować podglądu aktualizacji"

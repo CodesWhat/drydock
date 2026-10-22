@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "في قائمة الانتظار",
+      "updateFailed": "فشل التحديث",
       "statusScanning": "جارٍ الفحص",
       "statusUpdating": "جارٍ التحديث",
       "statusPulling": "جارٍ السحب…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "فتح إعدادات السجل",
         "openTriggerSettings": "فتح إعدادات المشغّل"
       },
+      "requestFailed": "تعذّر إعداد معاينة هذا التحديث ({status})",
       "toasts": {
         "failedTitle": "فشلت المعاينة",
         "failedDetail": "فشل إنشاء معاينة التحديث"

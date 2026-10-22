@@ -97,7 +97,14 @@
       "updatesAvailable": "Доступні оновлення",
       "updateDetail": "{fresh} нових · {mature} зрілих",
       "securityIssues": "Проблеми безпеки",
-      "registries": "Реєстри"
+      "registries": "Реєстри",
+      "images": "Образи",
+      "imageDetail": "{count} з оновленнями",
+      "triggers": "Тригери",
+      "triggerDetail": "{actions} дій · {notifications} сповіщень",
+      "watchers": "Спостерігачі",
+      "watcherDetailHealthy": "Усі підключені",
+      "watcherDetailDisconnected": "{healthy} підключено · {disconnected} відключено"
     },
     "updateKind": {
       "major": "Мажорне",
@@ -120,7 +127,20 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
-    }
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "Образи",
+      "statTriggers": "Тригери",
+      "statWatchers": "Спостерігачі",
+      "recentActivity": "Остання активність"
+    },
+    "recentActivity": {
+      "title": "Остання активність",
+      "viewAudit": "Відкрити журнал аудиту →",
+      "loading": "Завантаження активності...",
+      "loadFailed": "Не вдалося завантажити останню активність",
+      "empty": "Немає останньої активності",
+      "system": "Система"
+    },
+    "recentActivityLoadFailed": "Не вдалося завантажити нещодавню активність"
   }
 }

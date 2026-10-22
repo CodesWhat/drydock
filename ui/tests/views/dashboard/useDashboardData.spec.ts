@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => {
     getContainerSummary: vi.fn(),
     getAllRegistries: vi.fn(),
     getAllWatchers: vi.fn(),
+    getAllTriggers: vi.fn(),
     getServer: vi.fn(),
     getStatsSummary: vi.fn(),
     connectStatsSummaryStream,
@@ -59,6 +60,10 @@ vi.mock('@/services/registry', () => ({
 
 vi.mock('@/services/server', () => ({
   getServer: mocks.getServer,
+}));
+
+vi.mock('@/services/trigger', () => ({
+  getAllTriggers: mocks.getAllTriggers,
 }));
 
 vi.mock('@/services/watcher', () => ({
@@ -128,6 +133,7 @@ describe('useDashboardData', () => {
     vi.resetAllMocks();
 
     mocks.getAllContainers.mockResolvedValue([{ id: 'api-c1' }]);
+    mocks.getAllTriggers.mockResolvedValue([]);
     mocks.getStatsSummary.mockResolvedValue({
       timestamp: '2026-04-30T00:00:00.000Z',
       watchedCount: 0,
@@ -234,6 +240,24 @@ describe('useDashboardData', () => {
 
     wrapper.unmount();
     expect(clearIntervalSpy).toHaveBeenCalled();
+  });
+
+  it('loads triggers for the Triggers card and keeps the dashboard up when that endpoint fails', async () => {
+    mocks.getAllTriggers.mockResolvedValue([{ type: 'slack', name: 'ops' }]);
+    const first = await mountDashboardData();
+    expect(first.state.triggers.value).toEqual([{ type: 'slack', name: 'ops' }]);
+    first.wrapper.unmount();
+
+    mocks.getAllTriggers.mockResolvedValue({ not: 'an array' });
+    const malformed = await mountDashboardData();
+    expect(malformed.state.triggers.value).toEqual([]);
+    malformed.wrapper.unmount();
+
+    mocks.getAllTriggers.mockRejectedValue(new Error('forbidden'));
+    const failed = await mountDashboardData();
+    expect(failed.state.error.value).toBeNull();
+    expect(failed.state.triggers.value).toEqual([]);
+    expect(failed.state.containers.value).toEqual([makeContainer()]);
   });
 
   it('normalizes malformed watcher/registry/status responses', async () => {

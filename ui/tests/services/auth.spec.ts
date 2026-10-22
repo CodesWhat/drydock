@@ -1,3 +1,5 @@
+import { readLastKnown, saveLastKnown } from '@/utils/last-known';
+
 const fetchMock = vi.fn();
 global.fetch = fetchMock as unknown as typeof fetch;
 
@@ -17,6 +19,19 @@ describe('Auth Service', () => {
   });
 
   describe('getUser', () => {
+    it('wipes the last-known store on a 401 only', async () => {
+      const { getUser } = await loadAuthService();
+      saveLastKnown('containers', [{ id: 'a' }]);
+
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 500 });
+      await getUser();
+      expect(readLastKnown('containers')).toBeDefined();
+
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 401 });
+      await getUser();
+      expect(readLastKnown('containers')).toBeUndefined();
+    });
+
     it('returns user data when authenticated', async () => {
       const { getUser } = await loadAuthService();
       const mockUser = { username: 'testuser', roles: ['admin'] };
@@ -150,6 +165,16 @@ describe('Auth Service', () => {
   });
 
   describe('loginBasic', () => {
+    it('wipes the last-known store so a new session never sees the old one', async () => {
+      const { loginBasic } = await loadAuthService();
+      saveLastKnown('containers', [{ id: 'a' }]);
+      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ username: 'bob' }) });
+
+      await loginBasic('bob', 'pw');
+
+      expect(readLastKnown('containers')).toBeUndefined();
+    });
+
     it('performs basic authentication successfully', async () => {
       const { loginBasic } = await loadAuthService();
       const mockUser = { username: 'testuser' };
@@ -254,6 +279,16 @@ describe('Auth Service', () => {
         redirect: 'manual',
       });
       expect(result).toEqual(mockResponse);
+    });
+
+    it('wipes the last-known store even when the logout request fails', async () => {
+      const { logout } = await loadAuthService();
+      saveLastKnown('containers', [{ id: 'a' }]);
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+      await expect(logout()).rejects.toThrow('Failed to fetch');
+
+      expect(readLastKnown('containers')).toBeUndefined();
     });
 
     it('clears the cached user after logout', async () => {

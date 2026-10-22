@@ -10,6 +10,7 @@ import {
   operationIdPathParam,
 } from '../common.js';
 import { authPaths } from './auth.js';
+import { categoryTriggerPaths } from './category-triggers.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
 import { dependencyGroupPaths } from './dependency-groups.js';
@@ -496,6 +497,7 @@ export const openApiPaths = {
     },
   },
   ...triggerPaths,
+  ...categoryTriggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
   '/api/v1/agents': {

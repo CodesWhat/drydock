@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Нет подключения к сети",
+      "offlineBody": "Показаны последние известные данные. Изменения отключены до восстановления связи.",
+      "unreachableTitle": "Сервер Drydock недоступен",
+      "unreachableBody": "Показаны последние известные данные. Изменения отключены, Drydock продолжает попытки подключения.",
+      "lastUpdated": "Последнее обновление: {time}.",
+      "actionsDisabledOffline": "Недоступно без сети",
+      "actionsDisabledUnreachable": "Недоступно, пока сервер Drydock недоступен"
+    },
     "toast": {
       "dismiss": "Закрыть"
     },
@@ -115,7 +124,9 @@
         "openHint": "открыть",
         "recentGroup": "Недавние",
         "unknownHost": "неизвестный узел",
+        "unknownImage": "неизвестный образ",
         "containerSubtitle": "Контейнер · {image} · {status} · {host}",
+        "pageSubtitle": "Страница · {route}",
         "agentSubtitle": "Агент · {status} · {host}",
         "triggerSubtitle": "Триггер · {type}",
         "watcherSubtitle": "Наблюдатель · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Соединение потеряно",
         "applyingUpdateTitle": "Применение обновления",
-        "lostMessage": "Сервер недоступен. Ожидание восстановления соединения...",
         "restartingMessage": "Drydock перезапускается после самообновления{opId}. Повторное подключение после восстановления службы...",
-        "reconnecting": "Переподключение",
         "restartingService": "Перезапуск службы"
       },
       "shortcuts": {

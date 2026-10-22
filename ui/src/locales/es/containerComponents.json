@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "En cola",
+      "updateFailed": "Error en la actualización",
       "statusScanning": "Escaneando",
       "statusUpdating": "Actualizando",
       "statusPulling": "Descargando…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Abrir configuración del registro",
         "openTriggerSettings": "Abrir configuración del trigger"
       },
+      "requestFailed": "No se pudo preparar la vista previa de esta actualización ({status})",
       "toasts": {
         "failedTitle": "Vista previa fallida",
         "failedDetail": "No se pudo generar la vista previa de la actualización"

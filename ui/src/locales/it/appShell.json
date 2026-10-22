@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Sei offline",
+      "offlineBody": "Vengono mostrati gli ultimi dati noti. Le modifiche sono disattivate finché non ti riconnetti.",
+      "unreachableTitle": "Server Drydock non raggiungibile",
+      "unreachableBody": "Vengono mostrati gli ultimi dati noti. Le modifiche sono disattivate e Drydock continua a riprovare.",
+      "lastUpdated": "Ultimo aggiornamento: {time}.",
+      "actionsDisabledOffline": "Non disponibile offline",
+      "actionsDisabledUnreachable": "Non disponibile finché il server Drydock non è raggiungibile"
+    },
     "toast": {
       "dismiss": "Ignora"
     },
@@ -115,7 +124,9 @@
         "openHint": "apri",
         "recentGroup": "Recenti",
         "unknownHost": "host sconosciuto",
+        "unknownImage": "immagine sconosciuta",
         "containerSubtitle": "Container · {image} · {status} · {host}",
+        "pageSubtitle": "Pagina · {route}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Connessione persa",
         "applyingUpdateTitle": "Applicazione aggiornamento",
-        "lostMessage": "Il server non e raggiungibile. In attesa che torni online...",
         "restartingMessage": "Drydock si sta riavviando dopo un auto-aggiornamento{opId}. Riconnessione quando il servizio torna disponibile...",
-        "reconnecting": "Riconnessione",
         "restartingService": "Riavvio servizio"
       },
       "shortcuts": {

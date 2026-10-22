@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "You are offline",
+      "offlineBody": "Showing the last known data. Changes are disabled until you reconnect.",
+      "unreachableTitle": "Drydock server unreachable",
+      "unreachableBody": "Showing the last known data. Changes are disabled and Drydock keeps retrying.",
+      "lastUpdated": "Last updated {time}.",
+      "actionsDisabledOffline": "Unavailable while offline",
+      "actionsDisabledUnreachable": "Unavailable while the Drydock server is unreachable"
+    },
     "toast": {
       "dismiss": "Dismiss"
     },
@@ -115,7 +124,9 @@
         "openHint": "open",
         "recentGroup": "Recent",
         "unknownHost": "unknown host",
+        "unknownImage": "unknown image",
         "containerSubtitle": "Container · {image} · {status} · {host}",
+        "pageSubtitle": "Page · {route}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
@@ -143,11 +154,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Connection Lost",
         "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
         "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
         "restartingService": "Restarting service"
       },
       "shortcuts": {

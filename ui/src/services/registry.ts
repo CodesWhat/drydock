@@ -1,4 +1,5 @@
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { withLastKnown } from './last-known';
 
 /**
  * Get registry provider icon (acr, ecr...).
@@ -79,12 +80,14 @@ function getRegistryProviderColor(provider: string) {
  * @returns {Promise<unknown>}
  */
 async function getAllRegistries() {
-  const response = await fetch('/api/v1/registries', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(`Failed to get registries: ${response.statusText}`);
-  }
-  const payload = await readJsonResponse(response);
-  return extractCollectionData(payload);
+  return withLastKnown('registries', async () => {
+    const response = await fetch('/api/v1/registries', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`Failed to get registries: ${response.statusText}`);
+    }
+    const payload = await readJsonResponse(response);
+    return extractCollectionData(payload);
+  });
 }
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {

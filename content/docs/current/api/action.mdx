@@ -1,0 +1,48 @@
+---
+title: "Action API"
+description: "This API allows to query and run the update actions (docker, dockercompose, command)."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="info">[Need to add a new action?](/docs/configuration/triggers)</Callout>
+
+`/api/v1/actions` is the action view of the trigger registry. It behaves exactly like the deprecated `/api/v1/triggers` routes (same auth, same response shapes) but only exposes action triggers (`docker`, `dockercompose`, `command`). Any other trigger type returns 404.
+
+## Get all actions
+
+```bash
+curl http://drydock:3000/api/v1/actions
+
+{
+    "data": [
+      {
+        "id": "docker.local",
+        "type": "docker",
+        "name": "local",
+        "configuration": { "prune": false }
+      }
+    ],
+    "total": 1,
+    "limit": 0,
+    "offset": 0,
+    "hasMore": false
+}
+```
+
+## Get a action by id
+
+```bash
+curl http://drydock:3000/api/v1/actions/docker/local
+```
+
+To fetch one registered on a specific agent, append the agent name: `/api/v1/actions/docker/local/agent1`.
+
+## Running a action
+
+Run a action with simulated or real container data. Local routes are `POST /api/v1/actions/:type/:name`; for containers managed by a remote agent use `POST /api/v1/actions/:type/:name/:agent`.
+
+```bash
+export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test"}'
+curl -X POST -H "Content-Type: application/json" -d "$CONTAINER" http://drydock:3000/api/v1/actions/docker/local
+```

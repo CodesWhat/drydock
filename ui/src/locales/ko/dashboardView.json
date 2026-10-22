@@ -97,7 +97,14 @@
       "updatesAvailable": "사용 가능한 업데이트",
       "updateDetail": "{fresh} 신규 · {mature} 기존",
       "securityIssues": "보안 문제",
-      "registries": "레지스트리"
+      "registries": "레지스트리",
+      "images": "이미지",
+      "imageDetail": "{count}개 업데이트 있음",
+      "triggers": "트리거",
+      "triggerDetail": "액션 {actions}개 · 알림 {notifications}개",
+      "watchers": "워처",
+      "watcherDetailHealthy": "모두 연결됨",
+      "watcherDetailDisconnected": "{healthy}개 연결됨 · {disconnected}개 연결 끊김"
     },
     "updateKind": {
       "major": "메이저",
@@ -120,7 +127,20 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
-    }
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "이미지",
+      "statTriggers": "트리거",
+      "statWatchers": "워처",
+      "recentActivity": "최근 활동"
+    },
+    "recentActivity": {
+      "title": "최근 활동",
+      "viewAudit": "감사 로그 보기 →",
+      "loading": "활동 불러오는 중...",
+      "loadFailed": "최근 활동을 불러오지 못했습니다",
+      "empty": "최근 활동이 없습니다",
+      "system": "시스템"
+    },
+    "recentActivityLoadFailed": "최근 활동을 불러오지 못했습니다"
   }
 }

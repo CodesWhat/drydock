@@ -1,3 +1,5 @@
+import { i18n } from '../boot/i18n';
+
 export interface ContainerComposePreview {
   files: string[];
   service?: string;
@@ -276,7 +278,7 @@ async function buildPreviewRequestError(response: Response): Promise<PreviewRequ
   const message =
     typeof payload?.message === 'string' && payload.message.trim() !== ''
       ? payload.message
-      : `Unable to prepare this update preview (${fallbackStatus})`;
+      : i18n.global.t('containerComponents.preview.requestFailed', { status: fallbackStatus });
   const details = asRecord(payload?.details);
   const action = normalizePreviewErrorAction(payload?.action);
 

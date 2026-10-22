@@ -87,7 +87,7 @@ describe('preferences migration', () => {
     it('adds manual container groups when migrating schema version 11', () => {
       const result = migrate({ schemaVersion: 11, containers: { groupByStack: true } });
 
-      expect(result.schemaVersion).toBe(12);
+      expect(result.schemaVersion).toBe(13);
       expect(result.containers.manualGroups).toEqual({});
       expect(result.containers.groupByStack).toBe(true);
     });
@@ -98,14 +98,14 @@ describe('preferences migration', () => {
         containers: { manualGroups: { 'local::nginx': 'edge-services' } },
       });
 
-      expect(result.schemaVersion).toBe(12);
+      expect(result.schemaVersion).toBe(13);
       expect(result.containers.manualGroups).toEqual({ 'local::nginx': 'edge-services' });
     });
 
     it('restores container defaults when schema version 11 has malformed container preferences', () => {
       const result = migrate({ schemaVersion: 11, containers: 'invalid' });
 
-      expect(result.schemaVersion).toBe(12);
+      expect(result.schemaVersion).toBe(13);
       expect(result.containers.manualGroups).toEqual({});
       expect(result.containers.groupByStack).toBe(false);
     });
@@ -135,9 +135,55 @@ describe('preferences migration', () => {
       ).toEqual({});
     });
 
+    it('hides the opt-in dashboard widgets once when migrating schema version 12', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        dashboard: { hiddenWidgets: ['host-status'], widgetOrder: ['stat-containers'] },
+      });
+
+      expect(result.schemaVersion).toBe(13);
+      expect(result.dashboard.hiddenWidgets).toEqual([
+        'host-status',
+        'stat-images',
+        'stat-triggers',
+        'stat-watchers',
+        'recent-activity',
+      ]);
+      expect(result.dashboard.widgetOrder).toEqual(['stat-containers']);
+    });
+
+    it('does not duplicate opt-in widgets already hidden when migrating schema version 12', () => {
+      const result = migrate({
+        schemaVersion: 12,
+        dashboard: { hiddenWidgets: ['recent-activity', 'stat-images'] },
+      });
+
+      expect(result.dashboard.hiddenWidgets).toEqual([
+        'recent-activity',
+        'stat-images',
+        'stat-triggers',
+        'stat-watchers',
+      ]);
+    });
+
+    it('falls back to the default hidden widgets when schema 12 has no dashboard', () => {
+      const result = migrate({ schemaVersion: 12, dashboard: undefined });
+      expect(result.schemaVersion).toBe(13);
+      expect(result.dashboard.hiddenWidgets).toEqual(DEFAULTS.dashboard.hiddenWidgets);
+    });
+
+    it('keeps an explicit unhide on current-schema preferences', () => {
+      const result = migrate({
+        schemaVersion: 13,
+        dashboard: { hiddenWidgets: ['stat-images'] },
+      });
+
+      expect(result.dashboard.hiddenWidgets).toEqual(['stat-images']);
+    });
+
     it('adds disabled sync preferences when migrating schema version 10', () => {
       const result = migrate({ schemaVersion: 10, sync: undefined });
-      expect(result.schemaVersion).toBe(12);
+      expect(result.schemaVersion).toBe(13);
       expect(result.sync).toEqual({ enabled: false });
     });
 

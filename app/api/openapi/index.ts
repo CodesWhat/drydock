@@ -26,7 +26,12 @@ export const openApiDocument = {
     { name: 'System', description: 'Health, metadata, and server endpoints' },
     { name: 'Authentication', description: 'Authentication and session lifecycle endpoints' },
     { name: 'Containers', description: 'Container inventory and container-scoped operations' },
-    { name: 'Triggers', description: 'Trigger discovery and trigger execution' },
+    {
+      name: 'Triggers',
+      description:
+        'Deprecated combined trigger routes. Use Actions and Notification Triggers instead',
+    },
+    { name: 'Notification Triggers', description: 'Notification trigger discovery and execution' },
     {
       name: 'Actions',
       description:

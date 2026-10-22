@@ -173,6 +173,7 @@
     },
     "groupedViews": {
       "statusQueued": "Na fila",
+      "updateFailed": "Falha na atualização",
       "statusScanning": "Escaneando",
       "statusUpdating": "Atualizando",
       "statusPulling": "Pull em andamento…",
@@ -612,6 +613,7 @@
         "openRegistrySettings": "Abrir configurações do registry",
         "openTriggerSettings": "Abrir configurações do trigger"
       },
+      "requestFailed": "Não foi possível preparar a prévia desta atualização ({status})",
       "toasts": {
         "failedTitle": "Prévia falhou",
         "failedDetail": "Falha ao gerar a prévia de atualização"

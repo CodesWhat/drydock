@@ -97,7 +97,14 @@
       "updatesAvailable": "可用更新",
       "updateDetail": "{fresh} 新增 · {mature} 成熟",
       "securityIssues": "安全风险",
-      "registries": "仓库"
+      "registries": "仓库",
+      "images": "镜像",
+      "imageDetail": "{count} 个有更新",
+      "triggers": "触发器",
+      "triggerDetail": "{actions} 个操作 · {notifications} 个通知",
+      "watchers": "监视器",
+      "watcherDetailHealthy": "全部已连接",
+      "watcherDetailDisconnected": "{healthy} 个已连接 · {disconnected} 个已断开"
     },
     "updateKind": {
       "major": "主要",
@@ -120,7 +127,20 @@
       "securityOverview": "Security Overview",
       "resourceUsage": "Resource Usage",
       "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown"
-    }
+      "updateBreakdown": "Update Breakdown",
+      "statImages": "镜像",
+      "statTriggers": "触发器",
+      "statWatchers": "监视器",
+      "recentActivity": "最近活动"
+    },
+    "recentActivity": {
+      "title": "最近活动",
+      "viewAudit": "查看审计日志 →",
+      "loading": "正在加载活动...",
+      "loadFailed": "无法加载最近活动",
+      "empty": "暂无最近活动",
+      "system": "系统"
+    },
+    "recentActivityLoadFailed": "无法加载最近活动"
   }
 }

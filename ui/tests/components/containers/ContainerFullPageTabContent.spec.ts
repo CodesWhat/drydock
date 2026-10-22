@@ -10,6 +10,7 @@ type Trigger = {
   name: string;
   agent?: string;
   configuration?: Record<string, unknown>;
+  resolvedState?: 'blocked' | 'manual' | 'auto';
 };
 
 type Backup = {
@@ -724,6 +725,19 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('status:succeeded');
     expect(wrapper.text()).toContain('phase:succeeded');
     expect(wrapper.text()).toContain('reason:manual');
+  });
+
+  it('shows the Auto badge on an associated trigger row that resolves to auto', () => {
+    detailTriggers.value = [
+      { type: 'docker', name: 'update', resolvedState: 'auto' },
+      { type: 'docker', name: 'manual', resolvedState: 'manual' },
+    ];
+
+    const wrapper = mountComponent();
+    const rows = wrapper.findAll('[data-trigger-key]');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain('Auto');
+    expect(rows[1].text()).not.toContain('Auto');
   });
 
   it('marks a dry-run action as preview-only and explains the trigger condition', () => {

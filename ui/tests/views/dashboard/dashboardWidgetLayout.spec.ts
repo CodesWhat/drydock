@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { DASHBOARD_WIDGET_IDS } from '@/views/dashboard/dashboardTypes';
+import {
+  DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS,
+  DASHBOARD_WIDGET_IDS,
+} from '@/views/dashboard/dashboardTypes';
 import {
   applyConstraints,
   createDefaultLayout,
@@ -21,7 +24,11 @@ describe('dashboardWidgetLayout', () => {
     });
 
     test('stat cards fill the first row as 4 equal columns', () => {
-      const statCards = layout.filter((item) => item.i.startsWith('stat-'));
+      const statCards = layout.filter(
+        (item) =>
+          item.i.startsWith('stat-') &&
+          !DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS.includes(item.i as never),
+      );
       expect(statCards).toHaveLength(4);
       for (const card of statCards) {
         expect(card.y).toBe(0);
@@ -52,9 +59,48 @@ describe('dashboardWidgetLayout', () => {
       expect(updates?.x).toBe(0);
       expect(updates?.w).toBe(12);
       const maxY = Math.max(
-        ...layout.filter((i) => i.i !== 'recent-updates').map((i) => i.y + i.h),
+        ...layout
+          .filter(
+            (i) =>
+              i.i !== 'recent-updates' &&
+              !DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS.includes(i.i as never),
+          )
+          .map((i) => i.y + i.h),
       );
       expect(updates?.y).toBeGreaterThanOrEqual(maxY);
+    });
+
+    test('opt-in widgets ship hidden and sit below the established layout', () => {
+      expect([...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS].sort()).toEqual([
+        'recent-activity',
+        'stat-images',
+        'stat-triggers',
+        'stat-watchers',
+      ]);
+      const established = layout.filter(
+        (item) => !DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS.includes(item.i as never),
+      );
+      const establishedBottom = Math.max(...established.map((item) => item.y + item.h));
+      for (const id of DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS) {
+        const item = layout.find((candidate) => candidate.i === id);
+        expect(item?.y).toBeGreaterThanOrEqual(establishedBottom);
+      }
+    });
+
+    test('new stat cards match the existing stat card bounds and Recent Activity can stretch', () => {
+      for (const id of ['stat-images', 'stat-triggers', 'stat-watchers'] as const) {
+        expect(WIDGET_CONSTRAINTS[id]).toEqual(WIDGET_CONSTRAINTS['stat-containers']);
+      }
+      expect(getWidgetBoundsForBreakpoint('recent-activity', 'lg')).toEqual({
+        minW: 4,
+        minH: 4,
+        maxW: 12,
+        maxH: 16,
+      });
+      expect(getWidgetBoundsForBreakpoint('recent-activity', 'xs')).toMatchObject({
+        minW: 1,
+        maxW: 1,
+      });
     });
 
     test('all items have constraints applied', () => {

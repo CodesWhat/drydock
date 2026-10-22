@@ -106,7 +106,10 @@ export default defineConfig({
       workbox: {
         // Drydock is a live dashboard — stale API data is worse than a
         // request failing outright, so /api is never handled by the SW,
-        // neither for navigations nor for runtime fetches.
+        // neither for navigations nor for runtime fetches. The offline
+        // fallback is an app-level last-known store instead
+        // (ui/src/services/last-known.ts), which only answers after a real
+        // network failure, is cleared on logout/401, and expires after 24h.
         //
         // The navigation fallback skips every other server-owned route too.
         // Answering /auth/oidc/<name>/cb with index.html meant the OIDC code
