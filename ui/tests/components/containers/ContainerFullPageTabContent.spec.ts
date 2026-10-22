@@ -1012,6 +1012,9 @@ describe('ContainerFullPageTabContent', () => {
     const row = wrapper.get('[data-notification-skip-key="smtp.ops"]');
     expect(row.text()).toContain("Skipped: the update is below this trigger's threshold.");
     expect(row.attributes('title')).toBe('2026-10-19T10:00:00.000Z');
+    expect(row.get('[data-test="notification-skip-at"]').text()).toBe(
+      `Last skipped ${new Date('2026-10-19T10:00:00.000Z').toLocaleString()}`,
+    );
   });
 
   it('renders no notification skip section when nothing was skipped (DR-85)', () => {

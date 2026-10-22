@@ -37,7 +37,7 @@
  * would act on a version the row and the audit entry do not name. A moved candidate is
  * refused, and the reconciler supersedes the row on the same report that replaced it.
  */
-import express, { type Request, type Response } from 'express';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { announceApprovalEvent } from '../approvals/events.js';
 import {
@@ -70,6 +70,7 @@ import {
   dispatchManualContainerUpdate,
   sendContainerUpdateDispatchOutcome,
 } from './container-update-dispatch.js';
+import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import { sendErrorResponse } from './error-response.js';
 import { buildPaginationLinks } from './pagination-links.js';
 import { scoped } from './route-scopes.js';
@@ -91,7 +92,16 @@ const APPROVAL_DEFER_DEFAULT_DAYS = 7;
 const APPROVAL_DEFER_MAX_DAYS = 365;
 const INVALID_UNTIL_MESSAGE = `Invalid until; expected an RFC 3339 date-time in the future, at most ${APPROVAL_DEFER_MAX_DAYS} days from now`;
 const INVALID_DAYS_MESSAGE = `Invalid days; expected an integer between 1 and ${APPROVAL_DEFER_MAX_DAYS}`;
+const APPROVAL_BULK_MAX_IDS = 200;
+const APPROVAL_BULK_ACTIONS = new Set<string>(['approve', 'reject', 'defer']);
+const INVALID_BULK_IDS_MESSAGE = `Invalid ids; expected a non-empty array of at most ${APPROVAL_BULK_MAX_IDS} approval ids`;
+const INVALID_BULK_ACTION_MESSAGE = 'Invalid action; expected approve, reject, or defer';
+const BULK_DEFER_ONLY_MESSAGE =
+  'Invalid request body; until and days are only valid with action defer';
+const BULK_PROCESSED_MESSAGE = 'Approval decisions processed';
+const BULK_APPROVE_CONFIRMATION = 'approvals-bulk-approve';
 const DECISION_BODY_FIELDS = ['note'] as const;
+const BULK_BODY_FIELDS = ['ids', 'action', 'until', 'days', 'note'] as const;
 const DEFER_BODY_FIELDS = ['until', 'days', 'note'] as const;
 // A full RFC 3339 instant: date, time to the second, explicit offset. `new Date()` accepts
 // far more than that — a bare `2026-09-09` is midnight in whatever zone the process runs
@@ -241,8 +251,30 @@ function getApproval(req: Request<{ id: string }>, res: Response): void {
   res.status(200).json({ approval, eligibility, holdReasons: getSoftBlockers(eligibility) });
 }
 
-/** A request carrying whoever the authentication middleware resolved, if anyone. */
-type DecisionRequest = Request<{ id: string }> & { user?: { username?: string } };
+/** Whoever the authentication middleware resolved, if anyone. */
+interface AuthenticatedRequest {
+  user?: { username?: string };
+}
+
+/** A single-row decision request. */
+type DecisionRequest = Request<{ id: string }> & AuthenticatedRequest;
+
+/** Why a decision did not take effect, in the status and message the single route answers with. */
+interface DecisionFailure {
+  kind: 'rejected';
+  statusCode: number;
+  message: string;
+}
+
+type DecisionOutcome = { kind: 'decided'; record: ApprovalRecord } | DecisionFailure;
+
+type ApproveOutcome =
+  | { kind: 'accepted'; operationId: string; record: ApprovalRecord }
+  | DecisionFailure;
+
+function failure(statusCode: number, message: string): DecisionFailure {
+  return { kind: 'rejected', statusCode, message };
+}
 
 /** A row reserved for one decision, with the container that decision acts on. */
 interface ReservedApproval {
@@ -258,7 +290,7 @@ interface ReservedApproval {
  * synthesizing a user — so the fallback is the same literal the rest of the API uses.
  * @param req
  */
-function getDecidedBy(req: DecisionRequest): string {
+function getDecidedBy(req: AuthenticatedRequest): string {
   return req.user?.username?.trim() || 'anonymous';
 }
 
@@ -375,97 +407,91 @@ function resolveDeferralExpiry(
  * neither the row nor its audit entry names. The row is not resolved here — the
  * reconciler owns resolution and supersedes it on the report that carried the new
  * candidate, which is also the report that mints its replacement.
- * @param req
- * @param res
+ * @param id
+ * @param decidedBy
  * @param patch
+ * @param note
  */
 function reserveApproval(
-  req: DecisionRequest,
-  res: Response,
+  id: string,
+  decidedBy: string,
   patch: ApprovalPatch,
   note: string | undefined,
-): ReservedApproval | undefined {
-  const id = getPathParamValue(req.params.id);
+): ReservedApproval | DecisionFailure {
   const previous = getApprovalById(id);
   if (previous === undefined) {
-    sendErrorResponse(res, 404, APPROVAL_NOT_FOUND_MESSAGE);
-    return undefined;
+    return failure(404, APPROVAL_NOT_FOUND_MESSAGE);
   }
 
   const container = getContainer(previous.containerId);
   if (container === undefined) {
     // A row whose container is gone has already been resolved `container-removed` by the
     // reconciler in the normal case; this answers the race where it has not.
-    sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_MESSAGE);
-    return undefined;
+    return failure(404, CONTAINER_NOT_FOUND_MESSAGE);
   }
 
   if (getApprovalCandidateRef(container) !== previous.candidateRef) {
-    sendErrorResponse(res, 409, APPROVAL_SUPERSEDED_MESSAGE);
-    return undefined;
+    return failure(409, APPROVAL_SUPERSEDED_MESSAGE);
   }
 
   const transition = decideApprovalIfPending(id, {
     ...patch,
     decidedAt: new Date().toISOString(),
-    decidedBy: getDecidedBy(req),
+    decidedBy,
     ...(note !== undefined ? { decisionNote: note } : {}),
   });
 
   if (transition.status === 'not-found') {
-    sendErrorResponse(res, 404, APPROVAL_NOT_FOUND_MESSAGE);
-    return undefined;
+    return failure(404, APPROVAL_NOT_FOUND_MESSAGE);
   }
   if (transition.status === 'already-decided') {
-    sendErrorResponse(res, 409, APPROVAL_ALREADY_DECIDED_MESSAGE);
-    return undefined;
+    return failure(409, APPROVAL_ALREADY_DECIDED_MESSAGE);
   }
 
   return { previous, record: transition.record, container };
 }
 
+function isFailure(value: ReservedApproval | DecisionFailure): value is DecisionFailure {
+  return 'statusCode' in value;
+}
+
 /**
- * Put a reserved row back exactly as it was and answer with the reason its work was
- * refused. A decision that did not take effect leaves no trace: the operator can fix the
- * blocker and decide again, and the row's `createdAt` still says how long it has been
- * waiting. The snapshot is restored rather than the row being reset, because a reserved
- * row may be an expired deferral that a reset would blank.
- * @param res
+ * Put a reserved row back exactly as it was and report the reason its work was refused. A
+ * decision that did not take effect leaves no trace: the operator can fix the blocker and
+ * decide again, and the row's `createdAt` still says how long it has been waiting. The
+ * snapshot is restored rather than the row being reset, because a reserved row may be an
+ * expired deferral that a reset would blank.
  * @param previous
  * @param statusCode
  * @param message
  */
 function abandonReservation(
-  res: Response,
   previous: ApprovalRecord,
   statusCode: number,
   message: string,
-): void {
+): DecisionFailure {
   restoreApproval(previous);
-  sendErrorResponse(res, statusCode, message);
+  return failure(statusCode, message);
 }
 
 /**
- * Write the container policy a decision delegates to. Returns false when it answered with
- * the policy layer's own error, which is the same message and status the container panel
- * would show for the same action.
- * @param res
+ * Write the container policy a decision delegates to. Returns a failure when the policy
+ * layer refused, with its own message and status: the same ones the container panel would
+ * show for the same action.
  * @param reserved
  * @param action
  * @param body
  */
 function writeDecisionPolicy(
-  res: Response,
   reserved: ReservedApproval,
   action: string,
   body: Record<string, unknown>,
-): boolean {
+): DecisionFailure | undefined {
   const result = applyContainerUpdatePolicyAction(reserved.container, action, body);
   if ('error' in result) {
-    abandonReservation(res, reserved.previous, 400, result.error);
-    return false;
+    return abandonReservation(reserved.previous, 400, result.error);
   }
-  return true;
+  return undefined;
 }
 
 /**
@@ -503,14 +529,101 @@ function completeDecision(
 }
 
 /**
- * Approve a queued update: dispatch it exactly as the container panel's Update button
- * does, and answer exactly what that endpoint answers.
+ * Approve one queued update: dispatch it exactly as the container panel's Update button
+ * does, and report exactly what that endpoint answers.
  *
  * Every rejection here is the admission path's own, re-evaluated now rather than when the
  * row was sighted — the row is a pointer at a candidate, never a capability, so there is
  * no window between sighting and approval in which the queue could admit something the
  * Update button would refuse. Under `updateMode: notify` that means the existing 409, and
  * nothing is dispatched.
+ * @param id
+ * @param decidedBy
+ * @param note
+ */
+async function approveOne(
+  id: string,
+  decidedBy: string,
+  note: string | undefined,
+): Promise<ApproveOutcome> {
+  const reserved = reserveApproval(id, decidedBy, { decision: 'approved' }, note);
+  if (isFailure(reserved)) {
+    return reserved;
+  }
+
+  const outcome = await dispatchManualContainerUpdate(reserved.container);
+  if (outcome.kind === 'rejected') {
+    restoreApproval(reserved.previous);
+    return failure(outcome.statusCode, outcome.message);
+  }
+
+  updateApproval(reserved.record.id, { operationId: outcome.operationId });
+  const record = { ...reserved.record, operationId: outcome.operationId };
+  completeDecision('update-approved', reserved.container, record);
+  return { kind: 'accepted', operationId: outcome.operationId, record };
+}
+
+/**
+ * Reject one queued update by writing the container's existing skip policy. This is the
+ * same operation as the container panel's Skip button, one source of truth, undoable from
+ * the update-policy panel — and visible there, which is a thing the confirmation copy has
+ * to say out loud.
+ * @param id
+ * @param decidedBy
+ * @param note
+ */
+function rejectOne(id: string, decidedBy: string, note: string | undefined): DecisionOutcome {
+  const reserved = reserveApproval(id, decidedBy, { decision: 'rejected' }, note);
+  if (isFailure(reserved)) {
+    return reserved;
+  }
+  const policyFailure = writeDecisionPolicy(reserved, 'skip-current', {});
+  if (policyFailure !== undefined) {
+    return policyFailure;
+  }
+
+  completeDecision('update-rejected', reserved.container, reserved.record);
+  return { kind: 'decided', record: reserved.record };
+}
+
+/**
+ * Defer one queued update by snoozing the container until the same instant the row is
+ * deferred to. The expiry is resolved by the caller before the row is reserved, so the row
+ * and the container are written one value rather than two that agree today.
+ * @param id
+ * @param decidedBy
+ * @param note
+ * @param deferredUntil
+ */
+function deferOne(
+  id: string,
+  decidedBy: string,
+  note: string | undefined,
+  deferredUntil: string,
+): DecisionOutcome {
+  const reserved = reserveApproval(id, decidedBy, { decision: 'deferred', deferredUntil }, note);
+  if (isFailure(reserved)) {
+    return reserved;
+  }
+  const policyFailure = writeDecisionPolicy(reserved, 'snooze', { snoozeUntil: deferredUntil });
+  if (policyFailure !== undefined) {
+    return policyFailure;
+  }
+
+  completeDecision('update-deferred', reserved.container, reserved.record);
+  return { kind: 'decided', record: reserved.record };
+}
+
+function sendDecisionOutcome(res: Response, outcome: DecisionOutcome): void {
+  if (outcome.kind === 'rejected') {
+    sendErrorResponse(res, outcome.statusCode, outcome.message);
+    return;
+  }
+  res.status(200).json({ approval: outcome.record });
+}
+
+/**
+ * Approve a queued update.
  * @param req
  * @param res
  */
@@ -525,30 +638,16 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
     return;
   }
 
-  const reserved = reserveApproval(req, res, { decision: 'approved' }, request.note);
-  if (reserved === undefined) {
-    return;
-  }
-
-  const outcome = await dispatchManualContainerUpdate(reserved.container);
-  if (outcome.kind === 'rejected') {
-    restoreApproval(reserved.previous);
-  } else {
-    updateApproval(reserved.record.id, { operationId: outcome.operationId });
-    completeDecision('update-approved', reserved.container, {
-      ...reserved.record,
-      operationId: outcome.operationId,
-    });
-  }
-
+  const outcome = await approveOne(
+    getPathParamValue(req.params.id),
+    getDecidedBy(req),
+    request.note,
+  );
   sendContainerUpdateDispatchOutcome(res, outcome);
 }
 
 /**
- * Reject a queued update by writing the container's existing skip policy. This is the
- * same operation as the container panel's Skip button, one source of truth, undoable from
- * the update-policy panel — and visible there, which is a thing the confirmation copy has
- * to say out loud.
+ * Reject a queued update.
  * @param req
  * @param res
  */
@@ -558,26 +657,18 @@ function rejectApproval(req: DecisionRequest, res: Response): void {
     return;
   }
 
-  const reserved = reserveApproval(req, res, { decision: 'rejected' }, request.note);
-  if (reserved === undefined) {
-    return;
-  }
-  if (!writeDecisionPolicy(res, reserved, 'skip-current', {})) {
-    return;
-  }
-
-  completeDecision('update-rejected', reserved.container, reserved.record);
-  res.status(200).json({ approval: reserved.record });
+  sendDecisionOutcome(
+    res,
+    rejectOne(getPathParamValue(req.params.id), getDecidedBy(req), request.note),
+  );
 }
 
 /**
- * Defer a queued update by snoozing the container until the same instant the row is
- * deferred to.
+ * Defer a queued update.
  *
- * The expiry is resolved before the row is reserved, so the row and the container are
- * written one value rather than two that agree today. There is no sweep and no timer: a
- * row is deferred while `deferredUntil` is in the future and pending again the moment it
- * is not, which is also why an expiry in the past is refused rather than stored.
+ * There is no sweep and no timer: a row is deferred while `deferredUntil` is in the future
+ * and pending again the moment it is not, which is also why an expiry in the past is
+ * refused rather than stored.
  * @param req
  * @param res
  */
@@ -593,21 +684,132 @@ function deferApproval(req: DecisionRequest, res: Response): void {
     return;
   }
 
-  const reserved = reserveApproval(
-    req,
+  sendDecisionOutcome(
     res,
-    { decision: 'deferred', deferredUntil: expiry.deferredUntil },
-    request.note,
+    deferOne(
+      getPathParamValue(req.params.id),
+      getDecidedBy(req),
+      request.note,
+      expiry.deferredUntil,
+    ),
   );
-  if (reserved === undefined) {
-    return;
+}
+
+/** The `ids` of a bulk body, deduplicated in order, or undefined when it is not valid. */
+function parseBulkIds(value: unknown): string[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > APPROVAL_BULK_MAX_IDS ||
+    value.some((id) => typeof id !== 'string' || id.trim() === '')
+  ) {
+    return undefined;
   }
-  if (!writeDecisionPolicy(res, reserved, 'snooze', { snoozeUntil: expiry.deferredUntil })) {
+  return [...new Set(value as string[])];
+}
+
+/**
+ * Decide several queued updates in one call, mirroring `POST /containers/update`: a 200
+ * with `accepted` and `rejected` lists, one entry per id, so a failure on one row never
+ * hides the others.
+ *
+ * Each id goes through the single-row decision exactly as the per-row route runs it:
+ * the same reservation, the same candidate binding, the same admission path, one audit
+ * entry and one SSE event per decision that took effect, so a bulk decision cannot do
+ * anything a sequence of single ones could not. Ids are processed one at a time on
+ * purpose: approvals dispatch real updates and the admission gates are written for one
+ * caller at a time. A deferral's expiry is resolved once, so every row in the call is
+ * held to the same instant.
+ * @param req
+ * @param res
+ */
+async function bulkDecideApprovals(
+  req: Request & AuthenticatedRequest,
+  res: Response,
+): Promise<void> {
+  const request = readDecisionRequest(res, req.body, BULK_BODY_FIELDS);
+  if (request === undefined) {
     return;
   }
 
-  completeDecision('update-deferred', reserved.container, reserved.record);
-  res.status(200).json({ approval: reserved.record });
+  const ids = parseBulkIds(request.body.ids);
+  if (ids === undefined) {
+    sendErrorResponse(res, 400, INVALID_BULK_IDS_MESSAGE);
+    return;
+  }
+
+  const action = request.body.action;
+  if (typeof action !== 'string' || !APPROVAL_BULK_ACTIONS.has(action)) {
+    sendErrorResponse(res, 400, INVALID_BULK_ACTION_MESSAGE);
+    return;
+  }
+  if (action !== 'defer' && (request.body.until !== undefined || request.body.days !== undefined)) {
+    sendErrorResponse(res, 400, BULK_DEFER_ONLY_MESSAGE);
+    return;
+  }
+  if (action === 'approve' && !areContainerActionsEnabled()) {
+    sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
+    return;
+  }
+
+  let deferredUntil = '';
+  if (action === 'defer') {
+    const expiry = resolveDeferralExpiry(request.body, Date.now());
+    if ('error' in expiry) {
+      sendErrorResponse(res, 400, expiry.error);
+      return;
+    }
+    deferredUntil = expiry.deferredUntil;
+  }
+
+  const decidedBy = getDecidedBy(req);
+  const accepted: Array<Record<string, unknown>> = [];
+  const rejected: Array<{ id: string; statusCode: number; message: string }> = [];
+
+  for (const id of ids) {
+    let outcome: DecisionOutcome | ApproveOutcome;
+    if (action === 'approve') {
+      outcome = await approveOne(id, decidedBy, request.note);
+    } else if (action === 'reject') {
+      outcome = rejectOne(id, decidedBy, request.note);
+    } else {
+      outcome = deferOne(id, decidedBy, request.note, deferredUntil);
+    }
+
+    if (outcome.kind === 'rejected') {
+      rejected.push({ id, statusCode: outcome.statusCode, message: outcome.message });
+      continue;
+    }
+    accepted.push({
+      id,
+      containerId: outcome.record.containerId,
+      containerName: outcome.record.containerName,
+      decision: outcome.record.decision,
+      ...(outcome.record.operationId !== undefined
+        ? { operationId: outcome.record.operationId }
+        : {}),
+      ...(outcome.record.deferredUntil !== undefined
+        ? { deferredUntil: outcome.record.deferredUntil }
+        : {}),
+    });
+  }
+
+  res.status(200).json({ message: BULK_PROCESSED_MESSAGE, accepted, rejected });
+}
+
+const confirmBulkApprove = requireDestructiveActionConfirmation(BULK_APPROVE_CONFIRMATION);
+
+/**
+ * Only the approve action dispatches updates, so only it is destructive: it can start an
+ * arbitrary number of container recreations in one call. Reject and defer write policy that
+ * the update-policy panel undoes, and need no header.
+ */
+function requireBulkApproveConfirmation(req: Request, res: Response, next: NextFunction): void {
+  if (req.body?.action === 'approve') {
+    confirmBulkApprove(req, res, next);
+    return;
+  }
+  next();
 }
 
 /**
@@ -624,6 +826,13 @@ export function init() {
   // POST /containers/:id/update, so approving one it was offered cannot
   // reasonably require more. Reject and defer are decisions on the same queue
   // and travel with it — none of the three is reachable with `read` alone.
+  // Ahead of the `/:id/...` routes for readability only; the segment counts differ.
+  // Same scope as the single decisions, so a key that can approve one row can approve many.
+  router.post(
+    '/bulk',
+    requireBulkApproveConfirmation,
+    scoped('containers:update', bulkDecideApprovals),
+  );
   router.post('/:id/approve', scoped('containers:update', approveApproval));
   router.post('/:id/reject', scoped('containers:update', rejectApproval));
   router.post('/:id/defer', scoped('containers:update', deferApproval));

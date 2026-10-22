@@ -5,7 +5,8 @@
       "detailLoadFailed": "Falha ao carregar a aprovação",
       "approveFailed": "Falha ao aprovar a atualização",
       "rejectFailed": "Falha ao rejeitar a atualização",
-      "deferFailed": "Falha ao adiar a atualização"
+      "deferFailed": "Falha ao adiar a atualização",
+      "bulkFailed": "Falha ao decidir as atualizações selecionadas"
     },
     "ofCount": "Exibidos: {count}",
     "refresh": "Atualizar",
@@ -70,6 +71,18 @@
         "header": "Adiar atualização",
         "message": "Adiar a atualização de {name} por {days} dias?",
         "acceptLabel": "Adiar"
+      },
+      "bulkApprove": {
+        "header": "Aprovar atualizações selecionadas",
+        "message": "Aprovar as atualizações selecionadas ({count})? Cada uma é verificada de novo e disparada da mesma forma que pelo botão Aprovar, então uma atualização que esse botão recusaria é informada em vez de aplicada.",
+        "acceptLabel": "Aprovar selecionadas",
+        "holdsSuffix": "\n\nEssas atualizações têm motivos de retenção em aberto que a aprovação ignora:\n{list}",
+        "excludedSuffix": "\n\nBloqueadas e ignoradas ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Rejeitar atualizações selecionadas",
+        "message": "Rejeitar as atualizações selecionadas ({count})? Elas não serão aplicadas automaticamente.",
+        "acceptLabel": "Rejeitar selecionadas"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Atualização rejeitada para {name}",
       "rejectFailed": "Não foi possível rejeitar {name}",
       "deferred": "Atualização adiada para {name}",
-      "deferFailed": "Não foi possível adiar {name}"
+      "deferFailed": "Não foi possível adiar {name}",
+      "bulkApproved": "Aprovação solicitada para as atualizações selecionadas: {count}",
+      "bulkRejected": "Atualizações selecionadas rejeitadas: {count}",
+      "bulkPartialFailure": "Algumas atualizações não puderam ser decididas ({count}): {list}",
+      "bulkFailed": "Falha ao decidir as atualizações selecionadas"
+    },
+    "bulk": {
+      "selectRow": "Selecionar {name}",
+      "selectAll": "Selecionar todas as aprovações visíveis",
+      "barLabel": "Aprovações selecionadas",
+      "count": "Selecionadas: {count}",
+      "approveSelected": "Aprovar selecionadas",
+      "rejectSelected": "Rejeitar selecionadas",
+      "clear": "Limpar seleção"
     }
   }
 }

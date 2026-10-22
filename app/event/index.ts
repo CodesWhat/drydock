@@ -217,6 +217,15 @@ export interface MaturityGateClearedEventPayload {
   clockSource?: string;
 }
 
+export interface ApprovalPendingNotificationEventPayload {
+  container: Container;
+  approvalId: string;
+  fromRef: string;
+  toRef: string;
+  /** Deep link to the queue row; absent when `DD_PUBLIC_URL` is not configured. */
+  approvalUrl?: string;
+}
+
 /**
  * A watcher's maintenance window has opened and its catch-up scan has finished, so the
  * containers whose automatic install was deferred are back in the store with fresh state.
@@ -309,6 +318,10 @@ const containerHealthTransitionHandlers = new Map<
 const maturityGateClearedHandlers = new Map<
   number,
   OrderedEventHandler<MaturityGateClearedEventPayload>
+>();
+const approvalPendingNotificationHandlers = new Map<
+  number,
+  OrderedEventHandler<ApprovalPendingNotificationEventPayload>
 >();
 const securityScanCycleCompleteHandlers = new Map<
   number,
@@ -594,6 +607,27 @@ export function registerMaturityGateCleared(
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(maturityGateClearedHandlers, handler, options);
+}
+
+/**
+ * Emit ApprovalPendingNotification event: an update candidate entered the approval queue.
+ * @param payload
+ */
+export async function emitApprovalPendingNotification(
+  payload: ApprovalPendingNotificationEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(approvalPendingNotificationHandlers, payload);
+}
+
+/**
+ * Register to ApprovalPendingNotification event.
+ * @param handler
+ */
+export function registerApprovalPendingNotification(
+  handler: OrderedEventHandlerFn<ApprovalPendingNotificationEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(approvalPendingNotificationHandlers, handler, options);
 }
 
 /**
@@ -901,6 +935,7 @@ export function clearAllListenersForTests(): void {
   securityAlertHandlers.clear();
   containerHealthTransitionHandlers.clear();
   maturityGateClearedHandlers.clear();
+  approvalPendingNotificationHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
   maintenanceWindowOpenedHandlers.clear();
   agentConnectedHandlers.clear();

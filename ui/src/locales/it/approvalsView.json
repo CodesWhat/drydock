@@ -5,7 +5,8 @@
       "detailLoadFailed": "Impossibile caricare l’approvazione",
       "approveFailed": "Impossibile approvare l’aggiornamento",
       "rejectFailed": "Impossibile rifiutare l’aggiornamento",
-      "deferFailed": "Impossibile posticipare l’aggiornamento"
+      "deferFailed": "Impossibile posticipare l’aggiornamento",
+      "bulkFailed": "Impossibile elaborare gli aggiornamenti selezionati"
     },
     "ofCount": "Elementi mostrati: {count}",
     "refresh": "Aggiorna",
@@ -70,6 +71,18 @@
         "header": "Rimanda aggiornamento",
         "message": "Rimandare l’aggiornamento di {name} di {days} giorni?",
         "acceptLabel": "Rimanda"
+      },
+      "bulkApprove": {
+        "header": "Approva gli aggiornamenti selezionati",
+        "message": "Approvare gli aggiornamenti selezionati ({count})? Ognuno viene ricontrollato e avviato come con il pulsante Approva, quindi un aggiornamento che quel pulsante rifiuterebbe viene segnalato invece di essere applicato.",
+        "acceptLabel": "Approva selezionati",
+        "holdsSuffix": "\n\nQuesti aggiornamenti hanno motivi di sospensione aperti che l’approvazione ignora:\n{list}",
+        "excludedSuffix": "\n\nBloccati e ignorati ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Rifiuta gli aggiornamenti selezionati",
+        "message": "Rifiutare gli aggiornamenti selezionati ({count})? Non verranno applicati automaticamente.",
+        "acceptLabel": "Rifiuta selezionati"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Aggiornamento rifiutato per {name}",
       "rejectFailed": "Impossibile rifiutare {name}",
       "deferred": "Aggiornamento rimandato per {name}",
-      "deferFailed": "Impossibile rimandare {name}"
+      "deferFailed": "Impossibile rimandare {name}",
+      "bulkApproved": "Approvazione richiesta per gli aggiornamenti selezionati: {count}",
+      "bulkRejected": "Aggiornamenti selezionati rifiutati: {count}",
+      "bulkPartialFailure": "Alcuni aggiornamenti non sono stati elaborati ({count}): {list}",
+      "bulkFailed": "Impossibile elaborare gli aggiornamenti selezionati"
+    },
+    "bulk": {
+      "selectRow": "Seleziona {name}",
+      "selectAll": "Seleziona tutte le approvazioni visibili",
+      "barLabel": "Approvazioni selezionate",
+      "count": "Selezionati: {count}",
+      "approveSelected": "Approva selezionati",
+      "rejectSelected": "Rifiuta selezionati",
+      "clear": "Cancella selezione"
     }
   }
 }

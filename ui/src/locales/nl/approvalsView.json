@@ -5,7 +5,8 @@
       "detailLoadFailed": "Goedkeuring kon niet worden geladen",
       "approveFailed": "Update kon niet worden goedgekeurd",
       "rejectFailed": "Update kon niet worden afgewezen",
-      "deferFailed": "Update kon niet worden uitgesteld"
+      "deferFailed": "Update kon niet worden uitgesteld",
+      "bulkFailed": "Geselecteerde updates konden niet worden afgehandeld"
     },
     "ofCount": "{count} weergegeven",
     "refresh": "Vernieuwen",
@@ -70,6 +71,18 @@
         "header": "Update uitstellen",
         "message": "De update voor {name} met {days} dagen uitstellen?",
         "acceptLabel": "Uitstellen"
+      },
+      "bulkApprove": {
+        "header": "Geselecteerde updates goedkeuren",
+        "message": "De geselecteerde updates goedkeuren ({count})? Elke update wordt opnieuw gecontroleerd en op dezelfde manier gestart als met de knop Goedkeuren, dus een update die die knop zou weigeren wordt gemeld in plaats van toegepast.",
+        "acceptLabel": "Selectie goedkeuren",
+        "holdsSuffix": "\n\nDeze updates hebben openstaande redenen voor uitstel die goedkeuren overschrijft:\n{list}",
+        "excludedSuffix": "\n\nGeblokkeerd en overgeslagen ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Geselecteerde updates afwijzen",
+        "message": "De geselecteerde updates afwijzen ({count})? Ze worden niet automatisch toegepast.",
+        "acceptLabel": "Selectie afwijzen"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Update voor {name} afgewezen",
       "rejectFailed": "Afwijzen van {name} mislukt",
       "deferred": "Update voor {name} uitgesteld",
-      "deferFailed": "Uitstellen van {name} mislukt"
+      "deferFailed": "Uitstellen van {name} mislukt",
+      "bulkApproved": "Goedkeuring aangevraagd voor geselecteerde updates: {count}",
+      "bulkRejected": "Geselecteerde updates afgewezen: {count}",
+      "bulkPartialFailure": "Sommige updates konden niet worden afgehandeld ({count}): {list}",
+      "bulkFailed": "De geselecteerde updates konden niet worden afgehandeld"
+    },
+    "bulk": {
+      "selectRow": "{name} selecteren",
+      "selectAll": "Alle zichtbare goedkeuringen selecteren",
+      "barLabel": "Geselecteerde goedkeuringen",
+      "count": "Geselecteerd: {count}",
+      "approveSelected": "Selectie goedkeuren",
+      "rejectSelected": "Selectie afwijzen",
+      "clear": "Selectie wissen"
     }
   }
 }

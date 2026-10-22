@@ -338,7 +338,7 @@ describe('useDashboardData', () => {
     );
     await nextTick();
 
-    expect(state.containers.value[0]?.updateOperation).toBeUndefined();
+    expect(state.containers.value[0]).toEqual(makeContainer({ id: 'c1' }));
     expect(mocks.getAllContainers).not.toHaveBeenCalled();
   });
 

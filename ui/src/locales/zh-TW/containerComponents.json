@@ -141,6 +141,7 @@
         "recently-applied": "已略過：更新剛套用，正在等待 watcher 確認。",
         "digest-buffered": "已留待下一次摘要發送。"
       },
+      "notificationSkipAt": "最近一次略過 {date}",
       "backupsRollback": "備份與回滾",
       "rollingBack": "回滾中……",
       "rollbackLatest": "回滾到最新",
@@ -653,6 +654,7 @@
         "snoozed": "更新已推遲",
         "maturityBlockedSingular": "僅限成熟版本策略會阻止低於 {days} 天的更新",
         "maturityBlockedPlural": "僅限成熟版本策略會阻止低於 {days} 天的更新",
+        "maturityCountdown": "{message}。{countdown} 後解鎖 ({date})",
         "maturityActiveSingular": "僅限成熟版本策略已啟用（最短 {days} 天）",
         "maturityActivePlural": "僅限成熟版本策略已啟用（最短 {days} 天）",
         "maturityAllowAll": "成熟度策略允許所有更新",

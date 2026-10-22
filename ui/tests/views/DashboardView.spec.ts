@@ -3127,15 +3127,15 @@ describe('DashboardView', () => {
         id: 'c1',
         name: 'nginx',
         identityKey: '::local::nginx',
-        updateOperation: {
-          id: 'op-old',
-          batchId: 'old-batch',
-          queuePosition: 2,
-          queueTotal: 3,
-          status: 'queued',
-          phase: 'queued',
-          updatedAt: '2026-10-21T00:00:00.000Z',
-        },
+      });
+      seedOperation(getActivePinia()!, container, {
+        operationId: 'op-old',
+        batchId: 'old-batch',
+        queuePosition: 2,
+        queueTotal: 3,
+        status: 'queued',
+        phase: 'queued',
+        updatedAt: '2026-10-21T00:00:00.000Z',
       });
       await mountDashboard([container]);
 

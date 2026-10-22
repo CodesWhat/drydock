@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · сервер: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Генерацію SBOM увімкнено ({formats})",
-      "sbomDisabled": "Генерацію SBOM вимкнено"
+      "sbomDisabled": "Генерацію SBOM вимкнено",
+      "assetVersion": "Версія {version}",
+      "assetDigest": "Образ {digest}",
+      "assetDatabaseUpdated": "Базу даних оновлено {updatedAt}",
+      "assetCacheUpdated": "Кеш оновлено {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Поки що немає даних про вразливості",

@@ -43,6 +43,7 @@
       "updateAll": "全部更新",
       "noUpdates": "沒有可用更新",
       "securityBlocked": "被安全機制阻止",
+      "maturityCountdown": "{countdown} 後解鎖 ({date})",
       "updateContainer": "更新容器",
       "compactSingle": "{count} 個可用更新",
       "compactPlural": "{count} 個可用更新",

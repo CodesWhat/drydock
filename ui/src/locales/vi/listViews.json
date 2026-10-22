@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · máy chủ: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Tạo SBOM đã bật ({formats})",
-      "sbomDisabled": "Tạo SBOM đã tắt"
+      "sbomDisabled": "Tạo SBOM đã tắt",
+      "assetVersion": "Phiên bản {version}",
+      "assetDigest": "Image {digest}",
+      "assetDatabaseUpdated": "Cơ sở dữ liệu cập nhật {updatedAt}",
+      "assetCacheUpdated": "Bộ nhớ đệm cập nhật {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Chưa có dữ liệu lỗ hổng bảo mật",

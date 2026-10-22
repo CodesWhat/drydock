@@ -212,7 +212,7 @@ The editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.5 b
 }
 ```
 
-`sources` is built at merge time, so it's observed rather than inferred: a key present in a section but absent from `sources` came from a Joi schema default, not from either layer.
+`sources` is built at merge time, so it's observed rather than inferred: a key present in a section but absent from `sources` came from a Joi schema default, not from either layer. A secret-file setting is keyed by its base name, `DD_REGISTRY_GHCR_PRIVATE_TOKEN` above, whether it was set as `x: { _file: path }`, `DD_X__FILE`, or a literal, and whether it came from startup or a reload.
 
 `POST /api/v1/config/validate` accepts either `{ "yaml": "<document text>" }` or the configuration tree itself as JSON, and returns `{ valid, errors, diff }` — `diff` names which keys would change, and which of the affected sections would reload live versus need a restart, without writing or applying anything.
 

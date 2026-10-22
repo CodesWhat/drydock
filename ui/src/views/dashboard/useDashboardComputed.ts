@@ -2,7 +2,7 @@ import { type ComputedRef, computed, type Ref } from 'vue';
 import { i18n } from '../../boot/i18n';
 import { ROUTES } from '../../router/routes';
 import { useOperationStore } from '../../stores/operations';
-import type { Container } from '../../types/container';
+import type { Container, ContainerUpdateOperation } from '../../types/container';
 import { shouldRenderStandaloneQueuedUpdateAsUpdating } from '../../utils/container-update';
 import {
   buildDashboardContainerMetrics,
@@ -194,7 +194,7 @@ function getUpdateKindIcon(kind: UpdateKind | null): string {
   }
 }
 
-type ResolveOperation = (container: Container) => Container['updateOperation'];
+type ResolveOperation = (container: Container) => ContainerUpdateOperation | undefined;
 
 function deriveRecentUpdateStatus(
   container: Container,
@@ -242,14 +242,14 @@ function deriveRecentUpdateStatus(
 
 function deriveCurrentVersion(
   container: Container,
-  operation: Container['updateOperation'],
+  operation: ContainerUpdateOperation | undefined,
 ): string {
   return operation?.fromVersion ?? container.currentTag;
 }
 
 function deriveRecentUpdateVersion(
   container: Container,
-  operation: Container['updateOperation'],
+  operation: ContainerUpdateOperation | undefined,
 ): string {
   if (container.newTag) {
     return container.newTag;
@@ -644,7 +644,7 @@ function useStatsComputed(
 
 function isPendingRecentUpdateContainer(
   container: Container,
-  operation: Container['updateOperation'],
+  operation: ContainerUpdateOperation | undefined,
 ): boolean {
   return (
     operation?.status === 'queued' ||

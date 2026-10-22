@@ -17,7 +17,6 @@ import {
   type ReconcileContainerCandidate,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
-import { useToast } from '../composables/useToast';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { useOperationStore } from '../stores/operations';
@@ -71,7 +70,6 @@ const {
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers: reconcileHolds,
 } = useOperationDisplayHold();
-const toast = useToast();
 const operationStore = useOperationStore();
 
 // The store lookup ignores the display hold, otherwise every held container
@@ -242,21 +240,6 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
     }
     if (match.lastUpdateFailureAt !== undefined) {
       c.lastUpdateFailureAt = match.lastUpdateFailureAt;
-    }
-    const previousOperation = match.updateOperation;
-    if (c.updateOperation && previousOperation && c.updateOperation.id === previousOperation.id) {
-      c.updateOperation = {
-        ...previousOperation,
-        ...c.updateOperation,
-        batchId: c.updateOperation.batchId ?? previousOperation.batchId,
-        queuePosition: c.updateOperation.queuePosition ?? previousOperation.queuePosition,
-        queueTotal: c.updateOperation.queueTotal ?? previousOperation.queueTotal,
-      };
-    } else if (
-      c.updateOperation === undefined &&
-      (previousOperation?.status === 'queued' || previousOperation?.status === 'in-progress')
-    ) {
-      c.updateOperation = previousOperation;
     }
   }
   return next;
@@ -1527,7 +1510,7 @@ function handleGlobalScroll() {
   }
 }
 
-const { hasPendingOperationWatcher } = useContainerSsePatchPipeline({
+useContainerSsePatchPipeline({
   containers,
   containerIdMap,
   containerMetaMap,

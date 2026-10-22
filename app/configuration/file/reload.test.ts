@@ -4,7 +4,13 @@ import path from 'node:path';
 import { setWarnLogger } from '../../log/warn.js';
 import type { ComponentReconcileResult } from '../../registry/index.js';
 import { getUpdateLockSnapshot, withContainerUpdateLocks } from '../../updates/update-locks.js';
-import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
+import {
+  configFileInterpolatedKeys,
+  configFileSecretPaths,
+  configFileSources,
+  ddEnvVars,
+} from '../index.js';
+import { buildCandidateEnvAndDiff } from './diff.js';
 import { getConfigFileInfo, getConfigFileLayer, resetConfigFileLayer } from './layer.js';
 
 const mockReconcile = vi.hoisted(() => vi.fn());
@@ -78,6 +84,7 @@ describe('reloadConfiguration', () => {
       delete configFileSources[key];
     }
     Object.assign(configFileSources, configFileSourcesSnapshot);
+    for (const key of Object.keys(configFileSecretPaths)) delete configFileSecretPaths[key];
     if (originalConfigFileEnv === undefined) {
       delete process.env.DD_CONFIG_FILE;
     } else {
@@ -140,7 +147,7 @@ describe('reloadConfiguration', () => {
     const value = 'https://discord.example/private';
     fs.writeFileSync(credentialPath, value, { mode: 0o600 });
     ddEnvVars[key] = value;
-    configFileSources[marker] = 'file';
+    configFileSources[key] = 'file';
     writeConfig(
       `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
     );
@@ -163,6 +170,72 @@ describe('reloadConfiguration', () => {
     expect((await reloadConfiguration()).diff.changed).toContain(key);
     expect(ddEnvVars[key]).toBeUndefined();
     expect(configFileSources[key]).toBeUndefined();
+  });
+
+  test('keeps a restart-required secret-file change pending in validate after the reload publishes it', async () => {
+    const credentialPath = path.join(tempDir, 'server-name');
+    fs.writeFileSync(credentialPath, 'beta\n', { mode: 0o600 });
+    ddEnvVars.DD_SERVER_NAME = 'alpha';
+    configFileSources.DD_SERVER_NAME = 'file';
+    writeConfig(`server:\n  name:\n    _file: ${credentialPath}\n`);
+
+    const reloaded = await reloadConfiguration();
+
+    expect(reloaded.applied).toBe(true);
+    expect(reloaded.diff.restart).toEqual(['server']);
+    expect(ddEnvVars.DD_SERVER_NAME).toBe('alpha');
+    expect(getConfigFileLayer()).toStrictEqual({ DD_SERVER_NAME__FILE: credentialPath });
+    const { diff } = buildCandidateEnvAndDiff({ DD_SERVER_NAME__FILE: credentialPath });
+    expect(diff.changed).toEqual(['DD_SERVER_NAME']);
+    expect(diff.restart).toEqual(['server']);
+  });
+
+  test('tracks a reloadable secret-file path that moves while the secret contents stay identical', async () => {
+    const key = 'DD_NOTIFICATION_DISCORD_PRIVATE_URL';
+    const first = path.join(tempDir, 'first');
+    const second = path.join(tempDir, 'second');
+    fs.writeFileSync(first, 'https://discord.example/private', { mode: 0o600 });
+    fs.writeFileSync(second, 'https://discord.example/private', { mode: 0o600 });
+    writeConfig(`notification:\n  discord:\n    private:\n      url:\n        _file: ${first}\n`);
+    await reloadConfiguration();
+    expect(configFileSecretPaths[key]).toBe(first);
+    writeConfig(`notification:\n  discord:\n    private:\n      url:\n        _file: ${second}\n`);
+    await reloadConfiguration();
+    expect(configFileSecretPaths[key]).toBe(second);
+    expect(buildCandidateEnvAndDiff({ [`${key}__FILE`]: second }).diff.changed).toEqual([]);
+    writeConfig('{}\n');
+    await reloadConfiguration();
+    expect(configFileSecretPaths[key]).toBeUndefined();
+  });
+
+  test('never tracks a secret-file path for a setting the real environment owns', async () => {
+    const key = 'DD_NOTIFICATION_DISCORD_PRIVATE_URL';
+    const credentialPath = path.join(tempDir, 'ignored');
+    fs.writeFileSync(credentialPath, 'ignored', { mode: 0o600 });
+    vi.stubEnv(key, 'https://discord.example/env');
+    ddEnvVars[key] = 'https://discord.example/env';
+    configFileSources[key] = 'env';
+    writeConfig(
+      `notification:\n  discord:\n    private:\n      url:\n        _file: ${credentialPath}\n`,
+    );
+    await reloadConfiguration();
+    expect(configFileSecretPaths[key]).toBeUndefined();
+  });
+
+  test('never tracks an interpolated secret-file path for a setting the environment names by secret file', async () => {
+    const key = 'DD_WATCHER_LOCAL_CRON';
+    const envPath = path.join(tempDir, 'env-cron');
+    const filePath = path.join(tempDir, 'file-cron');
+    fs.writeFileSync(envPath, '0 3 * * *', { mode: 0o600 });
+    fs.writeFileSync(filePath, '0 4 * * *', { mode: 0o600 });
+    vi.stubEnv(`${key}__FILE`, envPath);
+    vi.stubEnv('CRON_FILE', filePath);
+    ddEnvVars[key] = '0 3 * * *';
+    configFileSources[key] = 'env';
+    writeConfig('watcher:\n  local:\n    cron:\n      _file: ${CRON_FILE}\n');
+    await reloadConfiguration();
+    expect(ddEnvVars[key]).toBe('0 3 * * *');
+    expect(configFileSecretPaths[key]).toBeUndefined();
   });
 
   test.each(['missing', 'unreadable'])(

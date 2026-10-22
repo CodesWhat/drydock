@@ -43,6 +43,7 @@
       "updateAll": "Оновити всі",
       "noUpdates": "Оновлень немає",
       "securityBlocked": "Заблоковано безпекою",
+      "maturityCountdown": "Розблокується через {countdown} ({date})",
       "updateContainer": "Оновити контейнер",
       "compactSingle": "{count} доступне оновлення",
       "compactPlural": "{count} доступних оновлень",

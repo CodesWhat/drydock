@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · 서버: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM 생성 활성화됨 ({formats})",
-      "sbomDisabled": "SBOM 생성 비활성화됨"
+      "sbomDisabled": "SBOM 생성 비활성화됨",
+      "assetVersion": "버전 {version}",
+      "assetDigest": "이미지 {digest}",
+      "assetDatabaseUpdated": "데이터베이스 업데이트 {updatedAt}",
+      "assetCacheUpdated": "캐시 업데이트 {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "아직 취약성 데이터가 없습니다",

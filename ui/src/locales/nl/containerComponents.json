@@ -141,6 +141,7 @@
         "recently-applied": "Overgeslagen: de update is net toegepast, wachten op bevestiging van de watcher.",
         "digest-buffered": "Vastgehouden voor de volgende digest."
       },
+      "notificationSkipAt": "Laatst overgeslagen {date}",
       "backupsRollback": "Back-ups en terugdraaien",
       "rollingBack": "Terugrollen...",
       "rollbackLatest": "Laatste terugdraaien",
@@ -653,6 +654,7 @@
         "snoozed": "Updates gesnoozed",
         "maturityBlockedSingular": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dag",
         "maturityBlockedPlural": "Alleen-rijp-beleid blokkeert updates die jonger zijn dan {days} dagen",
+        "maturityCountdown": "{message}. Ontgrendelt over {countdown} ({date})",
         "maturityActiveSingular": "Alleen-rijp-beleid actief (minimumleeftijd {days} dag)",
         "maturityActivePlural": "Alleen-rijp-beleid actief (minimumleeftijd {days} dagen)",
         "maturityAllowAll": "Volwassenheidsbeleid staat alle updates toe",

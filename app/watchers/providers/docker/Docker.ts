@@ -1409,6 +1409,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       emitBatchEvent,
       isScanStale:
         scanGeneration === undefined ? undefined : () => scanGeneration !== this.scanGeneration,
+      isRenamedPredecessorOfReplacement: storeContainer.isRenamedPredecessorOfReplacement,
     });
   }
 

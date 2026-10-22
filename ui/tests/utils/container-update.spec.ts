@@ -15,10 +15,34 @@ const mockT: TranslateFn = (key, params) => {
   return `${key}:${JSON.stringify(params)}`;
 };
 
+type FixtureOperation = {
+  status: 'queued' | 'in-progress';
+  updatedAt: string | undefined;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
+};
+
+// Fixtures describe each container's operation inline; the util reads them
+// through the resolver, the same way production reads the operations store.
+function renderWithOps(args: {
+  targetId?: string;
+  operation?: FixtureOperation;
+  hasExternalActiveHead?: boolean;
+  containers: Array<{ id: string; updateOperation?: FixtureOperation }>;
+}) {
+  const operations = new Map(args.containers.map((c) => [c.id, c.updateOperation]));
+  return shouldRenderStandaloneQueuedUpdateAsUpdating({
+    ...args,
+    containers: args.containers.map(({ id }) => ({ id })),
+    resolveOperation: (container) => operations.get(container.id),
+  });
+}
+
 describe('container-update utils', () => {
   it('yields standalone queued updates to persisted queued batch heads', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -49,7 +73,7 @@ describe('container-update utils', () => {
 
   it('prefers the earliest queued position within a persisted batch', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -90,7 +114,7 @@ describe('container-update utils', () => {
 
   it('keeps the existing persisted batch head when a later queued item is seen', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -137,7 +161,7 @@ describe('container-update utils', () => {
 
   it('treats invalid queued timestamps as the newest standalone item', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'stale-timestamp',
         operation: {
           status: 'queued',
@@ -190,7 +214,7 @@ describe('container-update utils', () => {
 
   it('yields standalone queued updates to external active heads', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         hasExternalActiveHead: true,
         operation: {
@@ -212,7 +236,7 @@ describe('container-update utils', () => {
 
   it('treats invalid persisted queue metadata as standalone queued state', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'malformed',
         operation: {
           status: 'queued',
@@ -239,7 +263,7 @@ describe('container-update utils', () => {
 
   it('yields to in-progress batch heads without a matching queued head', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -270,7 +294,7 @@ describe('container-update utils', () => {
 
   it('yields when a separate in-progress batch head is present alongside queued batch heads', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -311,7 +335,7 @@ describe('container-update utils', () => {
 
   it('skips non-standalone containers when scanning for the queue head', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'standalone',
         operation: {
           status: 'queued',
@@ -336,7 +360,7 @@ describe('container-update utils', () => {
 
   it('promotes the sole standalone queued update even with undefined updatedAt', () => {
     expect(
-      shouldRenderStandaloneQueuedUpdateAsUpdating({
+      renderWithOps({
         targetId: 'solo',
         operation: {
           status: 'queued',

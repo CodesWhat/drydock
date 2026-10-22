@@ -141,6 +141,7 @@
         "recently-applied": "Pominięto: aktualizacja została właśnie zastosowana, czekam na potwierdzenie przez watcher.",
         "digest-buffered": "Wstrzymano do następnego zestawienia."
       },
+      "notificationSkipAt": "Ostatnio pominięto {date}",
       "backupsRollback": "Kopie zapasowe i przywracanie",
       "rollingBack": "Cofanie się...",
       "rollbackLatest": "Wycofaj najnowszą",
@@ -653,6 +654,7 @@
         "snoozed": "Aktualizacje odłożone",
         "maturityBlockedSingular": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dzień",
         "maturityBlockedPlural": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dni",
+        "maturityCountdown": "{message}. Odblokuje się za {countdown} ({date})",
         "maturityActiveSingular": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dzień)",
         "maturityActivePlural": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dni)",
         "maturityAllowAll": "Polityka dojrzałości zezwala na wszystkie aktualizacje",

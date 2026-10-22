@@ -5,7 +5,8 @@
       "detailLoadFailed": "Genehmigung konnte nicht geladen werden",
       "approveFailed": "Update konnte nicht genehmigt werden",
       "rejectFailed": "Update konnte nicht abgelehnt werden",
-      "deferFailed": "Update konnte nicht verschoben werden"
+      "deferFailed": "Update konnte nicht verschoben werden",
+      "bulkFailed": "Ausgewählte Aktualisierungen konnten nicht entschieden werden"
     },
     "ofCount": "{count} angezeigt",
     "refresh": "Aktualisieren",
@@ -70,6 +71,18 @@
         "header": "Aktualisierung zurückstellen",
         "message": "Aktualisierung für {name} um {days} Tage zurückstellen?",
         "acceptLabel": "Zurückstellen"
+      },
+      "bulkApprove": {
+        "header": "Ausgewählte Aktualisierungen genehmigen",
+        "message": "Die ausgewählten Aktualisierungen genehmigen ({count})? Jede wird erneut geprüft und genauso gestartet wie über die Schaltfläche Genehmigen. Eine Aktualisierung, die diese Schaltfläche ablehnen würde, wird gemeldet statt angewendet.",
+        "acceptLabel": "Auswahl genehmigen",
+        "holdsSuffix": "\n\nDiese Aktualisierungen haben offene Haltegründe, die durch die Genehmigung übergangen werden:\n{list}",
+        "excludedSuffix": "\n\nBlockiert und übersprungen ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Ausgewählte Aktualisierungen ablehnen",
+        "message": "Die ausgewählten Aktualisierungen ablehnen ({count})? Sie werden nicht automatisch angewendet.",
+        "acceptLabel": "Auswahl ablehnen"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Aktualisierung für {name} abgelehnt",
       "rejectFailed": "{name} konnte nicht abgelehnt werden",
       "deferred": "Aktualisierung für {name} zurückgestellt",
-      "deferFailed": "{name} konnte nicht zurückgestellt werden"
+      "deferFailed": "{name} konnte nicht zurückgestellt werden",
+      "bulkApproved": "Genehmigung für ausgewählte Aktualisierungen angefordert: {count}",
+      "bulkRejected": "Ausgewählte Aktualisierungen abgelehnt: {count}",
+      "bulkPartialFailure": "Einige Aktualisierungen konnten nicht entschieden werden ({count}): {list}",
+      "bulkFailed": "Die ausgewählten Aktualisierungen konnten nicht entschieden werden"
+    },
+    "bulk": {
+      "selectRow": "{name} auswählen",
+      "selectAll": "Alle sichtbaren Genehmigungen auswählen",
+      "barLabel": "Ausgewählte Genehmigungen",
+      "count": "Ausgewählt: {count}",
+      "approveSelected": "Auswahl genehmigen",
+      "rejectSelected": "Auswahl ablehnen",
+      "clear": "Auswahl aufheben"
     }
   }
 }

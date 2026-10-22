@@ -5,6 +5,7 @@ import {
   replaceSecrets,
 } from '../index.js';
 import { buildCandidateEnvAndDiff, ddEnvKeyToSection, RELOADABLE_SECTIONS } from './diff.js';
+import { toSettingKey } from './sources.js';
 
 /** Resolve a private candidate before validation; never substitute live state across I/O. */
 export async function resolveCandidateEnvAndDiff(
@@ -16,17 +17,14 @@ export async function resolveCandidateEnvAndDiff(
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith('DD_') && key.endsWith('__FILE') && value !== undefined) {
       candidateEnv[key] = value;
-      candidateSources[key] = 'env';
+      candidateSources[toSettingKey(key)] = 'env';
     }
   }
   const resolvedSources = new Map(Object.entries(candidateSources));
   const resolvedInterpolatedKeys = new Set(interpolatedKeys);
   for (const key of Object.keys(candidateEnv)) {
     if (!key.endsWith('__FILE')) continue;
-    const baseKey = key.slice(0, -'__FILE'.length);
-    resolvedSources.set(baseKey, candidateSources[key]);
-    resolvedSources.delete(key);
-    if (resolvedInterpolatedKeys.delete(key)) resolvedInterpolatedKeys.add(baseKey);
+    if (resolvedInterpolatedKeys.delete(key)) resolvedInterpolatedKeys.add(toSettingKey(key));
   }
   try {
     await replaceSecrets(candidateEnv);

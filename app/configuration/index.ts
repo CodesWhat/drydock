@@ -7,7 +7,7 @@ import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './file/layer.js';
-import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
+import { type ConfigValueSource, mergeConfigLayers, toSettingKey } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
@@ -21,7 +21,7 @@ const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
+  'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c';
 const DEFAULT_GRYPE_WORKER_IMAGE =
   'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
 const DEFAULT_SYFT_WORKER_IMAGE =
@@ -166,7 +166,12 @@ Object.keys(process.env)
 // reads `'env'` exactly like a genuinely environment-owned key's does, and
 // this is the only way it can tell the two apart on a *later* reload.
 const configFileLayer = getConfigFileLayer();
-export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInterpolatedKeys());
+const configFileInterpolatedFileKeys = getConfigFileInterpolatedKeys();
+// Keyed by setting (`DD_X`) like `configFileSources`, whichever spelling the
+// file used; the merge below still takes the file's own `DD_X__FILE` names.
+export const configFileInterpolatedKeys: Set<string> = new Set(
+  [...configFileInterpolatedFileKeys].map(toSettingKey),
+);
 
 // 3. Merge the file layer beneath the real environment: a setting already
 // provided in step 1 wins, an unset one is filled in from the file, and Joi
@@ -180,7 +185,25 @@ export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInte
 export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(
   ddEnvVars,
   configFileLayer,
-  configFileInterpolatedKeys,
+  configFileInterpolatedFileKeys,
+);
+
+// The `DD_X__FILE` path each file-supplied secret-file setting was resolved
+// from, keyed by setting (`DD_X`). `replaceSecrets` below consumes the path and
+// leaves only the secret's contents in `ddEnvVars`, so this is the only record
+// of what is actually live; `POST /config/validate` compares against it rather
+// than the latest published file layer, which can move ahead of the live state
+// when a restart-required setting changes (`applyConfigurationReload`).
+export const configFileSecretPaths: Record<string, string> = Object.fromEntries(
+  Object.entries(configFileLayer)
+    .filter(
+      ([key, path]) =>
+        key.endsWith('__FILE') &&
+        ddEnvVars[key] === path &&
+        (configFileSources[toSettingKey(key)] === 'file' ||
+          configFileInterpolatedKeys.has(toSettingKey(key))),
+    )
+    .map(([key, path]) => [toSettingKey(key), path]),
 );
 
 // 4. Replace all secret files referenced by their secret values. Runs after
@@ -248,6 +271,11 @@ export async function validateStartupConfiguration(): Promise<{
  * `Object.keys(ddEnvVars)` walk (`get()` above, every section getter) never
  * sees it.
  *
+ * `secretPathsDelta` carries the secret-file path of every reloadable-section
+ * setting the file now supplies (`undefined`: it no longer does), applied the
+ * same way. Restart-required settings never appear in it, so
+ * `configFileSecretPaths` keeps naming what is actually live for them.
+ *
  * `newInterpolatedKeys` — `reload.ts`'s full, whole-file interpolated-keys
  * set for the reload just applied (the same set it hands `setConfigFileLayer`)
  * — keeps `configFileInterpolatedKeys` in sync for exactly the keys this
@@ -264,7 +292,15 @@ export function applyConfigurationReload(
   envDelta: Record<string, string | undefined>,
   sourcesDelta: Record<string, ConfigValueSource | undefined>,
   newInterpolatedKeys: ReadonlySet<string> = new Set(),
+  secretPathsDelta: Record<string, string | undefined> = {},
 ): void {
+  for (const [key, secretPath] of Object.entries(secretPathsDelta)) {
+    if (secretPath === undefined) {
+      delete configFileSecretPaths[key];
+    } else {
+      configFileSecretPaths[key] = secretPath;
+    }
+  }
   for (const [key, value] of Object.entries(envDelta)) {
     if (value === undefined) {
       delete ddEnvVars[key];
@@ -1326,6 +1362,14 @@ function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
     return undefined;
   }
   return parsedUrl;
+}
+
+/**
+ * The validated `DD_PUBLIC_URL` origin, or undefined when it is unset or unsafe. Request-free,
+ * for notifications that have no inbound request to infer a host from.
+ */
+export function getConfiguredPublicUrl(): string | undefined {
+  return parseSafePublicUrlCandidate(ddEnvVars.DD_PUBLIC_URL)?.origin;
 }
 
 export function getPublicUrl(req: Request) {

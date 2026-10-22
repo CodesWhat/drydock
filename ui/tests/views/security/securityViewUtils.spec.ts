@@ -7,6 +7,8 @@ import {
   formatTimestamp,
   highestSeverity,
   normalizeSeverityCount,
+  providerAssetDetails,
+  providerTooltip,
   severityColor,
   severityIcon,
   severityLabel,
@@ -396,6 +398,76 @@ describe('securityViewUtils', () => {
     it('passes through unrecognised severity values unchanged', () => {
       expect(severityLabel('UNKNOWN', t)).toBe('UNKNOWN');
       expect(severityLabel('', t)).toBe('');
+    });
+  });
+
+  describe('providerAssetDetails', () => {
+    const t = (key: string, params?: Record<string, unknown>) =>
+      `${key}:${Object.values(params ?? {}).join(',')}`;
+
+    it('lists version, shortened digest, database and cache age', () => {
+      expect(
+        providerAssetDetails(
+          {
+            provider: 'trivy',
+            backend: 'docker',
+            configuredImage: 'aquasec/trivy',
+            state: 'ready',
+            version: '0.73.0',
+            resolvedDigest:
+              'sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
+            databaseUpdatedAt: '2026-10-22T01:00:00Z',
+            cacheUpdatedAt: '2026-10-22T02:00:00Z',
+          },
+          t,
+        ),
+      ).toEqual([
+        'securityView.runtimeTools.assetVersion:0.73.0',
+        'securityView.runtimeTools.assetDigest:sha256:7cced7cae583',
+        'securityView.runtimeTools.assetDatabaseUpdated:2026-10-22T01:00:00.000Z',
+        'securityView.runtimeTools.assetCacheUpdated:2026-10-22T02:00:00.000Z',
+      ]);
+    });
+
+    it('skips missing values', () => {
+      expect(
+        providerAssetDetails(
+          { provider: 'grype', backend: 'docker', configuredImage: 'x', state: 'missing' },
+          t,
+        ),
+      ).toEqual([]);
+    });
+  });
+
+  describe('providerTooltip', () => {
+    const t = (key: string, params?: Record<string, unknown>) =>
+      `${key}:${Object.values(params ?? {}).join(',')}`;
+    const provider = { message: 'Trivy is ready', provider: 'trivy' as const };
+
+    it('appends matching asset details to the provider message', () => {
+      const assets = [
+        {
+          provider: 'trivy' as const,
+          backend: 'docker',
+          configuredImage: 'x',
+          state: 'ready' as const,
+          version: '0.73.0',
+        },
+      ];
+      expect(providerTooltip(provider, assets, t)).toBe(
+        'Trivy is ready · securityView.runtimeTools.assetVersion:0.73.0',
+      );
+    });
+
+    it('falls back to the bare message without a matching asset or details', () => {
+      expect(providerTooltip(provider, [], t)).toBe('Trivy is ready');
+      expect(
+        providerTooltip(
+          provider,
+          [{ provider: 'trivy', backend: 'docker', configuredImage: 'x', state: 'missing' }],
+          t,
+        ),
+      ).toBe('Trivy is ready');
     });
   });
 });

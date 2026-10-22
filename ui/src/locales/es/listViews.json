@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · servidor: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Generación de SBOM habilitada ({formats})",
-      "sbomDisabled": "Generación de SBOM deshabilitada"
+      "sbomDisabled": "Generación de SBOM deshabilitada",
+      "assetVersion": "Versión {version}",
+      "assetDigest": "Imagen {digest}",
+      "assetDatabaseUpdated": "Base de datos actualizada {updatedAt}",
+      "assetCacheUpdated": "Caché actualizada {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Aún no hay datos de vulnerabilidades",

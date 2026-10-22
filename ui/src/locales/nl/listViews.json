@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · server: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM-generatie ingeschakeld ({formats})",
-      "sbomDisabled": "SBOM-generatie uitgeschakeld"
+      "sbomDisabled": "SBOM-generatie uitgeschakeld",
+      "assetVersion": "Versie {version}",
+      "assetDigest": "Image {digest}",
+      "assetDatabaseUpdated": "Database bijgewerkt {updatedAt}",
+      "assetCacheUpdated": "Cache bijgewerkt {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Nog geen kwetsbaarheidsgegevens",

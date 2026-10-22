@@ -1,4 +1,9 @@
-import { errorResponse, jsonResponse, paginationQueryParams } from '../common.js';
+import {
+  destructiveConfirmationHeaderParam,
+  errorResponse,
+  jsonResponse,
+  paginationQueryParams,
+} from '../common.js';
 
 const decisionNoteProperty = {
   note: {
@@ -101,6 +106,52 @@ export const approvalPaths = {
           $ref: '#/components/schemas/ApprovalSummary',
         }),
         401: errorResponse('Authentication required'),
+        500: errorResponse('Internal server error'),
+      },
+    },
+  },
+  '/api/v1/approvals/bulk': {
+    post: {
+      tags: ['Approvals', 'Actions'],
+      summary: 'Decide several queued updates at once',
+      description:
+        'Applies one decision to up to 200 approval rows, mirroring POST ' +
+        '/api/v1/containers/update: the response is 200 with an accepted and a rejected ' +
+        'list, one entry per id, so a failure on one row never hides the others. Each id ' +
+        'runs through the same decision as the per-row route (the same reservation, ' +
+        'candidate binding and admission path), records its own audit entry, and is ' +
+        'processed one at a time. The approve action starts container updates and ' +
+        'therefore requires the X-DD-Confirm-Action: approvals-bulk-approve header; ' +
+        'reject and defer do not. A defer expiry is resolved once and shared by every row.',
+      operationId: 'bulkDecideApprovals',
+      parameters: [
+        {
+          ...destructiveConfirmationHeaderParam('approvals-bulk-approve'),
+          required: false,
+          description:
+            'Confirmation for the approve action (approvals-bulk-approve). Required when ' +
+            'action is approve, ignored otherwise.',
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/ApprovalBulkRequest' },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Decisions processed', {
+          $ref: '#/components/schemas/ApprovalBulkResponse',
+        }),
+        400: errorResponse(
+          'Invalid ids, action, note, until date or day count, or until/days given with an ' +
+            'action other than defer',
+        ),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Container actions feature disabled (approve only)'),
+        428: errorResponse('Destructive confirmation header is required (approve only)'),
         500: errorResponse('Internal server error'),
       },
     },

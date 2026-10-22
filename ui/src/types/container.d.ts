@@ -205,7 +205,6 @@ export interface Container {
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
   updateDetectedAt?: string;
   maturityGatePendingSince?: string;
-  updateOperation?: ContainerUpdateOperation;
   /**
    * UI-only transient: short summary of the most recent failed update attempt
    * (e.g. "Registry rate limit hit"). Set by ContainersView on terminal SSE,

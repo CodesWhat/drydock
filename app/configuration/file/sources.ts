@@ -9,6 +9,10 @@
  * is that one test. Defaults are never represented here: a key present in a
  * resolved section but absent from this map came from a Joi default.
  *
+ * The returned map is keyed by setting (`DD_X`), never by the `DD_X__FILE`
+ * spelling the value arrived under, so a secret-file entry reads the same at
+ * boot, after a reload, and in `GET /api/v1/config`'s `sources`.
+ *
  * "That setting", not "that key": `DD_X` and `DD_X__FILE` are two names for
  * one setting, since `replaceSecrets` (step 4) reads the file the second one
  * points at and stores its contents under the first. A file `_file` node
@@ -77,7 +81,7 @@ export function mergeConfigLayers(
 
   for (const key of Object.keys(envVars)) {
     if (envVars[key] !== undefined) {
-      sources.set(key, 'env');
+      sources.set(toSettingKey(key), 'env');
       environmentSettings.add(toSettingKey(key));
     }
   }
@@ -85,7 +89,7 @@ export function mergeConfigLayers(
   for (const [key, value] of Object.entries(fileLayer)) {
     if (!environmentSettings.has(toSettingKey(key)) && DD_ENV_KEY_PATTERN.test(key)) {
       envVars[key] = value;
-      sources.set(key, envSourcedFileKeys?.has(key) ? 'env' : 'file');
+      sources.set(toSettingKey(key), envSourcedFileKeys?.has(key) ? 'env' : 'file');
     }
   }
 

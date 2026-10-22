@@ -2347,6 +2347,154 @@ test('maturity-cleared batch title uses its dedicated template', () => {
   ).toBe('2 updates ready to apply');
 });
 
+test('getNotificationEvent preserves update-pending-approval metadata and drops invalid fields', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: {
+        kind: 'update-pending-approval',
+        approvalId: 'a1',
+        approvalUrl: 'https://dd.example.com/approvals?id=a1',
+        fromRef: '1.0.0',
+        toRef: '1.1.0',
+      },
+    } as any),
+  ).toEqual({
+    kind: 'update-pending-approval',
+    approvalId: 'a1',
+    approvalUrl: 'https://dd.example.com/approvals?id=a1',
+    fromRef: '1.0.0',
+    toRef: '1.1.0',
+  });
+  expect(
+    getNotificationEvent({
+      notificationEvent: { kind: 'update-pending-approval', approvalId: '', fromRef: 42 },
+    } as any),
+  ).toEqual({
+    kind: 'update-pending-approval',
+    approvalId: undefined,
+    approvalUrl: undefined,
+    fromRef: undefined,
+    toRef: undefined,
+  });
+});
+
+test('update-pending-approval uses dedicated templates with from/to versions and the queue link', () => {
+  trigger.configuration.simpletitle = 'custom title';
+  trigger.configuration.simplebody = 'custom body';
+  const base = { name: 'web', watcher: 'local' };
+  expect(
+    trigger.renderSimpleTitle({
+      ...base,
+      notificationEvent: { kind: 'update-pending-approval' },
+    }),
+  ).toBe('Update awaiting approval for container web');
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      notificationEvent: {
+        kind: 'update-pending-approval',
+        fromRef: '1.0.0',
+        toRef: '1.1.0',
+        approvalUrl: 'https://dd.example.com/approvals?id=a1',
+      },
+    }),
+  ).toBe(
+    'Container web has an update awaiting approval: 1.0.0 to 1.1.0\nhttps://dd.example.com/approvals?id=a1',
+  );
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      notificationEvent: { kind: 'update-pending-approval' },
+    }),
+  ).toBe('Container web has an update awaiting approval');
+  expect(
+    trigger.renderBatchTitle([
+      { name: 'web', notificationEvent: { kind: 'update-pending-approval' } },
+      { name: 'api', notificationEvent: { kind: 'update-pending-approval' } },
+    ]),
+  ).toBe('2 updates awaiting approval');
+});
+
+describe('handleApprovalPendingNotificationEvent', () => {
+  const pendingContainer = {
+    id: 'pend-1',
+    watcher: 'local',
+    name: 'web',
+    labels: {},
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+    result: { tag: '1.1.0' },
+  };
+  const payload = {
+    container: pendingContainer,
+    approvalId: 'a1',
+    fromRef: '1.0.0',
+    toRef: '1.1.0',
+    approvalUrl: 'https://dd.example.com/approvals?id=a1',
+  };
+
+  test('dispatches with the approval event attached', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleApprovalPendingNotificationEvent(payload as any);
+    expect(provider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: {
+          kind: 'update-pending-approval',
+          approvalId: 'a1',
+          approvalUrl: 'https://dd.example.com/approvals?id=a1',
+          fromRef: '1.0.0',
+          toRef: '1.1.0',
+        },
+      }),
+    );
+  });
+
+  test('respects the rule enabled flag', async () => {
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleApprovalPendingNotificationEvent(payload as any);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('missing container returns without dispatch', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleApprovalPendingNotificationEvent({
+      ...payload,
+      container: undefined,
+    } as any);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('action triggers do not act on this event', async () => {
+    trigger.type = 'docker';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleApprovalPendingNotificationEvent(payload as any);
+    expect(provider).not.toHaveBeenCalled();
+  });
+});
+
+test('component lifecycle registers and unregisters approval pending notification handling', async () => {
+  const unregister = vi.fn();
+  let callback: any;
+  vi.spyOn(event, 'registerApprovalPendingNotification').mockImplementation((handler) => {
+    callback = handler;
+    return unregister;
+  });
+  const handler = vi
+    .spyOn(trigger, 'handleApprovalPendingNotificationEvent')
+    .mockResolvedValue(undefined);
+  trigger.configuration.auto = true;
+  trigger.configuration.mode = 'simple';
+
+  await trigger.init();
+  const payload = { container: { id: 'c1', name: 'web' }, approvalId: 'a1' };
+  await callback(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+
+  await trigger.deregisterComponent();
+  expect(unregister).toHaveBeenCalledTimes(1);
+});
+
 test('getNotificationEvent should return undefined when notification metadata is missing', () => {
   expect(getNotificationEvent({} as any)).toBeUndefined();
 });
@@ -2547,6 +2695,7 @@ test('previewNotificationTemplates supports every notification rule and rejects 
     'agent-reconnect',
     'container-unhealthy',
     'maturity-cleared',
+    'update-pending-approval',
   ];
 
   for (const ruleId of ruleIds) {

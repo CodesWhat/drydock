@@ -141,6 +141,7 @@
         "recently-applied": "건너뜀: 업데이트가 방금 적용되어 워처의 확인을 기다리는 중입니다.",
         "digest-buffered": "다음 다이제스트까지 보류 중입니다."
       },
+      "notificationSkipAt": "마지막 건너뜀 {date}",
       "backupsRollback": "백업 및 롤백",
       "rollingBack": "롤백 중...",
       "rollbackLatest": "최신 버전으로 롤백",
@@ -653,6 +654,7 @@
         "snoozed": "업데이트 일시 중지됨",
         "maturityBlockedSingular": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
         "maturityBlockedPlural": "기존만 정책이 {days}일 미만 업데이트를 차단합니다",
+        "maturityCountdown": "{message}. {countdown} 후 잠금 해제 ({date})",
         "maturityActiveSingular": "기존만 정책 활성화됨 (최소 {days}일 경과)",
         "maturityActivePlural": "기존만 정책 활성화됨 (최소 {days}일 경과)",
         "maturityAllowAll": "성숙도 정책이 모든 업데이트를 허용합니다",

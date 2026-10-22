@@ -897,7 +897,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',
@@ -987,7 +987,7 @@ describe('getSecurityConfiguration', () => {
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
       },
       grype: {
         command: 'grype',
@@ -1425,6 +1425,27 @@ describe('getSecurityConfiguration', () => {
     expect(result.prune.onBlock).toBe(true);
 
     delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
+  });
+});
+
+describe('getConfiguredPublicUrl', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('returns the validated DD_PUBLIC_URL origin', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com/base/';
+    expect(configuration.getConfiguredPublicUrl()).toBe('https://dd.example.com');
+  });
+
+  test('returns undefined when unset', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
+  });
+
+  test('returns undefined when the value is unsafe', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
   });
 });
 
@@ -3859,6 +3880,40 @@ describe('${NAME} interpolation in drydock.yml', () => {
         expect(freshConfiguration.configFileSources.DD_SERVER_NAME).toBe('env');
       },
     );
+  });
+
+  test('a file _file entry is keyed by its base name in sources at boot, with the secret resolved beneath it', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-sources-'));
+    const secretPath = path.join(directory, 'secret');
+    fs.writeFileSync(secretPath, 'file-secret\n', { mode: 0o600 });
+    try {
+      vi.resetModules();
+      const { setConfigFileLayer } = await import('./file/layer.js');
+      setConfigFileLayer(
+        {
+          DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE: secretPath,
+          DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE: secretPath,
+        },
+        new Set(['DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE']),
+      );
+      const freshConfiguration = await import('./index.js');
+
+      expect(freshConfiguration.ddEnvVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file-secret');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('env');
+      expect(freshConfiguration.configFileSecretPaths).toStrictEqual({
+        DD_REGISTRY_GHCR_PRIVATE_TOKEN: secretPath,
+        DD_REGISTRY_HUB_PRIVATE_PASSWORD: secretPath,
+      });
+      expect(
+        Object.keys(freshConfiguration.configFileSources).filter((key) => key.endsWith('__FILE')),
+      ).toEqual([]);
+      expect([...freshConfiguration.configFileInterpolatedKeys]).toEqual([
+        'DD_REGISTRY_HUB_PRIVATE_PASSWORD',
+      ]);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('a literal value with no ${...} pattern is still sourced as "file"', async () => {

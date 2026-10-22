@@ -1,4 +1,4 @@
-import { configFileSources, ddEnvVars } from '../configuration/index.js';
+import { configFileSecretPaths, configFileSources, ddEnvVars } from '../configuration/index.js';
 import Component from '../registry/Component.js';
 import { createMockResponse } from '../test/helpers.js';
 import { validateCandidateConfiguration } from './config-validate.js';
@@ -38,6 +38,9 @@ describe('validateCandidateConfiguration', () => {
   });
 
   afterEach(() => {
+    for (const key of Object.keys(configFileSecretPaths)) {
+      delete configFileSecretPaths[key];
+    }
     for (const key of Object.keys(ddEnvVars)) {
       delete ddEnvVars[key];
     }
@@ -240,6 +243,61 @@ describe('validateCandidateConfiguration', () => {
     expect(payload.diff.changed).toEqual(['DD_WATCHER_LOCAL_SOCKET']);
     expect(payload.diff.reload).toEqual(['watcher']);
     expect(payload.diff.restart).toEqual([]);
+  });
+
+  describe('a currently file-sourced _file entry, keyed by its base name', () => {
+    const KEY = 'DD_NOTIFICATION_DISCORD_MYHOOK_URL';
+    const secretBody = (path: string) => ({
+      notification: { discord: { myhook: { url: { _file: path } } } },
+    });
+
+    beforeEach(() => {
+      ddEnvVars[KEY] = 'https://discord.example/from-secret-file';
+      configFileSources[KEY] = 'file';
+      configFileSecretPaths[KEY] = '/run/secrets/hook';
+    });
+
+    test('an unchanged _file entry is not reported as changed', async () => {
+      const res = createMockResponse();
+
+      await validateCandidateConfiguration(
+        jsonRequest(secretBody('/run/secrets/hook')) as never,
+        res,
+      );
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.diff.changed).toEqual([]);
+      expect(payload.diff.reload).toEqual([]);
+    });
+
+    test('a _file entry pointing at a different path is reported under the base name', async () => {
+      const res = createMockResponse();
+
+      await validateCandidateConfiguration(
+        jsonRequest(secretBody('/run/secrets/other')) as never,
+        res,
+      );
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.diff.changed).toEqual([KEY]);
+      expect(payload.diff.reload).toEqual(['notification']);
+    });
+
+    test('switching the same setting to a literal value is reported as changed', async () => {
+      const res = createMockResponse();
+
+      await validateCandidateConfiguration(
+        jsonRequest({
+          notification: {
+            discord: { myhook: { url: 'https://discord.example/from-secret-file' } },
+          },
+        }) as never,
+        res,
+      );
+
+      const payload = (res.json as any).mock.calls[0][0];
+      expect(payload.diff.changed).toEqual([KEY]);
+    });
   });
 
   test('a candidate that changes a currently file-sourced restart-required-section key is reported in diff.restart', async () => {

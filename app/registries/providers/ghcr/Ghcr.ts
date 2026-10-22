@@ -30,6 +30,10 @@ interface GhcrTokenResponse {
 class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   override readonly publishedAtIsPushDate = true;
 
+  protected override listsTagsInCreationOrder(): boolean {
+    return true;
+  }
+
   protected getTrustedAuthHosts(): string[] {
     return ['ghcr.io'];
   }

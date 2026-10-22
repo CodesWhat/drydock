@@ -1996,6 +1996,80 @@ export const openApiSchemas = {
     required: ['approval'],
     additionalProperties: false,
   },
+  ApprovalBulkRequest: {
+    type: 'object',
+    properties: {
+      ids: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 200,
+        items: { type: 'string' },
+        description: 'Approval ids to decide. Duplicates are collapsed.',
+      },
+      action: { type: 'string', enum: ['approve', 'reject', 'defer'] },
+      until: {
+        type: 'string',
+        format: 'date-time',
+        description:
+          'Defer only. Explicit expiry, an RFC 3339 date-time in the future and at most 365 ' +
+          'days from now. Takes precedence over days.',
+      },
+      days: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 365,
+        description: 'Defer only. Days from now. Defaults to 7 when neither field is given.',
+      },
+      note: {
+        type: 'string',
+        maxLength: 500,
+        description: 'Free-text reason recorded on every decided row and its audit entry',
+      },
+    },
+    required: ['ids', 'action'],
+    additionalProperties: false,
+  },
+  ApprovalBulkResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      accepted: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            containerId: { type: 'string' },
+            containerName: { type: 'string' },
+            decision: { type: 'string', enum: ['approved', 'rejected', 'deferred'] },
+            operationId: { type: 'string', description: 'Present for approve' },
+            deferredUntil: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Present for defer',
+            },
+          },
+          required: ['id', 'containerId', 'containerName', 'decision'],
+          additionalProperties: false,
+        },
+      },
+      rejected: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            statusCode: { type: 'integer' },
+            message: { type: 'string' },
+          },
+          required: ['id', 'statusCode', 'message'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['message', 'accepted', 'rejected'],
+    additionalProperties: false,
+  },
   ApprovalDetail: {
     type: 'object',
     description:

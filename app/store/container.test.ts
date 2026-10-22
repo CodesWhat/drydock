@@ -5887,6 +5887,166 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
         expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
       });
 
+      describe('isRenamedPredecessorOfReplacement', () => {
+        const supersedeOldContainer = (updatePolicy?: unknown) => {
+          mountWith([
+            {
+              data: makePolicyFixture({ id: 'old-container', watcher: 'docker', updatePolicy }),
+            },
+          ]);
+          container.deleteContainer('old-container', {
+            replacementExpected: true,
+            excludedContainerId: 'old-container',
+            supersededByContainerId: 'new-container',
+          });
+        };
+        const oldContainer = () => makePolicyFixture({ id: 'old-container', watcher: 'docker' });
+
+        test('is false while the replacement is not stored yet', () => {
+          supersedeOldContainer(MATURITY_POLICY);
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(false);
+        });
+
+        test('is true once the replacement is stored, with or without overrides', () => {
+          supersedeOldContainer();
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(true);
+        });
+
+        test('is false again when the replacement is removed', () => {
+          supersedeOldContainer();
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+          container.deleteContainer('new-container');
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(false);
+        });
+
+        test('is false once the record has expired', () => {
+          supersedeOldContainer();
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+          vi.useFakeTimers();
+          try {
+            vi.setSystemTime(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
+
+            expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(false);
+          } finally {
+            vi.useRealTimers();
+          }
+        });
+
+        test('a replacement insert removes a predecessor row that got in ahead of it', () => {
+          supersedeOldContainer();
+          container.insertContainer(oldContainer());
+
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+
+          expect(container.getContainers().map((c) => c.id)).toEqual(['new-container']);
+        });
+
+        test('the supersession record is bounded by the retention cache capacity', () => {
+          const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+          for (let i = 0; i <= maxEntries; i++) {
+            container.insertContainer(makePolicyFixture({ id: `cap-old-${i}`, name: `cap-${i}` }));
+            container.deleteContainer(`cap-old-${i}`, {
+              replacementExpected: true,
+              supersededByContainerId: `cap-new-${i}`,
+            });
+          }
+          container.insertContainer(makePolicyFixture({ id: 'cap-new-0', name: 'cap-0' }));
+          container.insertContainer(
+            makePolicyFixture({ id: `cap-new-${maxEntries}`, name: 'cap' }),
+          );
+
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({ id: 'cap-old-0', name: 'cap-0' }),
+            ),
+          ).toBe(false);
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({ id: `cap-old-${maxEntries}`, name: 'cap' }),
+            ),
+          ).toBe(true);
+        });
+
+        test('is false for another id under the same name', () => {
+          supersedeOldContainer();
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({ id: 'other', watcher: 'docker' }),
+            ),
+          ).toBe(false);
+        });
+
+        test('removes a stored predecessor whose replacement is stored', () => {
+          supersedeOldContainer();
+          container.insertContainer(makePolicyFixture({ id: 'new-container', watcher: 'docker' }));
+          container.insertContainer(oldContainer());
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(true);
+          expect(container.getContainers().map((c) => c.id)).toEqual(['new-container']);
+        });
+
+        test('is false for a container that is already stored', () => {
+          supersedeOldContainer();
+          container.insertContainer(oldContainer());
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(false);
+        });
+
+        test('is false for an agent-owned container', () => {
+          mountWith([{ data: makePolicyFixture({ id: 'agent-new', agent: 'edge' }) }]);
+
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({
+                id: 'agent-old',
+                agent: 'edge',
+                name: 'myapp-old-1760000000000',
+              }),
+            ),
+          ).toBe(false);
+        });
+
+        test('is true for a rollback-renamed container whose replacement is stored', () => {
+          mountWith([{ data: makePolicyFixture({ id: 'new-container' }) }]);
+
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({ id: 'old-container', name: 'myapp-old-1760000000000' }),
+            ),
+          ).toBe(true);
+        });
+
+        test('is false for a rollback-renamed container with no replacement stored', () => {
+          expect(
+            container.isRenamedPredecessorOfReplacement(
+              makePolicyFixture({ id: 'old-container', name: 'foo-old-1760000000000' }),
+            ),
+          ).toBe(false);
+        });
+
+        test('is false for a plain-named container with no record', () => {
+          mountWith([{ data: makePolicyFixture({ id: 'new-container' }) }]);
+
+          expect(
+            container.isRenamedPredecessorOfReplacement(makePolicyFixture({ id: 'other' })),
+          ).toBe(false);
+        });
+
+        test('discovery of a replacement records the supersession even with no overrides', async () => {
+          mountWith([{ data: makePolicyFixture({ id: 'old-container', watcher: 'docker' }) }]);
+          const replacement = await discoverReplacement('new-container');
+          mapContainerToContainerReport(replacement, reportDependencies);
+
+          expect(container.isRenamedPredecessorOfReplacement(oldContainer())).toBe(true);
+        });
+      });
+
       test('the excluded id lives on the entry and leaves nothing behind once it is evicted', () => {
         const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
         const fixtures = [];

@@ -54,9 +54,18 @@ describe('buildCandidateEnvAndDiff', () => {
 
   test('does not retain a resolved file secret as if it were owned by the environment', () => {
     ddEnvVars.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'old-private-value';
-    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE = 'file';
+    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'file';
     const { candidateEnv } = buildCandidateEnvAndDiff({});
     expect(candidateEnv.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBeUndefined();
+  });
+
+  test('keeps a real environment value for a setting being dropped from the file layer', () => {
+    vi.stubEnv('DD_REGISTRY_HUB_PRIVATE_PASSWORD', 'environment-value');
+    ddEnvVars.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'old-file-value';
+    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'file';
+    const { candidateEnv } = buildCandidateEnvAndDiff({});
+    expect(candidateEnv.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('environment-value');
+    vi.unstubAllEnvs();
   });
 
   test('classifies a changed key outside the reloadable set as restart-required', () => {
@@ -99,7 +108,7 @@ describe('buildCandidateEnvAndDiff', () => {
 
     test('a candidate value never overrides a secret file the environment names', () => {
       ddEnvVars[KEY] = 'https://env-secret.example/hook';
-      configFileSources[FILE_KEY] = 'env';
+      configFileSources[KEY] = 'env';
 
       const { candidateEnv, diff } = buildCandidateEnvAndDiff({
         [KEY]: 'https://file.example/hook',
@@ -111,8 +120,8 @@ describe('buildCandidateEnvAndDiff', () => {
 
     test('a secret-file entry that is only env-attributed because its path is interpolated can still change', () => {
       ddEnvVars[KEY] = 'https://file-secret.example/hook';
-      configFileSources[FILE_KEY] = 'env';
-      configFileInterpolatedKeys.add(FILE_KEY);
+      configFileSources[KEY] = 'env';
+      configFileInterpolatedKeys.add(KEY);
 
       const { candidateEnv, diff } = buildCandidateEnvAndDiff({
         [KEY]: 'https://file.example/hook',

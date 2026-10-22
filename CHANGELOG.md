@@ -11,6 +11,33 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- Bump `nodemailer` to 10.0.10 (GHSA-39m8-27wv-hr27, used by the SMTP notification trigger) and the `ip-address` override to 10.7.4 (GHSA-rxp7-6hxx-x8q5), and the website's `dompurify` to 3.4.17 (GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr).
+- Bump the website and docs app to `next` 16.4.2 for GHSA-p3m5-59mp-jv5r and GHSA-2464-fhr4-w9xw (website only, not in the Drydock image).
+- OIDC bearer tokens are now opt-in and must be issued for Drydock's client. An `Authorization: Bearer` access token is only accepted when `DD_AUTH_OIDC_{name}_BEARER=true`, and then only if its `aud` contains the client ID (or a `DD_AUTH_OIDC_{name}_BEARERAUDIENCES` entry) or its `azp`/`client_id` equals it, or, for opaque tokens, RFC 7662 introspection returns an active token for this client. Setups that send OIDC access tokens to the API must set the variable. The browser login flow is unchanged (DR-10). See DEPRECATIONS.md.
+
+### Fixed
+
+- The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR.
+- The Security view now shows the scanner version, image digest, and vulnerability database or cache update time in each scanner's tooltip, using the asset details the API already returned.
+- Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
+- Show when a notification was last skipped. The container detail notification section already named the reason, and now also shows the local date and time of the last skip for each trigger.
+- Key the config `sources` map by the setting name for a secret-file entry. A `_file` (`DD_X__FILE`) entry was listed under `DD_X__FILE` at boot and under `DD_X` after a reload, while the docs showed `DD_X`; both now use `DD_X`. `POST /api/v1/config/validate` no longer reports an unchanged `_file` entry as changed, and the editors label a field set by an environment variable as environment-owned even when the file also has a `_file` entry for it. (CFG-1)
+- With `watchall` on, a slow replacement no longer leaves the renamed old container as a duplicate row that could take the replacement's retained update policy. The old container is skipped while its replacement stands, so the policy stays on the replacement (DR-147).
+- Send the `update-pending-approval` notification. The rule existed and could be enabled, but nothing dispatched to it, so enabling it did nothing. It now fires once when an update candidate enters the approval queue (not under update mode `notify` or with container actions disabled, where approving is refused), follows the rule's enabled flag, trigger selection, templates and batch modes like the other rules, and links to the queue row when `DD_PUBLIC_URL` is set. It is deduplicated on the queue row, so a re-seen pending candidate or a restart doesn't notify again. The rule still ships disabled.
+- Stop the Closing Keywords Guard from failing every dev to main sync PR. A sync head has main as its first parent, so the guard now checks only the sync commit's own message instead of the whole dev history since the branch cut (DR-100b).
+- Check very large GHCR repositories quickly. After a listing hits the 50-page limit once, Drydock lists only the tags pushed after the container's current tag for the next 24 hours instead of re-reading the first 50 pages on every check (REG-PERF-1, follow-up to #1453).
+
+### Added
+
+- Decide several queued updates at once. The approval queue gets row checkboxes, a select-all box and a selection bar with **Approve selected** and **Reject selected**, backed by the new `POST /api/v1/approvals/bulk` (up to 200 ids, with `approve`, `reject` or `defer` as the action). Each id is decided exactly as its single-row route would decide it, so a row that would be refused on its own is reported in the `rejected` list with the same status and message and the rest still go through, and every decided row writes its own audit entry. Bulk approve requires the `X-DD-Confirm-Action: approvals-bulk-approve` header and a confirmation dialog in the UI that lists the hold reasons it overrides and skips hard-blocked rows, and uses the same `containers:update` scope as the single decisions.
+
+### Changed
+
+- Delete the container's `updateOperation` field and the SSE bridge that kept it in sync with the operations store (DR-89, slice 5). Every view already reads update progress from the store, and a new architecture test fails on any new use of the field. Behavior is unchanged.
+- Add an architecture test that fails on toast calls outside the update lifecycle layer (DR-90). Existing feedback toasts are allowlisted per file with a count that can only go down, update outcome toasts can only come from the operations store, and a toast binding can't be handed to a helper. Also drops an unused `useToast()` binding from `ContainersView`.
+
 ## [1.8.0-rc.5] - 2026-10-22
 
 > [!WARNING]

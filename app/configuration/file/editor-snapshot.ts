@@ -145,12 +145,18 @@ export function watcherSnapshot(document: Awaited<ReturnType<typeof readEditorDo
             ([suffix]) => `DD_WATCHER_${watcher.name.toUpperCase()}${suffix}`,
           ),
         ];
-        const reference = referencedPath(
-          document,
-          fieldPath ?? ['watcher', watcher.name, field],
-          false,
-          relatedEnvKeys,
-        );
+        // A real environment literal owns the setting outright: the file's entry
+        // for it, a `_file` node included, is ignored at merge time, so it reads
+        // as `env` rather than as a reference the file never gets to resolve.
+        const environmentLiteral = relatedEnvKeys.some((key) => process.env[key] !== undefined);
+        const reference =
+          !environmentLiteral &&
+          referencedPath(
+            document,
+            fieldPath ?? ['watcher', watcher.name, field],
+            false,
+            relatedEnvKeys,
+          );
         const environmentOwned = relatedEnvKeys.some(
           (key) => configFileSources[key] === 'env' || process.env[key] !== undefined,
         );

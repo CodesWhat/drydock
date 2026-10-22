@@ -42,6 +42,10 @@ describe('GitHub Container Registry', () => {
     expect(ghcr).toBeInstanceOf(Ghcr);
   });
 
+  test('lists tags in creation order', () => {
+    expect((ghcr as any).listsTagsInCreationOrder()).toBe(true);
+  });
+
   test('should match registry', async () => {
     expect(ghcr.match({ registry: { url: 'ghcr.io' } })).toBe(true);
     expect(ghcr.match({ registry: { url: 'docker.io' } })).toBe(false);

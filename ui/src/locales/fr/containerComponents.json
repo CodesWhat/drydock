@@ -141,6 +141,7 @@
         "recently-applied": "Ignorée : la mise à jour vient d'être appliquée, en attente de confirmation du watcher.",
         "digest-buffered": "Retenue pour le prochain résumé."
       },
+      "notificationSkipAt": "Dernier saut {date}",
       "backupsRollback": "Backups et rollback",
       "rollingBack": "Rollback en cours...",
       "rollbackLatest": "Rollback du dernier",
@@ -653,6 +654,7 @@
         "snoozed": "Mises à jour reportées",
         "maturityBlockedSingular": "La politique Mature-only bloque les mises à jour plus récentes que {days} jour",
         "maturityBlockedPlural": "La politique Mature-only bloque les mises à jour plus récentes que {days} jours",
+        "maturityCountdown": "{message}. Débloqué dans {countdown} ({date})",
         "maturityActiveSingular": "Politique Mature-only active ({days} jour d'âge minimal)",
         "maturityActivePlural": "Politique Mature-only active ({days} jours d'âge minimal)",
         "maturityAllowAll": "La politique de maturité autorise les mises à jour",

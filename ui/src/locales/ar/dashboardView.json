@@ -43,6 +43,7 @@
       "updateAll": "تحديث الكل",
       "noUpdates": "لا توجد تحديثات متاحة",
       "securityBlocked": "محظور أمنياً",
+      "maturityCountdown": "يُفتح خلال {countdown} ({date})",
       "updateContainer": "تحديث الحاوية",
       "compactSingle": "{count} تحديث متاح",
       "compactPlural": "{count} تحديثات متاحة",

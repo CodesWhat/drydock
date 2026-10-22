@@ -141,6 +141,7 @@
         "recently-applied": "Übersprungen: Das Update wurde gerade angewendet, Bestätigung durch den Watcher steht aus.",
         "digest-buffered": "Für die nächste Zusammenfassung zurückgehalten."
       },
+      "notificationSkipAt": "Zuletzt übersprungen {date}",
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rollback läuft...",
       "rollbackLatest": "Letztes Backup zurückrollen",
@@ -653,6 +654,7 @@
         "snoozed": "Updates pausiert",
         "maturityBlockedSingular": "Die Nur-reife-Policy blockiert Updates, die jünger als {days} Tag sind",
         "maturityBlockedPlural": "Die Nur-reife-Policy blockiert Updates, die jünger als {days} Tage sind",
+        "maturityCountdown": "{message}. Entsperrt in {countdown} ({date})",
         "maturityActiveSingular": "Nur-reife-Policy aktiv (Mindestalter {days} Tag)",
         "maturityActivePlural": "Nur-reife-Policy aktiv (Mindestalter {days} Tage)",
         "maturityAllowAll": "Reife-Policy erlaubt alle Updates",
