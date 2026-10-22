@@ -21,7 +21,7 @@ test("coverage FAQ distinguishes TypeScript gates, Vue component floors, and typ
 });
 
 test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
-  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.4",([\s\S]*?)(?=\n {2}\},)/)?.[1];
+  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.5",([\s\S]*?)(?=\n {2}\},)/)?.[1];
   assert.ok(milestone, "v1.8 must have a roadmap entry");
   assert.match(milestone, /title: "[^"]*RC[^"]*testing only/i);
   assert.match(milestone, /Landed:.*drydock\.yml/);
@@ -33,7 +33,7 @@ test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
 
 test("roadmap HEAD follows the active RC while retaining older candidates", () => {
   assert.equal(typeof marketing.getRoadmapHead, "function");
-  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.4");
+  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.5");
   assert.equal(marketing.roadmap.find((item) => item.version === "v1.7.0").status, "released");
   assert.equal(
     marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))
