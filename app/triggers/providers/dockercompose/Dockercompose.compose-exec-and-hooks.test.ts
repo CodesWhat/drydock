@@ -982,6 +982,39 @@ describe('Dockercompose Trigger', () => {
     expect(postPullHook).toHaveBeenCalledWith('', imageIdentity);
   });
 
+  test.each([
+    [true, 1],
+    [false, 0],
+  ])(
+    'compose refresh with shouldStart=%s recreates shared-namespace dependents %s time(s)',
+    async (shouldStart, expectedCalls) => {
+      trigger.configuration.dryrun = false;
+      vi.spyOn(trigger, 'verifyPulledImageCompatibility').mockResolvedValue();
+      vi.spyOn(trigger.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({});
+      vi.spyOn(trigger as any, 'recreateReplacementContainerWithCleanup').mockResolvedValue();
+      const dependentsSpy = vi
+        .spyOn(trigger, 'recreateSharedNamespaceDependents')
+        .mockResolvedValue(undefined);
+
+      await (trigger as any).refreshComposeServiceWithDockerApi(
+        '/opt/drydock/test/stack.yml',
+        'nginx',
+        makeContainer(),
+        {
+          shouldStart,
+          runtimeContext: {
+            dockerApi: mockDockerApi,
+            auth: {},
+            newImage: 'nginx:1.1.0',
+            imageIdentity: 'nginx:1.1.0@sha256:abcdef123456',
+          },
+        },
+      );
+
+      expect(dependentsSpy).toHaveBeenCalledTimes(expectedCalls);
+    },
+  );
+
   test('updateContainerWithCompose should remove stale image-inherited env defaults while preserving runtime env', async () => {
     trigger.configuration.dryrun = false;
     const currentContainer = makeDockerContainerHandle({
@@ -2679,9 +2712,11 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('resolveComposeServiceContext should return compose file chain and deterministic writable file', async () => {
-    vi.spyOn(trigger, 'getComposeFileAsObject')
-      .mockResolvedValueOnce(makeCompose({ nginx: { image: 'nginx:1.0.0' } }))
-      .mockResolvedValueOnce(makeCompose({ nginx: { image: 'nginx:1.1.0' } }));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFile) =>
+      composeFile === '/opt/drydock/test/stack.yml'
+        ? makeCompose({ nginx: { image: 'nginx:1.0.0' } })
+        : makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
 
     const context = await trigger.resolveComposeServiceContext(
       {

@@ -28,6 +28,7 @@ import ComposeFileParser, {
   updateComposeServiceImagesInText,
   YAML_MAX_ALIAS_COUNT,
 } from './ComposeFileParser.js';
+import { expandComposeFilesWithIncludes } from './ComposeIncludes.js';
 import {
   getSelfContainerIdentifier as getRuntimeSelfContainerIdentifier,
   getSelfContainerBindMounts,
@@ -851,6 +852,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
+  /**
+   * Append the files the chain includes with compose `include:`, which the
+   * `config_files` label never lists. See ComposeIncludes.ts.
+   */
+  async expandComposeFilesWithIncludes(composeFiles: string[]): Promise<string[]> {
+    return expandComposeFilesWithIncludes({
+      composeFiles,
+      readCompose: (composeFile) => this.getComposeFileAsObject(composeFile),
+      mapPath: (composeFilePath) => this.mapComposePathToContainerBindMount(composeFilePath),
+      isAllowed: () => true,
+      warn: (message) => this.log.warn(message),
+    });
+  }
+
   async resolveComposeFilesForContainer(container: ComposeContainerReference): Promise<string[]> {
     await this.ensureHostToContainerBindMountsLoaded(container);
 
@@ -858,19 +873,19 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       includeDefaultComposeFile: false,
     });
     if (composeFilesFromConfiguration.length > 0) {
-      return composeFilesFromConfiguration;
+      return this.expandComposeFilesWithIncludes(composeFilesFromConfiguration);
     }
 
     const composeFilesFromInspect = await this.getComposeFilesFromInspect(container);
     if (composeFilesFromInspect.length > 0) {
-      return composeFilesFromInspect;
+      return this.expandComposeFilesWithIncludes(composeFilesFromInspect);
     }
 
     const composeFileFromDefault = await this.resolveDefaultComposeFilePathForRuntime();
     if (!composeFileFromDefault) {
       return [];
     }
-    return [composeFileFromDefault];
+    return this.expandComposeFilesWithIncludes([composeFileFromDefault]);
   }
 
   async resolveComposeFilePathFromDirectory(composePath: string): Promise<string | null> {
@@ -2889,6 +2904,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         logContainer,
         cloneRuntimeConfigOptions,
       );
+      if (serviceShouldStart) {
+        // Never throws: the replacement is already running, so a dependent that
+        // cannot follow it is logged rather than rolled back.
+        await this.recreateSharedNamespaceDependents(
+          dockerApi,
+          currentContainerSpec.Id,
+          container.name,
+          logContainer,
+          container,
+        );
+      }
     } catch (recreateError: unknown) {
       const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
         dockerApi as DockerApiLike,

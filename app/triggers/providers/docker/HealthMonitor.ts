@@ -46,6 +46,18 @@ interface TriggerInstanceLike {
     containerRef: ContainerRef,
     log: LoggerLike,
   ): Promise<void>;
+  /**
+   * Repoint containers that share the namespace or volumes of the container
+   * just restored, which still reference the removed replacement. Optional so
+   * trigger doubles without it keep working.
+   */
+  recreateSharedNamespaceDependents?(
+    dockerApi: DockerApiLike,
+    previousContainerId: string,
+    containerName: string,
+    log: LoggerLike,
+    containerRef?: ContainerRef,
+  ): Promise<unknown>;
 }
 
 interface HealthMonitorOptions {
@@ -234,6 +246,13 @@ async function performRollback(context: RollbackContext): Promise<void> {
       backupImage,
       containerRef,
       log,
+    );
+    await triggerInstance.recreateSharedNamespaceDependents?.(
+      dockerApi,
+      (currentContainerSpec as { Id: string }).Id,
+      containerName,
+      log,
+      containerRef,
     );
 
     recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag);
