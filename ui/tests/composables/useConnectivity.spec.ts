@@ -10,6 +10,18 @@ function setOnline(value: boolean) {
   Object.defineProperty(globalThis.navigator, 'onLine', { value, configurable: true });
 }
 
+// What a reverse proxy sends when Drydock is down: no JSON body.
+function proxyError(status: number): Response {
+  return new Response('<html>Bad gateway</html>', {
+    status,
+    headers: { 'content-type': 'text/html' },
+  });
+}
+
+function jsonError(status: number, body: object, contentType = 'application/json'): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': contentType } });
+}
+
 describe('useConnectivity', () => {
   let uninstall: (() => void) | undefined;
   let baseFetch: ReturnType<typeof vi.fn>;
@@ -98,11 +110,11 @@ describe('useConnectivity', () => {
       'treats a %i as unreachable once the confirming request agrees',
       async (code) => {
         const c = useConnectivity();
-        baseFetch.mockResolvedValue({ status: code });
+        baseFetch.mockResolvedValue(proxyError(code));
 
         const failure = globalThis.fetch('/api/v1/containers');
         await expect(failure).rejects.toBeInstanceOf(GatewayUnavailableError);
-        await expect(failure).rejects.toMatchObject({ status: code });
+        await expect(failure).rejects.toMatchObject(proxyError(code));
         await vi.advanceTimersByTimeAsync(0);
 
         expect(c.status.value).toBe('server-unreachable');
@@ -114,7 +126,7 @@ describe('useConnectivity', () => {
       c.noteLastKnownServed(1);
       const resync = vi.fn();
       globalThis.addEventListener('dd:sse-resync-required', resync);
-      baseFetch.mockResolvedValueOnce({ status: 503 }).mockResolvedValueOnce({ status: 200 });
+      baseFetch.mockResolvedValueOnce(proxyError(503)).mockResolvedValueOnce({ status: 200 });
 
       await expect(globalThis.fetch('/api/v1/containers')).rejects.toThrow(
         'Server unavailable (503)',
@@ -132,7 +144,7 @@ describe('useConnectivity', () => {
       c.markServerUnreachable();
       const resync = vi.fn();
       globalThis.addEventListener('dd:sse-resync-required', resync);
-      baseFetch.mockResolvedValueOnce({ status: 503 }).mockResolvedValueOnce({ status: 200 });
+      baseFetch.mockResolvedValueOnce(proxyError(503)).mockResolvedValueOnce({ status: 200 });
 
       await expect(globalThis.fetch('/api/v1/containers')).rejects.toThrow();
       await vi.advanceTimersByTimeAsync(0);
@@ -145,7 +157,7 @@ describe('useConnectivity', () => {
     it('marks unreachable when the confirming request itself cannot connect', async () => {
       const c = useConnectivity();
       baseFetch
-        .mockResolvedValueOnce({ status: 502 })
+        .mockResolvedValueOnce(proxyError(502))
         .mockRejectedValueOnce(new TypeError('Failed to fetch'));
 
       await expect(globalThis.fetch('/api/v1/containers')).rejects.toThrow();
@@ -155,7 +167,7 @@ describe('useConnectivity', () => {
     });
 
     it('runs a single confirming request for a burst of failures', async () => {
-      baseFetch.mockResolvedValue({ status: 503 });
+      baseFetch.mockResolvedValue(proxyError(503));
       baseFetch.mockClear();
 
       await Promise.allSettled([
@@ -167,6 +179,64 @@ describe('useConnectivity', () => {
 
       // three originals plus one confirmation
       expect(baseFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('lets a Drydock JSON 503 through with its body and without probing', async () => {
+      const c = useConnectivity();
+      c.markServerUnreachable();
+      baseFetch.mockResolvedValueOnce(jsonError(503, { error: 'Outbox store unavailable' }));
+      baseFetch.mockClear();
+
+      const response = await globalThis.fetch('/api/v1/notifications/outbox');
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(response.status).toBe(503);
+      await expect(response.json()).resolves.toEqual({ error: 'Outbox store unavailable' });
+      expect(c.status.value).toBe('online');
+      expect(baseFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('treats a +json content type as a Drydock answer', async () => {
+      baseFetch.mockResolvedValueOnce(
+        jsonError(502, { title: 'Bad gateway' }, 'application/problem+json; charset=utf-8'),
+      );
+
+      const response = await globalThis.fetch('/api/v1/containers');
+
+      expect(response.status).toBe(502);
+    });
+
+    it('still throws for a non-JSON 503 and confirms', async () => {
+      baseFetch.mockResolvedValueOnce(proxyError(503)).mockResolvedValueOnce(proxyError(503));
+      baseFetch.mockClear();
+
+      await expect(globalThis.fetch('/api/v1/containers')).rejects.toBeInstanceOf(
+        GatewayUnavailableError,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(baseFetch).toHaveBeenCalledTimes(2);
+      expect(useConnectivity().status.value).toBe('server-unreachable');
+    });
+
+    it('treats an empty 504 with no content type as a proxy error', async () => {
+      baseFetch.mockResolvedValueOnce(new Response(null, { status: 504 }));
+
+      await expect(globalThis.fetch('/api/v1/containers')).rejects.toBeInstanceOf(
+        GatewayUnavailableError,
+      );
+    });
+
+    it('counts a JSON 503 on the confirming request as reachable', async () => {
+      const c = useConnectivity();
+      baseFetch
+        .mockResolvedValueOnce(proxyError(503))
+        .mockResolvedValueOnce(jsonError(503, { error: 'Service starting' }));
+
+      await expect(globalThis.fetch('/api/v1/containers')).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(c.status.value).toBe('online');
     });
 
     it('does not treat other HTTP errors as unreachable', async () => {

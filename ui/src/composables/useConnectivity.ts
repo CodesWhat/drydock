@@ -11,6 +11,17 @@ const PROBE_URL = '/api/v1/auth/status';
 // is down, so they count as unreachable just like a network failure.
 const GATEWAY_STATUSES = new Set([502, 503, 504]);
 
+// Drydock itself answers 503 with a JSON body for real conditions (outbox store
+// unavailable, agent not connected, service starting). A proxy error page isn't
+// JSON, so the content type tells the two apart.
+function isProxyGatewayError(response: Response): boolean {
+  if (!GATEWAY_STATUSES.has(response.status)) {
+    return false;
+  }
+  const contentType = response.headers.get('content-type') ?? '';
+  return !/\b(?:application\/(?:[\w.-]+\+)?json)\b/i.test(contentType);
+}
+
 /** Thrown for a 502/503/504 on an API call; a TypeError so it falls back like a network failure. */
 export class GatewayUnavailableError extends TypeError {
   constructor(readonly status: number) {
@@ -89,7 +100,7 @@ export function installConnectivityMonitor(): () => void {
     );
   }
 
-  // A single 502/503/504 may be a transient blip from Drydock itself, so it
+  // A single proxy-style 502/503/504 may be a transient blip from Drydock itself, so it
   // never flips the banner on its own: one confirming request does. Only if
   // that also fails does the server count as unreachable; otherwise the views
   // that were served a fallback are told to refetch.
@@ -101,7 +112,7 @@ export function installConnectivityMonitor(): () => void {
     confirming = true;
     try {
       const response = await originalFetch(PROBE_URL, { credentials: 'include' });
-      if (GATEWAY_STATUSES.has(response.status)) {
+      if (isProxyGatewayError(response)) {
         markServerUnreachable();
       } else {
         const wasReachable = serverReachable.value;
@@ -131,7 +142,7 @@ export function installConnectivityMonitor(): () => void {
       }
       throw error;
     }
-    if (GATEWAY_STATUSES.has(response.status)) {
+    if (isProxyGatewayError(response)) {
       void confirmGatewayFailure();
       throw new GatewayUnavailableError(response.status);
     }
