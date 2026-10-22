@@ -75,7 +75,7 @@ async function runAction(action: UpdateStatusAction): Promise<void> {
           <div class="dd-text-label">{{ $t('containerComponents.updateStatus.title') }}</div>
           <AppBadge
             v-if="status.actionPolicyBadge"
-            tone="success"
+            :tone="status.actionPolicyBadge.tone"
             size="xs"
             v-tooltip.top="status.actionPolicyBadge.tooltip"
             data-test="update-status-action-policy-badge"

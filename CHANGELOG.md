@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The update-status panel now shows the Manual and Blocked action policy badges, not only Auto, and the full-page associated-triggers rows carry the per-trigger policy tooltip and Auto badge like the other trigger lists.
+
+### Added
+
+- Prometheus lockout counters `drydock_auth_account_lockout_total` and `drydock_auth_ip_lockout_total`, labelled by provider, increment once each time a login lockout starts. The existing `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` gauges only show lockouts active at scrape time. The monitoring docs list the new counters and add an alert example and dashboard panel.
+
 ### Security
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.

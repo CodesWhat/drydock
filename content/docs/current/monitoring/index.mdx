@@ -187,6 +187,10 @@ Use the auth metrics below to detect brute-force and username-enumeration activi
 - `drydock_auth_username_mismatch_total` counter
 - `drydock_auth_account_locked_total` gauge
 - `drydock_auth_ip_locked_total` gauge
+- `drydock_auth_account_lockout_total{provider}` counter, incremented once each time an account lockout starts
+- `drydock_auth_ip_lockout_total{provider}` counter, incremented once each time an IP lockout starts
+
+The `_locked_total` gauges show how many lockouts are active right now. The `_lockout_total` counters count lockout events over time, so you can alert on a burst that started and expired between scrapes. Neither carries a username or IP label.
 
 #### Prometheus alerting rules
 
@@ -219,6 +223,19 @@ groups:
           description: >-
             {{ $value | printf "%.0f" }} username mismatches in 5 minutes.
             Attackers may be probing valid usernames.
+
+      # Lockouts started, including ones that expire between scrapes
+      - alert: DrydockLockoutsStarted
+        expr: >-
+          sum(increase(drydock_auth_account_lockout_total[15m])) > 0
+          or sum(increase(drydock_auth_ip_lockout_total[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Auth lockouts started on Drydock"
+          description: >-
+            Account or IP lockouts began in the last 15 minutes
+            (drydock_auth_account_lockout_total, drydock_auth_ip_lockout_total).
 
       # Active account or IP lockouts
       - alert: DrydockActiveLockouts
@@ -261,6 +278,7 @@ Use these PromQL queries as a starting point for a Grafana dashboard row dedicat
 | Login failure rate by provider | Time series | `sum by (provider) (rate(drydock_auth_login_total{outcome!="success"}[5m]))` |
 | Username mismatch rate | Time series | `rate(drydock_auth_username_mismatch_total[5m])` |
 | Active lockouts | Stat / gauge | `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` (separate stats or combined bar gauge) |
+| Lockout events | Time series | `sum(increase(drydock_auth_account_lockout_total[1h]))` and `sum(increase(drydock_auth_ip_lockout_total[1h]))` |
 | Login latency p50 / p95 / p99 | Time series | `histogram_quantile(0.50, sum by (le) (rate(drydock_auth_login_duration_seconds_bucket[5m])))` (repeat for `0.95` and `0.99`) |
 | Success ratio | Gauge (percent) | `sum(rate(drydock_auth_login_total{outcome="success"}[5m])) / sum(rate(drydock_auth_login_total[5m]))` |
 

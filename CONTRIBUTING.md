@@ -175,6 +175,10 @@ If you do want to write tests:
 
 - **Gotcha:** `vi.mock()` factories are hoisted above imports — you can't use imported helpers inside them. Use `vi.hoisted()` for values needed in mock factories.
 
+## Translations
+
+UI translations are managed in [Crowdin](https://crowdin.com/project/drydock), and you can also send a pull request that edits the locale files under `ui/src/locales/<locale>/`. Key-parity and placeholder tests (`npx vitest run tests/i18n --coverage.enabled=false` from `ui/`) and the Crowdin sync caveat are covered in the [Translating Drydock guide](https://getdrydock.com/docs/guides/translations).
+
 ## Pull requests
 
 - **Target:** the active release branch, `dev/vX.Y` — never `main`. GitHub preselects `main` because it's the default branch, so change the base when you open the PR. If you get it wrong it's a one-click fix, not a reason to redo the branch.

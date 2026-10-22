@@ -646,13 +646,14 @@ describe('deriveUpdateStatus', () => {
 
     expect(status.actionPolicyBadge).toEqual({
       state: 'auto',
+      tone: 'success',
       label: 'Auto',
       tooltip:
         "Drydock will apply this update automatically once it's detected — no manual click needed.",
     });
   });
 
-  it('omits the Auto badge when actionPolicy resolves to manual', () => {
+  it('surfaces a neutral Manual badge when actionPolicy resolves to manual', () => {
     const status = deriveUpdateStatus(
       input({
         container: {
@@ -667,10 +668,38 @@ describe('deriveUpdateStatus', () => {
       }),
     );
 
-    expect(status.actionPolicyBadge).toBeUndefined();
+    expect(status.actionPolicyBadge).toEqual({
+      state: 'manual',
+      tone: 'neutral',
+      label: 'Manual',
+      tooltip: "This update can be applied manually, but won't fire automatically.",
+    });
   });
 
-  it('omits the Auto badge when there is no actionPolicy at all', () => {
+  it('surfaces a danger Blocked badge without adding a second condition row', () => {
+    const status = deriveUpdateStatus(
+      input({
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: {
+            ...eligibility(),
+            actionPolicy: { state: 'blocked', reason: 'excluded', triggerId: 'docker.update' },
+          },
+        },
+      }),
+    );
+
+    expect(status.actionPolicyBadge).toMatchObject({
+      state: 'blocked',
+      tone: 'danger',
+      label: 'Blocked',
+    });
+    expect(status.conditions).toHaveLength(0);
+  });
+
+  it('omits the action policy badge when there is no actionPolicy at all', () => {
     const status = deriveUpdateStatus(input());
 
     expect(status.actionPolicyBadge).toBeUndefined();

@@ -1,11 +1,11 @@
 ---
 title: "Translating Drydock"
-description: "Help translate the Drydock UI and README files through Crowdin. No GitHub account or build setup required."
+description: "Help translate the Drydock UI through Crowdin, or send a pull request with the locale files directly."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Drydock's interface and translated README files are managed through [Crowdin](https://crowdin.com/project/drydock), and the translation project is open to everyone. English is the source language; every other locale is community-maintained.
+Drydock's interface strings are managed through [Crowdin](https://crowdin.com/project/drydock), and the translation project is open to everyone. You can also send a pull request with the locale files directly. English is the source language; every other locale is community-maintained.
 
 ## Languages
 
@@ -13,16 +13,36 @@ Drydock ships with 16 languages beyond English: Arabic, German, Spanish, French,
 
 You switch language in the app under **Config > Appearance**. See [UI configuration](/docs/configuration/ui#language--locale) for the full locale list.
 
-## How to contribute
+## Translate in Crowdin
 
 You don't need a GitHub account, a checkout, or any build tooling. Everything happens in Crowdin.
 
 1. Create a free account and open the [Drydock project](https://crowdin.com/project/drydock).
-2. Pick your language and start translating. UI strings include surrounding context and often a screenshot; README sections retain their Markdown context.
+2. Pick your language and start translating. UI strings include surrounding context and often a screenshot.
 3. Save your suggestions. That's the whole loop.
 
 <Callout type="info">
 Translations sync back into the repository automatically. A bot opens a pull request with translated strings, so your work ships in the next release without anyone editing generated translation files by hand.
+</Callout>
+
+## Translate through a pull request
+
+If you'd rather work in a checkout, fork [CodesWhat/drydock](https://github.com/CodesWhat/drydock) and edit the locale files directly.
+
+1. Branch from the active release branch, `dev/vX.Y`, not `main`. Set the PR base to that branch when you open it.
+2. UI strings live in `ui/src/locales/<locale>/`, one JSON file per area (for example `containerComponents.json`). The English files in `ui/src/locales/en/` are the source. Keep every key and every `{placeholder}` name exactly as it is in English and translate only the values.
+3. Run the locale tests from `ui/`:
+
+   ```bash
+   npm ci
+   npx vitest run tests/i18n --coverage.enabled=false
+   ```
+
+   `key-parity.spec.ts` fails on a key that is missing from your locale or that doesn't exist in English. `placeholder-parity.spec.ts` fails when a translated string drops or invents a `{placeholder}`. A PR that adds a new English string has to add it to all 16 locales in the same change.
+4. README translations (`README.de.md`, `README.es.md`, `README.fr.md`, `README.pl.md`, `README.pt-BR.md`, `README.zh-CN.md`) are hand-edited in the repository and checked by `.github/tests/readme-translations.test.ts`. Run it from the repository root with `npm run test:workflows`.
+
+<Callout type="warn">
+Crowdin owns the UI locale files and syncs them back as a pull request. A hand edit in the repository can be overwritten by a later sync with whatever Crowdin has stored for that string. If the string exists in Crowdin, save your translation there too so the two stay in step.
 </Callout>
 
 ## Requesting a new language
@@ -31,4 +51,4 @@ Want a language that isn't listed yet? Drop a comment on the [translations annou
 
 ## How it works under the hood
 
-The English UI source strings live in `ui/src/locales/en/`, and the English README source is `README.md`. Crowdin watches both through the [Crowdin GitHub Action](https://github.com/crowdin/github-action), which pushes new source strings and pulls completed translations back as a pull request. The UI supports all 16 non-English locales listed above. README translations currently cover German, Spanish, French, Polish, Brazilian Portuguese, and Simplified Chinese. Don't edit the per-language JSON files or translated README files directly; translate in Crowdin and let the sync handle the generated files.
+The English UI source strings live in `ui/src/locales/en/`. Crowdin watches that directory through the [Crowdin GitHub Action](https://github.com/crowdin/github-action), which pushes new source strings and pulls completed translations back as a pull request. The UI supports all 16 non-English locales listed above. `README.md` is not part of the Crowdin project: the six translated READMEs (German, Spanish, French, Polish, Brazilian Portuguese, and Simplified Chinese) are maintained in the repository and updated through pull requests. For UI strings, translate in Crowdin or send a pull request as described above; don't hand-edit generated sync pull requests.

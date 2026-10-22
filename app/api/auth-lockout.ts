@@ -4,6 +4,8 @@ import type { NextFunction, Response } from 'express';
 import passport from 'passport';
 import log from '../log/index.js';
 import {
+  recordAuthAccountLockout,
+  recordAuthIpLockout,
   recordAuthLogin,
   setAuthAccountLockedTotal,
   setAuthIpLockedTotal,
@@ -407,6 +409,7 @@ function registerFailedLoginAttempt(
   policy: LoginLockoutPolicy,
   key: string | undefined,
   now: number,
+  onLockoutStart?: () => void,
 ): number | undefined {
   if (!key) {
     return undefined;
@@ -434,7 +437,11 @@ function registerFailedLoginAttempt(
   existingEntry.failedAttempts += 1;
   existingEntry.lastAttemptAt = now;
   if (existingEntry.failedAttempts >= policy.maxAttempts) {
+    const wasLocked = existingEntry.lockedUntil > now;
     existingEntry.lockedUntil = now + policy.lockoutMs;
+    if (!wasLocked) {
+      onLockoutStart?.();
+    }
   }
 
   lockouts.set(key, existingEntry);
@@ -536,12 +543,14 @@ export function authenticateLogin(req: AuthRequest, res: Response, next: NextFun
             accountLockoutPolicy,
             accountLockoutKey,
             failedAt,
+            () => recordAuthAccountLockout('basic'),
           );
           const ipLockoutAfterFailure = registerFailedLoginAttempt(
             ipLoginLockouts,
             ipLockoutPolicy,
             ipLockoutKey,
             failedAt,
+            () => recordAuthIpLockout('basic'),
           );
           const lockoutUntil = Math.max(
             accountLockoutAfterFailure ?? 0,
