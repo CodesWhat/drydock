@@ -430,6 +430,14 @@
       "status": "Stan",
       "refreshing": "Odświeżanie szczegółów wyzwalacza...",
       "noConfig": "Brak właściwości konfiguracyjnych"
+    },
+    "skips": {
+      "title": "Ostatnio pominięte",
+      "description": "Kontenery, które ten trigger niedawno pominął, i dlaczego. Przechowywane w pamięci, więc znikają po restarcie Drydock.",
+      "loading": "Ładowanie pominiętych...",
+      "loadError": "Nie udało się wczytać ostatnio pominiętych",
+      "empty": "Brak ostatnio pominiętych",
+      "showMore": "Pokaż więcej"
     }
   },
   "watchersView": {

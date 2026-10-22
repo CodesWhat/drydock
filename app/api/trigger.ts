@@ -15,6 +15,7 @@ import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
 import { DYNAMIC_SCOPE, enforceApiKeyScope, scoped } from './route-scopes.js';
+import { registerTriggerSkipRoutes } from './trigger-skips.js';
 
 const log = logger.child({ component: 'trigger' });
 
@@ -367,7 +368,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
  * @returns {*}
  */
 export function init() {
-  const router = component.init('trigger');
+  const router = component.init('trigger', registerTriggerSkipRoutes);
   router.post('/:type/:name', scoped(DYNAMIC_SCOPE, runTrigger));
   router.post('/:type/:name/:agent', scoped(DYNAMIC_SCOPE, runRemoteTrigger));
   return router;

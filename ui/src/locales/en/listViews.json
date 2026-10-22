@@ -430,6 +430,14 @@
       "status": "Status",
       "refreshing": "Refreshing trigger details...",
       "noConfig": "No configuration properties"
+    },
+    "skips": {
+      "title": "Recent skips",
+      "description": "Containers this trigger skipped recently and why. Kept in memory, so it resets when Drydock restarts.",
+      "loading": "Loading skips...",
+      "loadError": "Unable to load recent skips",
+      "empty": "No recent skips",
+      "showMore": "Show more"
     }
   },
   "watchersView": {

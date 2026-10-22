@@ -327,6 +327,8 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 Drydock remembers the last reason each notification trigger skipped a container, so you can see it without turning on debug logging. Open the container's detail view and look at the **Notifications** list on the Actions tab, or read `notificationSkips` from `GET /api/v1/containers/{id}`. The debug dump (Config > Diagnostics) carries every recorded skip under `notificationSkips`.
 
+To see it from the trigger side, open a notification trigger in the Triggers view (or a rule's assigned triggers in the Notifications view) and read **Recent skips**. It lists the containers that trigger skipped, newest first, with the reason and a link to each container. The same list is available from `GET /api/v1/triggers/{type}/{name}/skips` (and `/api/v1/triggers/{type}/{name}/{agent}/skips` for an agent trigger). It takes `limit` (default 50, maximum 200) and `offset`, needs the `read` scope, and returns `data` entries of `containerId`, `containerName` (`null` if the container is gone), `reason` and `at`, plus `total` and `hasMore`. Like the container view it holds one entry per container, in memory, so it resets on restart.
+
 | Reason | What it means |
 | --- | --- |
 | `rule-disabled` | The notification rule is off, or this trigger isn't in the rule's trigger allow-list. |

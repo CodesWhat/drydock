@@ -430,6 +430,14 @@
       "status": "상태",
       "refreshing": "트리거 상세 정보 새로 고침 중...",
       "noConfig": "구성 속성이 없습니다"
+    },
+    "skips": {
+      "title": "최근 건너뜀",
+      "description": "이 트리거가 최근에 건너뛴 컨테이너와 그 이유입니다. 메모리에 보관되므로 Drydock을 다시 시작하면 초기화됩니다.",
+      "loading": "건너뜀 기록을 불러오는 중...",
+      "loadError": "최근 건너뜀을 불러올 수 없습니다",
+      "empty": "최근 건너뜀 없음",
+      "showMore": "더 보기"
     }
   },
   "watchersView": {

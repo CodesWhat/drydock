@@ -1,5 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick } from 'vue';
+import TriggerSkipsPanel from '@/components/TriggerSkipsPanel.vue';
 import { preferences, resetPreferences } from '@/preferences/store';
 import {
   getAllNotificationRules,
@@ -171,6 +172,42 @@ describe('NotificationsView', () => {
         triggers: [],
       }),
     );
+  });
+
+  describe('recent skips per trigger', () => {
+    const triggers = [
+      { id: 'slack.alerts', name: 'alerts', type: 'slack' },
+      { id: 'smtp.ops', name: 'ops', type: 'smtp' },
+      { id: 'edge.slack.team', name: 'team', type: 'slack' },
+    ];
+
+    async function openRule(ruleTriggers: string[]) {
+      mockGetAllNotificationRules.mockResolvedValue([makeRule({ triggers: ruleTriggers })]);
+      mockGetAllTriggers.mockResolvedValue(triggers);
+      const wrapper = await mountNotificationsView();
+      await wrapper.find('.row-click-first').trigger('click');
+      await flushPromises();
+      return wrapper;
+    }
+
+    it('shows a skip list for each explicitly assigned local trigger', async () => {
+      const wrapper = await openRule(['smtp.ops', 'edge.slack.team']);
+      const panels = wrapper.findAllComponents(TriggerSkipsPanel);
+
+      expect(panels).toHaveLength(1);
+      expect(panels[0].props()).toMatchObject({
+        trigger: { type: 'smtp', name: 'ops' },
+        label: 'ops',
+      });
+    });
+
+    it('covers every local notification trigger when the rule has no explicit list', async () => {
+      const wrapper = await openRule([]);
+
+      expect(
+        wrapper.findAllComponents(TriggerSkipsPanel).map((panel) => panel.props('label')),
+      ).toEqual(['alerts', 'ops']);
+    });
   });
 
   describe('tableColumns (card-mode annotations)', () => {

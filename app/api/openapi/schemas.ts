@@ -1694,6 +1694,44 @@ export const openApiSchemas = {
     required: ['trigger', 'reason', 'at'],
     additionalProperties: false,
   },
+  TriggerSkip: {
+    type: 'object',
+    description:
+      'The most recent skip of one container by a notification trigger (DR-85). ' +
+      'containerName is null when the container is no longer in the store.',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string', nullable: true },
+      reason: {
+        type: 'string',
+        enum: [
+          'rule-disabled',
+          'threshold-not-met',
+          'trigger-excluded',
+          'once-already-sent',
+          'recently-applied',
+          'digest-buffered',
+        ],
+      },
+      at: { type: 'string', format: 'date-time' },
+    },
+    required: ['containerId', 'containerName', 'reason', 'at'],
+    additionalProperties: false,
+  },
+  TriggerSkipsResult: {
+    type: 'object',
+    description:
+      'Recent skips for a trigger, newest first. limit defaults to 50 and is capped at 200.',
+    properties: {
+      data: { type: 'array', items: { $ref: '#/components/schemas/TriggerSkip' } },
+      total: { type: 'integer' },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+      hasMore: { type: 'boolean' },
+    },
+    required: ['data', 'total', 'limit', 'offset', 'hasMore'],
+    additionalProperties: false,
+  },
   ContainerUnassociatedTrigger: {
     type: 'object',
     description:

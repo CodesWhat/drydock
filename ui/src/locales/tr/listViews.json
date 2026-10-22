@@ -430,6 +430,14 @@
       "status": "Durum",
       "refreshing": "Tetikleyici ayrıntıları yenileniyor...",
       "noConfig": "Yapılandırma özelliği yok"
+    },
+    "skips": {
+      "title": "Son atlananlar",
+      "description": "Bu tetikleyicinin yakın zamanda atladığı konteynerler ve nedenleri. Bellekte tutulur, bu yüzden Drydock yeniden başlayınca sıfırlanır.",
+      "loading": "Atlananlar yükleniyor...",
+      "loadError": "Son atlananlar yüklenemedi",
+      "empty": "Yakın zamanda atlanan yok",
+      "showMore": "Daha fazla göster"
     }
   },
   "watchersView": {

@@ -430,6 +430,14 @@
       "status": "Status",
       "refreshing": "Triggerdetails vernieuwen...",
       "noConfig": "Geen configuratie-eigenschappen"
+    },
+    "skips": {
+      "title": "Recent overgeslagen",
+      "description": "Containers die deze trigger onlangs heeft overgeslagen en waarom. Wordt in het geheugen bewaard en dus gewist bij een herstart van Drydock.",
+      "loading": "Overgeslagen items laden...",
+      "loadError": "Recent overgeslagen items konden niet worden geladen",
+      "empty": "Niets recent overgeslagen",
+      "showMore": "Meer tonen"
     }
   },
   "watchersView": {

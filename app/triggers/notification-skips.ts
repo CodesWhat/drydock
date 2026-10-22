@@ -104,6 +104,17 @@ export function getNotificationSkipsForContainer(
   return result;
 }
 
+/** Skips recorded for one trigger, newest first, for the per-trigger skip list. */
+export function getNotificationSkipsForTrigger(trigger: string): NotificationSkip[] {
+  const result: NotificationSkip[] = [];
+  for (const entry of skips.values()) {
+    if (entry.trigger === trigger) {
+      result.push(entry);
+    }
+  }
+  return result.reverse();
+}
+
 /** Every recorded skip, newest last, for the debug dump. */
 export function getNotificationSkipsSnapshot(): NotificationSkip[] {
   return Array.from(skips.values());

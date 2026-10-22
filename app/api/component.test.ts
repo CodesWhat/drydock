@@ -339,6 +339,20 @@ describe('Component Router', () => {
       expect(router.get).toHaveBeenCalledWith('/:type/:name/:agent', expect.any(Function));
     });
 
+    test('runs the pre-route hook before the by-id routes', () => {
+      const order: string[] = [];
+      mockRouter.get.mockImplementation((path: string) => order.push(path));
+      const hook = vi.fn((router) => router.get('/:type/:name/skips', vi.fn()));
+
+      component.init('trigger', hook);
+
+      expect(hook).toHaveBeenCalledWith(mockRouter);
+      expect(order.indexOf('/:type/:name/skips')).toBeLessThan(
+        order.indexOf('/:type/:name/:agent'),
+      );
+      mockRouter.get.mockReset();
+    });
+
     test('getAll handler should return list of components', () => {
       const comp = {
         type: 'docker',

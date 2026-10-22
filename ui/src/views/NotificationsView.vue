@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '../components/AppBadge.vue';
+import TriggerSkipsPanel from '../components/TriggerSkipsPanel.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSearchFromQuery } from '../composables/useSearchFromQuery';
@@ -120,6 +121,15 @@ const triggersById = computed(() => {
 
 const triggersSorted = computed(() =>
   [...triggersData.value].sort((triggerA, triggerB) => triggerA.name.localeCompare(triggerB.name)),
+);
+
+// A rule with no explicit trigger list fires through every notification trigger.
+const skipTriggers = computed(() =>
+  triggersSorted.value.filter(
+    (trigger) =>
+      trigger.id === `${trigger.type}.${trigger.name}` &&
+      (detailTriggers.value.length === 0 || detailTriggers.value.includes(trigger.id)),
+  ),
 );
 
 function triggerNameById(id: string) {
@@ -720,6 +730,13 @@ onMounted(async () => {
                 </label>
               </div>
             </div>
+
+            <TriggerSkipsPanel
+              v-for="trigger in skipTriggers"
+              :key="trigger.id"
+              :trigger="{ type: trigger.type, name: trigger.name }"
+              :label="trigger.name"
+            />
 
             <div v-if="detailBellSupported">
               <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">

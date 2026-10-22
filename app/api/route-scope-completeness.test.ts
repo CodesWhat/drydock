@@ -106,6 +106,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/triggers → read',
   'GET /api/v1/triggers/:type/:name → read',
   'GET /api/v1/triggers/:type/:name/:agent → read',
+  'GET /api/v1/triggers/:type/:name/:agent/skips → read',
+  'GET /api/v1/triggers/:type/:name/skips → read',
   'GET /api/v1/update-operations/:id → read',
   'GET /api/v1/watchers → read',
   'GET /api/v1/watchers/:type/:name → read',

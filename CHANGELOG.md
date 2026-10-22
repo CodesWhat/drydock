@@ -32,6 +32,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Added
 
 - Decide several queued updates at once. The approval queue gets row checkboxes, a select-all box and a selection bar with **Approve selected** and **Reject selected**, backed by the new `POST /api/v1/approvals/bulk` (up to 200 ids, with `approve`, `reject` or `defer` as the action). Each id is decided exactly as its single-row route would decide it, so a row that would be refused on its own is reported in the `rejected` list with the same status and message and the rest still go through, and every decided row writes its own audit entry. Bulk approve requires the `X-DD-Confirm-Action: approvals-bulk-approve` header and a confirmation dialog in the UI that lists the hold reasons it overrides and skips hard-blocked rows, and uses the same `containers:update` scope as the single decisions.
+- Show recent notification skips per trigger. Open a notification trigger in the Triggers view, or a rule's assigned triggers in the Notifications view, and **Recent skips** lists the containers it skipped, newest first, with a readable reason and a link to each container. The same data is served by `GET /api/v1/triggers/{type}/{name}/skips` (and `/{agent}/skips` for agent triggers) under the `read` scope, paginated with `limit` (default 50, maximum 200) and `offset`, and documented in the OpenAPI spec. It reads the existing in-memory skip record, so there is no new storage.
 
 ### Changed
 

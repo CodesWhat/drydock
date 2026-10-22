@@ -51,8 +51,12 @@ import {
   recordNotificationSkip,
   resetNotificationSkips,
 } from '../triggers/notification-skips.js';
+import * as component from './component.js';
 import * as triggerRouter from './trigger.js';
 import { runTrigger } from './trigger.js';
+import { registerTriggerSkipRoutes } from './trigger-skips.js';
+
+const componentInit = vi.mocked(component.init);
 
 async function flushAcceptedUpdateWork() {
   await Promise.resolve();
@@ -79,6 +83,11 @@ describe('Trigger Router', () => {
       const router = triggerRouter.init();
       expect(router.post).toHaveBeenCalledWith('/:type/:name', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/:type/:name/:agent', expect.any(Function));
+    });
+
+    test('hands the skip route registrar to the component router', () => {
+      triggerRouter.init();
+      expect(componentInit).toHaveBeenCalledWith('trigger', registerTriggerSkipRoutes);
     });
   });
 
