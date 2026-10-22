@@ -1,5 +1,10 @@
-import { configFileInterpolatedKeys, configFileSources, ddEnvVars } from '../index.js';
-import { type ConfigValueSource, mergeConfigLayers, settingKeyForms } from './sources.js';
+import {
+  configFileInterpolatedKeys,
+  configFileSecretPaths,
+  configFileSources,
+  ddEnvVars,
+} from '../index.js';
+import { type ConfigValueSource, mergeConfigLayers, toSettingKey } from './sources.js';
 
 /**
  * Pure "would this candidate file layer change anything" comparison, shared
@@ -77,11 +82,12 @@ export function buildCandidateEnvAndDiff(
   diff: ConfigurationValidationDiff;
 } {
   const envOnly: Record<string, string | undefined> = { ...ddEnvVars };
-  const removeFileValue = (key: string) => {
-    const resolvedKey = key.endsWith('__FILE') ? key.slice(0, -'__FILE'.length) : key;
-    delete envOnly[key];
-    delete envOnly[resolvedKey];
-    if (process.env[resolvedKey] !== undefined) envOnly[resolvedKey] = process.env[resolvedKey];
+  // Every name below is a setting key (`DD_X`), the keying `configFileSources`
+  // and `configFileInterpolatedKeys` use for a `DD_X__FILE` entry too.
+  const removeFileValue = (settingKey: string) => {
+    delete envOnly[settingKey];
+    delete envOnly[`${settingKey}__FILE`];
+    if (process.env[settingKey] !== undefined) envOnly[settingKey] = process.env[settingKey];
   };
   const currentFileKeys = new Set<string>();
   for (const key of Object.keys(configFileSources)) {
@@ -101,27 +107,35 @@ export function buildCandidateEnvAndDiff(
     removeFileValue(key);
   }
 
+  // The live `ddEnvVars` holds a secret file's *contents* under `DD_X` (the
+  // `__FILE` entry is consumed at startup), so a `_file` entry is compared by
+  // the path it was actually resolved from (`configFileSecretPaths`, not the
+  // latest published file layer, which runs ahead of the live state for a
+  // restart-required setting), tagged with its spelling (NUL prefix, which no literal value carries) so a
+  // `x: value` -> `x: { _file }` switch of the same setting still counts.
+  const currentFileForm = (settingKey: string): string | undefined => {
+    const path = configFileSecretPaths[settingKey];
+    return path !== undefined ? `\u0000file:${path}` : undefined;
+  };
   const changedKeys = new Set<string>();
-  const candidateKeys = Object.keys(candidateFileLayer);
+  const candidateKeys = Object.keys(candidateFileLayer).map(toSettingKey);
   for (const key of new Set([...currentFileKeys, ...candidateKeys])) {
-    // Both names of the setting are checked: `DD_X` and `DD_X__FILE` are one
-    // key, so the environment owning either shadows a candidate in the other.
-    if (
-      settingKeyForms(key).some(
-        (form) => configFileSources[form] === 'env' && !configFileInterpolatedKeys.has(form),
-      )
-    ) {
+    if (configFileSources[key] === 'env' && !configFileInterpolatedKeys.has(key)) {
       // Env always wins; the candidate file can never change this key's
-      // effective value, whatever it sets. A key that's `'env'`-attributed
-      // only because it's currently interpolated is NOT skipped here: its
-      // resolved value can still change (a different `${NAME}` reference, or
-      // the same one pointed at a different real env var), and the file can
-      // still remove it outright — both are real changes this loop has to
-      // see.
+      // effective value, whatever it sets, under either name of the setting.
+      // A key that's `'env'`-attributed only because it's currently
+      // interpolated is NOT skipped here: its resolved value can still change
+      // (a different `${NAME}` reference, or the same one pointed at a
+      // different real env var), and the file can still remove it outright —
+      // both are real changes this loop has to see.
       continue;
     }
-    const currentValue = currentFileKeys.has(key) ? ddEnvVars[key] : undefined;
-    const candidateValue = candidateFileLayer[key];
+    const currentValue = currentFileKeys.has(key)
+      ? (currentFileForm(key) ?? ddEnvVars[key])
+      : undefined;
+    const candidatePath = candidateFileLayer[`${key}__FILE`];
+    const candidateValue =
+      candidatePath !== undefined ? `\u0000file:${candidatePath}` : candidateFileLayer[key];
     if (currentValue !== candidateValue) {
       changedKeys.add(key);
     }

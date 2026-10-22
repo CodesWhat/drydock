@@ -78,11 +78,12 @@ function triggerPolicySnapshot(
           const exactPath = prefix ? [...prefix, keys[0] ?? field] : undefined;
           const rawNode = exactPath ? document?.doc.getIn(exactPath, true) : undefined;
           const envKey = `DD_${category.toUpperCase()}_${trigger.type.toUpperCase()}_${trigger.name.toUpperCase()}_${field.toUpperCase()}`;
-          const reference = referencedPath(
-            document,
-            [category, trigger.type, trigger.name, field],
-            digestTemplate,
-          );
+          // A real environment literal owns the setting outright: the file's
+          // entry for it, a `_file` node included, is ignored at merge time, so
+          // it reads as `env` rather than as a reference the file never resolves.
+          const reference =
+            process.env[envKey] === undefined &&
+            referencedPath(document, [category, trigger.type, trigger.name, field], digestTemplate);
           const environmentOwned =
             configFileSources[envKey] === 'env' || process.env[envKey] !== undefined;
           const readOnlyReason = !document

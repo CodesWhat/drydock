@@ -3861,6 +3861,40 @@ describe('${NAME} interpolation in drydock.yml', () => {
     );
   });
 
+  test('a file _file entry is keyed by its base name in sources at boot, with the secret resolved beneath it', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-sources-'));
+    const secretPath = path.join(directory, 'secret');
+    fs.writeFileSync(secretPath, 'file-secret\n', { mode: 0o600 });
+    try {
+      vi.resetModules();
+      const { setConfigFileLayer } = await import('./file/layer.js');
+      setConfigFileLayer(
+        {
+          DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE: secretPath,
+          DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE: secretPath,
+        },
+        new Set(['DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE']),
+      );
+      const freshConfiguration = await import('./index.js');
+
+      expect(freshConfiguration.ddEnvVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file-secret');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('env');
+      expect(freshConfiguration.configFileSecretPaths).toStrictEqual({
+        DD_REGISTRY_GHCR_PRIVATE_TOKEN: secretPath,
+        DD_REGISTRY_HUB_PRIVATE_PASSWORD: secretPath,
+      });
+      expect(
+        Object.keys(freshConfiguration.configFileSources).filter((key) => key.endsWith('__FILE')),
+      ).toEqual([]);
+      expect([...freshConfiguration.configFileInterpolatedKeys]).toEqual([
+        'DD_REGISTRY_HUB_PRIVATE_PASSWORD',
+      ]);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test('a literal value with no ${...} pattern is still sourced as "file"', async () => {
     await withConfigFile('server:\n  name: literal-name\n', async (freshConfiguration) => {
       expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('literal-name');
