@@ -44,7 +44,7 @@ RUN apk add --no-cache \
 # Also an image index digest, never a per-platform manifest digest: a manifest
 # pin would compile this C stage for the wrong architecture (#1021).
 FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS healthcheck-build
-RUN apk add --no-cache gcc=15.2.0-r5 musl-dev=1.2.6-r2
+RUN apk add --no-cache gcc=15.2.0-r5 musl-dev=1.2.6-r3
 COPY healthcheck.c /src/healthcheck.c
 RUN gcc -Os -static -s -o /bin/healthcheck /src/healthcheck.c
 
