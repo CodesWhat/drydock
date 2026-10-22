@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
+- Bump `vite` to 8.2.4 (app, ui) and 7.3.7 (demo), and vitest and `@vitest/coverage-v8` to 4.1.12, for GHSA-587h-7wmj-h5pm, GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg (vite) and GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp (`@vitest/mocker`). Dev dependencies only, not in the image. The app lockfile also moves `follow-redirects` to 1.16.1 for GHSA-8r9p-f939-6h3c and GHSA-q3jh-wrc6-jgq8.
 
 ### Changed
 

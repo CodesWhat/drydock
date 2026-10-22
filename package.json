@@ -12,7 +12,7 @@
     "@biomejs/biome": "2.5.15",
     "@types/node": "25.9.9",
     "lefthook": "2.2.1",
-    "vitest": "4.1.11",
+    "vitest": "4.1.12",
     "yaml": "2.9.1"
   },
   "overrides": {
