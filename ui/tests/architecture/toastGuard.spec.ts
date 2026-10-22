@@ -27,8 +27,9 @@ const ALLOWLIST: Record<string, { max: number; reason: string }> = {
       'dialog-local validation warnings, update request accepted/stale acknowledgements and request failure',
   },
   'views/ApprovalsView.vue': {
-    max: 6,
-    reason: 'approve, reject and defer action feedback',
+    max: 10,
+    reason:
+      'approve, reject and defer action feedback, plus bulk decision results and partial failures',
   },
   'views/DashboardView.vue': {
     max: 9,
