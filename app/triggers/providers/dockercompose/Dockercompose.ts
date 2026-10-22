@@ -587,6 +587,41 @@ function resolveComposeInterpolation(
 
 const COMPOSE_ESCAPED_DOLLAR = '\u0000';
 
+/**
+ * Names of the variables a compose `image:` value interpolates. An escaped
+ * `$$` is a literal dollar sign, not an interpolation, so it is dropped first.
+ * Covers `$VAR`, `${VAR}`, `${VAR:-default}` and `${VAR?err}`.
+ */
+function getComposeImageInterpolationVariables(image: unknown): string[] {
+  if (typeof image !== 'string') {
+    return [];
+  }
+  const names = new Set<string>();
+  const withoutEscapes = image.replaceAll('$$', '');
+  for (const match of withoutEscapes.matchAll(
+    /\$(?:\{([_a-zA-Z][_a-zA-Z0-9]*)[^}]*\}|([_a-zA-Z][_a-zA-Z0-9]*))/g,
+  )) {
+    names.add((match[1] ?? match[2]) as string);
+  }
+  return [...names];
+}
+
+function buildComposeInterpolatedImageError(
+  service: string,
+  composeFileSummary: string,
+  image: string,
+  variables: string[],
+): Error {
+  return new Error(
+    `Compose service ${service} in ${composeFileSummary} sets its image through ` +
+      `${variables.length > 1 ? 'variables' : 'a variable'} (${variables.join(', ')}) in "${image}"; ` +
+      'refusing to rewrite the compose file and flatten it to a literal tag. ' +
+      `Update ${variables.length > 1 ? 'those variables' : 'the variable'} yourself ` +
+      '(for example in the .env file) and recreate the service. ' +
+      'Updating the environment file automatically is planned for a later release.',
+  );
+}
+
 function resolveComposeImageForContinuity(
   value: unknown,
   authoritativeResolvedImage?: unknown,
@@ -1660,6 +1695,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @param composeFileChainSummary
    * @param versionMappings
    */
+  assertComposeImageNotInterpolated(composeFileChainSummary, versionMappings) {
+    for (const mapping of versionMappings) {
+      const variables = getComposeImageInterpolationVariables(mapping.current);
+      if (variables.length > 0) {
+        throw buildComposeInterpolatedImageError(
+          mapping.service,
+          composeFileChainSummary,
+          mapping.current,
+          variables,
+        );
+      }
+    }
+  }
+
   assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
     for (const mapping of versionMappings) {
       const currentImage =
@@ -3563,9 +3612,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       compose,
       resolvedComposeImages,
     );
-    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
     const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
       this.splitComposeAndRuntimeMappings(versionMappings);
+    // Refuse before reconciliation, any lock, write or container change
+    // (dry-run included): the variable's value is not ours to flatten.
+    this.assertComposeImageNotInterpolated(composeFileChainSummary, mappingsNeedingRuntimeUpdate);
+    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
 
     if (mappingsNeedingRuntimeUpdate.length === 0) {
       this.logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings);
@@ -3658,6 +3710,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       );
     }
 
+    this.assertComposeImageNotInterpolated(composeFiles.join(', '), [
+      { service, current: (compose as ComposeFileWithServices).services?.[service]?.image },
+    ]);
     this.assertComposeRepositoryContinuity(composeFiles.join(', '), [
       {
         container,

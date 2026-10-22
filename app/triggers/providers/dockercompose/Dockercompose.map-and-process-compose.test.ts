@@ -552,37 +552,166 @@ describe('Dockercompose Trigger', () => {
     expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
   });
 
-  test('processComposeFile should resolve an image variable for continuity while preserving it until mutation', async () => {
-    trigger.configuration.dryrun = false;
-    trigger.configuration.backup = false;
-    try {
+  describe('interpolated image references', () => {
+    const runRefusal = async (imageValue: string) => {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
       const container = makeContainer({
         tagValue: '1.0.0',
         remoteValue: '1.1.0',
         labels: { 'com.docker.compose.service': 'nginx' },
       });
-
       vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
-        makeCompose({ nginx: { image: '${IMAGE}' } }),
+        makeCompose({ nginx: { image: imageValue } }),
       );
       vi.spyOn(fs, 'readFile').mockImplementation(async (filePath) =>
-        String(filePath).endsWith('/.env') ? Buffer.from('IMAGE=nginx:1.0.0\n') : Buffer.from(''),
+        String(filePath).endsWith('/.env')
+          ? Buffer.from('IMAGE=nginx:1.0.0\nTAG=1.0.0\nREG=docker.io\n')
+          : Buffer.from(''),
       );
-
-      const { writeComposeFileSpy } = spyOnProcessComposeHelpers(
+      const helpers = spyOnProcessComposeHelpers(
         trigger,
-        ['services:', '  nginx:', '    image: ${IMAGE}', ''].join('\n'),
+        ['services:', '  nginx:', `    image: ${imageValue}`, ''].join('\n'),
       );
+      const result = trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+      return { result, ...helpers };
+    };
 
-      await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+    test.each([
+      ['${IMAGE}', ['IMAGE']],
+      ['$IMAGE', ['IMAGE']],
+      ['nginx:${TAG}', ['TAG']],
+      ['nginx:$TAG', ['TAG']],
+      ['${REG}/nginx:${TAG:-1.0.0}', ['REG', 'TAG']],
+      ['nginx:${TAG-1.0.0}', ['TAG']],
+      ['nginx:${TAG?tag required}', ['TAG']],
+      ['nginx:${TAG:?tag required}', ['TAG']],
+      ['nginx:$$LITERAL-$TAG', ['TAG']],
+    ])('processComposeFile should refuse image %s and write nothing', async (image, variables) => {
+      try {
+        const { result, writeComposeFileSpy, composeUpdateSpy, backupSpy } =
+          await runRefusal(image);
 
-      expect(writeComposeFileSpy).toHaveBeenCalledWith(
+        await expect(result).rejects.toThrow(/sets its image through/);
+        await expect(result).rejects.toThrow(variables.join(', '));
+        await expect(result).rejects.toThrow('.env');
+        expect(writeComposeFileSpy).not.toHaveBeenCalled();
+        expect(composeUpdateSpy).not.toHaveBeenCalled();
+        expect(backupSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    test('processComposeFile should say "variables" when several are involved', async () => {
+      try {
+        const { result } = await runRefusal('${REG}/nginx:${TAG}');
+        await expect(result).rejects.toThrow('through variables (REG, TAG)');
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    test('processComposeFile should refuse in dry-run too', async () => {
+      try {
+        const { result, writeComposeFileSpy } = await runRefusal('${IMAGE}');
+        trigger.configuration.dryrun = true;
+        await expect(result).rejects.toThrow(/sets its image through/);
+        expect(writeComposeFileSpy).not.toHaveBeenCalled();
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    test('processComposeFile should still rewrite an escaped dollar in the image', async () => {
+      trigger.configuration.dryrun = false;
+      trigger.configuration.backup = false;
+      try {
+        const container = makeContainer({
+          tagValue: '1.0.0',
+          remoteValue: '1.1.0',
+          labels: { 'com.docker.compose.service': 'nginx' },
+        });
+        vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+          makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
+        );
+        vi.spyOn(trigger, 'buildVersionMappingsForCompose').mockReturnValue([
+          {
+            container,
+            service: 'nginx',
+            current: 'nginx$$:1.0.0',
+            update: 'nginx:1.1.0',
+            currentNormalized: 'nginx$$:1.0.0',
+            updateNormalized: 'nginx:1.1.0',
+            composeUpdate: 'nginx:1.1.0',
+            composeUpdateNormalized: 'nginx:1.1.0',
+            runtimeImage: 'nginx:1.0.0',
+            runtimeNormalized: 'nginx:1.0.0',
+          },
+        ] as any);
+        vi.spyOn(trigger, 'reconcileComposeMappings').mockImplementation(() => {});
+        const { composeUpdateSpy } = spyOnProcessComposeHelpers(trigger);
+
+        await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+
+        expect(composeUpdateSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+
+    test('assertComposeRepositoryContinuity should still fail closed on an unresolved repository variable', () => {
+      expect(() =>
+        trigger.assertComposeRepositoryContinuity('stack.yml', [
+          {
+            container: { name: 'nginx' },
+            service: 'nginx',
+            runtimeImage: 'nginx:1.0.0',
+            current: '${REG}/nginx:1.0.0',
+          },
+        ]),
+      ).toThrow('refusing to rewrite a different repository');
+    });
+
+    test('assertComposeImageNotInterpolated should accept plain and escaped images', () => {
+      expect(() =>
+        trigger.assertComposeImageNotInterpolated('stack.yml', [
+          { service: 'a', current: 'nginx:1.0.0' },
+          { service: 'b', current: 'nginx:$$TAG' },
+          { service: 'c', current: undefined },
+        ]),
+      ).not.toThrow();
+    });
+
+    test('preview and recreate should refuse an image set through a variable', async () => {
+      const basePreviewSpy = vi
+        .spyOn(Object.getPrototypeOf(Dockercompose.prototype), 'preview')
+        .mockResolvedValue({ newImage: 'nginx:1.1.0' } as any);
+      vi.spyOn(trigger, 'resolveComposeFilesForContainer').mockResolvedValue([
         '/opt/drydock/test/stack.yml',
-        expect.stringContaining('image: nginx:1.1.0'),
+      ]);
+      vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+        makeCompose({ nginx: { image: 'nginx:${TAG}' } }),
       );
-    } finally {
-      vi.restoreAllMocks();
-    }
+      const container = makeContainer({
+        tagValue: '1.0.0',
+        remoteValue: '1.1.0',
+        labels: { 'com.docker.compose.service': 'nginx' },
+      });
+      const mutateSpy = vi.spyOn(trigger, 'mutateComposeFile');
+      try {
+        await expect(trigger.preview(container as any)).rejects.toThrow(
+          /sets its image through a variable \(TAG\)/,
+        );
+        await expect(
+          trigger.recreateContainer({}, {}, 'nginx:1.1.0', container as any, mockLog),
+        ).rejects.toThrow(/sets its image through a variable \(TAG\)/);
+        expect(mutateSpy).not.toHaveBeenCalled();
+      } finally {
+        basePreviewSpy.mockRestore();
+        vi.restoreAllMocks();
+      }
+    });
   });
 
   test('getComposeResolvedImages should not use a service declared environment file', async () => {
@@ -926,7 +1055,7 @@ describe('Dockercompose Trigger', () => {
 
       await expect(
         trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
-      ).rejects.toThrow('refusing to rewrite a different repository');
+      ).rejects.toThrow('sets its image through');
 
       expect(writeComposeFileSpy).not.toHaveBeenCalled();
     } finally {
@@ -934,7 +1063,7 @@ describe('Dockercompose Trigger', () => {
     }
   });
 
-  test('processComposeFile should resolve a defaulted registry variable for continuity', async () => {
+  test('processComposeFile should pass continuity with a defaulted registry variable then refuse the interpolated image', async () => {
     trigger.configuration.dryrun = false;
     trigger.configuration.backup = false;
     try {
@@ -956,12 +1085,11 @@ describe('Dockercompose Trigger', () => {
         ),
       );
 
-      await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
+      await expect(
+        trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+      ).rejects.toThrow('(REGISTRY)');
 
-      expect(writeComposeFileSpy).toHaveBeenCalledWith(
-        '/opt/drydock/test/stack.yml',
-        expect.stringContaining('image: nginx:1.1.0'),
-      );
+      expect(writeComposeFileSpy).not.toHaveBeenCalled();
     } finally {
       vi.restoreAllMocks();
     }
@@ -992,7 +1120,7 @@ describe('Dockercompose Trigger', () => {
 
       await expect(
         trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
-      ).rejects.toThrow('refusing to rewrite a different repository');
+      ).rejects.toThrow('sets its image through');
       expect(writeComposeFileSpy).not.toHaveBeenCalled();
     } finally {
       vi.restoreAllMocks();
@@ -1044,7 +1172,7 @@ describe('Dockercompose Trigger', () => {
 
       await expect(
         trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
-      ).rejects.toThrow('refusing to rewrite a different repository');
+      ).rejects.toThrow('sets its image through');
 
       expect(writeComposeFileSpy).not.toHaveBeenCalled();
       expect(composeUpdateSpy).not.toHaveBeenCalled();
@@ -1079,7 +1207,7 @@ describe('Dockercompose Trigger', () => {
 
     await expect(
       trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
-    ).rejects.toThrow('refusing to rewrite a different repository');
+    ).rejects.toThrow('sets its image through');
 
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
     expect(composeUpdateSpy).not.toHaveBeenCalled();
@@ -1144,7 +1272,7 @@ describe('Dockercompose Trigger', () => {
 
     await expect(
       trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
-    ).rejects.toThrow('refusing to rewrite a different repository');
+    ).rejects.toThrow('sets its image through');
     expect(writeComposeFileSpy).not.toHaveBeenCalled();
   });
 
