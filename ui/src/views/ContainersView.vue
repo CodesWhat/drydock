@@ -17,7 +17,6 @@ import {
   type ReconcileContainerCandidate,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
-import { useToast } from '../composables/useToast';
 import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { useOperationStore } from '../stores/operations';
@@ -71,7 +70,6 @@ const {
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers: reconcileHolds,
 } = useOperationDisplayHold();
-const toast = useToast();
 const operationStore = useOperationStore();
 
 // The store lookup ignores the display hold, otherwise every held container
