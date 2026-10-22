@@ -22,11 +22,11 @@ const loading = ref(false);
 const failed = ref(false);
 let requestId = 0;
 
-async function load(append: boolean) {
+// Offset 0 replaces the list, any later offset extends the rows already shown.
+async function load(offset: number) {
   const current = ++requestId;
   loading.value = true;
   failed.value = false;
-  const offset = append ? skips.value.length : 0;
   try {
     const page = await getTriggerSkips({
       type: props.trigger.type,
@@ -36,12 +36,12 @@ async function load(append: boolean) {
       offset,
     });
     if (current !== requestId) return;
-    skips.value = append ? [...skips.value, ...page.data] : page.data;
+    skips.value = [...skips.value.slice(0, offset), ...page.data];
     total.value = page.total;
     hasMore.value = page.hasMore;
   } catch {
     if (current !== requestId) return;
-    if (!append) {
+    if (offset === 0) {
       skips.value = [];
       total.value = 0;
       hasMore.value = false;
@@ -54,9 +54,13 @@ async function load(append: boolean) {
 
 watch(
   () => [props.trigger.type, props.trigger.name, props.trigger.agent],
-  () => void load(false),
+  () => void load(0),
   { immediate: true },
 );
+
+function loadMore() {
+  return load(skips.value.length);
+}
 
 function containerLocation(containerId: string) {
   return { path: ROUTES.CONTAINERS, query: { containerIds: containerId } };
@@ -86,6 +90,6 @@ function formatTime(value: string) {
         <div class="text-2xs-plus dd-text-muted" data-test="trigger-skip-reason">{{ t(`containerComponents.fullPageActions.notificationSkipReason.${skip.reason}`) }}</div>
       </li>
     </ul>
-    <AppButton v-if="hasMore" variant="outlined" :disabled="loading" data-test="trigger-skips-more" @click="load(true)">{{ t('triggersView.skips.showMore') }}</AppButton>
+    <AppButton v-if="hasMore" variant="outlined" :disabled="loading" data-test="trigger-skips-more" @click="loadMore">{{ t('triggersView.skips.showMore') }}</AppButton>
   </section>
 </template>

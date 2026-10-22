@@ -148,4 +148,33 @@ describe('TriggerSkipsPanel', () => {
     expect(wrapper.find('[data-test="trigger-skips-error"]').exists()).toBe(false);
     expect(wrapper.findAll('[data-test="trigger-skip"]')).toHaveLength(1);
   });
+
+  it('clears shown rows when the first page of a changed trigger fails', async () => {
+    mockGetTriggerSkips
+      .mockResolvedValueOnce(page([skip('c1')], { total: 1 }))
+      .mockRejectedValueOnce(new Error('boom'));
+    const wrapper = mountPanel();
+    await flushPromises();
+    expect(wrapper.findAll('[data-test="trigger-skip"]')).toHaveLength(1);
+
+    await wrapper.setProps({ trigger: { type: 'slack', name: 'other' } as never });
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-test="trigger-skip"]')).toHaveLength(0);
+    expect(wrapper.find('[data-test="trigger-skips-error"]').exists()).toBe(true);
+  });
+
+  it('replaces rows instead of appending when the trigger changes', async () => {
+    mockGetTriggerSkips
+      .mockResolvedValueOnce(page([skip('c1'), skip('c2')]))
+      .mockResolvedValueOnce(page([skip('c3')]));
+    const wrapper = mountPanel();
+    await flushPromises();
+    await wrapper.setProps({ trigger: { type: 'slack', name: 'other' } as never });
+    await flushPromises();
+
+    expect(mockGetTriggerSkips).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
+    const rows = wrapper.findAll('[data-test="trigger-skip-container"]');
+    expect(rows.map((row) => row.text())).toEqual(['name-c3']);
+  });
 });
