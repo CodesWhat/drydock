@@ -38,7 +38,7 @@ If drydock runs in a pure IPv6 environment with no IPv4 connectivity:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     environment:
       - DD_DNS_MODE=ipv6first
 ```
@@ -50,7 +50,7 @@ To use the OS resolver's native ordering (not recommended on Alpine):
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     environment:
       - DD_DNS_MODE=verbatim
 ```

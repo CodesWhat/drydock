@@ -113,7 +113,7 @@ identity_providers:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -131,7 +131,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHELIA_CLIENTSECRET="this-is-a-very-secure-secret" \
   -e DD_AUTH_OIDC_AUTHELIA_DISCOVERY="https://<your_authelia_public_domain>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 
 </Tab>
@@ -157,7 +157,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -175,7 +175,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTH0_CLIENTSECRET="<paste the Client Secret from auth0 application settings>" \
   -e DD_AUTH_OIDC_AUTH0_DISCOVERY="https://<paste the domain from auth0 application settings>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 
 </Tab>
@@ -213,7 +213,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -232,7 +232,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 
 Opt in to direct Authentik redirect only when you intentionally want to skip the internal login page. Add this option before the `...` line in the Docker command above:
@@ -258,7 +258,7 @@ Opt in to direct Authentik redirect only when you intentionally want to skip the
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -278,7 +278,7 @@ docker run \
   -e DD_AUTH_OIDC_DEX_CLIENTSECRET="<dex_client_secret>" \
   -e DD_AUTH_OIDC_DEX_DISCOVERY="https://<your_dex_public_domain>/dex/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.8.0-rc.4
+  codeswhat/drydock:1.8.0-rc.5
 ```
 
 Opt in to a real Dex logout endpoint only when your IdP or auth proxy provides one. Add this option before the `...` line in the Docker command above:

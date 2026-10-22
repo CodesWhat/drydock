@@ -942,6 +942,144 @@ describe('getTagsPage link header cursor', () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Stopped listing'));
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('img'));
   });
+
+  describe('tail listing past MAX_TAG_PAGES', () => {
+    const linkHeader = '<https://reg.io/v2/img/tags/list?last=cursor&n=1000>; rel="next"';
+    const imageWithTag = {
+      name: 'img',
+      tag: { value: 'v3.3.4' },
+      registry: { url: 'https://reg.io/v2' },
+    };
+
+    function mockRegistry(tailResponses: any[]) {
+      const registryMocked = createMockedRegistry();
+      const warnSpy = vi.fn();
+      registryMocked.log = { debug: vi.fn(), warn: warnSpy } as any;
+      const urls: string[] = [];
+      let headCalls = 0;
+      let tailIndex = 0;
+      registryMocked.callRegistry = vi.fn((options: any) => {
+        urls.push(options.url);
+        if (headCalls < 50) {
+          headCalls++;
+          return { headers: { link: linkHeader }, data: { tags: [`old${headCalls}`] } };
+        }
+        const response = tailResponses[Math.min(tailIndex, tailResponses.length - 1)];
+        tailIndex++;
+        if (response instanceof Error) throw response;
+        return response;
+      }) as any;
+      return { registryMocked, warnSpy, urls };
+    }
+
+    test('continues from the current tag and returns newer tags', async () => {
+      const { registryMocked, warnSpy, urls } = mockRegistry([
+        { headers: { link: linkHeader }, data: { tags: ['v3.3.5'] } },
+        { headers: {}, data: { tags: ['v3.3.6'] } },
+      ]);
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(result).toContain('v3.3.5');
+      expect(result).toContain('v3.3.6');
+      expect(result).toContain('old1');
+      expect(urls[50]).toContain('last=v3.3.4');
+      expect(urls).toHaveLength(52);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('continuing from tag v3.3.4'));
+    });
+
+    test('stops the tail when the registry replays the first page', async () => {
+      const { registryMocked, urls } = mockRegistry([
+        { headers: { link: linkHeader }, data: { tags: ['old1'] } },
+      ]);
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(urls).toHaveLength(51);
+      expect(result).toHaveLength(50);
+    });
+
+    test('keeps going through already-seen tail pages that advance past the head start', async () => {
+      const { registryMocked, urls } = mockRegistry([
+        { headers: { link: linkHeader }, data: { tags: ['old10', 'old11'] } },
+        { headers: {}, data: { tags: ['v3.3.5'] } },
+      ]);
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(urls).toHaveLength(52);
+      expect(result).toContain('v3.3.5');
+    });
+
+    test('tolerates a tail page with no data or headers', async () => {
+      const { registryMocked } = mockRegistry([{}]);
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(result).toHaveLength(50);
+    });
+
+    test('warns again when the tail also hits the page cap', async () => {
+      let n = 0;
+      const registryMocked = createMockedRegistry();
+      const warnSpy = vi.fn();
+      registryMocked.log = { debug: vi.fn(), warn: warnSpy } as any;
+      registryMocked.callRegistry = vi.fn(() => {
+        n++;
+        return { headers: { link: linkHeader }, data: { tags: [`t${n}`] } };
+      }) as any;
+
+      await registryMocked.getTags(imageWithTag);
+
+      expect(n).toBe(100);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
+    });
+
+    test('does not request a tail when the head listing was not truncated', async () => {
+      const registryMocked = createMockedRegistry();
+      registryMocked.callRegistry = vi.fn(() => ({ headers: {}, data: { tags: ['a'] } })) as any;
+
+      await registryMocked.getTags(imageWithTag);
+
+      expect(registryMocked.callRegistry).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns the head tags and warns when the tail request fails', async () => {
+      const { registryMocked, warnSpy } = mockRegistry([new Error('boom')]);
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(result).toHaveLength(50);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('boom'));
+    });
+
+    test('reports a non-Error tail failure', async () => {
+      const { registryMocked, warnSpy } = mockRegistry([]);
+      let calls = 0;
+      registryMocked.getTagsPage = vi.fn(async () => {
+        calls++;
+        if (calls > 50) throw 'plain failure';
+        return { headers: { link: linkHeader }, data: { tags: [`h${calls}`] } };
+      }) as any;
+
+      const result = await registryMocked.getTags(imageWithTag);
+
+      expect(result).toHaveLength(50);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('plain failure'));
+    });
+
+    test('does not request a tail when the image has no current tag', async () => {
+      const { registryMocked } = mockRegistry([{ headers: {}, data: { tags: ['new'] } }]);
+
+      const result = await registryMocked.getTags({
+        name: 'img',
+        registry: { url: 'https://reg.io/v2' },
+      });
+
+      expect(registryMocked.callRegistry).toHaveBeenCalledTimes(50);
+      expect(result).not.toContain('new');
+    });
+  });
 });
 
 // --- getImageManifestDigest tests ---

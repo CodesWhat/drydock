@@ -18,7 +18,7 @@ Drydock detects when its own container image has an update available, just like 
 - The Docker trigger must be enabled
 - Drydock must be able to create temporary helper containers
 
-The examples below pin the opt-in `1.8.0-rc.4` image and explicitly discover newer `1.8.0-rc.N` tags. Their `local` Docker action uses `AUTO=onauto` with `dd.action.include=local`, so self-updates are manually available and automatic installs remain opt-in through `dd.action.auto=local`. Other update eligibility and security gates still apply. See [action execution policy](/docs/configuration/triggers#common-trigger-configuration).
+The examples below pin the opt-in `1.8.0-rc.5` image and explicitly discover newer `1.8.0-rc.N` tags. Their `local` Docker action uses `AUTO=onauto` with `dd.action.include=local`, so self-updates are manually available and automatic installs remain opt-in through `dd.action.auto=local`. Other update eligibility and security gates still apply. See [action execution policy](/docs/configuration/triggers#common-trigger-configuration).
 
 <Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
 
@@ -136,7 +136,7 @@ services:
       - VOLUMES=1
 
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     labels:
       - dd.watch=true
       - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
@@ -180,7 +180,7 @@ For ordinary container updates, restart recovery depends on which phase was inte
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     container_name: drydock
     labels:
       - dd.watch=true
@@ -207,7 +207,7 @@ Plain TCP deployment — Drydock connects to the Docker daemon over TCP (no bind
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.4
+    image: codeswhat/drydock:1.8.0-rc.5
     container_name: drydock
     labels:
       - dd.watch=true
