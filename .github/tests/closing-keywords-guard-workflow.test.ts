@@ -50,12 +50,17 @@ describe('closing keywords guard commit range', () => {
     expect(commitScript).toContain('git log -1 --format=%B "${HEAD_SHA}"');
   });
 
+  // Git hooks (the pre-push gate runs this suite) export GIT_DIR, GIT_INDEX_FILE
+  // and friends; inherited, they point every temp-repo command at the real repo.
+  const cleanEnv = () =>
+    Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
+
   const git = (cwd: string, args: string[], env: NodeJS.ProcessEnv = {}) =>
     execFileSync('git', args, {
       cwd,
       encoding: 'utf8',
       env: {
-        ...process.env,
+        ...cleanEnv(),
         GIT_CONFIG_GLOBAL: '/dev/null',
         GIT_CONFIG_SYSTEM: '/dev/null',
         ...env,
@@ -67,7 +72,7 @@ describe('closing keywords guard commit range', () => {
     execFileSync('bash', ['-eo', 'pipefail', '-c', commitScript], {
       cwd,
       env: {
-        ...process.env,
+        ...cleanEnv(),
         RUNNER_TEMP: runnerTemp,
         PR_TITLE: 't',
         PR_BODY: 'b',
