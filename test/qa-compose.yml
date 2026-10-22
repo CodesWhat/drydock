@@ -49,6 +49,10 @@ services:
       - "DD_AUTH_BASIC_TOTPE2E_HASH=argon2id$$19456$$2$$4$$EMmBuKKZakqxY7+rqR9OUega2sAx0gRYszpIan23z5Q=$$NiD24IC9IiuDPwQc2N0fHW55SfftnWRKMGRq38JUDmlvwvqbTE/V9IKT9XAlySvXLGf4EFDgYhpLTVym4idbUg=="
       - DD_AUTH_TOTP_KEYRING__FILE=/config/totp-keyring.json
       - DD_AUTH_TOTP_ACTIVE_KEY_ID=qa-e2e
+      # The suite reaches the published port through Docker's bridge, so the socket
+      # peer is never loopback and the HTTPS-or-local gate would refuse enrollment.
+      # Test-only stack on plain HTTP, so take the operator opt-in.
+      - DD_AUTH_TOTP_ALLOWHTTP=true
       - DD_SERVER_WEBHOOK_ENABLED=true
       - DD_SERVER_WEBHOOK_TOKEN=test-token-12345
       # The complete Playwright release gate intentionally exercises dozens
