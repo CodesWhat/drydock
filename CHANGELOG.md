@@ -20,7 +20,7 @@ This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/
 ### Changed
 
 - Delete the container's `updateOperation` field and the SSE bridge that kept it in sync with the operations store (DR-89, slice 5). Every view already reads update progress from the store, and a new architecture test fails on any new use of the field. Behavior is unchanged.
-- Add an architecture test that fails on toast calls outside the update lifecycle layer (DR-90). Existing feedback toasts are allowlisted per file with a count that can only go down, and update outcome toasts can only come from the operations store. Also drops an unused `useToast()` binding from `ContainersView`.
+- Add an architecture test that fails on toast calls outside the update lifecycle layer (DR-90). Existing feedback toasts are allowlisted per file with a count that can only go down, update outcome toasts can only come from the operations store, and a toast binding can't be handed to a helper. Also drops an unused `useToast()` binding from `ContainersView`.
 
 ### Fixed
 

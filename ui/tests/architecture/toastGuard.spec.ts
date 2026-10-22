@@ -186,8 +186,7 @@ function readArgs(source: string, start: number): string {
   return source.slice(start);
 }
 
-function findToastCalls(rawSource: string): ToastCall[] {
-  const { code: source, text } = maskSource(rawSource);
+function collectBindings(source: string): { objectNames: Set<string>; functionNames: Set<string> } {
   const objectNames = new Set<string>();
   const functionNames = new Set<string>();
 
@@ -216,6 +215,12 @@ function findToastCalls(rawSource: string): ToastCall[] {
       }
     }
   }
+  return { objectNames, functionNames };
+}
+
+function findToastCalls(rawSource: string): ToastCall[] {
+  const { code: source, text } = maskSource(rawSource);
+  const { objectNames, functionNames } = collectBindings(source);
 
   const patterns: RegExp[] = [new RegExp(`\\buseToast\\(\\)\\s*${CALLEE}`, 'g')];
   if (objectNames.size > 0) {
@@ -261,8 +266,62 @@ function lifecycleKeys(): string[] {
   return [...keys].filter((key) => key.startsWith('containersView.toast.'));
 }
 
-function usesLifecycleMessage(call: ToastCall, keys: string[]): boolean {
-  if (keys.some((key) => call.args.includes(key))) return true;
+// Outside the lifecycle layer a toast binding may only be the receiver of a
+// direct call (`toast.x(...)` / `toast[k](...)`), so every emission stays
+// visible to the counts above. Returns one description per offending use.
+function findBindingMisuse(rawSource: string): string[] {
+  const { code: original } = maskSource(rawSource);
+  // Imports are fine; blank them so the bare `useToast` name is only seen in real uses.
+  let code = original.replaceAll(/\bimport\b[^;]*?\bfrom\s*['"][^'"]*['"]/g, (m) => blank(m));
+  const problems: string[] = [];
+  const receiver = new RegExp(`^\\s*${CALLEE}`);
+
+  // useToast() may only be bound by a declaration or be called on directly.
+  for (const match of code.matchAll(/\buseToast\b(?!\s*\()/g)) {
+    problems.push(`useToast referenced without being called at index ${match.index}`);
+  }
+  for (const match of code.matchAll(/\buseToast\s*\(\s*\)/g)) {
+    const before = code.slice(0, match.index);
+    const after = code.slice(match.index + match[0].length);
+    const declared = /\b(?:const|let|var)\s+(?:[A-Za-z_$][\w$]*|\{[^}]*\})\s*=\s*$/.test(before);
+    if (!declared && !receiver.test(after)) {
+      problems.push(`useToast() used as a value at index ${match.index}`);
+    }
+  }
+
+  const { objectNames, functionNames } = collectBindings(code);
+  // Blank the declarations themselves, then every remaining use must be a call receiver.
+  code = code.replaceAll(
+    /\b(?:const|let|var)\s+(?:[A-Za-z_$][\w$]*|\{[^}]*\})\s*=\s*useToast\s*\(\s*\)/g,
+    (m) => blank(m),
+  );
+  for (const name of objectNames) {
+    const pattern = new RegExp(`(?<![.\\w$])${escapeRegExp(name)}(?![\\w$])`, 'g');
+    for (const match of code.matchAll(pattern)) {
+      if (!receiver.test(code.slice(match.index + name.length))) {
+        problems.push(`toast binding "${name}" used as a value at index ${match.index}`);
+      }
+    }
+  }
+  for (const name of functionNames) {
+    const pattern = new RegExp(`(?<![.\\w$])${escapeRegExp(name)}(?![\\w$])(?!\\s*\\()`, 'g');
+    for (const match of code.matchAll(pattern)) {
+      problems.push(`toast function "${name}" used as a value at index ${match.index}`);
+    }
+  }
+  return problems;
+}
+
+function countLifecycleKeys(rawSource: string, keys: string[]): number {
+  const { text } = maskSource(rawSource);
+  return keys.reduce(
+    (total, key) =>
+      total + (text.match(new RegExp(`['"\`]${escapeRegExp(key)}['"\`]`, 'g'))?.length ?? 0),
+    0,
+  );
+}
+
+function usesLifecycleWording(call: ToastCall): boolean {
   const literals = call.args.match(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g) ?? [];
   return literals.some((literal) => LIFECYCLE_WORDING.test(literal));
 }
@@ -345,14 +404,49 @@ describe('toast architecture guard: detector', () => {
     expect(findToastCalls(source)).toEqual([]);
   });
 
-  it('flags lifecycle keys and wording in call arguments only', () => {
-    const keys = ['containersView.toast.updated'];
-    expect(
-      usesLifecycleMessage({ args: `t('containersView.toast.updated', { name })` }, keys),
-    ).toBe(true);
-    expect(usesLifecycleMessage({ args: `'Update failed for web'` }, keys)).toBe(true);
-    expect(usesLifecycleMessage({ args: `'Updated policy saved'` }, keys)).toBe(false);
-    expect(usesLifecycleMessage({ args: `t('approvalsView.toast.approved')` }, keys)).toBe(false);
+  it('counts lifecycle keys anywhere in a file, including laundered through a variable', () => {
+    const keys = ['containersView.toast.updated', 'containersView.toast.updateFailed'];
+    const laundered = `const m = t('containersView.toast.updated', { name });\ntoast.success(m);`;
+    expect(countLifecycleKeys(laundered, keys)).toBe(1);
+    expect(countLifecycleKeys(`const k = "containersView.toast.updateFailed";`, keys)).toBe(1);
+    expect(countLifecycleKeys(`t('containersView.toast.updateFailedWithReason')`, keys)).toBe(0);
+    expect(countLifecycleKeys(`// t('containersView.toast.updated')`, keys)).toBe(0);
+    expect(countLifecycleKeys(`t('approvalsView.toast.approved')`, keys)).toBe(0);
+  });
+
+  it('flags lifecycle wording in literal call arguments', () => {
+    expect(usesLifecycleWording({ args: `'Update failed for web'` })).toBe(true);
+    expect(usesLifecycleWording({ args: `'Updated policy saved'` })).toBe(false);
+  });
+
+  it.each([
+    ['passed as an argument', `const toast = useToast();\nshowFailure(toast);`],
+    ['put in an object', `const toast = useToast();\nhelper({ toast });`],
+    ['put in an array', `const toast = useToast();\nconst all = [toast];`],
+    ['returned', `const toast = useToast();\nfunction get() { return toast; }`],
+    ['reassigned to another name', `const toast = useToast();\nconst other = toast;`],
+    ['useToast() passed to a helper', `helper(useToast());`],
+    ['useToast() returned', `function get() { return useToast(); }`],
+    ['useToast passed by reference', `helper(useToast);`],
+    ['destructured function passed on', `const { success } = useToast();\nhelper(success);`],
+    ['aliased binding passed on', `const notify = useToast();\nrun(notify);`],
+  ])('flags a toast binding %s', (_label, source) => {
+    expect(findBindingMisuse(source)).not.toEqual([]);
+  });
+
+  it.each([
+    ['member calls', `const toast = useToast();\ntoast.success('a');\ntoast.error('b');`],
+    ['computed member calls', `const toast = useToast();\ntoast[kind]('a');\ntoast['error']('b');`],
+    ['chained useToast()', `useToast().warning('a');\nuseToast()['info']('b');`],
+    [
+      'destructured calls',
+      `const { success, error: fail } = useToast();\nsuccess('a');\nfail('b');`,
+    ],
+    ['an import of the composable', `import { useToast } from '../composables/useToast';`],
+    ['mentions in comments and strings', `// helper(toast)\nconst s = 'helper(useToast())';`],
+    ['an unrelated variable named like a field', `const x = { toast: 1 };\nfoo(x.toast);`],
+  ])('allows %s', (_label, source) => {
+    expect(findBindingMisuse(source)).toEqual([]);
   });
 
   it('detects import references to the toast composable and store', () => {
@@ -384,21 +478,34 @@ describe('toast architecture guard: ui/src', () => {
     expect(drift).toEqual([]);
   });
 
-  it('keeps update lifecycle outcome toasts inside the lifecycle layer', () => {
+  it('hands toast bindings to nobody outside the lifecycle layer', () => {
+    const offenders = outside.flatMap((file) =>
+      findBindingMisuse(sources.get(file)!).map(
+        (problem) => `${file}: ${problem}. Call toast where the binding is created instead.`,
+      ),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps update lifecycle outcome keys inside the lifecycle layer', () => {
     const keys = lifecycleKeys();
     expect(keys.length).toBeGreaterThan(0);
-    const hits = new Map<string, number>();
+    const hits: Record<string, number> = {};
     for (const file of outside) {
-      const n = findToastCalls(sources.get(file)!).filter((call) =>
-        usesLifecycleMessage(call, keys),
-      ).length;
-      if (n > 0) hits.set(file, n);
+      const n = countLifecycleKeys(sources.get(file)!, keys);
+      if (n > 0) hits[file] = n;
     }
-    const actual = Object.fromEntries([...hits].sort());
     const expected = Object.fromEntries(
       Object.entries(LIFECYCLE_KEY_EXEMPTIONS).map(([file, { max }]) => [file, max]),
     );
-    expect(actual).toEqual(expected);
+    expect(hits).toEqual(expected);
+  });
+
+  it('keeps update lifecycle wording out of toast messages outside the lifecycle layer', () => {
+    const offenders = outside.filter((file) =>
+      findToastCalls(sources.get(file)!).some(usesLifecycleWording),
+    );
+    expect(offenders).toEqual([]);
   });
 
   it('gives every allowlist entry a reason', () => {
