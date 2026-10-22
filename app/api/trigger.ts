@@ -238,7 +238,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
 /**
  * Run a specifically targeted remote trigger.
  */
-async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
+export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
   const { agent: agentName, type: triggerType, name: triggerName } = req.params;
 
   const agentClient = agent.getAgent(agentName);

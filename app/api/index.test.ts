@@ -252,6 +252,12 @@ function mockActualApiRouterStatsLifecycle() {
     }));
   }
 
+  vi.doMock('./trigger-routes.js', () => ({
+    initActions: vi.fn(() => './actions-router'),
+    initNotificationTriggers: vi.fn(() => './notification-triggers-router'),
+    deprecateLegacyTriggerRoutes: vi.fn(),
+  }));
+
   return { mockCreateContainerStatsAggregator, mockStatsAggregator };
 }
 

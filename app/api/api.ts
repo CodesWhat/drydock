@@ -39,6 +39,7 @@ import * as sseRouter from './sse.js';
 import * as statsRouter from './stats.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
+import * as triggerRoutes from './trigger-routes.js';
 import * as updateOperationsRouter from './update-operations.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
@@ -173,8 +174,12 @@ export function init(): express.Router {
   // Mount update-operations router (single-operation lookup by id)
   router.use('/update-operations', updateOperationsRouter.init());
 
-  // Mount trigger router
-  router.use('/triggers', triggerRouter.init());
+  // Mount category-specific trigger routers (/notifications is taken by notification rules)
+  router.use('/actions', triggerRoutes.initActions());
+  router.use('/notification-triggers', triggerRoutes.initNotificationTriggers());
+
+  // Deprecated alias for both categories; remove no earlier than v1.9.0
+  router.use('/triggers', triggerRoutes.deprecateLegacyTriggerRoutes, triggerRouter.init());
 
   // Mount notification rules router
   router.use('/notifications', notificationRouter.init());

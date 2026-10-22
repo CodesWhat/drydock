@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Prometheus lockout counters `drydock_auth_account_lockout_total` and `drydock_auth_ip_lockout_total`, labelled by provider, increment once each time a login lockout starts. The existing `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` gauges only show lockouts active at scrape time. The monitoring docs list the new counters and add an alert example and dashboard panel.
+- Category-specific trigger API routes that match the `DD_ACTION_*` / `DD_NOTIFICATION_*` split: `/api/v1/actions` (`docker`, `dockercompose`, `command`) and `/api/v1/notification-triggers` (every other provider). They list, get and run triggers with the same auth and response shapes as `/api/v1/triggers`, and a trigger of the other category returns 404. `/api/v1/notifications` stays the notification rules collection. The UI trigger service now uses the new routes, and the OpenAPI spec and API docs cover them.
+
+### Deprecated
+
+- `/api/v1/triggers` is deprecated in favor of `/api/v1/actions` and `/api/v1/notification-triggers`. It keeps working and now sends `Deprecation: true` and a `Link: <successor>; rel="successor-version"` header, and logs a one-time warning per process. Removal is planned no earlier than v1.9.0 (see DEPRECATIONS.md).
 
 ### Security
 
