@@ -3,6 +3,7 @@ import { mapApiContainer } from '@/utils/container-mapper';
 import {
   BLOCKER_SEVERITY,
   findBackendMaturityBlocked,
+  findMaturityLiftableAt,
   getHardBlockers,
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -452,5 +453,45 @@ describe('primaryBlockerForButton', () => {
     const hard = makeBlocker({ reason: 'security-scan-blocked' });
     const result = primaryBlockerForButton(makeEligibility({ blockers: [soft, hard] }));
     expect(result?.reason).toBe('security-scan-blocked');
+  });
+});
+
+describe('findMaturityLiftableAt', () => {
+  const blocker = (reason: string, liftableAt?: unknown) => ({ reason, liftableAt });
+
+  it('returns the earliest parseable liftableAt across the maturity blockers', () => {
+    expect(
+      findMaturityLiftableAt({
+        updateEligibility: {
+          blockers: [
+            blocker('maturity-not-reached', '2026-07-15T12:00:00.000Z'),
+            blocker('maturity-not-reached', '2026-07-14T12:00:00.000Z'),
+            blocker('maturity-not-reached', '2026-07-16T12:00:00.000Z'),
+          ],
+        },
+      }),
+    ).toBe('2026-07-14T12:00:00.000Z');
+  });
+
+  it('ignores non-maturity blockers, bad timestamps and malformed entries', () => {
+    expect(
+      findMaturityLiftableAt({
+        updateEligibility: {
+          blockers: [
+            null,
+            'nope',
+            blocker('security-scan-blocked', '2026-07-14T12:00:00.000Z'),
+            blocker('maturity-not-reached'),
+            blocker('maturity-not-reached', 'not-a-date'),
+          ],
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it('returns undefined without an eligibility payload or blockers array', () => {
+    expect(findMaturityLiftableAt({})).toBeUndefined();
+    expect(findMaturityLiftableAt({ updateEligibility: 'x' })).toBeUndefined();
+    expect(findMaturityLiftableAt({ updateEligibility: {} })).toBeUndefined();
   });
 });

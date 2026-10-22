@@ -127,6 +127,7 @@ function makeTemplateContext(
     resetColumns: vi.fn(),
     tt: (label: string) => ({ value: label, showDelay: 0 }),
     groupByStack: ref(false) as any,
+    groupByDependency: ref(false) as any,
     rechecking: ref(false),
     recheckAll: vi.fn(),
     expandAllGroups: vi.fn(),
@@ -360,5 +361,27 @@ describe('ContainersListContent', () => {
     await wrapper.find('[data-test="data-table-column-picker-reset"]').trigger('click');
 
     expect(context.resetColumns).toHaveBeenCalledOnce();
+  });
+
+  it('toggles dependency grouping from its own toolbar button', async () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+    const button = wrapper.get('[data-test="group-by-dependency"]');
+
+    expect(button.attributes('aria-label')).toBe('Group by dependency');
+    expect(button.classes()).not.toContain('dd-bg-elevated');
+
+    await button.trigger('click');
+
+    expect(context.groupByDependency.value).toBe(true);
+    expect(wrapper.get('[data-test="group-by-dependency"]').classes()).toContain('dd-bg-elevated');
+  });
+
+  it('offers expand and collapse all in dependency grouping too', () => {
+    const context = makeTemplateContext();
+    context.groupByDependency.value = true;
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.find('[data-test="collapse-all-groups"]').exists()).toBe(true);
   });
 });

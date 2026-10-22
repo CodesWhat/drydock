@@ -1,6 +1,7 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
+import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useScanLifecycle } from '../../composables/useScanLifecycle';
 import { useServerFeatures } from '../../composables/useServerFeatures';
@@ -40,6 +41,11 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
+import {
+  collectTransitiveChildIds,
+  type DependencyAdjacency,
+} from '../../utils/dependency-graph-view';
+import { findStaleParents, formatStaleParentNames } from '../../utils/dependency-update-guard';
 import { ApiError, errorMessage } from '../../utils/error';
 import {
   getPrimaryHardBlocker,
@@ -280,6 +286,16 @@ async function executeContainerActionState(args: {
   }
 }
 
+function getUpdatableGroupContainers(containers: Container[]): Container[] {
+  return containers.filter((container) => {
+    return (
+      container.newTag &&
+      container.bouncer !== 'blocked' &&
+      !hasHardBlocker(container.updateEligibility)
+    );
+  });
+}
+
 async function updateAllInGroupState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
@@ -302,13 +318,7 @@ async function updateAllInGroupState(args: {
     args.inputError.value = args.containerActionsDisabledReason;
     return;
   }
-  const updatableContainers = args.group.containers.filter((container) => {
-    return (
-      container.newTag &&
-      container.bouncer !== 'blocked' &&
-      !hasHardBlocker(container.updateEligibility)
-    );
-  });
+  const updatableContainers = getUpdatableGroupContainers(args.group.containers);
   const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   if (
     updatableContainers.some((container) => {
@@ -540,6 +550,8 @@ async function confirmDependencyGroupUpdateState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   target: ContainerActionTarget;
+  /** Ids the list currently shows. Chain members outside it are labelled in the dialog. */
+  shownIds?: ReadonlySet<string>;
   containerIdMap: Record<string, string>;
   inputError: Ref<string | null>;
   dependencyPreviewLoading: Ref<boolean>;
@@ -564,10 +576,21 @@ async function confirmDependencyGroupUpdateState(args: {
     // expectedContainerIds so the backend can bind the eventual update to
     // this same chain rather than whatever it happens to be at accept time.
     const expectedContainerIds = preview.waves.flatMap((wave) => wave.containers.map((c) => c.id));
+    // The backend only runs the whole connected chain (expectedContainerIds
+    // must match it exactly), so a member hidden by the current filter can't
+    // be left out. Name it in the dialog instead of updating it unannounced.
+    let hiddenCount = 0;
     const waveList = preview.waves
       .map((wave, index) => {
         const names = wave.containers
-          .map((c) => (c.actionKind === 'restart' ? `${c.name} (restart)` : c.name))
+          .map((c) => {
+            let label = c.actionKind === 'restart' ? `${c.name} (restart)` : c.name;
+            if (args.shownIds && !args.shownIds.has(c.id)) {
+              hiddenCount += 1;
+              label += ` (${args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenMarker')})`;
+            }
+            return label;
+          })
           .join(', ');
         return `${index + 1}. ${names}`;
       })
@@ -583,6 +606,11 @@ async function confirmDependencyGroupUpdateState(args: {
     if (waveList) {
       message += args.t('containerComponents.confirmDialogs.dependencyGroup.waveList', {
         list: waveList,
+      });
+    }
+    if (hiddenCount > 0) {
+      message += args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenNote', {
+        count: hiddenCount,
       });
     }
     if (preview.warnings.cycles.length > 0) {
@@ -828,8 +856,144 @@ function schedulePendingActionsPoll(args: {
   }, args.pendingActionsPollIntervalMs.value);
 }
 
+/**
+ * Builds the child-before-parent warning suffix + acceptLabel override for
+ * a single-container update confirmation (#219, roadmap 6.1). Only the
+ * per-row update/force-update path calls this — the stack "Update All"
+ * button has no confirm dialog today and stays as-is.
+ *
+ * A transitive parent is "stale" when it is not part of this dispatch (a
+ * one-container dispatch, so only `containerId` itself) AND already has a
+ * pending update of its own — updating the child now would leave it running
+ * against a parent that is about to change underneath it.
+ */
+function buildStaleParentsWarning(args: {
+  adjacency: DependencyAdjacency;
+  containerId: string | undefined;
+  name: string;
+  containers: Container[];
+  t: TranslateFn;
+}): { suffix: string; acceptLabel?: string } {
+  if (!args.containerId) {
+    return { suffix: '' };
+  }
+  const staleParents = findStaleParents({
+    adjacency: args.adjacency,
+    containerId: args.containerId,
+    dispatchIds: new Set([args.containerId]),
+    hasPendingUpdate: (id) => {
+      const container = args.containers.find((c) => c.id === id);
+      return container ? Boolean(container.newTag) : undefined;
+    },
+  });
+  if (staleParents.length === 0) {
+    return { suffix: '' };
+  }
+  const { names, overflow } = formatStaleParentNames(staleParents);
+  let suffix = `\n\n${args.t('containerComponents.dependencyGraph.staleParentsWarning', {
+    name: args.name,
+    parents: names,
+    count: staleParents.length,
+  })}`;
+  if (overflow > 0) {
+    suffix += ` ${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: overflow,
+    })}`;
+  }
+  return {
+    suffix,
+    acceptLabel: args.t('containerComponents.dependencyGraph.staleParentsAccept'),
+  };
+}
+
+/**
+ * Builds the "dependents are not updated with this" note for a single
+ * container's Update confirmation (#219). A single update never cascades to
+ * the containers that depend on it, so listing them tells the user what is
+ * left behind and points at the chain update that covers them.
+ */
+function buildDependentsNote(args: {
+  adjacency: DependencyAdjacency;
+  containerId: string | undefined;
+  name: string;
+  t: TranslateFn;
+}): string {
+  if (!args.containerId) {
+    return '';
+  }
+  const dependentIds = [...collectTransitiveChildIds(args.adjacency, args.containerId)];
+  if (dependentIds.length === 0) {
+    return '';
+  }
+  const { names, overflow } = formatStaleParentNames(
+    dependentIds.map((id) => {
+      const node = args.adjacency.nodeById.get(id);
+      return { id, name: node?.displayName || node?.name || id };
+    }),
+  );
+  let note = `\n\n${args.t('containerComponents.dependencyGraph.dependentsNote', {
+    name: args.name,
+    dependents: names,
+    count: dependentIds.length,
+  })}`;
+  if (overflow > 0) {
+    note += ` ${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: overflow,
+    })}`;
+  }
+  return note;
+}
+
+/**
+ * Builds the child-before-parent warning body for a stack/group "Update All"
+ * (#219). `dispatchIds` is the whole accepted set, so a parent that is part of
+ * the same update never counts as stale: the backend orders those parent-first.
+ * Returns null when nothing in the batch has a stale parent.
+ */
+function buildGroupStaleParentsMessage(args: {
+  adjacency: DependencyAdjacency;
+  updatable: Container[];
+  containers: Container[];
+  t: TranslateFn;
+}): string | null {
+  const dispatchIds = new Set(args.updatable.map((container) => container.id));
+  const lines: string[] = [];
+  for (const container of args.updatable) {
+    const staleParents = findStaleParents({
+      adjacency: args.adjacency,
+      containerId: container.id,
+      dispatchIds,
+      hasPendingUpdate: (id) => {
+        const parent = args.containers.find((candidate) => candidate.id === id);
+        return parent ? Boolean(parent.newTag) : undefined;
+      },
+    });
+    if (staleParents.length > 0) {
+      lines.push(
+        args.t('containerComponents.dependencyGraph.groupStaleLine', {
+          name: container.name,
+          parents: formatStaleParentNames(staleParents).names,
+        }),
+      );
+    }
+  }
+  if (lines.length === 0) {
+    return null;
+  }
+  const shown = lines.slice(0, 5);
+  let list = shown.map((line) => `- ${line}`).join('\n');
+  if (lines.length > shown.length) {
+    list += `\n${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: lines.length - shown.length,
+    })}`;
+  }
+  return `${args.t('containerComponents.dependencyGraph.groupStaleWarning')}\n\n${list}`;
+}
+
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
+  containerIdMap: Readonly<Ref<Record<string, string>>>;
+  containers: Readonly<Ref<Container[]>>;
   executeAction: (
     target: ContainerActionTarget,
     action: (id: string) => Promise<unknown>,
@@ -851,6 +1015,8 @@ function createConfirmHandlers(args: {
   updateMode: Readonly<Ref<UpdateMode>>;
   t: TranslateFn;
 }) {
+  const { adjacency } = useDependencyGraph();
+
   function confirmStop(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
@@ -893,11 +1059,21 @@ function createConfirmHandlers(args: {
       return;
     }
     const name = typeof target === 'string' ? target : target.name;
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.forceUpdate.header'),
-      message: args.t('containerComponents.confirmDialogs.forceUpdate.message', { name }),
+      message: `${args.t('containerComponents.confirmDialogs.forceUpdate.message', { name })}${staleParents.suffix}`,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
-      acceptLabel: args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
+      acceptLabel:
+        staleParents.acceptLabel ??
+        args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
       severity: 'warn',
       accept: () => args.forceUpdate(target),
     });
@@ -952,14 +1128,30 @@ function createConfirmHandlers(args: {
       message = `${message}${args.t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list })}`;
     }
 
+    const { containerId } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    const staleParents = buildStaleParentsWarning({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      containers: args.containers.value,
+      t: args.t,
+    });
+    message = `${message}${staleParents.suffix}${buildDependentsNote({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      t: args.t,
+    })}`;
+
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.update.header'),
       message,
       rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
       acceptLabel:
-        softBlockers.length > 0
+        staleParents.acceptLabel ??
+        (softBlockers.length > 0
           ? args.t('containerComponents.confirmDialogs.update.acceptLabelOverride')
-          : args.t('containerComponents.confirmDialogs.update.acceptLabel'),
+          : args.t('containerComponents.confirmDialogs.update.acceptLabel')),
       severity: 'warn',
       link:
         softBlockers.length > 0
@@ -1200,6 +1392,7 @@ function createContainerActionHandlers(args: {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { adjacency: dependencyAdjacency } = useDependencyGraph();
   const { t } = useI18n();
   const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
@@ -1522,6 +1715,29 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   async function updateAllInGroup(group: ContainerActionGroup) {
+    const staleMessage = containerActionsEnabled.value
+      ? buildGroupStaleParentsMessage({
+          adjacency: dependencyAdjacency.value,
+          updatable: getUpdatableGroupContainers(group.containers),
+          containers: input.containers.value,
+          t: t as TranslateFn,
+        })
+      : null;
+    if (staleMessage === null) {
+      await runUpdateAllInGroup(group);
+      return;
+    }
+    confirm.require({
+      header: t('containerComponents.dependencyGraph.groupStaleHeader'),
+      message: staleMessage,
+      rejectLabel: t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: t('containerComponents.dependencyGraph.staleParentsAccept'),
+      severity: 'warn',
+      accept: () => runUpdateAllInGroup(group),
+    });
+  }
+
+  async function runUpdateAllInGroup(group: ContainerActionGroup) {
     await updateAllInGroupState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
@@ -1624,6 +1840,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     confirmUpdate,
   } = createConfirmHandlers({
     confirm,
+    containerIdMap: input.containerIdMap,
+    containers: input.containers,
     executeAction,
     forceUpdate,
     deleteContainer,
@@ -1634,11 +1852,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
     t: t as TranslateFn,
   });
 
-  async function confirmDependencyGroupUpdate(target: ContainerActionTarget) {
+  async function confirmDependencyGroupUpdate(
+    target: ContainerActionTarget,
+    shownIds?: ReadonlySet<string>,
+  ) {
     await confirmDependencyGroupUpdateState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       target,
+      shownIds,
       containerIdMap: input.containerIdMap.value,
       inputError: input.error,
       dependencyPreviewLoading: dependencyGroupPreviewLoading,

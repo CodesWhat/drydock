@@ -643,7 +643,7 @@ describe('Backup Router', () => {
       mockGetBackupsByName.mockReturnValue([latestBackup]);
 
       const mockCurrentContainer = {};
-      const mockContainerSpec = { State: { Running: true } };
+      const mockContainerSpec = { Id: 'old-id', State: { Running: true } };
       const mockTrigger = {
         type: 'docker',
         getWatcher: vi.fn(() => ({ dockerApi: {} })),
@@ -652,6 +652,7 @@ describe('Backup Router', () => {
         inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
         stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
         recreateContainer: vi.fn().mockResolvedValue(undefined),
+        recreateSharedNamespaceDependents: vi.fn().mockResolvedValue([]),
       };
       mockGetState.mockReturnValue({
         trigger: { 'docker.default': mockTrigger },
@@ -680,6 +681,13 @@ describe('Backup Router', () => {
         'library/nginx@sha256:old',
         container,
         expect.anything(),
+      );
+      expect(mockTrigger.recreateSharedNamespaceDependents).toHaveBeenCalledWith(
+        {},
+        mockContainerSpec.Id,
+        'nginx',
+        expect.anything(),
+        container,
       );
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({

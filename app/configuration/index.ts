@@ -19,7 +19,7 @@ const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
+  'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c';
 const DEFAULT_GRYPE_WORKER_IMAGE =
   'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
 const DEFAULT_SYFT_WORKER_IMAGE =
@@ -247,30 +247,32 @@ export function getPortwingAuthorizedKeysPath(): string | undefined {
   return raw || undefined;
 }
 
+// Longest suffix first: `_MAINTENANCE_WINDOW` is a prefix of the other two as a string, so a
+// shorter-first walk would never reach `_MAINTENANCE_WINDOW_TZ` / `_MAINTENANCE_WINDOW_SCOPE`
+// if the match were ever loosened from endsWith to includes.
+const WATCHER_MAINTENANCE_ENV_ALIASES = [
+  ['_MAINTENANCE_WINDOW_SCOPE', 'maintenancewindowscope'],
+  ['_MAINTENANCE_WINDOW_TZ', 'maintenancewindowtz'],
+  ['_MAINTENANCE_WINDOW', 'maintenancewindow'],
+] as const;
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';
-  const tzSuffix = '_MAINTENANCE_WINDOW_TZ';
-  const windowSuffix = '_MAINTENANCE_WINDOW';
 
   if (!envKeyUpper.startsWith(prefix)) {
     return undefined;
   }
 
-  if (envKeyUpper.endsWith(tzSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -tzSuffix.length);
+  for (const [suffix, key] of WATCHER_MAINTENANCE_ENV_ALIASES) {
+    if (!envKeyUpper.endsWith(suffix)) {
+      continue;
+    }
+    const watcherName = envKeyUpper.slice(prefix.length, -suffix.length);
     if (!watcherName) {
       return undefined;
     }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindowtz' };
-  }
-
-  if (envKeyUpper.endsWith(windowSuffix)) {
-    const watcherName = envKeyUpper.slice(prefix.length, -windowSuffix.length);
-    if (!watcherName) {
-      return undefined;
-    }
-    return { watcherName: watcherName.toLowerCase(), key: 'maintenancewindow' };
+    return { watcherName: watcherName.toLowerCase(), key };
   }
 
   return undefined;

@@ -32,6 +32,8 @@ export interface PreferencesSchema {
     viewMode: ViewMode;
     tableActions: 'icons' | 'buttons';
     groupByStack: boolean;
+    /** Group the list into dependency trees. Mutually exclusive with groupByStack. */
+    groupByDependency: boolean;
     /** UI-managed container identity key → group name overrides. */
     manualGroups: Record<string, string>;
     sort: { key: string; asc: boolean };
@@ -123,6 +125,7 @@ export const DEFAULTS: PreferencesSchema = {
     viewMode: 'table',
     tableActions: 'icons',
     groupByStack: false,
+    groupByDependency: false,
     manualGroups: {},
     sort: { key: 'name', asc: true },
     filters: {

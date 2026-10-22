@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
+import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { useDependencyGraph } from '../../composables/useDependencyGraph';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
+import { getDependencyComponentIds } from '../../utils/dependency-graph-view';
 import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
@@ -14,6 +17,7 @@ import { formatShortDigest } from '../../utils/digest-format';
 import { formatUptimeFromIso } from '../../utils/uptime';
 import { updateInsightColor } from '../../utils/display';
 import { useNow } from '../../composables/useNow';
+import { formatLiftCountdown } from '../../composables/useUpdateStatus';
 import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
   getPrimaryHardBlocker,
@@ -25,6 +29,7 @@ import {
 import { getUpdateKindLabel as resolveUpdateKindLabel } from '../../utils/update-kind-labels';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import ContainerDependencyRow from './ContainerDependencyRow.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import ContainerPortEntry from './ContainerPortEntry.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
@@ -37,6 +42,7 @@ const {
   filteredContainers,
   renderGroups,
   groupByStack,
+  groupByDependency,
   containerViewMode,
   containerCardReflowForced,
   toggleGroupCollapse,
@@ -69,6 +75,7 @@ const {
   recheckContainer,
   scanContainer,
   confirmForceUpdate,
+  confirmDependencyGroupUpdate,
   skipUpdate,
   closeActionsMenu,
   confirmDelete,
@@ -87,13 +94,22 @@ const {
   updateMode: configuredUpdateMode,
 } = useContainersViewTemplateContext();
 const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
+const { adjacency, isExpanded, toggleExpanded } = useDependencyGraph();
 const { visibleColumns } = useColumnVisibility();
 const nowMs = useNow(
   30_000,
-  () => visibleColumns.value.has('uptime') || containerViewMode.value === 'cards',
+  () =>
+    visibleColumns.value.has('uptime') ||
+    containerViewMode.value === 'cards' ||
+    displayContainers.value.some((c) => Boolean(getContainerListPolicyState(c).liftableAt)),
 );
 const { t, te } = useI18n();
 const { resolveHost } = useAgentHosts();
+
+function getMaturityCountdownLabel(c: Container): string | undefined {
+  const liftableAt = getContainerListPolicyState(c).liftableAt;
+  return liftableAt ? formatLiftCountdown(liftableAt, nowMs.value) : undefined;
+}
 
 function getEnrichedPorts(c: Container) {
   return enrichContainerPorts(
@@ -143,7 +159,13 @@ type ContainerTableRow = DisplayContainer & {
   __source: DisplayContainer;
 };
 
-type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow;
+interface DependencyTableRow {
+  __rowType: 'dependency';
+  __rowKey: string;
+  container: DisplayContainer;
+}
+
+type GroupedTableRow = GroupHeaderTableRow | ContainerTableRow | DependencyTableRow;
 
 function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow {
   return row.__rowType === 'group';
@@ -151,6 +173,10 @@ function isGroupHeaderTableRow(row: GroupedTableRow): row is GroupHeaderTableRow
 
 function isContainerTableRow(row: GroupedTableRow): row is ContainerTableRow {
   return row.__rowType === 'container';
+}
+
+function isDependencyTableRow(row: GroupedTableRow): row is DependencyTableRow {
+  return row.__rowType === 'dependency';
 }
 
 // Build the row using the container as a prototype so field reads (c.name,
@@ -176,10 +202,71 @@ function makeContainerTableRow(container: DisplayContainer, groupKey: string): C
   return row;
 }
 
+// Dependency rows are rebuilt fresh every time (never cached in the
+// WeakMap above) — they're cheap, presentational-only, and their content
+// (parent/child names, cycle membership) comes from the dependency graph
+// singleton rather than the container itself, so there's no staleness risk
+// to guard against by memoizing on the container reference.
+function makeDependencyTableRow(container: DisplayContainer): DependencyTableRow {
+  return {
+    __rowType: 'dependency',
+    __rowKey: `dependency:${getContainerViewKey(container)}`,
+    container,
+  };
+}
+
+function pushContainerRow(rows: GroupedTableRow[], container: DisplayContainer, groupKey: string) {
+  rows.push(makeContainerTableRow(container, groupKey));
+  if (isExpanded(container.id)) {
+    rows.push(makeDependencyTableRow(container));
+  }
+}
+
+const isGrouped = computed(() => groupByStack.value || groupByDependency.value);
+
+// Indent level per container id, only populated in the dependency view.
+const dependencyDepthById = computed(() => {
+  const depths = new Map<string, number>();
+  if (groupByDependency.value) {
+    for (const group of renderGroups.value) {
+      for (const [id, depth] of Object.entries(group.dependencyDepths ?? {})) {
+        depths.set(id, depth);
+      }
+    }
+  }
+  return depths;
+});
+
+function getNameIndent(containerId: string) {
+  const depth = dependencyDepthById.value.get(containerId) ?? 0;
+  return depth > 0 ? { paddingInlineStart: `${depth * 1.25}rem` } : undefined;
+}
+
+// What the current filter leaves visible. The chain update still covers the
+// whole connected chain, so the confirmation labels members outside this set.
+const shownContainerIds = computed(
+  () => new Set(displayContainers.value.map((container) => container.id)),
+);
+
+// A dependency-view group updates as a chain (previewed, wave-ordered, confirmed);
+// every other group keeps the plain bulk update.
+function handleGroupUpdateAll(group: ContainersViewRenderGroup) {
+  if (group.dependencyRootId) {
+    const root = group.containers.find((container) => container.id === group.dependencyRootId);
+    if (root) {
+      confirmDependencyGroupUpdate(root, shownContainerIds.value);
+      return;
+    }
+  }
+  updateAllInGroup(group);
+}
+
 const tableRows = computed<GroupedTableRow[]>(() => {
-  if (!groupByStack.value) {
+  if (!isGrouped.value) {
     const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
-    return flat.map((container) => makeContainerTableRow(container, '__flat__'));
+    const rows: GroupedTableRow[] = [];
+    flat.forEach((container) => pushContainerRow(rows, container, '__flat__'));
+    return rows;
   }
 
   const rows: GroupedTableRow[] = [];
@@ -191,9 +278,7 @@ const tableRows = computed<GroupedTableRow[]>(() => {
       isFirst: index === 0,
     });
     if (!collapsedGroups.value.has(group.key)) {
-      rows.push(
-        ...group.containers.map((container) => makeContainerTableRow(container, group.key)),
-      );
+      group.containers.forEach((container) => pushContainerRow(rows, container, group.key));
     }
   });
   return rows;
@@ -455,7 +540,8 @@ function getContainerUpdateStateTooltip(
 }
 
 function isTableRowFullWidth(row: Record<string, unknown>) {
-  return isGroupHeaderTableRow(row as GroupedTableRow);
+  const typedRow = row as GroupedTableRow;
+  return isGroupHeaderTableRow(typedRow) || isDependencyTableRow(typedRow);
 }
 
 function isTableRowInteractive(row: Record<string, unknown>) {
@@ -599,7 +685,16 @@ onScopeDispose(() => {
             :tt="tt"
             :show-update-controls="updateMode !== 'notify'"
             @toggle="toggleGroupCollapse"
-            @update-all="updateAllInGroup($event)"
+            @update-all="handleGroupUpdateAll($event)"
+          />
+          <ContainerDependencyRow
+            v-else-if="isDependencyTableRow(row)"
+            :container="row.container"
+            :adjacency="adjacency"
+            :cycle="adjacency.cycleMemberIds.has(row.container.id)"
+            :group-size="getDependencyComponentIds(adjacency, row.container.id).size"
+            :container-actions-enabled="containerActionsEnabled"
+            @update-group="confirmDependencyGroupUpdate($event, shownContainerIds)"
           />
         </template>
         <!-- Container icon (own column) -->
@@ -629,9 +724,60 @@ onScopeDispose(() => {
 
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
-          <div class="min-w-0">
+          <div class="min-w-0" :style="getNameIndent(c.id)" data-test="container-name-cell">
               <div class="flex items-center gap-2">
+                <AppIconButton
+                  v-if="c.dependencyCount || c.dependentCount"
+                  :icon="isExpanded(c.id) ? 'chevron-down' : 'chevron-right'"
+                  size="xs"
+                  variant="muted"
+                  class="shrink-0"
+                  :aria-label="t('containerComponents.dependencyGraph.toggle')"
+                  :aria-expanded="isExpanded(c.id)"
+                  data-test="container-dependency-toggle"
+                  @click.stop="toggleExpanded(c.id)"
+                />
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
+                <AppBadge
+                  v-if="c.dependencyCount"
+                  tone="neutral"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-dependency-count"
+                >
+                  {{ t('containerComponents.dependencyGraph.dependsOnCount', { count: c.dependencyCount }) }}
+                </AppBadge>
+                <AppBadge
+                  v-if="c.dependentCount"
+                  tone="info"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-dependent-count"
+                >
+                  {{ t('containerComponents.dependencyGraph.requiredByCount', { count: c.dependentCount }) }}
+                </AppBadge>
+                <AppBadge
+                  v-if="adjacency.cycleMemberIds.has(c.id)"
+                  tone="warning"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-cycle-badge"
+                >
+                  {{ t('containerComponents.dependencyGraph.cycle') }}
+                </AppBadge>
+                <AppBadge
+                  v-if="adjacency.unresolvedTargetsByNodeId.has(c.id)"
+                  tone="warning"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-unresolved-badge"
+                >
+                  {{
+                    t('containerComponents.dependencyGraph.unresolved', {
+                      targets: adjacency.unresolvedTargetsByNodeId.get(c.id)?.join(', '),
+                    })
+                  }}
+                </AppBadge>
               </div>
               <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ c.image }}</div>
           </div>
@@ -792,9 +938,12 @@ onScopeDispose(() => {
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity', nowMs))">
                 <AppIcon name="clock" :size="14" />
               </span>
+              <span v-if="getContainerListPolicyState(c).maturityBlocked && getMaturityCountdownLabel(c)"
+                    class="text-2xs dd-text-muted"
+                    data-test="maturity-countdown-label">{{ getMaturityCountdownLabel(c) }}</span>
             </div>
           </div>
           </div>
@@ -1137,9 +1286,12 @@ onScopeDispose(() => {
                     class="inline-flex items-center justify-center"
                     style="color: var(--dd-primary);"
                     :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity', nowMs))">
                 <AppIcon name="clock" :size="12" />
               </span>
+              <span v-if="getContainerListPolicyState(c).maturityBlocked && getMaturityCountdownLabel(c)"
+                    class="text-2xs dd-text-muted"
+                    data-test="maturity-countdown-label">{{ getMaturityCountdownLabel(c) }}</span>
             </div>
           </div>
 

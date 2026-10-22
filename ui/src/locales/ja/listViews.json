@@ -272,7 +272,11 @@
       "scannerTooltipServer": "Trivy：{message} · サーバー：{server}",
       "cosignTooltip": "Cosign：{message}",
       "sbomEnabled": "SBOM 生成が有効です（{formats}）",
-      "sbomDisabled": "SBOM 生成が無効です"
+      "sbomDisabled": "SBOM 生成が無効です",
+      "assetVersion": "バージョン {version}",
+      "assetDigest": "イメージ {digest}",
+      "assetDatabaseUpdated": "データベース更新 {updatedAt}",
+      "assetCacheUpdated": "キャッシュ更新 {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "脆弱性データがまだありません",

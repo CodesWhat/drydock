@@ -43,6 +43,7 @@
       "updateAll": "Actualizar todo",
       "noUpdates": "No hay actualizaciones disponibles",
       "securityBlocked": "Bloqueado por seguridad",
+      "maturityCountdown": "Se desbloquea en {countdown} ({date})",
       "updateContainer": "Actualizar contenedor",
       "compactSingle": "{count} actualización disponible",
       "compactPlural": "{count} actualizaciones disponibles",

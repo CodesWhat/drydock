@@ -1919,6 +1919,107 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('resolveComposeServiceContext finds a service defined in an included compose file and writes to that file', async () => {
+    trigger.configuration.file = '/opt/drydock/test/compose.yaml';
+    trigger.setHostToContainerBindMountCache([]);
+    fs.access.mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFile) => {
+      if (composeFile === '/opt/drydock/test/compose.yaml') {
+        return { include: ['svc/web.yaml'], services: { main: { image: 'busybox:1.36' } } };
+      }
+      return { services: { web: { image: 'nginx:1.0.0' } } };
+    });
+
+    const { composeFile, composeFiles, service } = await trigger.resolveComposeServiceContext(
+      {
+        name: 'web',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project.config_files': '/opt/drydock/test/compose.yaml',
+          'com.docker.compose.service': 'web',
+        },
+        image: { registry: { name: 'hub' }, name: 'nginx', tag: { value: '1.0.0' } },
+      },
+      'nginx:1.0.0',
+    );
+
+    expect(composeFiles).toEqual([
+      '/opt/drydock/test/compose.yaml',
+      '/opt/drydock/test/svc/web.yaml',
+    ]);
+    expect(service).toBe('web');
+    expect(composeFile).toBe('/opt/drydock/test/svc/web.yaml');
+  });
+
+  test('resolveComposeServiceContext writes to the override file when an included file defines the same service', async () => {
+    trigger.configuration.file = '/opt/drydock/test/compose.yaml';
+    trigger.setHostToContainerBindMountCache([]);
+    fs.access.mockResolvedValue(undefined);
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFile) => {
+      if (composeFile === '/opt/drydock/test/compose.yaml') {
+        return { include: ['inc.yaml'] };
+      }
+      if (composeFile === '/opt/drydock/test/inc.yaml') {
+        return { services: { app: { image: 'nginx:1' } } };
+      }
+      return { services: { app: { image: 'nginx:2' } } };
+    });
+
+    const { composeFile, composeFiles } = await trigger.resolveComposeServiceContext(
+      {
+        name: 'app',
+        watcher: 'local',
+        labels: {
+          'com.docker.compose.project.config_files':
+            '/opt/drydock/test/compose.yaml,/opt/drydock/test/override.yaml',
+          'com.docker.compose.service': 'app',
+        },
+        image: { registry: { name: 'hub' }, name: 'nginx', tag: { value: '2' } },
+      },
+      'nginx:2',
+    );
+
+    expect(composeFiles).toEqual([
+      '/opt/drydock/test/compose.yaml',
+      '/opt/drydock/test/inc.yaml',
+      '/opt/drydock/test/override.yaml',
+    ]);
+    expect(composeFile).toBe('/opt/drydock/test/override.yaml');
+  });
+
+  test('expandComposeFilesWithIncludes follows relative and absolute include paths in order', async () => {
+    trigger.configuration.file = '/opt/drydock/test/compose.yaml';
+    trigger.setHostToContainerBindMountCache([]);
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFile) =>
+      composeFile === '/opt/drydock/test/compose.yaml'
+        ? { include: ['inside.yaml', '/opt/drydock/test/abs.yaml'] }
+        : {},
+    );
+
+    await expect(
+      trigger.expandComposeFilesWithIncludes(['/opt/drydock/test/compose.yaml']),
+    ).resolves.toEqual([
+      '/opt/drydock/test/compose.yaml',
+      '/opt/drydock/test/inside.yaml',
+      '/opt/drydock/test/abs.yaml',
+    ]);
+  });
+
+  test('expandComposeFilesWithIncludes logs and skips an interpolated include path', async () => {
+    trigger.configuration.file = '/opt/drydock/test/compose.yaml';
+    trigger.setHostToContainerBindMountCache([]);
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue({
+      include: ['${STACK_DIR}/web.yaml'],
+    });
+
+    await expect(
+      trigger.expandComposeFilesWithIncludes(['/opt/drydock/test/compose.yaml']),
+    ).resolves.toEqual(['/opt/drydock/test/compose.yaml']);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('interpolated include paths are not resolved'),
+    );
+  });
+
   test('resolveComposeServiceContext should throw when no compose file is configured', async () => {
     trigger.configuration.file = undefined;
 
@@ -1960,9 +2061,11 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('resolveComposeServiceContext should return compose file chain and deterministic writable file', async () => {
-    vi.spyOn(trigger, 'getComposeFileAsObject')
-      .mockResolvedValueOnce(makeCompose({ nginx: { image: 'nginx:1.0.0' } }))
-      .mockResolvedValueOnce(makeCompose({ nginx: { image: 'nginx:1.1.0' } }));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockImplementation(async (composeFile) =>
+      composeFile === '/opt/drydock/test/stack.yml'
+        ? makeCompose({ nginx: { image: 'nginx:1.0.0' } })
+        : makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
 
     const context = await trigger.resolveComposeServiceContext(
       {

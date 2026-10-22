@@ -38,7 +38,10 @@ vi.mock('../../../prometheus/watcher');
 vi.mock('parse-docker-image-name');
 vi.mock('node:fs');
 vi.mock('axios');
-vi.mock('./maintenance.js', () => ({
+// Partial: isScanGatedByMaintenanceWindow stays real so the maintenancewindowscope
+// branches are exercised rather than restated here.
+vi.mock('./maintenance.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./maintenance.js')>()),
   isInMaintenanceWindow: vi.fn(() => true),
   getNextMaintenanceWindow: vi.fn(() => undefined),
   hasNarrowMinuteField: vi.fn(() => false),

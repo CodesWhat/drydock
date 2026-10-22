@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Hidden: Pinned",
       "filtersLabel": "Filters",
       "filteredContainers": "Filtered to {count} container | Filtered to {count} containers",
-      "clearContainerIdFilter": "Clear container ID filter"
+      "clearContainerIdFilter": "Clear container ID filter",
+      "groupByDependencyTooltip": "Group by dependency"
     },
     "stats": {
       "paused": "Paused",
@@ -505,7 +506,9 @@
         "failedTitle": "Dependency chain update failed",
         "failedDetail": "Failed to update the dependency chain for {name}.",
         "staleChainTitle": "Dependency chain has changed",
-        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming."
+        "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming.",
+        "hiddenMarker": "not shown by the current filter",
+        "hiddenNote": "\n\n{count} container in this chain is hidden by the current filter and will be updated too. | \n\n{count} containers in this chain are hidden by the current filter and will be updated too."
       }
     },
     "actionToasts": {
@@ -542,6 +545,7 @@
         "snoozed": "Updates snoozed",
         "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
         "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
+        "maturityCountdown": "{message}. Unlocks in {countdown} ({date})",
         "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
         "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
         "maturityAllowAll": "Maturity policy allows all updates",
@@ -672,6 +676,23 @@
     },
     "logViewer": {
       "invalidRegex": "Invalid regular expression"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Depends on",
+      "requiredBy": "Required by",
+      "cycle": "Part of a dependency cycle",
+      "toggle": "Show dependencies",
+      "updateGroup": "Update dependency group ({count})",
+      "staleParentsWarning": "{name} depends on {parents}, which also has an update pending. Updating the child first can leave it running against an outdated parent. | {name} depends on {parents}, which also have updates pending. Updating the child first can leave it running against an outdated parent.",
+      "staleParentsOverflow": "and {count} more",
+      "staleParentsAccept": "Update anyway",
+      "dependsOnCount": "Depends on {count}",
+      "requiredByCount": "Required by {count}",
+      "unresolved": "Missing dependency: {targets}",
+      "dependentsNote": "{dependents} depends on {name} and is not updated or restarted with it. Use Update dependency group to update the whole chain in order. | {dependents} depend on {name} and are not updated or restarted with it. Use Update dependency group to update the whole chain in order.",
+      "groupStaleHeader": "Parents have updates pending",
+      "groupStaleWarning": "Some containers in this update depend on a parent that also has an update pending but is not part of it. Updating a child without its parent can leave it running against an outdated parent.",
+      "groupStaleLine": "{name} depends on {parents}"
     }
   }
 }

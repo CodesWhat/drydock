@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Gizli: Sabitlendi",
       "filtersLabel": "Filtreler",
       "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi",
-      "clearContainerIdFilter": "Konteyner kimliği filtresini temizle"
+      "clearContainerIdFilter": "Konteyner kimliği filtresini temizle",
+      "groupByDependencyTooltip": "Bağımlılığa göre grupla"
     },
     "stats": {
       "paused": "Duraklatıldı",
@@ -505,7 +506,9 @@
         "failedTitle": "Bağımlılık zinciri güncellemesi başarısız oldu",
         "failedDetail": "{name} için bağımlılık zinciri güncellenemedi.",
         "staleChainTitle": "Bağımlılık zinciri değişti",
-        "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
+        "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın.",
+        "hiddenMarker": "geçerli filtre tarafından gösterilmiyor",
+        "hiddenNote": "\n\nBu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve o da güncellenecek. | \n\nBu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve onlar da güncellenecek."
       }
     },
     "actionToasts": {
@@ -542,6 +545,7 @@
         "snoozed": "Güncellemeler ertelendi",
         "maturityBlockedSingular": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
         "maturityBlockedPlural": "Yalnızca olgun politikası {days} günden genç güncellemeleri engeller",
+        "maturityCountdown": "{message}. {countdown} sonra açılır ({date})",
         "maturityActiveSingular": "Yalnızca olgun politikası etkin ({days} gün minimum yaş)",
         "maturityActivePlural": "Yalnızca olgun politikası etkin ({days} gün minimum yaş)",
         "maturityAllowAll": "Olgunluk politikası tüm güncellemelere izin veriyor",
@@ -672,6 +676,23 @@
     },
     "logViewer": {
       "invalidRegex": "Geçersiz normal ifade"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Şuna bağlı",
+      "requiredBy": "Şunun tarafından gerekli",
+      "cycle": "Bir bağımlılık döngüsünün parçası",
+      "toggle": "Bağımlılıkları göster",
+      "updateGroup": "Bağımlılık grubunu güncelle ({count})",
+      "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
+      "staleParentsOverflow": "ve {count} tane daha",
+      "staleParentsAccept": "Yine de güncelle",
+      "dependsOnCount": "{count} bağımlılığa sahip",
+      "requiredByCount": "{count} kapsayıcı tarafından gerekli",
+      "unresolved": "Eksik bağımlılık: {targets}",
+      "dependentsNote": "{dependents}, {name} kapsayıcısına bağımlıdır ve onunla birlikte güncellenmez veya yeniden başlatılmaz. Tüm zinciri sırayla güncellemek için Bağımlılık grubunu güncelle seçeneğini kullanın. | {dependents}, {name} kapsayıcısına bağımlıdır ve onunla birlikte güncellenmez veya yeniden başlatılmaz. Tüm zinciri sırayla güncellemek için Bağımlılık grubunu güncelle seçeneğini kullanın.",
+      "groupStaleHeader": "Üst kapsayıcıların bekleyen güncellemeleri var",
+      "groupStaleWarning": "Bu güncellemedeki bazı kapsayıcılar, bekleyen bir güncellemesi olan ama bu güncellemeye dahil olmayan bir üst kapsayıcıya bağımlıdır. Bir alt kapsayıcıyı üstü olmadan güncellemek, onu eski bir üst kapsayıcıyla çalışır halde bırakabilir.",
+      "groupStaleLine": "{name}, {parents} kapsayıcısına bağımlıdır"
     }
   }
 }

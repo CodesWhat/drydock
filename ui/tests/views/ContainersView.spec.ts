@@ -1,5 +1,6 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, reactive, ref } from 'vue';
+import { resetDependencyGraphState, useDependencyGraph } from '@/composables/useDependencyGraph';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { findStub } from '../helpers/find-stub';
@@ -438,6 +439,7 @@ async function mountContainersView(
 
 describe('ContainersView', () => {
   beforeEach(async () => {
+    resetDependencyGraphState();
     vi.clearAllMocks();
     mockRouterReplace.mockResolvedValue(undefined);
     mockContainerActionsEnabled.value = true;
@@ -2441,6 +2443,107 @@ describe('ContainersView', () => {
       flushPreferences();
       const prefs2 = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
       expect(prefs2.containers.groupByStack).toBe(false);
+    });
+
+    describe('dependency grouping (#219)', () => {
+      it('re-renders a row when only its dependency counts change', async () => {
+        const first = makeContainer({ id: 'c-web', name: 'web' });
+        const wrapper = await mountContainersView([first]);
+        const vm = wrapper.vm as any;
+        const before = vm.containers[0];
+        expect(before.dependencyCount ?? 0).toBe(0);
+
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([
+          { ...first, dependencyCount: 2, dependentCount: 1 },
+        ]);
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers[0].dependencyCount).toBe(2);
+        expect(vm.containers[0].dependentCount).toBe(1);
+      });
+
+      function seedDependencyGraph() {
+        useDependencyGraph().graph.value = {
+          nodes: [
+            { id: 'c-db', name: 'db', displayName: 'db' },
+            { id: 'c-web', name: 'web', displayName: 'web' },
+            { id: 'c-api', name: 'api', displayName: 'api' },
+          ],
+          edges: [
+            { from: 'c-web', to: 'c-db', action: 'update', source: 'label' },
+            { from: 'c-api', to: 'c-db', action: 'update', source: 'label' },
+          ],
+          cycles: [],
+          unresolved: [],
+          crossHostIgnored: [],
+        };
+      }
+
+      it('groups each dependency tree parent-first and leaves the rest ungrouped', async () => {
+        const containers = [
+          makeContainer({ id: 'c-web', name: 'web', newTag: '2.0.0' }),
+          makeContainer({ id: 'c-solo', name: 'solo' }),
+          makeContainer({ id: 'c-db', name: 'db', newTag: '2.0.0' }),
+          makeContainer({ id: 'c-api', name: 'api' }),
+        ];
+        const wrapper = await mountContainersView(containers);
+        const vm = wrapper.vm as any;
+        seedDependencyGraph();
+
+        vm.groupByDependency = true;
+        await flushPromises();
+
+        const [tree, ungrouped] = vm.renderGroups;
+        expect(vm.renderGroups).toHaveLength(2);
+        expect(tree.key).toBe('dependency:c-db');
+        expect(tree.name).toBe('db');
+        expect(tree.dependencyRootId).toBe('c-db');
+        expect(tree.containers.map((c: any) => c.name)).toEqual(['db', 'api', 'web']);
+        expect(tree.dependencyDepths).toEqual({ 'c-db': 0, 'c-api': 1, 'c-web': 1 });
+        expect(tree.containerCount).toBe(3);
+        expect(tree.updatesAvailable).toBe(2);
+        expect(tree.updatableCount).toBe(2);
+        expect(ungrouped.key).toBe('__ungrouped__');
+        expect(ungrouped.name).toBeNull();
+        expect(ungrouped.containers.map((c: any) => c.name)).toEqual(['solo']);
+      });
+
+      it('omits the ungrouped group when every container is in a tree', async () => {
+        const wrapper = await mountContainersView([
+          makeContainer({ id: 'c-db', name: 'db' }),
+          makeContainer({ id: 'c-web', name: 'web' }),
+        ]);
+        const vm = wrapper.vm as any;
+        seedDependencyGraph();
+
+        vm.groupByDependency = true;
+        await flushPromises();
+
+        expect(vm.renderGroups.map((group: any) => group.key)).toEqual(['dependency:c-db']);
+      });
+
+      it('turns stack grouping off when dependency grouping is turned on, and back', async () => {
+        const wrapper = await mountContainersView([makeContainer()]);
+        const vm = wrapper.vm as any;
+
+        vm.groupByStack = true;
+        await flushPromises();
+        vm.groupByDependency = true;
+        await flushPromises();
+        expect(vm.groupByStack).toBe(false);
+        expect(vm.groupByDependency).toBe(true);
+
+        vm.groupByStack = true;
+        await flushPromises();
+        expect(vm.groupByDependency).toBe(false);
+        expect(vm.groupByStack).toBe(true);
+
+        vm.groupByDependency = false;
+        await flushPromises();
+        expect(vm.groupByStack).toBe(true);
+      });
     });
 
     it('toggles collapse state for groups', async () => {

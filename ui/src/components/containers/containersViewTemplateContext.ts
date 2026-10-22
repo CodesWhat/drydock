@@ -88,6 +88,10 @@ export interface ContainersViewRenderGroup {
   containerCount: number;
   updatesAvailable: number;
   updatableCount: number;
+  /** Set on dependency-view groups: the container that anchors the group's chain update. */
+  dependencyRootId?: string;
+  /** Set on dependency-view groups: indent level of each container id in the tree. */
+  dependencyDepths?: Record<string, number>;
 }
 
 export interface ContainersViewTableColumn {
@@ -123,6 +127,7 @@ export interface ContainersViewTemplateContext
   serverNames: ComputedRef<string[]>;
   tt: (label: string) => { value: string; showDelay: number };
   groupByStack: WritableComputedRef<boolean>;
+  groupByDependency: WritableComputedRef<boolean>;
   rechecking: Ref<boolean>;
   recheckAll: () => Promise<void>;
   renderGroups: ComputedRef<ContainersViewRenderGroup[]>;

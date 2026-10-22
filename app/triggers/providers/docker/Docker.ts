@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
@@ -45,13 +46,18 @@ import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { syncComposeFileTag } from './compose-file-sync.js';
-import { attachCreatedContainerCandidate } from './created-container-candidate.js';
+import {
+  attachCreatedContainerCandidate,
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from './created-container-candidate.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
+import { recreateSharedNamespaceDependents } from './SharedNamespaceDependents.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
   markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
@@ -288,6 +294,7 @@ const CONTAINER_UPDATE_ORCHESTRATOR_METHODS = [
   'startContainer',
   'pullImage',
   'cloneContainer',
+  'recreateSharedNamespaceDependents',
   'isContainerNotFoundError',
   'recordRollbackTelemetry',
   'hasHealthcheckConfigured',
@@ -1270,7 +1277,211 @@ class Docker<
       containerClone.HostConfig = hostConfigWithoutRuntime as { NetworkMode?: string };
     }
 
+    // Carry anonymous volumes (image VOLUME paths with no named volume or
+    // bind) over to the replacement. The inspect HostConfig has no entry for
+    // them, so without this the daemon would mint a fresh empty volume from
+    // Config.Volumes and orphan the old one with the user's data on it.
+    // Bind the existing volume by name at the same destination, as
+    // docker compose does when it recreates a service.
+    const { binds: anonymousVolumeBinds, mounts: pinnedMounts } =
+      this.getAnonymousVolumeCarryOver(currentContainer);
+    if (anonymousVolumeBinds.length > 0 || pinnedMounts) {
+      const currentHostConfig = (containerClone.HostConfig ?? {}) as Record<string, unknown>;
+      const nextHostConfig: Record<string, unknown> = { ...currentHostConfig };
+      if (anonymousVolumeBinds.length > 0) {
+        nextHostConfig.Binds = [
+          ...(Array.isArray(currentHostConfig.Binds) ? (currentHostConfig.Binds as string[]) : []),
+          ...anonymousVolumeBinds,
+        ];
+      }
+      if (pinnedMounts) {
+        nextHostConfig.Mounts = pinnedMounts;
+      }
+      containerClone.HostConfig = nextHostConfig as { NetworkMode?: string };
+    }
+
     return containerClone;
+  }
+
+  /**
+   * Work out how to reattach a container's anonymous volumes. Destinations are
+   * compared normalized (no trailing slash) on every side, because a daemon
+   * can report "/data/" in a bind or Config.Volumes and "/data" in Mounts.
+   * Returns binds ("name:/destination[:ro]") for image-declared volume mounts
+   * that no explicit bind or mount covers, and, when a HostConfig.Mounts
+   * volume entry has no Source (so replaying it would mint a new volume), a
+   * copy of HostConfig.Mounts with Source filled from the inspected volume.
+   */
+  private getAnonymousVolumeCarryOver(currentContainer): {
+    binds: string[];
+    mounts: Record<string, unknown>[] | undefined;
+  } {
+    const normalize = (destination: unknown): string | undefined => {
+      if (typeof destination !== 'string' || destination === '') {
+        return undefined;
+      }
+      const normalized = path.posix.normalize(destination);
+      return normalized.length > 1 ? normalized.replace(/\/+$/, '') : normalized;
+    };
+    const inspectedMounts = Array.isArray(currentContainer.Mounts) ? currentContainer.Mounts : [];
+    const volumeMounts = inspectedMounts.filter(
+      (mount) =>
+        mount?.Type === 'volume' &&
+        typeof mount.Name === 'string' &&
+        mount.Name !== '' &&
+        normalize(mount.Destination) !== undefined,
+    );
+    if (volumeMounts.length === 0) {
+      return { binds: [], mounts: undefined };
+    }
+    const imageVolumePaths = new Set(
+      Object.keys(currentContainer.Config?.Volumes ?? {}).map(normalize),
+    );
+    const hostConfig = currentContainer.HostConfig ?? {};
+    const explicitDestinations = new Set<string | undefined>();
+    for (const bind of Array.isArray(hostConfig.Binds) ? hostConfig.Binds : []) {
+      if (typeof bind === 'string') {
+        explicitDestinations.add(normalize(bind.split(':')[1]));
+      }
+    }
+    let pinnedMounts: Record<string, unknown>[] | undefined;
+    if (Array.isArray(hostConfig.Mounts)) {
+      pinnedMounts = hostConfig.Mounts.map((mount) => {
+        const target = normalize(mount?.Target);
+        explicitDestinations.add(target);
+        if (mount?.Type === 'volume' && !mount.Source) {
+          const inspected = volumeMounts.find((m) => normalize(m.Destination) === target);
+          if (inspected) {
+            return { ...mount, Source: inspected.Name };
+          }
+        }
+        return mount;
+      });
+      if (pinnedMounts.every((mount, index) => mount === hostConfig.Mounts[index])) {
+        pinnedMounts = undefined;
+      }
+    }
+    const binds = volumeMounts
+      .filter((mount) => {
+        const destination = normalize(mount.Destination);
+        return imageVolumePaths.has(destination) && !explicitDestinations.has(destination);
+      })
+      .map((mount) => `${mount.Name}:${mount.Destination}${mount.RW === false ? ':ro' : ''}`);
+    return { binds, mounts: pinnedMounts };
+  }
+
+  /**
+   * Recreate every container that shares the namespace or volumes of a
+   * container that was just replaced under the same name, so it follows the
+   * new container instead of the removed one. Returns one message per
+   * borrower that could not be recreated, and records them as an error audit
+   * entry on the owner when the owner container is known, so a half-updated
+   * stack is visible beyond the log.
+   */
+  async recreateSharedNamespaceDependents(
+    dockerApi,
+    previousContainerId,
+    containerName,
+    logContainer,
+    container?,
+  ): Promise<string[]> {
+    const { failures } = await recreateSharedNamespaceDependents({
+      dockerApi,
+      previousContainerId,
+      containerName,
+      logContainer,
+      recreateDependent: (dependentSpec, hostConfig) =>
+        this.recreateSharedNamespaceDependent(dockerApi, dependentSpec, hostConfig, logContainer),
+    });
+    if (failures.length > 0 && container?.image) {
+      this.recordAudit(
+        'container-update',
+        container,
+        'error',
+        `Updated ${containerName}, but containers sharing its namespace or volumes were not all recreated: ${failures.join('; ')}`,
+      );
+    }
+    return failures;
+  }
+
+  /**
+   * The image to recreate a borrower from: the image it is running now, not
+   * whatever its tag points at today. The tag is kept when it still names the
+   * running image so the container keeps its readable reference; when the tag
+   * was repointed by a later pull, the running image id is used, so updating the
+   * owner never silently upgrades the borrower past its own update gates.
+   */
+  private async resolveRunningImageReference(dockerApi, dependentSpec): Promise<string> {
+    const tag = dependentSpec.Config?.Image;
+    if (tag) {
+      try {
+        const tagged = await dockerApi.getImage(tag).inspect();
+        if (tagged?.Id === dependentSpec.Image) {
+          return tag;
+        }
+      } catch {
+        // Tag no longer resolves locally: fall back to the running image id.
+      }
+    }
+    return dependentSpec.Image ?? tag;
+  }
+
+  /**
+   * Replace one container that borrows its owner's namespace or volumes: same
+   * image and config, host config rewritten to follow the new owner. The old
+   * container is renamed out of the way first and removed once the replacement
+   * runs. On failure the half-created replacement is removed, the old name
+   * restored and the old container started again when it had been running.
+   * AutoRemove containers are refused up front: stopping one deletes it, which
+   * would leave nothing to fall back to.
+   */
+  async recreateSharedNamespaceDependent(dockerApi, dependentSpec, hostConfig, logContainer) {
+    const dependentName = dependentSpec.Name.replace(/^\//, '');
+    if (dependentSpec.HostConfig?.AutoRemove === true) {
+      throw new Error(
+        `${dependentName} has AutoRemove set, so stopping it to recreate it would delete it; recreate it manually`,
+      );
+    }
+    const tempName = `${dependentName}-old-${Date.now()}`;
+    const oldContainer = dockerApi.getContainer(dependentSpec.Id);
+    const image = await this.resolveRunningImageReference(dockerApi, dependentSpec);
+    const wasRunning = dependentSpec.State?.Running === true;
+
+    logContainer.info(`Rename container ${dependentName} to ${tempName}`);
+    await oldContainer.rename({ name: tempName });
+    try {
+      if (wasRunning) {
+        await this.stopContainer(oldContainer, tempName, dependentSpec.Id, logContainer);
+      }
+      // Always the plain Docker recreate: a compose-managed dependent must not
+      // go through Dockercompose.recreateContainer, which rewrites the compose file.
+      await Docker.prototype.recreateContainer.call(
+        this,
+        dockerApi,
+        { ...dependentSpec, HostConfig: hostConfig },
+        image,
+        { name: dependentName },
+        logContainer,
+      );
+    } catch (error: unknown) {
+      await cleanupCreatedContainerCandidate(
+        getCreatedContainerCandidate(error),
+        dependentName,
+        logContainer,
+      );
+      try {
+        await oldContainer.rename({ name: dependentName });
+        if (wasRunning) {
+          await oldContainer.start();
+        }
+      } catch (restoreError: unknown) {
+        logContainer.warn(
+          `Unable to restore ${dependentName} after a failed recreate (${getErrorMessage(restoreError)})`,
+        );
+      }
+      throw error;
+    }
+    await this.removeContainer(oldContainer, tempName, dependentSpec.Id, logContainer);
   }
 
   /**

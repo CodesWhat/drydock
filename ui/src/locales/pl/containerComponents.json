@@ -310,7 +310,8 @@
       "filterHiddenPinned": "Ukryty: przypięty",
       "filtersLabel": "Filtry",
       "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}",
-      "clearContainerIdFilter": "Wyczyść filtr ID kontenera"
+      "clearContainerIdFilter": "Wyczyść filtr ID kontenera",
+      "groupByDependencyTooltip": "Grupuj według zależności"
     },
     "stats": {
       "paused": "Wstrzymano",
@@ -505,7 +506,9 @@
         "failedTitle": "Aktualizacja łańcucha zależności nie powiodła się",
         "failedDetail": "Nie udało się zaktualizować łańcucha zależności dla {name}.",
         "staleChainTitle": "Łańcuch zależności uległ zmianie",
-        "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
+        "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem.",
+        "hiddenMarker": "niewidoczny przy bieżącym filtrze",
+        "hiddenNote": "\n\n{count} kontener w tym łańcuchu jest ukryty przez bieżący filtr i również zostanie zaktualizowany. | \n\n{count} kontenery w tym łańcuchu są ukryte przez bieżący filtr i również zostaną zaktualizowane."
       }
     },
     "actionToasts": {
@@ -542,6 +545,7 @@
         "snoozed": "Aktualizacje odłożone",
         "maturityBlockedSingular": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dzień",
         "maturityBlockedPlural": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dni",
+        "maturityCountdown": "{message}. Odblokuje się za {countdown} ({date})",
         "maturityActiveSingular": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dzień)",
         "maturityActivePlural": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dni)",
         "maturityAllowAll": "Polityka dojrzałości zezwala na wszystkie aktualizacje",
@@ -672,6 +676,23 @@
     },
     "logViewer": {
       "invalidRegex": "Nieprawidłowe wyrażenie regularne"
+    },
+    "dependencyGraph": {
+      "dependsOn": "Zależy od",
+      "requiredBy": "Wymagany przez",
+      "cycle": "Część cyklu zależności",
+      "toggle": "Pokaż zależności",
+      "updateGroup": "Zaktualizuj grupę zależności ({count})",
+      "staleParentsWarning": "{name} zależy od {parents}, który również ma oczekującą aktualizację. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego. | {name} zależy od {parents}, które również mają oczekujące aktualizacje. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnych kontenerów nadrzędnych.",
+      "staleParentsOverflow": "i {count} więcej",
+      "staleParentsAccept": "Zaktualizuj mimo to",
+      "dependsOnCount": "Zależy od {count}",
+      "requiredByCount": "Wymagany przez {count}",
+      "unresolved": "Brakująca zależność: {targets}",
+      "dependentsNote": "{dependents} zależy od {name} i nie jest aktualizowany ani restartowany razem z nim. Użyj opcji Aktualizuj grupę zależności, aby zaktualizować cały łańcuch po kolei. | {dependents} zależą od {name} i nie są aktualizowane ani restartowane razem z nim. Użyj opcji Aktualizuj grupę zależności, aby zaktualizować cały łańcuch po kolei.",
+      "groupStaleHeader": "Kontenery nadrzędne mają oczekujące aktualizacje",
+      "groupStaleWarning": "Niektóre kontenery w tej aktualizacji zależą od kontenera nadrzędnego, który również ma oczekującą aktualizację, ale nie jest jej częścią. Zaktualizowanie kontenera zależnego bez nadrzędnego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego.",
+      "groupStaleLine": "{name} zależy od {parents}"
     }
   }
 }

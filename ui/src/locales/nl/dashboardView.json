@@ -43,6 +43,7 @@
       "updateAll": "Alles bijwerken",
       "noUpdates": "Geen updates beschikbaar",
       "securityBlocked": "Beveiliging geblokkeerd",
+      "maturityCountdown": "Ontgrendelt over {countdown} ({date})",
       "updateContainer": "Container bijwerken",
       "compactSingle": "{count}-update beschikbaar",
       "compactPlural": "{count}-updates beschikbaar",

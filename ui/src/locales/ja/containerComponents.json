@@ -310,7 +310,8 @@
       "filterHiddenPinned": "非表示：固定済み",
       "filtersLabel": "フィルター",
       "filteredContainers": "{count} 件のコンテナに絞り込み | {count} 件のコンテナに絞り込み",
-      "clearContainerIdFilter": "コンテナ ID フィルターをクリア"
+      "clearContainerIdFilter": "コンテナ ID フィルターをクリア",
+      "groupByDependencyTooltip": "依存関係でグループ化"
     },
     "stats": {
       "paused": "一時停止",
@@ -505,7 +506,9 @@
         "failedTitle": "依存関係チェーンの更新に失敗しました",
         "failedDetail": "{name} の依存関係チェーンの更新に失敗しました。",
         "staleChainTitle": "依存関係チェーンが変更されました",
-        "staleChainDetail": "{name} の依存関係チェーンは、前回プレビューした時点から変更されています。確定する前に更新ダイアログを再度開き、現在のチェーンを確認してください。"
+        "staleChainDetail": "{name} の依存関係チェーンは、前回プレビューした時点から変更されています。確定する前に更新ダイアログを再度開き、現在のチェーンを確認してください。",
+        "hiddenMarker": "現在のフィルターでは表示されていません",
+        "hiddenNote": "\n\nこのチェーンの {count} 件のコンテナは現在のフィルターで非表示ですが、一緒に更新されます。 | \n\nこのチェーンの {count} 件のコンテナは現在のフィルターで非表示ですが、一緒に更新されます。"
       }
     },
     "actionToasts": {
@@ -542,6 +545,7 @@
         "snoozed": "更新はスヌーズされています",
         "maturityBlockedSingular": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
         "maturityBlockedPlural": "成熟のみポリシーにより、{days} 日未満の更新はブロックされます",
+        "maturityCountdown": "{message}。{countdown} 後に解除 ({date})",
         "maturityActiveSingular": "成熟のみポリシーが有効です（最低経過日数 {days} 日）",
         "maturityActivePlural": "成熟のみポリシーが有効です（最低経過日数 {days} 日）",
         "maturityAllowAll": "成熟度ポリシーはすべての更新を許可しています",
@@ -672,6 +676,23 @@
     },
     "logViewer": {
       "invalidRegex": "無効な正規表現です"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依存先",
+      "requiredBy": "依存元",
+      "cycle": "依存関係のサイクルの一部",
+      "toggle": "依存関係を表示",
+      "updateGroup": "依存関係グループを更新 ({count})",
+      "staleParentsWarning": "{name} は {parents} に依存していますが、これには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。 | {name} は {parents} に依存していますが、これらには保留中の更新があります。依存側を先に更新すると、更新されていない親に対して動作したままになる可能性があります。",
+      "staleParentsOverflow": "他 {count} 件",
+      "staleParentsAccept": "そのまま更新",
+      "dependsOnCount": "{count} 件に依存",
+      "requiredByCount": "{count} 件から必要とされています",
+      "unresolved": "依存先が見つかりません: {targets}",
+      "dependentsNote": "{dependents} は {name} に依存しており、{name} と一緒には更新も再起動もされません。依存グループを更新を使うと、チェーン全体を順番に更新できます。 | {dependents} は {name} に依存しており、{name} と一緒には更新も再起動もされません。依存グループを更新を使うと、チェーン全体を順番に更新できます。",
+      "groupStaleHeader": "親に保留中の更新があります",
+      "groupStaleWarning": "この更新に含まれる一部のコンテナは、保留中の更新があるものの今回の更新には含まれていない親に依存しています。親を更新せずに子だけを更新すると、古い親に対して動作したままになる可能性があります。",
+      "groupStaleLine": "{name} は {parents} に依存しています"
     }
   }
 }

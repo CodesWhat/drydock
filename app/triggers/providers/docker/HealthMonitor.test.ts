@@ -226,6 +226,53 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  test('should repoint shared-namespace dependents to the restored container after auto-rollback', async () => {
+    var log = createMockLog();
+    var triggerInstance = {
+      ...createMockTriggerInstance(),
+      recreateSharedNamespaceDependents: vi.fn().mockResolvedValue([]),
+    };
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'unhealthy' } },
+    });
+
+    mockGetBackupsByName.mockReturnValue([
+      {
+        id: 'backup-1',
+        containerId: 'container-123',
+        containerName: 'test-container',
+        imageName: 'registry/test-image',
+        imageTag: '1.0.0',
+        timestamp: new Date().toISOString(),
+        triggerName: 'docker.update',
+      },
+    ]);
+
+    var abortController = startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '2.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 300000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(triggerInstance.recreateSharedNamespaceDependents).toHaveBeenCalledWith(
+      dockerApi,
+      'abc123',
+      'test-container',
+      log,
+      expect.objectContaining({ id: 'container-123' }),
+    );
+
+    abortController.abort();
+  });
+
   test('should create audit entry on successful auto-rollback', async () => {
     var log = createMockLog();
     var triggerInstance = createMockTriggerInstance();

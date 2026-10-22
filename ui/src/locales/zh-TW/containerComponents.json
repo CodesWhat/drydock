@@ -310,7 +310,8 @@
       "filterHiddenPinned": "已隱藏：已固定",
       "filtersLabel": "篩選器",
       "filteredContainers": "已篩選 {count} 個容器 | 已篩選 {count} 個容器",
-      "clearContainerIdFilter": "清除容器 ID 篩選條件"
+      "clearContainerIdFilter": "清除容器 ID 篩選條件",
+      "groupByDependencyTooltip": "依相依性分組"
     },
     "stats": {
       "paused": "已暫停",
@@ -505,7 +506,9 @@
         "failedTitle": "依賴鏈更新失敗",
         "failedDetail": "無法更新 {name} 的依賴鏈。",
         "staleChainTitle": "依賴鏈已變更",
-        "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。"
+        "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。",
+        "hiddenMarker": "目前篩選未顯示",
+        "hiddenNote": "\n\n此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。 | \n\n此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。"
       }
     },
     "actionToasts": {
@@ -542,6 +545,7 @@
         "snoozed": "更新已推遲",
         "maturityBlockedSingular": "僅限成熟版本策略會阻止低於 {days} 天的更新",
         "maturityBlockedPlural": "僅限成熟版本策略會阻止低於 {days} 天的更新",
+        "maturityCountdown": "{message}。{countdown} 後解鎖 ({date})",
         "maturityActiveSingular": "僅限成熟版本策略已啟用（最短 {days} 天）",
         "maturityActivePlural": "僅限成熟版本策略已啟用（最短 {days} 天）",
         "maturityAllowAll": "成熟度策略允許所有更新",
@@ -672,6 +676,23 @@
     },
     "logViewer": {
       "invalidRegex": "無效的正規表示式"
+    },
+    "dependencyGraph": {
+      "dependsOn": "依賴於",
+      "requiredBy": "被以下依賴",
+      "cycle": "屬於依賴循環的一部分",
+      "toggle": "顯示依賴關係",
+      "updateGroup": "更新依賴群組 ({count})",
+      "staleParentsWarning": "{name} 依賴於 {parents}，該容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。 | {name} 依賴於 {parents}，這些容器也有待處理的更新。先更新依賴項可能會導致它針對過期的上層容器執行。",
+      "staleParentsOverflow": "還有 {count} 個",
+      "staleParentsAccept": "仍然更新",
+      "dependsOnCount": "依賴 {count} 個",
+      "requiredByCount": "被 {count} 個依賴",
+      "unresolved": "缺少相依項目：{targets}",
+      "dependentsNote": "{dependents} 依賴 {name}，不會隨它一起更新或重新啟動。使用「更新相依群組」可依序更新整條相依鏈。 | {dependents} 依賴 {name}，不會隨它一起更新或重新啟動。使用「更新相依群組」可依序更新整條相依鏈。",
+      "groupStaleHeader": "上游容器有待處理的更新",
+      "groupStaleWarning": "本次更新中的部分容器依賴某個上游容器，該上游容器也有待處理的更新，但不在本次更新範圍內。只更新下游而不更新其上游，可能會讓它繼續執行在過時的上游之上。",
+      "groupStaleLine": "{name} 依賴 {parents}"
     }
   }
 }
