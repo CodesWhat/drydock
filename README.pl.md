@@ -354,7 +354,7 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 </table>
 
 > WUD 9.0 do 9.5 (wrzesień do października 2026) dodał RBAC z rolami administratora, odczytu i zapisu oraz tylko do odczytu, osobiste tokeny API z zakresem uprawnień, SQLite, watchery Swarm, Kubernetes i Nomad (tylko obserwacja, poza Nomad), tryb jednorazowy dla CI, hooki pre/post i cyklu życia z exec, automatyczne wycofanie po niepowodzeniu HEALTHCHECK oraz uwierzytelniane webhooki rejestru. Oznaczenia częściowe: wycofanie w WUD cofa aktualizację, która nie przeszła HEALTHCHECK, ale nie przechowuje kopii obrazu, jego webhooki to kontrole wyzwalane push z rejestru, a nie ogólne API dla CI, a przycisk ręcznej aktualizacji obejmuje tylko aktualizacje. Tylko tryb jednorazowy WUD steruje CI kodami wyjścia (`--fail-on-update`); Diun uruchamia się raz i kończy, gdy nie ustawiono harmonogramu, a Watchtower robi to samo z `--run-once`, ale żaden nie zwraca kodu wyjścia zależnego od aktualizacji. API HTTP Watchtowera używa jednego wspólnego tokenu, więc nie ma tokenów z zakresem uprawnień.
-
+>
 > Watchtower zarchiwizowano w grudniu 2025 roku, a jego ostatnie wydanie to v1.7.1 (listopad 2023). Nieoficjalny fork społecznościowy, nicholas-fedor/watchtower, nadal jest aktywnie wydawany.
 
 <h4 align="center">Platformy zarządzania</h4>

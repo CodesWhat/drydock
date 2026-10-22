@@ -354,7 +354,7 @@ Trivy 或 Grype 支持的漏洞扫描会在部署之前阻止不安全的更新�
 </table>
 
 > WUD 9.0 至 9.5（2026 年 9 月至 10 月）新增了带管理员、读写和只读角色的 RBAC、受限范围的个人 API 令牌、SQLite、Swarm、Kubernetes 和 Nomad 监视器（除 Nomad 外仅监视）、CI 一次性模式、支持 exec 的更新前后及生命周期钩子、HEALTHCHECK 失败时自动回滚，以及带认证的镜像仓库 Webhook。部分支持说明：WUD 的回滚会在 HEALTHCHECK 失败时撤销更新，但不保留镜像备份；其 Webhook 是镜像仓库推送触发的检查，而非通用的 CI API；其手动更新按钮仅涵盖更新。 只有 WUD 的一次性模式可通过退出码控制 CI（`--fail-on-update`）；Diun 在未设置计划时运行一次后退出，Watchtower 用 `--run-once` 也是如此，但两者都不会按是否有更新返回退出码。Watchtower 的 HTTP API 使用单一共享令牌，因此没有受限范围的令牌。
-
+>
 > Watchtower 已于 2025 年 12 月存档，最后一个版本是 v1.7.1（2023 年 11 月）。非官方社区分支 nicholas-fedor/watchtower 仍在持续发布。
 
 <h4 align="center">管理平台</h4>

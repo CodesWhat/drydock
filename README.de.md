@@ -354,7 +354,7 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 </table>
 
 > WUD 9.0 bis 9.5 (September bis Oktober 2026) brachte RBAC mit den Rollen Administrator, Lesen/Schreiben und Nur-Lesen, begrenzte persönliche API-Tokens, SQLite, Swarm-, Kubernetes- und Nomad-Watcher (nur beobachtend, außer Nomad), einen Einmal-Modus für CI, Pre-/Post- und Lifecycle-Hooks mit exec, automatischen Rollback bei HEALTHCHECK-Fehlern und authentifizierte Registry-Webhooks. Teilweise unterstützt: Der Rollback von WUD macht ein fehlgeschlagenes Update bei HEALTHCHECK-Fehlern rückgängig, legt aber keine Image-Sicherung an, die Webhooks sind Registry-Push-Prüfungen statt einer allgemeinen CI-API, und die Schaltfläche für manuelle Updates deckt nur Updates ab. Nur der Einmal-Modus von WUD steuert CI über Exit-Codes (`--fail-on-update`); Diun läuft einmal und beendet sich, wenn kein Zeitplan gesetzt ist, Watchtower tut das mit `--run-once`, aber beide liefern keinen updatebasierten Exit-Code. Die HTTP-API von Watchtower nutzt ein einziges gemeinsames Token und kennt keine begrenzten Tokens.
-
+>
 > Watchtower wurde im Dezember 2025 archiviert; das letzte Release war v1.7.1 (November 2023). Ein inoffizieller Community-Fork, nicholas-fedor/watchtower, wird weiterhin aktiv veröffentlicht.
 
 <h4 align="center">Management-Plattformen</h4>

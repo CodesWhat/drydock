@@ -354,7 +354,7 @@ L'analyse des vulnérabilités basée sur Trivy ou Grype bloque les mises à jou
 </table>
 
 > WUD 9.0 à 9.5 (septembre à octobre 2026) a ajouté le RBAC avec les rôles administrateur, lecture-écriture et lecture seule, des jetons d'API personnels à portée limitée, SQLite, des watchers Swarm, Kubernetes et Nomad (observation seule, sauf Nomad), un mode exécution unique pour la CI, des hooks pre/post et de cycle de vie avec exec, un retour arrière automatique en cas d'échec du HEALTHCHECK et des webhooks de registre authentifiés. Marques partielles : le retour arrière de WUD annule une mise à jour qui échoue au HEALTHCHECK mais ne conserve aucune sauvegarde d'image, ses webhooks sont des vérifications déclenchées par push du registre et non une API de CI générale, et son bouton de mise à jour manuelle ne couvre que les mises à jour. Seul le mode exécution unique de WUD pilote la CI par codes de sortie (`--fail-on-update`) ; Diun s'exécute une fois puis quitte quand aucune planification n'est définie, et Watchtower fait de même avec `--run-once`, mais aucun ne renvoie de code de sortie selon les mises à jour. L'API HTTP de Watchtower utilise un seul jeton partagé, donc sans jetons à portée limitée.
-
+>
 > Watchtower a été archivé en décembre 2025 et sa dernière version était la v1.7.1 (novembre 2023). Un fork communautaire non officiel, nicholas-fedor/watchtower, continue de publier des versions.
 
 <h4 align="center">Plateformes de gestion</h4>
