@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import {
@@ -1434,7 +1435,97 @@ class Docker<
       containerClone.HostConfig = hostConfigWithoutRuntime as { NetworkMode?: string };
     }
 
+    // Carry anonymous volumes (image VOLUME paths with no named volume or
+    // bind) over to the replacement. The inspect HostConfig has no entry for
+    // them, so without this the daemon would mint a fresh empty volume from
+    // Config.Volumes and orphan the old one with the user's data on it.
+    // Bind the existing volume by name at the same destination, as
+    // docker compose does when it recreates a service.
+    const { binds: anonymousVolumeBinds, mounts: pinnedMounts } =
+      this.getAnonymousVolumeCarryOver(currentContainer);
+    if (anonymousVolumeBinds.length > 0 || pinnedMounts) {
+      const currentHostConfig = (containerClone.HostConfig ?? {}) as Record<string, unknown>;
+      const nextHostConfig: Record<string, unknown> = { ...currentHostConfig };
+      if (anonymousVolumeBinds.length > 0) {
+        nextHostConfig.Binds = [
+          ...(Array.isArray(currentHostConfig.Binds) ? (currentHostConfig.Binds as string[]) : []),
+          ...anonymousVolumeBinds,
+        ];
+      }
+      if (pinnedMounts) {
+        nextHostConfig.Mounts = pinnedMounts;
+      }
+      containerClone.HostConfig = nextHostConfig as { NetworkMode?: string };
+    }
+
     return containerClone;
+  }
+
+  /**
+   * Work out how to reattach a container's anonymous volumes. Destinations are
+   * compared normalized (no trailing slash) on every side, because a daemon
+   * can report "/data/" in a bind or Config.Volumes and "/data" in Mounts.
+   * Returns binds ("name:/destination[:ro]") for image-declared volume mounts
+   * that no explicit bind or mount covers, and, when a HostConfig.Mounts
+   * volume entry has no Source (so replaying it would mint a new volume), a
+   * copy of HostConfig.Mounts with Source filled from the inspected volume.
+   */
+  private getAnonymousVolumeCarryOver(currentContainer): {
+    binds: string[];
+    mounts: Record<string, unknown>[] | undefined;
+  } {
+    const normalize = (destination: unknown): string | undefined => {
+      if (typeof destination !== 'string' || destination === '') {
+        return undefined;
+      }
+      const normalized = path.posix.normalize(destination);
+      return normalized.length > 1 ? normalized.replace(/\/+$/, '') : normalized;
+    };
+    const inspectedMounts = Array.isArray(currentContainer.Mounts) ? currentContainer.Mounts : [];
+    const volumeMounts = inspectedMounts.filter(
+      (mount) =>
+        mount?.Type === 'volume' &&
+        typeof mount.Name === 'string' &&
+        mount.Name !== '' &&
+        normalize(mount.Destination) !== undefined,
+    );
+    if (volumeMounts.length === 0) {
+      return { binds: [], mounts: undefined };
+    }
+    const imageVolumePaths = new Set(
+      Object.keys(currentContainer.Config?.Volumes ?? {}).map(normalize),
+    );
+    const hostConfig = currentContainer.HostConfig ?? {};
+    const explicitDestinations = new Set<string | undefined>();
+    for (const bind of Array.isArray(hostConfig.Binds) ? hostConfig.Binds : []) {
+      if (typeof bind === 'string') {
+        explicitDestinations.add(normalize(bind.split(':')[1]));
+      }
+    }
+    let pinnedMounts: Record<string, unknown>[] | undefined;
+    if (Array.isArray(hostConfig.Mounts)) {
+      pinnedMounts = hostConfig.Mounts.map((mount) => {
+        const target = normalize(mount?.Target);
+        explicitDestinations.add(target);
+        if (mount?.Type === 'volume' && !mount.Source) {
+          const inspected = volumeMounts.find((m) => normalize(m.Destination) === target);
+          if (inspected) {
+            return { ...mount, Source: inspected.Name };
+          }
+        }
+        return mount;
+      });
+      if (pinnedMounts.every((mount, index) => mount === hostConfig.Mounts[index])) {
+        pinnedMounts = undefined;
+      }
+    }
+    const binds = volumeMounts
+      .filter((mount) => {
+        const destination = normalize(mount.Destination);
+        return imageVolumePaths.has(destination) && !explicitDestinations.has(destination);
+      })
+      .map((mount) => `${mount.Name}:${mount.Destination}${mount.RW === false ? ':ro' : ''}`);
+    return { binds, mounts: pinnedMounts };
   }
 
   /**

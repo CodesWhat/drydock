@@ -876,6 +876,150 @@ test('clone should clone an existing container spec', async () => {
   });
 });
 
+describe('cloneContainer anonymous volumes', () => {
+  const baseSpec = {
+    Name: '/db',
+    Id: 'abc',
+    NetworkSettings: { Networks: {} },
+  };
+
+  test('should rebind anonymous volumes by name at the same destination', () => {
+    const hostConfig = { Binds: null };
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: hostConfig,
+        Config: { Volumes: { '/data': {}, '/ro': {} } },
+        Mounts: [
+          { Type: 'volume', Name: 'a'.repeat(64), Destination: '/data', RW: true },
+          { Type: 'volume', Name: 'b'.repeat(64), Destination: '/ro', RW: false },
+        ],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual([`${'a'.repeat(64)}:/data`, `${'b'.repeat(64)}:/ro:ro`]);
+    // source inspect spec stays untouched for rollback reuse
+    expect(hostConfig).toEqual({ Binds: null });
+  });
+
+  test('should not duplicate volumes already covered by binds or mounts', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: {
+          Binds: ['myvol:/named', '/host/path:/bound:ro'],
+          Mounts: [{ Type: 'volume', Source: 'other', Target: '/mounted' }],
+        },
+        Config: { Volumes: { '/named': {}, '/bound': {}, '/mounted': {}, '/data': {} } },
+        Mounts: [
+          { Type: 'volume', Name: 'myvol', Destination: '/named', RW: true },
+          { Type: 'bind', Source: '/host/path', Destination: '/bound', RW: false },
+          { Type: 'volume', Name: 'other', Destination: '/mounted', RW: true },
+          { Type: 'volume', Name: 'c'.repeat(64), Destination: '/data', RW: true },
+        ],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual([
+      'myvol:/named',
+      '/host/path:/bound:ro',
+      `${'c'.repeat(64)}:/data`,
+    ]);
+  });
+
+  const destinationsOf = (hostConfig) => [
+    ...(hostConfig.Binds ?? []).map((bind) => bind.split(':')[1].replace(/\/+$/, '')),
+    ...(hostConfig.Mounts ?? []).map((mount) => mount.Target.replace(/\/+$/, '')),
+  ];
+
+  test('should not duplicate a named bind written with a trailing slash', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: { Binds: ['dbdata:/data/'] },
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'volume', Name: 'dbdata', Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual(['dbdata:/data/']);
+    expect(new Set(destinationsOf(clone.HostConfig)).size).toBe(1);
+  });
+
+  test('should not duplicate a mount target written with a trailing slash', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: { Mounts: [{ Type: 'volume', Source: 'dbdata', Target: '/data/' }] },
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'volume', Name: 'dbdata', Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toBeUndefined();
+    expect(destinationsOf(clone.HostConfig)).toEqual(['/data']);
+  });
+
+  test('should match a Config.Volumes key with a trailing slash', () => {
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: {},
+        Config: { Volumes: { '/data/': {} } },
+        Mounts: [{ Type: 'volume', Name: 'd'.repeat(64), Destination: '/data', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Binds).toEqual([`${'d'.repeat(64)}:/data`]);
+  });
+
+  test('should fill Source on a source-less volume mount and keep its options', () => {
+    const hostConfig = {
+      Mounts: [
+        { Type: 'volume', Target: '/data', ReadOnly: true, VolumeOptions: { NoCopy: true } },
+        { Type: 'tmpfs', Target: '/tmp' },
+      ],
+    };
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: hostConfig,
+        Config: { Volumes: { '/data': {} } },
+        Mounts: [{ Type: 'volume', Name: 'e'.repeat(64), Destination: '/data', RW: false }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig.Mounts).toEqual([
+      {
+        Type: 'volume',
+        Source: 'e'.repeat(64),
+        Target: '/data',
+        ReadOnly: true,
+        VolumeOptions: { NoCopy: true },
+      },
+      { Type: 'tmpfs', Target: '/tmp' },
+    ]);
+    expect(clone.HostConfig.Binds).toBeUndefined();
+    expect(new Set(destinationsOf(clone.HostConfig)).size).toBe(2);
+    // source inspect spec stays untouched for rollback reuse
+    expect(hostConfig.Mounts[0]).not.toHaveProperty('Source');
+  });
+
+  test('should leave HostConfig alone when there are no anonymous volumes', () => {
+    const hostConfig = { Binds: ['myvol:/named'] };
+    const clone = docker.cloneContainer(
+      {
+        ...baseSpec,
+        HostConfig: hostConfig,
+        Config: { Volumes: { '/named': {} } },
+        Mounts: [{ Type: 'volume', Name: 'myvol', Destination: '/named', RW: true }],
+      },
+      'test/test:2.0.0',
+    );
+    expect(clone.HostConfig).toBe(hostConfig);
+  });
+});
+
 test('cloneContainer should drop stale image-inherited env and labels from the source image', () => {
   const clone = docker.cloneContainer(
     {
