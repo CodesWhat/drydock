@@ -6,8 +6,10 @@ import whaleLogo from '@/assets/whale-logo.png';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import InstallBanner from '@/components/InstallBanner.vue';
+import OfflineBanner from '@/components/OfflineBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useConnectivity } from '@/composables/useConnectivity';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
@@ -213,7 +215,7 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
     group.items.map((item) => ({
       id: `page:${item.route}`,
       title: item.label,
-      subtitle: `Page · ${item.route}`,
+      subtitle: t('appShell.layout.search.pageSubtitle', { route: item.route }),
       icon: item.icon,
       route: item.route,
       kind: 'page',
@@ -1124,6 +1126,7 @@ watch(showSearch, async (val) => {
 
 // Server connectivity monitor
 const connectionLost = ref(false);
+const connectivity = useConnectivity();
 const selfUpdateInProgress = ref(false);
 const selfUpdateOperationId = ref<string | undefined>(undefined);
 const CONNECTIVITY_POLL_INTERVAL_MS = 5_000;
@@ -1206,23 +1209,15 @@ async function checkConnectivity() {
   }
 }
 
-const connectionOverlayTitle = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.applyingUpdateTitle')
-    : t('appShell.layout.connection.lostTitle'),
-);
+// The overlay only shows during a self-update; ordinary outages use the
+// offline banner and read-only views instead.
+const connectionOverlayTitle = computed(() => t('appShell.layout.connection.applyingUpdateTitle'));
 const connectionOverlayMessage = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.restartingMessage', {
-        opId: selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : '',
-      })
-    : t('appShell.layout.connection.lostMessage'),
+  t('appShell.layout.connection.restartingMessage', {
+    opId: selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : '',
+  }),
 );
-const connectionOverlayStatus = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.restartingService')
-    : t('appShell.layout.connection.reconnecting'),
-);
+const connectionOverlayStatus = computed(() => t('appShell.layout.connection.restartingService'));
 
 function asSidebarRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1340,6 +1335,7 @@ function emitUiSseEvent(name: string, detail?: unknown) {
 
 function handleSseEvent(event: string, payload?: unknown) {
   if (event === 'sse:connected') {
+    connectivity.markServerReachable();
     connectionLost.value = false;
     stopConnectivityPolling();
     selfUpdateInProgress.value = false;
@@ -1428,6 +1424,7 @@ function handleSseEvent(event: string, payload?: unknown) {
     return;
   }
   if (event === 'connection-lost') {
+    connectivity.markServerUnreachable();
     connectionLost.value = true;
     startConnectivityPolling();
   }
@@ -1716,6 +1713,8 @@ onUnmounted(() => {
       <div
         class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
       >
+        <OfflineBanner />
+
         <InstallBanner />
 
         <AnnouncementBanner
@@ -1962,7 +1961,7 @@ onUnmounted(() => {
     <!-- Connection Lost Overlay -->
     <Teleport to="body">
       <Transition name="menu-fade">
-        <div v-if="connectionLost"
+        <div v-if="connectionLost && selfUpdateInProgress"
              class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center"
              style="z-index: var(--z-modal, 200)">
           <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"

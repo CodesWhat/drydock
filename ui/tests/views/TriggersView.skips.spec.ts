@@ -16,8 +16,11 @@ describe('trigger recent skips', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async (path: string) => {
-        if (path === '/api/v1/triggers') return Response.json({ data: [trigger], total: 1 });
-        if (path.startsWith('/api/v1/triggers/')) return Response.json(trigger);
+        const own = type === 'docker' ? 'actions' : 'notification-triggers';
+        const other = type === 'docker' ? 'notification-triggers' : 'actions';
+        if (path === `/api/v1/${own}`) return Response.json({ data: [trigger], total: 1 });
+        if (path === `/api/v1/${other}`) return Response.json({ data: [], total: 0 });
+        if (path.startsWith(`/api/v1/${own}/`)) return Response.json(trigger);
         if (path.startsWith('/api/v1/config/editor/')) return Response.json({});
         throw new Error(`Unexpected request ${path}`);
       }),

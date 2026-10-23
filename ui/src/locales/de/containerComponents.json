@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "In Warteschlange",
+      "updateFailed": "Update fehlgeschlagen",
       "statusScanning": "Scan läuft",
       "statusUpdating": "Aktualisiert",
       "statusPulling": "Pull läuft…",

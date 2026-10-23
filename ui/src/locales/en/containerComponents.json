@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "Queued",
+      "updateFailed": "Update failed",
       "statusScanning": "Scanning",
       "statusUpdating": "Updating",
       "statusPulling": "Pulling…",

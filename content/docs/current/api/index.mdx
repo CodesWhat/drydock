@@ -73,7 +73,9 @@ If the header is missing or does not match the expected token, the API responds 
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
 | [Approvals](/docs/api/approvals) | `GET /api/v1/approvals`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer`, `POST /bulk` | Pending-approval queue: list, count, detail, and decide one or many |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
-| [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
+| [Actions](/docs/api/action) | `GET /api/v1/actions` | Action trigger configurations (`docker`, `dockercompose`, `portainer`, `command`) |
+| [Notification triggers](/docs/api/notification-trigger) | `GET /api/v1/notification-triggers` | Notification trigger configurations |
+| [Triggers](/docs/api/trigger) (deprecated) | `GET /api/v1/triggers` | Both categories; use the two routes above |
 | [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
 | Images | `GET /api/v1/images`, `GET /api/v1/images/prune-preview`, `POST /api/v1/images/prune` | Image inventory across hosts, prune preview, and prune (admin; requires `X-DD-Confirm-Action: image-prune`) |
 

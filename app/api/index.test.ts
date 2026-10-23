@@ -268,6 +268,12 @@ function mockActualApiRouterStatsLifecycle() {
     initCollection: vi.fn(() => ({ router: './label-override.js-collection-router' })),
   }));
 
+  vi.doMock('./trigger-routes.js', () => ({
+    initActions: vi.fn(() => ({ router: './actions-router' })),
+    initNotificationTriggers: vi.fn(() => ({ router: './notification-triggers-router' })),
+    deprecateLegacyTriggerRoutes: vi.fn(),
+  }));
+
   return { mockCreateContainerStatsAggregator, mockStatsAggregator };
 }
 

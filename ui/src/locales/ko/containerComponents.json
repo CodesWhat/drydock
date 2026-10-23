@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "대기 중",
+      "updateFailed": "업데이트 실패",
       "statusScanning": "스캔 중",
       "statusUpdating": "업데이트 중",
       "statusPulling": "풀링 중…",

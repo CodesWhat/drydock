@@ -29,12 +29,16 @@ describe('action policy editor integration', () => {
         calls.push({ path, options });
         const response = intercept?.(path, options);
         if (response) return response;
-        if (path === '/api/v1/triggers')
+        if (path === '/api/v1/notification-triggers') return Response.json({ data: [], total: 0 });
+        if (path === '/api/v1/actions')
           return Response.json({
-            data: [trigger, { ...trigger, id: 'command.other', type: 'command', name: 'other' }],
+            data: [
+              trigger,
+              { ...trigger, id: 'portainer.zzother', type: 'portainer', name: 'zzother' },
+            ],
             total: 2,
           });
-        if (path.startsWith('/api/v1/triggers/')) return Response.json(trigger);
+        if (path.startsWith('/api/v1/actions/')) return Response.json(trigger);
         if (path === '/api/v1/config/editor/actions')
           return Response.json(options?.method === 'PATCH' ? actionOutcome() : snapshot);
         throw new Error(`Unexpected request ${path}`);
@@ -51,7 +55,7 @@ describe('action policy editor integration', () => {
     async (type) => {
       const { wrapper, calls } = await setup(type);
       try {
-        expect(calls).toHaveLength(2);
+        expect(calls).toHaveLength(3);
         await wrapper.get('[data-testid="edit-action-policy"]').trigger('click');
         await flushPromises();
         expect(wrapper.get<HTMLSelectElement>('[data-field="auto"]').element.value).toBe('all');
@@ -74,7 +78,7 @@ describe('action policy editor integration', () => {
             { path: ['Action', type, 'Policy', 'concurrency'], operation: 'set', value: 7 },
           ],
         });
-        expect(calls).toHaveLength(5);
+        expect(calls).toHaveLength(6);
         expect(calls.every(({ path }) => !path.includes('/run'))).toBe(true);
         expect(wrapper.text()).toContain('Saved and applied');
       } finally {
@@ -96,7 +100,7 @@ describe('action policy editor integration', () => {
         ).toBeDefined();
         await wrapper.get('form').trigger('submit');
         await flushPromises();
-        expect(calls).toHaveLength(3);
+        expect(calls).toHaveLength(4);
       } finally {
         wrapper.unmount();
       }
@@ -113,7 +117,7 @@ describe('action policy editor integration', () => {
       ).toBeDefined();
       await wrapper.get('[data-reset="order"]').trigger('click');
       await wrapper.get('[data-testid="cancel-action-policy"]').trigger('click');
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(4);
       await wrapper.get('[data-testid="edit-action-policy"]').trigger('click');
       await flushPromises();
       await wrapper.get('[data-reset="concurrency"]').trigger('click');
@@ -135,7 +139,7 @@ describe('action policy editor integration', () => {
         saved = true;
         return Response.json(actionOutcome({ reload: { applied: false, errors: [] } }));
       }
-      if (saved && path === '/api/v1/triggers/docker/policy')
+      if (saved && path === '/api/v1/actions/docker/policy')
         return Response.json({
           id: 'docker.policy',
           type: 'docker',
@@ -159,7 +163,7 @@ describe('action policy editor integration', () => {
       i18n.global.locale.value = 'fr';
       await flushPromises();
       expect(wrapper.get('[role="alert"]').text()).toBe(i18n.global.t('watcherEditor.notApplied'));
-      expect(calls).toHaveLength(5);
+      expect(calls).toHaveLength(6);
     } finally {
       wrapper.unmount();
       i18n.global.locale.value = locale;
@@ -198,7 +202,7 @@ describe('action policy editor integration', () => {
       expect(wrapper.get('[data-field="concurrency"]').attributes('disabled')).toBeUndefined();
       expect(wrapper.text()).toContain('other actions and notifications with the same name');
       expect(wrapper.text()).toContain('independent projects');
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(4);
     } finally {
       wrapper.unmount();
     }
@@ -211,7 +215,7 @@ describe('action policy editor integration', () => {
       for (const field of ['auto', 'order', 'concurrency'])
         expect(wrapper.get(`[data-field="${field}"]`).attributes('disabled')).toBeDefined();
       expect(wrapper.get<HTMLInputElement>('[data-field="order"]').element.value).toBe('');
-      expect(calls[1].path).toContain('Local');
+      expect(calls[2].path).toContain('Local');
     } finally {
       wrapper.unmount();
     }
@@ -245,14 +249,14 @@ describe('action policy editor integration', () => {
         await flushPromises();
         expect(wrapper.text()).toContain('Rejected policy');
         expect(wrapper.get<HTMLInputElement>('[data-field="order"]').element.value).toBe('-9');
-        expect(calls).toHaveLength(4);
+        expect(calls).toHaveLength(5);
         if (status === 409) {
           expect(
             wrapper.get('[data-testid="save-action-policy"]').attributes('disabled'),
           ).toBeDefined();
           await wrapper.get('[data-testid="reload-action-policy"]').trigger('click');
           await flushPromises();
-          expect(calls).toHaveLength(5);
+          expect(calls).toHaveLength(6);
         }
       } finally {
         wrapper.unmount();
@@ -274,7 +278,7 @@ describe('action policy editor integration', () => {
         wrapper.get('[data-testid="save-action-policy"]').attributes('disabled'),
       ).toBeDefined();
       await wrapper.get('form').trigger('submit');
-      expect(calls).toHaveLength(4);
+      expect(calls).toHaveLength(5);
     } finally {
       wrapper.unmount();
     }

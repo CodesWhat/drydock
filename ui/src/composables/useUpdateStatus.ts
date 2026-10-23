@@ -61,16 +61,18 @@ type UpdateStatusState =
   | 'notify';
 
 /**
- * Additive "Auto" badge (spec-6.0.1-action-policy.md API surface) reflecting
- * UpdateEligibility.actionPolicy. Only ever shown for `state === 'auto'` —
- * `manual`/`blocked` don't get a badge here (blocked is already covered by
- * the trigger-excluded/trigger-not-included condition; manual is the
- * unremarkable default). `tooltip` still varies by state so the same
- * mapping is reusable anywhere all three states need explaining (e.g. the
- * per-trigger resolvedState tooltip in the associated-triggers list).
+ * Additive action-policy badge (spec-6.0.1-action-policy.md API surface)
+ * reflecting UpdateEligibility.actionPolicy. Shown for all three states:
+ * auto (success), manual (neutral) and blocked (danger, matching the hard
+ * trigger-excluded/trigger-not-included condition). The badge carries the
+ * state only; the explanatory condition row stays the single owner of the
+ * blocked detail, so no extra row is derived here. `tooltip` varies by
+ * state and mirrors the per-trigger resolvedState tooltip in the
+ * associated-triggers list.
  */
 interface ActionPolicyBadge {
   state: ActionPolicyState;
+  tone: 'success' | 'neutral' | 'danger';
   label: string;
   tooltip: string;
 }
@@ -327,18 +329,24 @@ function groupManualCondition(group: string, t: Translate): UpdateStatusConditio
     action: groupEditorAction(group, t),
   };
 }
+const ACTION_POLICY_TONES: Record<ActionPolicyState, ActionPolicyBadge['tone']> = {
+  auto: 'success',
+  manual: 'neutral',
+  blocked: 'danger',
+};
 
 function actionPolicyBadgeFor(
   actionPolicy: UpdateEligibility['actionPolicy'],
   t: Translate,
 ): ActionPolicyBadge | undefined {
-  if (actionPolicy?.state !== 'auto') {
+  if (!actionPolicy) {
     return undefined;
   }
   return {
     state: actionPolicy.state,
-    label: t('containerComponents.updateStatus.actionPolicyBadge.auto'),
-    tooltip: t('containerComponents.updateStatus.actionPolicyTooltip.auto'),
+    tone: ACTION_POLICY_TONES[actionPolicy.state],
+    label: t(`containerComponents.updateStatus.actionPolicyBadge.${actionPolicy.state}`),
+    tooltip: t(`containerComponents.updateStatus.actionPolicyTooltip.${actionPolicy.state}`),
   };
 }
 

@@ -344,7 +344,7 @@ describe('Component Router', () => {
       mockRouter.get.mockImplementation((path: string) => order.push(path));
       const hook = vi.fn((router) => router.get('/:type/:name/skips', vi.fn()));
 
-      component.init('trigger', hook);
+      component.init('trigger', undefined, hook);
 
       expect(hook).toHaveBeenCalledWith(mockRouter);
       expect(order.indexOf('/:type/:name/skips')).toBeLessThan(
@@ -561,6 +561,48 @@ describe('Component Router', () => {
       getByIdHandler({ params: { agent: 'myagent', type: 'docker', name: 'hub' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    describe('filter', () => {
+      const slack = { type: 'slack', name: 'a', maskConfiguration: vi.fn(() => ({})) };
+      const docker = { type: 'docker', name: 'b', maskConfiguration: vi.fn(() => ({})) };
+      const onlyDocker = (c) => c.type === 'docker';
+
+      beforeEach(() => {
+        registry.getState.mockReturnValue({
+          trigger: { 'slack.a': slack, 'docker.b': docker },
+        });
+        mockRouter.get.mockClear();
+      });
+
+      test('getAll only lists and counts components accepted by the filter', () => {
+        component.init('trigger', onlyDocker);
+        const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+        const res = createMockResponse();
+        handler({ query: {} }, res);
+
+        const body = res.json.mock.calls[0][0];
+        expect(body.total).toBe(1);
+        expect(body.data.map((d) => d.id)).toEqual(['docker.b']);
+      });
+
+      test('getById returns 404 for a component the filter rejects', () => {
+        component.init('trigger', onlyDocker);
+        const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/:type/:name')[1];
+        const res = createMockResponse();
+        handler({ params: { type: 'slack', name: 'a' } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+      });
+
+      test('getById returns a component the filter accepts', () => {
+        component.init('trigger', onlyDocker);
+        const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/:type/:name')[1];
+        const res = createMockResponse();
+        handler({ params: { type: 'docker', name: 'b' } }, res);
+
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
     });
   });
 });

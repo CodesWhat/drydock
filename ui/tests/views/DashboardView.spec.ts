@@ -69,6 +69,14 @@ vi.mock('@/services/registry', () => ({
   getAllRegistries: vi.fn(),
 }));
 
+vi.mock('@/services/trigger', () => ({
+  getAllTriggers: vi.fn(),
+}));
+
+vi.mock('@/services/audit', () => ({
+  getAuditLog: vi.fn(),
+}));
+
 vi.mock('@/services/container-actions', () => ({
   updateContainer: mockUpdateContainer,
   updateContainers: mockUpdateContainers,
@@ -103,6 +111,7 @@ vi.mock('@/utils/dashboard-container-metrics', async () => {
 });
 
 import { getAgents } from '@/services/agent';
+import { getAuditLog } from '@/services/audit';
 import {
   getAllContainers,
   getContainerRecentStatus,
@@ -111,6 +120,7 @@ import {
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
 import { connectStatsSummaryStream, getStatsSummary } from '@/services/stats';
+import { getAllTriggers } from '@/services/trigger';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
@@ -122,6 +132,8 @@ const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetServer = getServer as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 const mockGetAllRegistries = getAllRegistries as ReturnType<typeof vi.fn>;
+const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
+const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
 const PREFERENCES_STORAGE_KEY = 'dd-preferences';
 const mountedWrappers: VueWrapper[] = [];
 const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
@@ -152,6 +164,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 interface DashboardDataOverrides {
   watchers?: any[];
   registries?: any[];
+  triggers?: any[];
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
   recentStatusesByIdentity?: Record<string, string>;
@@ -215,6 +228,8 @@ async function mountDashboard(
   mockGetServer.mockResolvedValue(server);
   mockGetAllWatchers.mockResolvedValue(overrides.watchers ?? []);
   mockGetAllRegistries.mockResolvedValue(overrides.registries ?? []);
+  mockGetAllTriggers.mockResolvedValue(overrides.triggers ?? []);
+  mockGetAuditLog.mockResolvedValue({ entries: [] });
   mockGetContainerRecentStatus.mockResolvedValue({
     statuses:
       overrides.recentStatuses ?? mapAuditEntriesToRecentStatuses(overrides.auditEntries ?? []),
@@ -313,7 +328,7 @@ describe('DashboardView', () => {
         editToggle.click();
         await flushPromises();
         const checkboxes = wrapper.findAll('aside input[type="checkbox"]');
-        expect(checkboxes).toHaveLength(10);
+        expect(checkboxes).toHaveLength(14);
         await checkboxes[0].setValue(false);
         expect((checkboxes[0].element as HTMLInputElement).checked).toBe(false);
         const requests = mockGetAllContainers.mock.calls.length;
@@ -331,6 +346,10 @@ describe('DashboardView', () => {
           'Utilisation des ressources',
           'État des hôtes',
           'Répartition des mises à jour',
+          'Images',
+          'Triggers',
+          'Watchers',
+          'Activité récente',
         ]);
         expect(
           (wrapper.find('aside input[type="checkbox"]').element as HTMLInputElement).checked,
@@ -397,6 +416,10 @@ describe('DashboardView', () => {
         ['M', 'L'],
         ['S', 'M', 'L'],
         ['S', 'M', 'L'],
+        ['S'],
+        ['S'],
+        ['S'],
+        ['M', 'L'],
       ]);
     });
 
@@ -1595,6 +1618,10 @@ describe('DashboardView', () => {
         'security-overview',
         'resource-usage',
         'host-status',
+        'stat-images',
+        'stat-triggers',
+        'stat-watchers',
+        'recent-activity',
         'stat-approvals',
       ]);
     });
@@ -1659,6 +1686,87 @@ describe('DashboardView', () => {
       const registriesCard = statCards.find((c) => c.text().includes('Registries'));
       await registriesCard?.trigger('click');
       expect(mockRouterPush).toHaveBeenCalledWith('/registries');
+    });
+
+    it('ships the Images, Triggers and Watchers cards and Recent Activity hidden', async () => {
+      const wrapper = await mountDashboard([makeContainer()]);
+
+      for (const id of ['stat-images', 'stat-triggers', 'stat-watchers', 'recent-activity']) {
+        expect(wrapper.get(`[data-widget-id="${id}"]`).attributes('style')).toContain(
+          'display: none',
+        );
+      }
+      expect(wrapper.get('[data-widget-id="stat-containers"]').attributes('style')).not.toContain(
+        'display: none',
+      );
+      expect(mockGetAuditLog).not.toHaveBeenCalled();
+    });
+
+    it('shows the opt-in cards and Recent Activity from the customize panel and deep-links them', async () => {
+      const wrapper = await mountDashboard(
+        [makeContainer({ updateKind: 'minor', newTag: '1.1.0' })],
+        [],
+        {},
+        {
+          triggers: [
+            { type: 'docker', name: 'local' },
+            { type: 'slack', name: 'ops' },
+          ],
+          watchers: [{ name: 'local' }],
+        },
+      );
+      mockGetAuditLog.mockResolvedValue({
+        entries: [
+          {
+            id: 'e1',
+            timestamp: new Date().toISOString(),
+            action: 'update-applied',
+            containerName: 'nginx',
+            status: 'success',
+            triggerName: 'docker.local',
+          },
+        ],
+      });
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
+
+      const panelLabels = wrapper.findAll('aside label');
+      expect(panelLabels.length).toBeGreaterThan(0);
+      for (const text of ['Images', 'Triggers', 'Watchers', 'Recent Activity']) {
+        const label = panelLabels.find((candidate) => candidate.text().includes(text));
+        expect(label, `${text} listed in the customize panel`).toBeTruthy();
+        const checkbox = label!.get('input');
+        expect((checkbox.element as HTMLInputElement).checked).toBe(false);
+        await checkbox.setValue(true);
+        await flushPromises();
+      }
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
+
+      expect(mockGetAuditLog).toHaveBeenCalledWith({ limit: 10 });
+      for (const id of ['stat-images', 'stat-triggers', 'stat-watchers', 'recent-activity']) {
+        expect(wrapper.get(`[data-widget-id="${id}"]`).attributes('style')).not.toContain(
+          'display: none',
+        );
+      }
+
+      const statCards = wrapper.findAll('.stat-card');
+      const clickCard = async (label: string) =>
+        statCards.find((card) => card.text().includes(label))?.trigger('click');
+      await clickCard('Images');
+      expect(mockRouterPush).toHaveBeenCalledWith('/containers');
+      await clickCard('Triggers');
+      expect(mockRouterPush).toHaveBeenCalledWith('/triggers');
+      await clickCard('Watchers');
+      expect(mockRouterPush).toHaveBeenCalledWith('/watchers');
+
+      const row = wrapper.get('[data-activity-row]');
+      expect(row.text()).toContain('nginx');
+      await row.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/audit',
+        query: { container: 'nginx' },
+      });
     });
 
     it('routes update view-all buttons with has-update filter', async () => {

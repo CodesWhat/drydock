@@ -33,6 +33,7 @@ import { errorMessage } from '../utils/error';
 import { getPrimaryHardBlocker, getSoftBlockers } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
+import DashboardRecentActivityWidget from './dashboard/components/DashboardRecentActivityWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
 import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSecurityOverviewWidget.vue';
@@ -53,6 +54,7 @@ import {
 } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
+import { useDashboardRecentActivity } from './dashboard/useDashboardRecentActivity';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const { t } = useI18n();
@@ -195,9 +197,16 @@ const {
   recentStatusByIdentity,
   registries,
   serverInfo,
+  triggers,
   watchers,
   approvalPendingCount,
 } = useDashboardData();
+
+const {
+  entries: recentActivityEntries,
+  error: recentActivityError,
+  loading: recentActivityLoading,
+} = useDashboardRecentActivity({ enabled: computed(() => isWidgetVisible('recent-activity')) });
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -230,6 +239,7 @@ const {
   recentStatusByIdentity,
   registries,
   serverInfo,
+  triggers,
   watchers,
   // Project held containers through the snapshot so the Updates Available
   // widget's detectedAt-based sort sees the pre-update timestamp even while
@@ -931,6 +941,16 @@ function confirmDashboardUpdateAll() {
               :servers="servers"
               :edit-mode="editMode"
               @view-all="navigateTo(ROUTES.SERVERS)" />
+
+            <DashboardRecentActivityWidget
+              v-else-if="item.i === 'recent-activity'"
+              class="h-full"
+              :entries="recentActivityEntries"
+              :error="recentActivityError"
+              :loading="recentActivityLoading"
+              :edit-mode="editMode"
+              @open-entry="navigateTo({ path: ROUTES.AUDIT, query: { container: $event.containerName } })"
+              @view-all="navigateTo(ROUTES.AUDIT)" />
 
             <DashboardUpdateBreakdownWidget
               v-else-if="item.i === 'update-breakdown'"

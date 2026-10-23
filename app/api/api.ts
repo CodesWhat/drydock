@@ -51,6 +51,7 @@ import * as statsRouter from './stats.js';
 import * as storeRouter from './store.js';
 import * as totpFactorRouter from './totp-factor.js';
 import * as triggerRouter from './trigger.js';
+import * as triggerRoutes from './trigger-routes.js';
 import * as updateOperationsRouter from './update-operations.js';
 import * as watcherRouter from './watcher.js';
 import * as webhookRouter from './webhook.js';
@@ -243,7 +244,12 @@ export function init(): express.Router {
   // Mount label override list and row delete (spec 7.5), sibling of /containers
   mountRouter(router, '/label-overrides', labelOverrideRouter.initCollection());
 
-  // Mount trigger router
+  // Mount category-specific trigger routers (/notifications is taken by notification rules)
+  mountRouter(router, '/actions', triggerRoutes.initActions());
+  mountRouter(router, '/notification-triggers', triggerRoutes.initNotificationTriggers());
+
+  // Deprecated alias for both categories; remove no earlier than v1.9.0
+  router.use('/triggers', triggerRoutes.deprecateLegacyTriggerRoutes);
   mountRouter(router, '/triggers', triggerRouter.init());
 
   // Mount notification rules router

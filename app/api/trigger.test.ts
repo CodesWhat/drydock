@@ -87,7 +87,7 @@ describe('Trigger Router', () => {
 
     test('hands the skip route registrar to the component router', () => {
       triggerRouter.init();
-      expect(componentInit).toHaveBeenCalledWith('trigger', registerTriggerSkipRoutes);
+      expect(componentInit).toHaveBeenCalledWith('trigger', undefined, registerTriggerSkipRoutes);
     });
   });
 

@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "In de wachtrij",
+      "updateFailed": "Update mislukt",
       "statusScanning": "Scannen",
       "statusUpdating": "Updaten",
       "statusPulling": "Trekken…",

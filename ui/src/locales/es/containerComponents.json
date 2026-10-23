@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "En cola",
+      "updateFailed": "Error en la actualización",
       "statusScanning": "Escaneando",
       "statusUpdating": "Actualizando",
       "statusPulling": "Descargando…",

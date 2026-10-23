@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "Sıraya alındı",
+      "updateFailed": "Güncelleme başarısız oldu",
       "statusScanning": "Tarama",
       "statusUpdating": "Güncelleniyor",
       "statusPulling": "Çekiliyor…",

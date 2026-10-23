@@ -34,6 +34,7 @@ interface ComponentRouteParams {
 
 type ComponentKind = keyof RegistryState;
 type ComponentMap = Record<string, ComponentLike>;
+type ComponentFilter = (component: ComponentLike) => boolean;
 type ComponentListPagination = {
   limit: number;
   offset: number;
@@ -108,13 +109,20 @@ export function mapComponentsToList(
     );
 }
 
+function filterComponents(components: ComponentMap, filter?: ComponentFilter): ComponentMap {
+  if (!filter) {
+    return components;
+  }
+  return Object.fromEntries(Object.entries(components).filter(([, c]) => filter(c)));
+}
+
 /**
  * Get all components.
  * @param req
  * @param res
  */
-function getAll(req: Request, res: Response, kind: ComponentKind): void {
-  const components = registry.getState()[kind] as unknown as ComponentMap;
+function getAll(req: Request, res: Response, kind: ComponentKind, filter?: ComponentFilter): void {
+  const components = filterComponents(registry.getState()[kind] as unknown as ComponentMap, filter);
   const allItems = mapComponentsToList(components, kind);
   const pagination = normalizeLimitOffsetPagination(req.query, {
     maxLimit: COMPONENT_LIST_MAX_LIMIT,
@@ -135,12 +143,17 @@ function getAll(req: Request, res: Response, kind: ComponentKind): void {
  * @param res
  * @param listFunction
  */
-export function getById(req: Request<ComponentRouteParams>, res: Response, kind: ComponentKind) {
+export function getById(
+  req: Request<ComponentRouteParams>,
+  res: Response,
+  kind: ComponentKind,
+  filter?: ComponentFilter,
+) {
   const { agent, type, name } = req.params;
   const id = agent ? `${agent}.${type}.${name}` : `${type}.${name}`;
   const components = registry.getState()[kind] as unknown as ComponentMap;
   const component = components[id];
-  if (component) {
+  if (component && (!filter || filter(component))) {
     res.status(200).json(mapComponentToItem(id, component, kind));
   } else {
     sendErrorResponse(res, 404, 'Component not found');
@@ -150,9 +163,14 @@ export function getById(req: Request<ComponentRouteParams>, res: Response, kind:
 /**
  * Init the component router.
  * @param kind
+ * @param filter optional predicate restricting which components the routes expose
  * @returns {*|Router}
  */
-export function init(kind: ComponentKind, registerBeforeById?: (router: Router) => void) {
+export function init(
+  kind: ComponentKind,
+  filter?: ComponentFilter,
+  registerBeforeById?: (router: Router) => void,
+) {
   const router = express.Router();
   router.use(nocache());
   // Routes with a literal tail (e.g. `/:type/:name/skips`) must register before the
@@ -160,15 +178,19 @@ export function init(kind: ComponentKind, registerBeforeById?: (router: Router) 
   registerBeforeById?.(router);
   router.get(
     '/',
-    scoped('read', (req: Request, res: Response) => getAll(req, res, kind)),
+    scoped('read', (req: Request, res: Response) => getAll(req, res, kind, filter)),
   );
   router.get(
     '/:type/:name',
-    scoped('read', (req: Request<ComponentRouteParams>, res: Response) => getById(req, res, kind)),
+    scoped('read', (req: Request<ComponentRouteParams>, res: Response) =>
+      getById(req, res, kind, filter),
+    ),
   );
   router.get(
     '/:type/:name/:agent',
-    scoped('read', (req: Request<ComponentRouteParams>, res: Response) => getById(req, res, kind)),
+    scoped('read', (req: Request<ComponentRouteParams>, res: Response) =>
+      getById(req, res, kind, filter),
+    ),
   );
   return router;
 }

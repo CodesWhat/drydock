@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "排队中",
+      "updateFailed": "更新失败",
       "statusScanning": "扫描中",
       "statusUpdating": "更新中",
       "statusPulling": "拉取中…",

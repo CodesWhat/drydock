@@ -102,6 +102,11 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Drydock is a live dashboard, so /api is never handled by the SW. The
+        // offline fallback is an app-level last-known store instead
+        // (ui/src/services/last-known.ts), which only answers after a real
+        // network failure, is cleared on logout/401, and expires after 24h.
+        //
         // DR-102: only a path the SPA router itself owns gets the offline app-shell
         // fallback; everything else (the REST API, /auth's OIDC subpaths, /health,
         // /metrics, and any future server route) reaches Express, matching what the

@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "В очереди",
+      "updateFailed": "Не удалось обновить",
       "statusScanning": "Сканирование",
       "statusUpdating": "Обновляется",
       "statusPulling": "Загрузка образа…",

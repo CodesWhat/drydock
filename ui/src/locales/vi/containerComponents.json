@@ -263,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "Đang chờ",
+      "updateFailed": "Cập nhật thất bại",
       "statusScanning": "Đang quét",
       "statusUpdating": "Đang cập nhật",
       "statusPulling": "Đang tải…",

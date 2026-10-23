@@ -24,6 +24,20 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 
 ---
 
+### `/api/v1/triggers` (combined trigger routes)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.7.1 |
+| **Removal** | No earlier than v1.9.0 (`/api/v1` is frozen, so the removal itself waits for API v2 unless the maintainers schedule it sooner) |
+| **Affects** | API clients calling `GET /api/v1/triggers`, `GET /api/v1/triggers/{type}/{name}[/{agent}]` or `POST /api/v1/triggers/{type}/{name}[/{agent}]` |
+
+The `DD_ACTION_*` / `DD_NOTIFICATION_*` split now has matching API routes: `/api/v1/actions` for action triggers (`docker`, `dockercompose`, `portainer`, `command`) and `/api/v1/notification-triggers` for notification triggers. `/api/v1/notifications` could not be reused because it is already the notification rules collection. Both new routes accept the same methods, auth and response shapes as `/api/v1/triggers`, filtered by category; a trigger of the other category returns 404. The old routes keep working, add `Deprecation: true` and `Link: <successor>; rel="successor-version"` headers, and log a one-time warning per process. The agent-local `/api/triggers` routes used for controller-to-agent calls are not affected.
+
+**Migration:** Call `/api/v1/actions` for `docker`, `dockercompose`, `portainer` and `command` triggers and `/api/v1/notification-triggers` for everything else. Paths after the prefix are unchanged.
+
+---
+
 ## Removed compatibility behaviors
 
 ### Bundled Trivy and cosign binaries in the Docker image
