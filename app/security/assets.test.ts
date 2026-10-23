@@ -449,4 +449,30 @@ describe('createScannerAssetManager', () => {
     await expect(warming).resolves.toMatchObject({ state: 'ready', version: 'ready' });
     expect(provider.warm).toHaveBeenCalledOnce();
   });
+
+  test('preserves the numeric status code and string code of a failed operation', async () => {
+    const denied = Object.assign(new Error('forbidden'), { statusCode: 403, code: 'EACCES' });
+    const manager = createScannerAssetManager({
+      providers: [createProvider({ id: 'trivy', warm: vi.fn(async () => Promise.reject(denied)) })],
+    });
+
+    await expect(manager.warm('trivy')).rejects.toMatchObject({
+      message: 'forbidden',
+      statusCode: 403,
+      code: 'EACCES',
+    });
+  });
+
+  test('drops non-primitive error metadata when rethrowing', async () => {
+    const odd = Object.assign(new Error('boom'), { statusCode: '403', code: { nested: true } });
+    const manager = createScannerAssetManager({
+      providers: [createProvider({ id: 'trivy', warm: vi.fn(async () => Promise.reject(odd)) })],
+    });
+
+    const error = await manager.warm('trivy').catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toHaveProperty('statusCode');
+    expect(error).not.toHaveProperty('code');
+  });
 });

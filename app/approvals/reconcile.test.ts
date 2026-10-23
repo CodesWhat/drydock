@@ -25,13 +25,27 @@ import * as groupPolicyStore from '../store/group-policy.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as reconcile from './reconcile.js';
 
-const { getStateMock, getUpdateModeMock, isSelfUpdateAvailableMock, warnMock } = vi.hoisted(() => ({
+const {
+  getServerConfigurationMock,
+  getConfiguredPublicUrlMock,
+  getStateMock,
+  getUpdateModeMock,
+  isSelfUpdateAvailableMock,
+  warnMock,
+} = vi.hoisted(() => ({
+  getServerConfigurationMock: vi.fn(),
+  getConfiguredPublicUrlMock: vi.fn(),
   getStateMock: vi.fn(),
   getUpdateModeMock: vi.fn(),
   isSelfUpdateAvailableMock: vi.fn(),
   warnMock: vi.fn(),
 }));
 
+vi.mock('../configuration/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../configuration/index.js')>()),
+  getConfiguredPublicUrl: getConfiguredPublicUrlMock,
+  getServerConfiguration: getServerConfigurationMock,
+}));
 vi.mock('../registry/index.js', () => ({ getState: getStateMock }));
 vi.mock('../store/settings.js', () => ({ getUpdateMode: getUpdateModeMock }));
 vi.mock('../triggers/providers/docker/self-update-availability.js', () => ({
@@ -46,11 +60,12 @@ vi.mock('../log/index.js', () => ({
 function createTrigger(
   auto: 'all' | 'none' | 'onauto' = 'none',
   id = 'docker.local',
+  threshold?: string,
 ): Record<string, ActionPolicyTrigger> {
   return {
     [id]: {
       type: 'docker',
-      configuration: { auto },
+      configuration: { auto, ...(threshold !== undefined ? { threshold } : {}) },
       getId: () => id,
     } as unknown as ActionPolicyTrigger,
   };
@@ -95,6 +110,8 @@ beforeEach(() => {
   db = createMigratedMemoryDatabase();
   approvalStore.createCollections(db);
   getStateMock.mockReturnValue({ trigger: createTrigger('none') });
+  getConfiguredPublicUrlMock.mockReturnValue(undefined);
+  getServerConfigurationMock.mockReturnValue({ feature: { containeractions: true } });
   getUpdateModeMock.mockReturnValue('manual');
   isSelfUpdateAvailableMock.mockReturnValue(true);
   reconcile.init();
@@ -432,6 +449,53 @@ describe('container removal', () => {
 });
 
 // Spec edge cases 6 and 7 — the mode-flip pair that falsifies the predicate cheaply.
+describe('trigger threshold under auto mode', () => {
+  const majorCandidate = () =>
+    createContainer({
+      result: { tag: '2.0.0' },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '2.0.0', semverDiff: 'major' },
+    });
+
+  beforeEach(() => {
+    getUpdateModeMock.mockReturnValue('auto');
+  });
+
+  test('keeps a major candidate pending when the auto action threshold is minor', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'minor') });
+
+    await emitContainerReport({ container: majorCandidate(), changed: true });
+
+    expect(allRows()).toMatchObject([{ candidateRef: '2.0.0', decision: 'pending' }]);
+    expect(allRows()[0].resolution).toBeUndefined();
+  });
+
+  test('resolves a minor candidate as auto-applied under the same threshold', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'minor') });
+    const container = createContainer({
+      result: { tag: '1.3.0' },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.3.0', semverDiff: 'minor' },
+    });
+    await emitContainerReport({ container, changed: true });
+    expect(allRows()).toHaveLength(0);
+
+    // A row that was queued earlier is resolved once the trigger will apply it itself.
+    getUpdateModeMock.mockReturnValue('manual');
+    await emitContainerReport({ container, changed: false });
+    getUpdateModeMock.mockReturnValue('auto');
+    await emitContainerReport({ container, changed: false });
+
+    expect(allRows()).toMatchObject([{ resolution: 'auto-applied', decidedBy: 'system' }]);
+  });
+
+  test('resolves a major candidate as auto-applied when the threshold is all', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'all') });
+
+    await emitContainerReport({ container: majorCandidate(), changed: true });
+
+    expect(allRows()).toHaveLength(0);
+  });
+});
+
 describe('update-mode flips', () => {
   test('auto to manual queues the previously auto-dispatched candidate, without duplicating', async () => {
     getUpdateModeMock.mockReturnValue('auto');
@@ -621,6 +685,113 @@ describe('failure isolation', () => {
       await emitContainerReport({ container: createContainer(), changed: true });
       await vi.waitFor(() =>
         expect(warnMock).toHaveBeenCalledWith('Approval event dispatch failed: bus is down'),
+      );
+    } finally {
+      emitSpy.mockRestore();
+    }
+
+    expect(allRows()).toHaveLength(1);
+  });
+});
+
+describe('pending-approval notification', () => {
+  let notified: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    notified = vi.fn();
+    events.registerApprovalPendingNotification(notified);
+  });
+
+  test('fires once on row insert with the row refs and a deep link when DD_PUBLIC_URL is set', async () => {
+    getConfiguredPublicUrlMock.mockReturnValue('https://dd.example.com');
+
+    await emitContainerReport({ container: createContainer(), changed: true });
+
+    const [row] = allRows();
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(notified).toHaveBeenCalledWith({
+      container: expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+      approvalId: row.id,
+      fromRef: '1.2.3',
+      toRef: '1.2.4',
+      approvalUrl: `https://dd.example.com/approvals?id=${row.id}`,
+    });
+  });
+
+  test('omits the link when no public URL is configured', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+
+    expect(notified).toHaveBeenCalledTimes(1);
+    expect(notified.mock.calls[0][0]).not.toHaveProperty('approvalUrl');
+  });
+
+  test('does not re-notify when the same pending candidate is seen again', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not re-notify once the candidate row is decided and re-seen', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    approvalStore.updateApproval(allRows()[0].id, { decision: 'rejected' });
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  test('notifies again for a superseding candidate', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    await emitContainerReport({
+      container: createContainer({
+        result: { tag: '1.2.5' },
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.2.5' },
+      }),
+      changed: true,
+    });
+
+    expect(notified).toHaveBeenCalledTimes(2);
+  });
+
+  test('still creates the row but sends no notification under update mode notify', async () => {
+    getUpdateModeMock.mockReturnValue('notify');
+
+    await emitContainerReport({ container: createContainer(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('still creates the row but sends no notification when container actions are disabled', async () => {
+    getServerConfigurationMock.mockReturnValue({ feature: { containeractions: false } });
+
+    await emitContainerReport({ container: createContainer(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('does not notify for a hard-blocked container', async () => {
+    isSelfUpdateAvailableMock.mockReturnValue(false);
+    await emitContainerReport({
+      container: createContainer({
+        image: { ...createContainer().image, name: 'codeswhat/drydock' },
+      }),
+      changed: true,
+    });
+
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('a rejected notification dispatch is logged rather than left unhandled', async () => {
+    const emitSpy = vi
+      .spyOn(events, 'emitApprovalPendingNotification')
+      .mockRejectedValue(new Error('bus is down'));
+
+    try {
+      await emitContainerReport({ container: createContainer(), changed: true });
+      await vi.waitFor(() =>
+        expect(warnMock).toHaveBeenCalledWith('Approval pending notification failed: bus is down'),
       );
     } finally {
       emitSpy.mockRestore();

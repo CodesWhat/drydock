@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · servidor: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Generación de SBOM habilitada ({formats})",
-      "sbomDisabled": "Generación de SBOM deshabilitada"
+      "sbomDisabled": "Generación de SBOM deshabilitada",
+      "assetVersion": "Versión {version}",
+      "assetDigest": "Imagen {digest}",
+      "assetDatabaseUpdated": "Base de datos actualizada {updatedAt}",
+      "assetCacheUpdated": "Caché actualizada {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Aún no hay datos de vulnerabilidades",
@@ -426,6 +430,14 @@
       "status": "Estado",
       "refreshing": "Actualizando detalles del trigger...",
       "noConfig": "Sin propiedades de configuración"
+    },
+    "skips": {
+      "title": "Omisiones recientes",
+      "description": "Contenedores que este trigger omitió hace poco y por qué. Se guarda en memoria, así que se reinicia cuando Drydock se reinicia.",
+      "loading": "Cargando omisiones...",
+      "loadError": "No se pudieron cargar las omisiones recientes",
+      "empty": "Sin omisiones recientes",
+      "showMore": "Mostrar más"
     }
   },
   "watchersView": {

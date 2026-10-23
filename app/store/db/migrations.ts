@@ -240,6 +240,48 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
   },
 ];
 
+/**
+ * Thrown when the database records a schema version this build has no migration
+ * for: a newer Drydock migrated it. Running anyway could misread or corrupt rows
+ * the newer schema reshaped, so the store refuses to open instead.
+ */
+export class StoreSchemaTooNewError extends Error {
+  readonly databaseVersion: number;
+  readonly supportedVersion: number;
+
+  constructor(databaseVersion: number, supportedVersion: number, location?: string) {
+    const where = location ? ` at ${location}` : '';
+    super(
+      `The store database${where} was migrated by a newer Drydock build: its schema is at version ${databaseVersion}, but this build only supports up to version ${supportedVersion}. ` +
+        'Refusing to start so this older build cannot corrupt it. ' +
+        'Start a Drydock build at least as new as the one that last ran, or stop Drydock and restore the snapshot taken before that migration ' +
+        '(the dd.sqlite.pre-migration-* file next to the database, or a backup of the store directory), deleting any -wal and -shm files beside the restored database.',
+    );
+    this.name = 'StoreSchemaTooNewError';
+    this.databaseVersion = databaseVersion;
+    this.supportedVersion = supportedVersion;
+  }
+}
+
+/**
+ * Applied versions, after proving this build understands the database. Throws
+ * `StoreSchemaTooNewError` when the highest applied version is above the
+ * highest migration this build ships.
+ */
+export function assertSchemaSupported(
+  db: Database,
+  migrations: readonly Migration[] = MIGRATIONS,
+  location?: string,
+): number[] {
+  const applied = getAppliedSchemaVersions(db);
+  const databaseVersion = applied.at(-1) ?? 0;
+  const supportedVersion = Math.max(0, ...migrations.map((migration) => migration.version));
+  if (databaseVersion > supportedVersion) {
+    throw new StoreSchemaTooNewError(databaseVersion, supportedVersion, location);
+  }
+  return applied;
+}
+
 /** Versions already recorded in `schema_migrations`, ascending. */
 export function getAppliedSchemaVersions(db: Database): number[] {
   db.exec(SCHEMA_MIGRATIONS_TABLE_SQL);
@@ -254,7 +296,7 @@ export function getAppliedSchemaVersions(db: Database): number[] {
  * this call, so a second call on the same database returns an empty array.
  */
 export function migrate(db: Database, migrations: readonly Migration[] = MIGRATIONS): number[] {
-  const applied = new Set(getAppliedSchemaVersions(db));
+  const applied = new Set(assertSchemaSupported(db, migrations));
   const pending = [...migrations]
     .sort((first, second) => first.version - second.version)
     .filter((migration) => !applied.has(migration.version));

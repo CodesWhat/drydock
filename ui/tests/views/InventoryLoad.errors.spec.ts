@@ -24,7 +24,8 @@ function successfulResponse(input: RequestInfo | URL): Response {
       '/api/v1/agents',
       '/api/v1/agents/roster',
       '/api/v1/watchers',
-      '/api/v1/triggers',
+      '/api/v1/actions',
+      '/api/v1/notification-triggers',
     ].includes(String(input))
   )
     return Response.json({ data: [], total: 0 });

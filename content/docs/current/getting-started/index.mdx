@@ -323,9 +323,11 @@ Block updates that introduce critical CVEs:
 
 ```yaml
 environment:
-  - DD_SECURITY_SCANNER=trivy
+  - DD_SECURITY_SCANNER=grype
   - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
 ```
+
+Grype runs in a pinned worker container, so Drydock needs a Docker API connection that can create containers (the socket mount or a socket proxy that allows it).
 
 **Docs:** [Backup & rollback](/docs/configuration/rollback) | [Lifecycle hooks](/docs/configuration/hooks) | [Update Bouncer](/docs/configuration/security)
 
@@ -351,7 +353,7 @@ environment:
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     command: --agent
     ports:
       - "3000:3000"  # agent API — the controller connects to this port
@@ -376,7 +378,7 @@ Here's a complete single-host setup with notifications, auto-updates, and safety
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     container_name: drydock
     depends_on:
       socket-proxy:
@@ -404,7 +406,7 @@ services:
       - DD_ACTION_DOCKERCOMPOSE_STACK_FILE=/compose/stack.yml
 
       # Security
-      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_SCANNER=grype
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
     ports:
       - 3000:3000

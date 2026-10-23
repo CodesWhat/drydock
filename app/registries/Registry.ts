@@ -98,6 +98,14 @@ const MAX_MANIFEST_INDEX_DEPTH = 3;
 const MAX_TAG_PAGES = 50;
 
 /**
+ * After a listing is truncated on a creation-ordered registry, later checks
+ * list only the tail from the current tag until this interval passes, then
+ * read the head again.
+ */
+const TRUNCATED_LISTING_FULL_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MAX_TRUNCATED_LISTING_ENTRIES = 1000;
+
+/**
  * Split a `Link` header into its link-values.
  *
  * A plain `split(',')` is wrong: a comma is a sub-delimiter under RFC 3986, so
@@ -265,6 +273,8 @@ const DEFAULT_HTTPS_KEEP_ALIVE_AGENT = new https.Agent({ keepAlive: true });
 class Registry<
   TConfiguration extends ComponentConfiguration = ComponentConfiguration,
 > extends Component<TConfiguration> {
+  private readonly truncatedListings = new Map<string, { truncatedAt: number }>();
+
   /**
    * Encode Bse64(login:password)
    * @param login
@@ -335,6 +345,31 @@ class Registry<
    */
   async getTags(image: ContainerImage, _options?: RegistryLookupOptions): Promise<string[]> {
     this.log.debug(`Get ${image.name} tags`);
+    const currentTag = image.tag?.value;
+    const truncatedEntry = this.truncatedListings.get(image.name);
+    if (
+      currentTag &&
+      truncatedEntry &&
+      this.listsTagsInCreationOrder() &&
+      Date.now() - truncatedEntry.truncatedAt < TRUNCATED_LISTING_FULL_SCAN_INTERVAL_MS
+    ) {
+      this.log.debug(
+        `Skipping the head listing of ${image.name} tags, it was truncated recently; listing from tag ${currentTag}`,
+      );
+      const tailTags: string[] = [];
+      try {
+        await this.appendTailTags(image, currentTag, tailTags, new Set(), undefined);
+        if (tailTags.length > 0) {
+          this.sortTagsDescending(tailTags);
+          return tailTags;
+        }
+        this.log.debug(`No tags found after ${currentTag} for ${image.name}, listing in full`);
+      } catch (e) {
+        this.log.debug(
+          `Tail-only listing of ${image.name} from tag ${currentTag} failed (${getErrorMessage(e)}), listing in full`,
+        );
+      }
+    }
     const tags: string[] = [];
     let page: AxiosResponse<RegistryTagsList> | undefined = undefined;
     let hasNext = true;
@@ -356,11 +391,12 @@ class Registry<
       }
     }
 
-    const currentTag = image.tag?.value;
     if (!truncated) {
+      this.truncatedListings.delete(image.name);
       this.sortTagsDescending(tags);
       return tags;
     }
+    this.recordTruncation(image.name);
     if (!currentTag) {
       this.log.warn(
         `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more`,
@@ -372,37 +408,8 @@ class Registry<
     this.log.warn(
       `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} pages; the registry is still reporting more, continuing from tag ${currentTag}`,
     );
-    const headFirstTag = tags[0];
-    const seen = new Set(tags);
     try {
-      let tailPage: AxiosResponse<RegistryTagsList> | undefined = undefined;
-      let tailLink: string | undefined = undefined;
-      let tailHasNext = true;
-      let tailPageCount = 0;
-      while (tailHasNext) {
-        const tailLastItem: string | undefined = tailPage
-          ? tailPage.data?.tags?.slice(-1)?.[0]
-          : currentTag;
-        tailPage = await this.getTagsPage(image, tailLastItem, tailLink);
-        const tailTags = tailPage.data?.tags ?? [];
-        tailLink = tailPage.headers?.link;
-        tailHasNext = tailLink !== undefined;
-        tailPageCount += 1;
-        const newTags = tailTags.filter((tag) => !seen.has(tag));
-        for (const tag of newTags) {
-          seen.add(tag);
-          tags.push(tag);
-        }
-        if (tailHasNext && tailTags[0] === headFirstTag) {
-          // The registry ignored the cursor and restarted from the first page.
-          tailHasNext = false;
-        } else if (tailHasNext && tailPageCount >= MAX_TAG_PAGES) {
-          this.log.warn(
-            `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} more pages from tag ${currentTag}; the registry is still reporting more`,
-          );
-          tailHasNext = false;
-        }
-      }
+      await this.appendTailTags(image, currentTag, tags, new Set(tags), tags[0]);
     } catch (e) {
       this.log.warn(
         `Unable to continue listing ${image.name} tags from tag ${currentTag} (${e instanceof Error ? e.message : e})`,
@@ -411,6 +418,61 @@ class Registry<
 
     this.sortTagsDescending(tags);
     return tags;
+  }
+
+  /**
+   * Whether the registry lists tags oldest first and honours `last=<tag>` as a
+   * cursor in that order (GHCR). Only then is a tail from the current tag
+   * guaranteed to contain every newer tag.
+   */
+  protected listsTagsInCreationOrder(): boolean {
+    return false;
+  }
+
+  private recordTruncation(imageName: string) {
+    this.truncatedListings.delete(imageName);
+    this.truncatedListings.set(imageName, { truncatedAt: Date.now() });
+    while (this.truncatedListings.size > MAX_TRUNCATED_LISTING_ENTRIES) {
+      const oldest = this.truncatedListings.keys().next().value as string;
+      this.truncatedListings.delete(oldest);
+    }
+  }
+
+  private async appendTailTags(
+    image: ContainerImage,
+    currentTag: string,
+    tags: string[],
+    seen: Set<string>,
+    headFirstTag: string | undefined,
+  ) {
+    let tailPage: AxiosResponse<RegistryTagsList> | undefined = undefined;
+    let tailLink: string | undefined = undefined;
+    let tailHasNext = true;
+    let tailPageCount = 0;
+    while (tailHasNext) {
+      const tailLastItem: string | undefined = tailPage
+        ? tailPage.data?.tags?.slice(-1)?.[0]
+        : currentTag;
+      tailPage = await this.getTagsPage(image, tailLastItem, tailLink);
+      const tailTags = tailPage.data?.tags ?? [];
+      tailLink = tailPage.headers?.link;
+      tailHasNext = tailLink !== undefined;
+      tailPageCount += 1;
+      const newTags = tailTags.filter((tag) => !seen.has(tag));
+      for (const tag of newTags) {
+        seen.add(tag);
+        tags.push(tag);
+      }
+      if (tailHasNext && tailTags[0] === headFirstTag) {
+        // The registry ignored the cursor and restarted from the first page.
+        tailHasNext = false;
+      } else if (tailHasNext && tailPageCount >= MAX_TAG_PAGES) {
+        this.log.warn(
+          `Stopped listing ${image.name} tags after ${MAX_TAG_PAGES} more pages from tag ${currentTag}; the registry is still reporting more`,
+        );
+        tailHasNext = false;
+      }
+    }
   }
 
   private sortTagsDescending(tags: string[]) {

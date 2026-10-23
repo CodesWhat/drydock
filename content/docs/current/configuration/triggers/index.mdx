@@ -18,7 +18,7 @@ You just need to give them different names.</Callout>
 
 ## Route notifications to a group
 
-On the v1.8.0-rc.5 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
+On the v1.8.0-rc.6 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
 
 The server resolves the container's group from `dd.group`, then `com.docker.compose.project`, then `com.docker.stack.namespace`. Names match exactly, including case, whitespace and punctuation. Empty or whitespace-only configured names are invalid. An empty higher-priority label does not fall through to a lower-priority label. Containers without a named group never match; the UI's ungrouped bucket is not a selectable routing identity. Browser grouping preferences, arbitrary label views and shared grouping URLs do not change notification routing.
 
@@ -30,7 +30,7 @@ Use separate notification instances for different groups or destinations. This s
 
 ## Per-container routing overrides
 
-On the v1.8.0-rc.5 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
+On the v1.8.0-rc.6 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
 
 An override changes which triggers a container reaches, nothing else. These limits still apply on top of it:
 
@@ -43,7 +43,7 @@ Trigger references in an override are checked when you save: each must match a r
 
 ## Edit notification delivery policy in the UI
 
-The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.5 builds. They require a writable [configuration file](/docs/configuration/config-file).
+The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.6 builds. They require a writable [configuration file](/docs/configuration/config-file).
 
 Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
 
@@ -168,7 +168,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 ### Manual updates by default
 
-On the **v1.8.0-rc.5 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
+On the **v1.8.0-rc.6 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
 
 ```text
 DD_ACTION_DOCKER_DATAVAULT_AUTO=onauto
@@ -264,7 +264,7 @@ The in-app bell has audit-backed controls for `update-available`, `update-applie
 - **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting.
 - **`container-unhealthy`** -- disabled by default. Enable it and assign triggers to receive container health alerts. When its trigger list is empty, all notification triggers fire. This event always fires regardless of the threshold setting.
 - **`maturity-cleared`** -- enabled by default. When its trigger list is empty, all notification triggers fire. Unlike the events above, it respects `THRESHOLD` and `AUTO` the same way `update-available` does -- a trigger that would never have announced an update also won't announce its maturity, and `AUTO=false` disables it too.
-- **`update-pending-approval`** -- disabled by default. The rule exists and can be enabled and assigned triggers today, but no event dispatches to it yet in this release; treat it as reserved for an upcoming one.
+- **`update-pending-approval`** -- disabled by default. When its trigger list is empty, all notification triggers fire. It respects `THRESHOLD` and `AUTO` the same way `update-available` does, and fires once per queue row, so a re-seen pending candidate never repeats.
 
 Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id`, or through the **Notifications** view in the UI. The rule detail panel keeps three related controls together:
 
@@ -287,6 +287,7 @@ Beyond the classic `update-available` event, triggers can fire on additional eve
 - **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
 - **`container-unhealthy`** -- fires when a container's Docker health check transitions into the `unhealthy` state. Does not fire for containers with no `HEALTHCHECK` configured, and does not fire again while the container remains continuously unhealthy -- except when the container restarts (new boot) while unhealthy, which counts as a new episode and fires again. This event **skips threshold checks** (always fires).
 - **`maturity-cleared`** -- fires when an update previously withheld by the [maturity gate](/docs/configuration/actions/update-eligibility) (`maturityMode: mature`) becomes applicable -- the soak window elapses, an override lifts the gate, or the policy changes. Default title: `Update ready for container <name>`. Default body: `Container <name> can now be updated to <tag or digest>: the maturity period has passed`, with a trailing `(N day minimum)` clause when the resolved policy's `maturityMinAgeDays` is known. Default batch title: `<N> updates ready to apply`. Detected both at the container's next watch-cycle scan and, independently and typically sooner, by the [maturity gate sweep](#maturity-gate-sweep). Deduplicated against the generic `update-available` notification for the same result, so the same update is never announced twice. **Action triggers are unaffected** -- Docker, Docker Compose, and Command triggers keep applying the update on their normal watch/scan cadence; this event only affects notification delivery.
+- **`update-pending-approval`** -- fires when an update candidate enters the [approval queue](/docs/configuration/actions/approvals). Default title: `Update awaiting approval for container <name>`. Default body: `Container <name> has an update awaiting approval: <from> to <to>`, followed by the queue link when `DD_PUBLIC_URL` is set. Default batch title: `<N> updates awaiting approval`. Deduplicated on the approval row, so it survives a restart without re-notifying. **Action triggers are unaffected.**
 
 <Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
 
@@ -325,6 +326,8 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 ## Why didn't I get a notification?
 
 Drydock remembers the last reason each notification trigger skipped a container, so you can see it without turning on debug logging. Open the container's detail view and look at the **Notifications** list on the Actions tab, or read `notificationSkips` from `GET /api/v1/containers/{id}`. The debug dump (Config > Diagnostics) carries every recorded skip under `notificationSkips`.
+
+To see it from the trigger side, open a notification trigger in the Triggers view (or a rule's assigned triggers in the Notifications view) and read **Recent skips**. It lists the containers that trigger skipped, newest first, with the reason and a link to each container. The same list is available from `GET /api/v1/triggers/{type}/{name}/skips` (and `/api/v1/triggers/{type}/{name}/{agent}/skips` for an agent trigger). It takes `limit` (default 50, maximum 200) and `offset`, needs the `read` scope, and returns `data` entries of `containerId`, `containerName` (`null` if the container is gone), `reason` and `at`, plus `total` and `hasMore`. Like the container view it holds one entry per container, in memory, so it resets on restart.
 
 | Reason | What it means |
 | --- | --- |
@@ -428,11 +431,12 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `currentTag` | Current image tag (top-level shortcut for `container.image.tag.value`) | `1.24.0` |
 | `suggestedTag` | Suggested new tag from the registry (top-level shortcut for `container.result.tag`) | `1.25.0` |
 | `isDigestUpdate` | Whether this update is digest-only rather than a tag change | `false` |
-| `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
+| `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `update-pending-approval`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
 | `event.error` | Error message (`event.kind` = `update-failed`) | `Pull failed: 401 Unauthorized` |
 | `event.details`, `event.status`, `event.blockingCount` | Alert details, status, and blocking-finding count (`event.kind` = `security-alert`) | `12` |
 | `event.previousHealth` | Health status before the container went unhealthy (`event.kind` = `container-unhealthy`) | `healthy` |
 | `event.minAgeDays`, `event.pendingSince` | Configured maturity window and when the gate started waiting (`event.kind` = `maturity-cleared`) | `7` |
+| `event.approvalId`, `event.approvalUrl`, `event.fromRef`, `event.toRef` | Queue row id, deep link (empty without `DD_PUBLIC_URL`), and the version change (`event.kind` = `update-pending-approval`) | `1.0.0` |
 | `event.agentName`, `event.reason` | Agent name and disconnect reason (`event.kind` = `agent-disconnect` / `agent-reconnect`) | `remote-1` |
 
 ### Batch mode variables
@@ -463,7 +467,7 @@ Inside `${...}` you can use:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
@@ -476,7 +480,7 @@ services:
 docker run \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${container.name} can be updated from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}' \
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>

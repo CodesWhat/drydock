@@ -2,6 +2,8 @@ const {
   mockFs,
   mockAuthenticateRequest,
   mockRecordAuthLogin,
+  mockRecordAuthAccountLockout,
+  mockRecordAuthIpLockout,
   mockSetAuthAccountLockedTotal,
   mockSetAuthIpLockedTotal,
   mockRecordLoginAuditEvent,
@@ -26,6 +28,8 @@ const {
     },
     mockAuthenticateRequest: vi.fn(),
     mockRecordAuthLogin: vi.fn(),
+    mockRecordAuthAccountLockout: vi.fn(),
+    mockRecordAuthIpLockout: vi.fn(),
     mockSetAuthAccountLockedTotal: vi.fn(),
     mockSetAuthIpLockedTotal: vi.fn(),
     mockRecordLoginAuditEvent: vi.fn(),
@@ -87,6 +91,8 @@ vi.mock('./totp-challenge.js', () => ({
 
 vi.mock('../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
+  recordAuthAccountLockout: mockRecordAuthAccountLockout,
+  recordAuthIpLockout: mockRecordAuthIpLockout,
   setAuthAccountLockedTotal: mockSetAuthAccountLockedTotal,
   setAuthIpLockedTotal: mockSetAuthIpLockedTotal,
 }));
@@ -1713,6 +1719,90 @@ describe('auth-lockout', () => {
     expect(result).toBeDefined();
     expect(result).toBeGreaterThan(now);
     expect(lockouts.get('threshold-user')?.lockedUntil).toBeGreaterThan(now);
+  });
+
+  test('registerFailedLoginAttempt reports a lockout start once, not on refreshes of an active lock', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const lockouts = new Map<string, any>([
+      [
+        'start-user',
+        {
+          failedAttempts: testable_accountLockoutPolicy.maxAttempts - 1,
+          windowStartAt: now - 1000,
+          lockedUntil: 0,
+          lastAttemptAt: now - 1000,
+        },
+      ],
+    ]);
+    const onLockoutStart = vi.fn();
+
+    testable_registerFailedLoginAttempt(
+      lockouts,
+      testable_accountLockoutPolicy,
+      'start-user',
+      now,
+      onLockoutStart,
+    );
+    testable_registerFailedLoginAttempt(
+      lockouts,
+      testable_accountLockoutPolicy,
+      'start-user',
+      now + 1,
+      onLockoutStart,
+    );
+
+    expect(onLockoutStart).toHaveBeenCalledTimes(1);
+  });
+
+  test('registerFailedLoginAttempt does not report a lockout below the threshold', () => {
+    const now = Date.parse('2026-01-01T00:00:00.000Z');
+    const lockouts = new Map<string, any>();
+    const onLockoutStart = vi.fn();
+
+    testable_registerFailedLoginAttempt(
+      lockouts,
+      testable_accountLockoutPolicy,
+      'fresh-user',
+      now,
+      onLockoutStart,
+    );
+
+    expect(onLockoutStart).not.toHaveBeenCalled();
+  });
+
+  test('counts an account lockout once when the lock starts, labelled by provider only', async () => {
+    makeAuthenticatorInvalidCredentials();
+    const req = { body: { username: 'count-user' }, ip: '203.0.113.77' } as any;
+    const next = vi.fn();
+
+    for (let index = 0; index < 4; index += 1) {
+      await authenticateLogin(req, createResponse() as any, next);
+    }
+    expect(mockRecordAuthAccountLockout).not.toHaveBeenCalled();
+
+    await authenticateLogin(req, createResponse() as any, next);
+    expect(mockRecordAuthAccountLockout).toHaveBeenCalledTimes(1);
+    expect(mockRecordAuthAccountLockout).toHaveBeenCalledWith('basic');
+
+    // Further attempts hit the active lock and must not count again.
+    await authenticateLogin(req, createResponse() as any, next);
+    expect(mockRecordAuthAccountLockout).toHaveBeenCalledTimes(1);
+  });
+
+  test('counts an IP lockout when many usernames fail from one address', async () => {
+    makeAuthenticatorInvalidCredentials();
+    const next = vi.fn();
+
+    for (let index = 0; index < 60 && mockRecordAuthIpLockout.mock.calls.length === 0; index += 1) {
+      await authenticateLogin(
+        { body: { username: `spray-${index}` }, ip: '198.51.100.9' } as any,
+        createResponse() as any,
+        next,
+      );
+    }
+
+    expect(mockRecordAuthIpLockout).toHaveBeenCalledTimes(1);
+    expect(mockRecordAuthIpLockout).toHaveBeenCalledWith('basic');
   });
 
   test('registerFailedLoginAttempt does not lock account before maxAttempts threshold', async () => {

@@ -141,6 +141,7 @@
         "recently-applied": "已跳过：更新刚刚应用，正在等待 watcher 确认。",
         "digest-buffered": "已留待下一次摘要发送。"
       },
+      "notificationSkipAt": "最近一次跳过 {date}",
       "backupsRollback": "备份与回滚",
       "rollingBack": "回滚中...",
       "rollbackLatest": "回滚到最新",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "排队中",
+      "updateFailed": "更新失败",
       "statusScanning": "扫描中",
       "statusUpdating": "更新中",
       "statusPulling": "拉取中…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "候选版本于 {date} 发布 — 距达到 {minDays} 天最低要求还有 {count} 天",
       "maturityClockDetected": "候选版本于 {date} 被检测到 — 距达到 {minDays} 天最低要求还有 {count} 天",
       "groupManualOnly": "分组策略“{group}”仅允许手动更新。Drydock 不会自动应用此更新。",
+      "updateAvailableRuleDisabled": "Update Available 通知规则已关闭，它同时控制自动更新。请在 Settings > Notifications > Update Available 中开启，Drydock 才会自动应用此更新。",
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
       "notificationsOnlyButton": "仅通知",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "未配置更新触发器",
         "self-update-unavailable": "自我更新不可用",
         "maintenance-window-closed": "维护窗口已关闭",
+        "update-available-rule-disabled": "Update Available 规则已关闭",
         "group-notify-only": "分组仅允许通知",
         "group-manual-only": "分组要求手动更新",
         "dry-run-trigger": "触发器配置处于 dry-run 模式",
@@ -536,6 +540,7 @@
         "configureThreshold": "配置触发阈值",
         "configureSelfUpdate": "配置自我更新",
         "configureMaintenance": "配置维护窗口",
+        "configureNotificationRule": "打开通知规则",
         "editGroupPolicy": "编辑分组策略"
       },
       "releaseMaturityCount": "正在等待版本系列 {family} 的稳定版：已确认 {count} 个较早版本，需要 {required} 个。",
@@ -653,6 +658,7 @@
         "snoozed": "更新已推迟",
         "maturityBlockedSingular": "仅成熟策略会阻止低于 {days} 天的更新",
         "maturityBlockedPlural": "仅成熟策略会阻止低于 {days} 天的更新",
+        "maturityCountdown": "{message}。{countdown} 后解锁 ({date})",
         "maturityActiveSingular": "仅成熟策略已启用（最低 {days} 天）",
         "maturityActivePlural": "仅成熟策略已启用（最低 {days} 天）",
         "maturityAllowAll": "成熟度策略允许所有更新",

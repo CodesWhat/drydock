@@ -34,6 +34,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'group-notify-only': 'hard',
   // soft: manual UI updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
+  // soft: the rule gates automatic dispatch only; manual updates never read it
+  'update-available-rule-disabled': 'soft',
 };
 
 export function severityOf(blocker: UpdateBlocker): UpdateBlockerSeverity {
@@ -164,6 +166,30 @@ export function findBackendMaturityBlocked(
       ((blocker as { reason?: unknown }).reason === 'maturity-not-reached' ||
         (blocker as { reason?: unknown }).reason === 'maturity-releases-not-reached'),
   );
+}
+
+/**
+ * Earliest `liftableAt` among the maturity blockers (age and release-count), or undefined when
+ * none carries a parseable timestamp. Drives the list/card/dashboard unlock countdowns.
+ */
+export function findMaturityLiftableAt(
+  container: { updateEligibility?: unknown } | Record<string, unknown>,
+): string | undefined {
+  const eligibility = (container as { updateEligibility?: unknown }).updateEligibility;
+  if (!eligibility || typeof eligibility !== 'object') return undefined;
+  const blockers = (eligibility as { blockers?: unknown }).blockers;
+  if (!Array.isArray(blockers)) return undefined;
+  let earliest: { raw: string; ms: number } | undefined;
+  for (const blocker of blockers) {
+    if (!blocker || typeof blocker !== 'object') continue;
+    const { reason, liftableAt } = blocker as { reason?: unknown; liftableAt?: unknown };
+    if (reason !== 'maturity-not-reached' && reason !== 'maturity-releases-not-reached') continue;
+    if (typeof liftableAt !== 'string') continue;
+    const ms = Date.parse(liftableAt);
+    if (!Number.isFinite(ms)) continue;
+    if (!earliest || ms < earliest.ms) earliest = { raw: liftableAt, ms };
+  }
+  return earliest?.raw;
 }
 
 export type UpdateButtonState = 'none' | 'ready' | 'soft' | 'hard';

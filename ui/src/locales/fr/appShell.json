@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "Vous êtes hors ligne",
+      "offlineBody": "Affichage des dernières données connues. Les modifications sont désactivées jusqu'à la reconnexion.",
+      "unreachableTitle": "Serveur Drydock injoignable",
+      "unreachableBody": "Affichage des dernières données connues. Les modifications sont désactivées et Drydock réessaie en continu.",
+      "lastUpdated": "Dernière mise à jour : {time}.",
+      "actionsDisabledOffline": "Indisponible hors ligne",
+      "actionsDisabledUnreachable": "Indisponible tant que le serveur Drydock est injoignable"
+    },
     "toast": {
       "dismiss": "Ignorer"
     },
@@ -120,6 +129,7 @@
         "unknownImage": "image inconnue",
         "localHost": "local",
         "containerSubtitle": "Conteneur · {image} · {status} · {host}",
+        "pageSubtitle": "Page · {route}",
         "agentSubtitle": "Agent · {status} · {host}",
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Observateur · {type}",
@@ -149,11 +159,8 @@
         }
       },
       "connection": {
-        "lostTitle": "Connexion perdue",
         "applyingUpdateTitle": "Application de la mise à jour",
-        "lostMessage": "Le serveur est inaccessible. En attente de son retour en ligne...",
         "restartingMessage": "Drydock redémarre après une auto-mise à jour{opId}. Reconnexion quand le service revient...",
-        "reconnecting": "Reconnexion",
         "restartingService": "Redémarrage du service"
       },
       "shortcuts": {

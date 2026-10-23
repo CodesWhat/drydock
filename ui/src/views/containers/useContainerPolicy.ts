@@ -1,6 +1,7 @@
 import { computed, type Ref, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
+import { formatLiftCountdown } from '../../composables/useUpdateStatus';
 import { updateContainerPolicy } from '../../services/container';
 import type { Container, ContainerGroupPolicySnapshot, UpdateBlocker } from '../../types/container';
 import { errorMessage } from '../../utils/error';
@@ -20,6 +21,7 @@ import { resolveSnoozeUntilFromInput } from '../../utils/snooze-date';
 import {
   findBackendMaturityBlocked,
   findBackendReleaseMaturityBlocker,
+  findMaturityLiftableAt,
   formatReleaseMaturityMessage,
 } from '../../utils/update-eligibility';
 
@@ -30,6 +32,7 @@ type ContainerListPolicyState = {
   snoozeUntil?: string;
   maturityBlocked: boolean;
   releaseMaturityBlocker?: UpdateBlocker;
+  liftableAt?: string;
   ageMaturityBlocked?: boolean;
   updateDetectedAt?: string;
 } & (
@@ -220,6 +223,7 @@ function buildContainerListPolicyStateFromPolicy(
   const ageMaturityBlocked =
     Array.isArray(blockers) &&
     blockers.some((blocker) => asRecord(blocker)?.reason === 'maturity-not-reached');
+  const liftableAt = backendMaturityBlocked ? findMaturityLiftableAt(metaRecord) : undefined;
   const fallbackMaturityStartMs = resolveFallbackMaturityClockStartMs(metaRecord, updateDetectedAt);
   const maturityBlocked =
     backendMaturityBlocked !== undefined
@@ -241,6 +245,7 @@ function buildContainerListPolicyStateFromPolicy(
     snoozeUntil: snoozed ? rawSnoozeUntil : undefined,
     ...(updateDetectedAt ? { updateDetectedAt } : {}),
     maturityBlocked,
+    ...(liftableAt ? { liftableAt } : {}),
     ...(ageMaturityBlocked ? { ageMaturityBlocked } : {}),
     ...(releaseMaturityBlocker ? { releaseMaturityBlocker } : {}),
   };
@@ -284,7 +289,24 @@ function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTra
     : t('containerComponents.policy.tooltips.snoozed');
 }
 
-function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
+function buildMaturityPolicyTooltip(
+  state: ContainerListPolicyState,
+  t: PolicyTranslateFn,
+  nowMs?: number,
+): string {
+  const base = buildMaturityPolicyMessage(state, t);
+  if (!state.maturityBlocked || !state.liftableAt || nowMs === undefined) {
+    return base;
+  }
+  return t('containerComponents.policy.tooltips.maturityCountdown', {
+    message: base,
+    // liftableAt was validated as parseable by findMaturityLiftableAt, so a countdown always exists.
+    countdown: formatLiftCountdown(state.liftableAt, nowMs),
+    date: new Date(state.liftableAt).toLocaleString(),
+  });
+}
+
+function buildMaturityPolicyMessage(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
   if (state.releaseMaturityBlocker && !state.ageMaturityBlocked) {
     return formatReleaseMaturityMessage(state.releaseMaturityBlocker, t);
   }
@@ -318,12 +340,13 @@ function buildContainerPolicyTooltip(
   state: ContainerListPolicyState,
   kind: 'snoozed' | 'skipped' | 'maturity',
   t: PolicyTranslateFn,
+  nowMs?: number,
 ): string {
   if (kind === 'snoozed') {
     return buildSnoozedPolicyTooltip(state, t);
   }
   if (kind === 'maturity') {
-    return buildMaturityPolicyTooltip(state, t);
+    return buildMaturityPolicyTooltip(state, t, nowMs);
   }
   return buildSkippedPolicyTooltip(state, t);
 }
@@ -812,9 +835,10 @@ function createContainerPolicyStateAccessors(
   function containerPolicyTooltip(
     target: ContainerPolicyTarget,
     kind: 'snoozed' | 'skipped' | 'maturity',
+    nowMs?: number,
   ): string {
     const state = getContainerListPolicyState(target);
-    return buildContainerPolicyTooltip(state, kind, t);
+    return buildContainerPolicyTooltip(state, kind, t, nowMs);
   }
 
   return {

@@ -126,7 +126,8 @@ type NotificationRuleId =
   | 'agent-disconnect'
   | 'agent-reconnect'
   | 'container-unhealthy'
-  | 'maturity-cleared';
+  | 'maturity-cleared'
+  | 'update-pending-approval';
 
 const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'update-available',
@@ -137,6 +138,7 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'agent-reconnect',
   'container-unhealthy',
   'maturity-cleared',
+  'update-pending-approval',
 ]);
 
 /**
@@ -231,6 +233,14 @@ interface MaturityGateClearedNotificationEvent {
   clockSource?: string;
 }
 
+interface UpdatePendingApprovalNotificationEvent {
+  kind: 'update-pending-approval';
+  approvalId?: string;
+  approvalUrl?: string;
+  fromRef?: string;
+  toRef?: string;
+}
+
 type TriggerNotificationEvent =
   | UpdateAppliedNotificationEvent
   | UpdateFailedNotificationEvent
@@ -238,7 +248,8 @@ type TriggerNotificationEvent =
   | AgentDisconnectedNotificationEvent
   | AgentReconnectedNotificationEvent
   | ContainerUnhealthyNotificationEvent
-  | MaturityGateClearedNotificationEvent;
+  | MaturityGateClearedNotificationEvent
+  | UpdatePendingApprovalNotificationEvent;
 
 type TriggerContainer = Container & {
   notificationEvent?: TriggerNotificationEvent;
@@ -398,6 +409,8 @@ const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpress
 const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}`;
+const UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update awaiting approval for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
+const UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} has an update awaiting approval${buildLiteralTemplateExpression('event.fromRef && event.toRef ? ": " + event.fromRef + " to " + event.toRef : ""')}${buildLiteralTemplateExpression('event.approvalUrl ? "\\n" + event.approvalUrl : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -408,6 +421,7 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE,
+  'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE,
 };
 const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -419,6 +433,7 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE,
+  'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE,
 };
 const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -428,6 +443,7 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
   'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
   'maturity-cleared': `${buildLiteralTemplateExpression('containers.length')} updates ready to apply`,
+  'update-pending-approval': `${buildLiteralTemplateExpression('containers.length')} updates awaiting approval`,
 };
 
 /** Per-container row used in the security digest body template. */
@@ -614,6 +630,18 @@ function getMaturityGateClearedNotificationEvent(
   };
 }
 
+function getUpdatePendingApprovalNotificationEvent(
+  notificationEvent: unknown,
+): UpdatePendingApprovalNotificationEvent {
+  return {
+    kind: 'update-pending-approval',
+    approvalId: getNonEmptyString(notificationEvent, 'approvalId'),
+    approvalUrl: getNonEmptyString(notificationEvent, 'approvalUrl'),
+    fromRef: getNonEmptyString(notificationEvent, 'fromRef'),
+    toRef: getNonEmptyString(notificationEvent, 'toRef'),
+  };
+}
+
 function getAgentNotificationEvent(
   kind: unknown,
   notificationEvent: unknown,
@@ -665,6 +693,10 @@ export function getNotificationEvent(
 
   if (kind === 'maturity-cleared') {
     return getMaturityGateClearedNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'update-pending-approval') {
+    return getUpdatePendingApprovalNotificationEvent(notificationEvent);
   }
 
   return getAgentNotificationEvent(kind, notificationEvent);
@@ -742,6 +774,7 @@ class Trigger<
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerHealthTransition?: () => void;
   private unregisterMaturityGateCleared?: () => void;
+  private unregisterApprovalPendingNotification?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private unregisterContainerRemovedForSkips?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
@@ -983,6 +1016,14 @@ class Trigger<
     return (
       this.getCategory() === 'action' &&
       resolveUpdateModeCeiling(container, 'auto').value !== 'auto'
+    );
+  }
+
+  /** Batch-path twin of the simple path's group-cap log, with the group and its mode added. */
+  private logGroupPolicyBatchHold(container: Container) {
+    const ceiling = resolveUpdateModeCeiling(container, 'auto');
+    this.log.debug(
+      `Group policy update mode does not allow automatic actions for ${fullName(container)} => ignore (group '${container.groupPolicy?.group}', mode '${ceiling.value}')`,
     );
   }
 
@@ -1758,6 +1799,32 @@ class Trigger<
     }
   }
 
+  /**
+   * Handle the update-pending-approval event: an update candidate entered the approval queue.
+   * The ledger row is the dedupe key (the reconciler only emits on row insert), so unlike
+   * maturity-cleared there is no once-reservation to take here. Gating otherwise mirrors
+   * `update-available`: threshold, include/exclude and the rule's trigger selection apply.
+   */
+  async handleApprovalPendingNotificationEvent(
+    payload: event.ApprovalPendingNotificationEventPayload,
+  ) {
+    const { container } = payload;
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'update-pending-approval',
+          approvalId: payload.approvalId,
+          approvalUrl: payload.approvalUrl,
+          fromRef: payload.fromRef,
+          toRef: payload.toRef,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('update-pending-approval', notificationContainer, {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+    });
+  }
+
   private warnIfDigestRoutingIsSuppressed(
     dispatchDecision: notificationStore.NotificationRuleDispatchDecision,
   ) {
@@ -2398,11 +2465,18 @@ class Trigger<
       return false;
     }
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      // Same wording as the simple path so one grep finds both.
+      this.getContainerLogger(container).debug(
+        `Threshold not reached => ignore (threshold=${this.getSimpleModeThreshold()}, updateKind=${container.updateKind?.kind ?? 'unknown'}, semverDiff=${container.updateKind?.semverDiff ?? 'unknown'})`,
+      );
       this.recordSkip(container, 'threshold-not-met', `threshold=${this.getSimpleModeThreshold()}`);
       return false;
     }
     const mustTriggerDecision = this.getMustTriggerDecision(container);
     if (!mustTriggerDecision.allowed) {
+      this.getContainerLogger(container).debug(
+        `Trigger conditions not met => ignore (${mustTriggerDecision.reason})`,
+      );
       this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
       return false;
     }
@@ -2729,6 +2803,10 @@ class Trigger<
     if (!batchDispatchDecision.enabled) {
       for (const report of containerReports) {
         if (report.container.updateAvailable) {
+          // Same wording as the simple path so one grep finds both.
+          this.log.debug(
+            `Skipping update-available notification for ${fullName(report.container)} (${batchDispatchDecision.reason})`,
+          );
           this.recordSkip(report.container, 'rule-disabled', batchDispatchDecision.reason);
         }
       }
@@ -2741,9 +2819,15 @@ class Trigger<
     }
     // Per report, after the global gate: a member whose group caps the mode never enters the
     // batch, so it is never reserved, sent or recorded as notified.
-    const dispatchableReports = containerReports.filter(
-      (report) => !this.isAutomaticActionDispatchBlockedFor(report.container),
-    );
+    const dispatchableReports = containerReports.filter((report) => {
+      if (!this.isAutomaticActionDispatchBlockedFor(report.container)) {
+        return true;
+      }
+      if (report.container.updateAvailable) {
+        this.logGroupPolicyBatchHold(report.container);
+      }
+      return false;
+    });
 
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
@@ -2759,6 +2843,7 @@ class Trigger<
       // A retry is judged on the current container, so a group that has since capped the mode
       // holds it back without a reservation. It stays buffered, as it does under a global gate.
       if (this.isAutomaticActionDispatchBlockedFor(container)) {
+        this.logGroupPolicyBatchHold(container);
         continue;
       }
       const businessId = getContainerNotificationKey(container) || fullName(container);
@@ -3626,6 +3711,14 @@ class Trigger<
         },
       );
 
+      this.unregisterApprovalPendingNotification = event.registerApprovalPendingNotification(
+        async (payload) => this.handleApprovalPendingNotificationEvent(payload),
+        {
+          id: this.getId(),
+          order: this.configuration.order,
+        },
+      );
+
       this.seedNotificationHistoryFromStore();
       this.seedRecentApplicationSuppressionFromStore();
     } else {
@@ -3738,6 +3831,9 @@ class Trigger<
 
     this.unregisterMaturityGateCleared?.();
     this.unregisterMaturityGateCleared = undefined;
+
+    this.unregisterApprovalPendingNotification?.();
+    this.unregisterApprovalPendingNotification = undefined;
 
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
@@ -4382,7 +4478,15 @@ class Trigger<
                   ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
                   : ruleId === 'maturity-cleared'
                     ? { kind: ruleId, pendingSince: '2026-01-01T00:00:00.000Z', minAgeDays: 7 }
-                    : { kind: ruleId };
+                    : ruleId === 'update-pending-approval'
+                      ? {
+                          kind: ruleId,
+                          approvalId: 'preview-approval',
+                          approvalUrl: 'https://drydock.example.com/approvals?id=preview-approval',
+                          fromRef: '1.0.0',
+                          toRef: '1.1.0',
+                        }
+                      : { kind: ruleId };
 
     return {
       id: 'drydock-preview',

@@ -1079,6 +1079,160 @@ describe('getTagsPage link header cursor', () => {
       expect(registryMocked.callRegistry).toHaveBeenCalledTimes(50);
       expect(result).not.toContain('new');
     });
+
+    describe('tail-only listing after a recent truncation', () => {
+      const DAY = 24 * 60 * 60 * 1000;
+
+      function creationOrdered(tailResponses: any[]) {
+        const m = mockRegistry(tailResponses);
+        (m.registryMocked as any).listsTagsInCreationOrder = () => true;
+        return m;
+      }
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date('2026-10-22T00:00:00Z'));
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      test('base registry does not list in creation order', () => {
+        expect((createMockedRegistry() as any).listsTagsInCreationOrder()).toBe(false);
+      });
+
+      test('skips the head on the second call within 24 hours', async () => {
+        const { registryMocked, urls } = creationOrdered([
+          { headers: {}, data: { tags: ['v3.3.5'] } },
+        ]);
+        await registryMocked.getTags(imageWithTag);
+        expect(urls).toHaveLength(51);
+        urls.length = 0;
+        (registryMocked.log.debug as any).mockClear();
+
+        const result = await registryMocked.getTags(imageWithTag);
+
+        expect(urls).toHaveLength(1);
+        expect(urls[0]).toContain('last=v3.3.4');
+        expect(result).toEqual(['v3.3.5']);
+        expect(registryMocked.log.debug).toHaveBeenCalledWith(
+          expect.stringContaining('Skipping the head listing'),
+        );
+      });
+
+      test('does the full head pass again after 24 hours and re-records truncation', async () => {
+        const { registryMocked, urls } = creationOrdered([
+          { headers: {}, data: { tags: ['v3.3.5'] } },
+        ]);
+        await registryMocked.getTags(imageWithTag);
+        vi.setSystemTime(Date.now() + DAY + 1);
+        urls.length = 0;
+        // callRegistry's head counter is exhausted, so serve a fresh truncated head.
+        let n = 0;
+        registryMocked.callRegistry = vi.fn((options: any) => {
+          urls.push(options.url);
+          n++;
+          return n <= 50
+            ? { headers: { link: linkHeader }, data: { tags: [`h${n}`] } }
+            : { headers: {}, data: { tags: ['v3.3.5'] } };
+        }) as any;
+
+        await registryMocked.getTags(imageWithTag);
+        expect(urls).toHaveLength(51);
+
+        urls.length = 0;
+        await registryMocked.getTags(imageWithTag);
+        expect(urls).toHaveLength(1);
+      });
+
+      test('never skips the head on a registry that is not creation ordered', async () => {
+        const { registryMocked, urls } = mockRegistry([
+          { headers: {}, data: { tags: ['v3.3.5'] } },
+        ]);
+        await registryMocked.getTags(imageWithTag);
+        urls.length = 0;
+        let n = 0;
+        registryMocked.callRegistry = vi.fn((options: any) => {
+          urls.push(options.url);
+          n++;
+          return n <= 50
+            ? { headers: { link: linkHeader }, data: { tags: [`h${n}`] } }
+            : { headers: {}, data: { tags: ['v3.3.5'] } };
+        }) as any;
+
+        await registryMocked.getTags(imageWithTag);
+
+        expect(urls).toHaveLength(51);
+        expect(urls[0]).not.toContain('last=v3.3.4');
+      });
+
+      test('falls back to the full listing when the tail-only pass throws', async () => {
+        const { registryMocked } = creationOrdered([{ headers: {}, data: { tags: ['v3.3.5'] } }]);
+        await registryMocked.getTags(imageWithTag);
+        let n = 0;
+        registryMocked.callRegistry = vi.fn(() => {
+          n++;
+          if (n === 1) throw new Error('boom');
+          return n <= 51
+            ? { headers: { link: linkHeader }, data: { tags: [`h${n}`] } }
+            : { headers: {}, data: { tags: ['v3.3.5'] } };
+        }) as any;
+
+        const result = await registryMocked.getTags(imageWithTag);
+
+        expect(n).toBeGreaterThan(50);
+        expect(result).toContain('h2');
+      });
+
+      test('falls back to the full listing when the tail-only pass is empty', async () => {
+        const { registryMocked } = creationOrdered([{ headers: {}, data: { tags: ['v3.3.5'] } }]);
+        await registryMocked.getTags(imageWithTag);
+        let n = 0;
+        registryMocked.callRegistry = vi.fn(() => {
+          n++;
+          if (n === 1) return { headers: {}, data: { tags: [] } };
+          return n <= 51
+            ? { headers: { link: linkHeader }, data: { tags: [`h${n}`] } }
+            : { headers: {}, data: { tags: ['v3.3.5'] } };
+        }) as any;
+
+        const result = await registryMocked.getTags(imageWithTag);
+
+        expect(n).toBeGreaterThan(50);
+        expect(result).toContain('h2');
+      });
+
+      test('a non-truncated full listing clears the entry', async () => {
+        const { registryMocked, urls } = creationOrdered([
+          { headers: {}, data: { tags: ['v3.3.5'] } },
+        ]);
+        await registryMocked.getTags(imageWithTag);
+        // Tail-only returns empty, full listing is not truncated: entry cleared.
+        let phase = 0;
+        registryMocked.callRegistry = vi.fn(() => {
+          phase++;
+          return { headers: {}, data: { tags: phase === 1 ? [] : ['a'] } };
+        }) as any;
+        await registryMocked.getTags(imageWithTag);
+        expect(phase).toBe(2);
+
+        urls.length = 0;
+        phase = 10;
+        await registryMocked.getTags(imageWithTag);
+        expect(phase).toBe(11);
+      });
+
+      test('bounds the number of remembered truncated images', async () => {
+        const { registryMocked } = creationOrdered([]);
+        const map = registryMocked.truncatedListings as Map<string, unknown>;
+        for (let i = 0; i < 1001; i++) {
+          registryMocked.recordTruncation(`img${i}`);
+        }
+        expect(map.size).toBe(1000);
+        expect(map.has('img0')).toBe(false);
+        expect(map.has('img1000')).toBe(true);
+      });
+    });
   });
 });
 

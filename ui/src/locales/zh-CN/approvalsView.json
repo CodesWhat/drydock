@@ -5,7 +5,8 @@
       "detailLoadFailed": "无法加载审批",
       "approveFailed": "无法批准更新",
       "rejectFailed": "无法拒绝更新",
-      "deferFailed": "无法推迟更新"
+      "deferFailed": "无法推迟更新",
+      "bulkFailed": "无法处理所选更新。"
     },
     "ofCount": "已显示 {count} 项",
     "refresh": "刷新",
@@ -70,6 +71,18 @@
         "header": "推迟更新",
         "message": "将 {name} 的更新推迟 {days} 天？",
         "acceptLabel": "推迟"
+      },
+      "bulkApprove": {
+        "header": "批准所选更新",
+        "message": "批准所选更新（{count}）？每个更新都会重新检查，并按与“批准”按钮相同的方式执行，因此该按钮会拒绝的更新将被报告而不是被应用。",
+        "acceptLabel": "批准所选",
+        "holdsSuffix": "\n\n这些更新存在未解决的暂缓原因，批准将覆盖它们：\n{list}",
+        "excludedSuffix": "\n\n已阻止并跳过（{count}）：\n{list}"
+      },
+      "bulkReject": {
+        "header": "拒绝所选更新",
+        "message": "拒绝所选更新（{count}）？这些更新将不会自动应用。",
+        "acceptLabel": "拒绝所选"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "已拒绝 {name} 的更新",
       "rejectFailed": "无法拒绝 {name}",
       "deferred": "已推迟 {name} 的更新",
-      "deferFailed": "无法推迟 {name}"
+      "deferFailed": "无法推迟 {name}",
+      "bulkApproved": "已请求批准所选更新：{count}",
+      "bulkRejected": "已拒绝所选更新：{count}",
+      "bulkPartialFailure": "部分更新无法处理（{count}）：{list}",
+      "bulkFailed": "无法处理所选更新"
+    },
+    "bulk": {
+      "selectRow": "选择 {name}",
+      "selectAll": "选择所有可见的审批",
+      "barLabel": "已选审批",
+      "count": "已选择：{count}",
+      "approveSelected": "批准所选",
+      "rejectSelected": "拒绝所选",
+      "clear": "清除选择"
     }
   }
 }

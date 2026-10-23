@@ -102,7 +102,7 @@ describe('renovate Dockerfile apk pin manager', () => {
     }
   });
 
-  it('covers the known apk-pinned packages, including the cosign line that broke CI', () => {
+  it('covers the known apk-pinned packages', () => {
     const dockerfile = readDockerfile();
     const dockerfilePins = extractDockerfilePins(dockerfile).map((pin) => pin.name);
 
@@ -115,10 +115,45 @@ describe('renovate Dockerfile apk pin manager', () => {
         'su-exec',
         'tini',
         'tzdata',
-        'cosign',
         'gcc',
         'musl-dev',
       ]),
     );
+  });
+});
+
+describe('renovate scanner worker image manager', () => {
+  const configurationPath = `${repoRoot}/app/configuration/index.ts`;
+
+  function findWorkerManager(config: RenovateConfig): CustomManager | undefined {
+    return config.customManagers?.find((manager) =>
+      manager.managerFilePatterns?.some((pattern) => pattern.includes('configuration')),
+    );
+  }
+
+  it('declares a docker-datasource regex manager scoped to the configuration module', () => {
+    const manager = findWorkerManager(readRenovateConfig());
+    expect(manager?.customType).toBe('regex');
+    expect(manager?.datasourceTemplate).toBe('docker');
+    expect(manager?.managerFilePatterns).toEqual(['/^app/configuration/index\\.ts$/']);
+  });
+
+  it('extracts every scanner worker pin with its tag and digest', () => {
+    const source = readFileSync(configurationPath, 'utf8');
+    const manager = findWorkerManager(readRenovateConfig());
+    const matches = manager!.matchStrings!.flatMap((matchString) =>
+      [...source.matchAll(new RegExp(matchString, 'g'))].map((match) => match.groups),
+    );
+
+    expect(matches.map((match) => match?.depName).sort()).toEqual([
+      'ghcr.io/anchore/grype',
+      'ghcr.io/anchore/syft',
+      'ghcr.io/aquasecurity/trivy',
+      'ghcr.io/sigstore/cosign/cosign',
+    ]);
+    for (const match of matches) {
+      expect(match?.currentValue).toMatch(/^v?\d+\.\d+\.\d+$/);
+      expect(match?.currentDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    }
   });
 });

@@ -5,7 +5,8 @@
       "detailLoadFailed": "無法載入核准",
       "approveFailed": "無法核准更新",
       "rejectFailed": "無法拒絕更新",
-      "deferFailed": "無法延後更新"
+      "deferFailed": "無法延後更新",
+      "bulkFailed": "無法處理所選更新。"
     },
     "ofCount": "已顯示 {count} 項",
     "refresh": "重新整理",
@@ -70,6 +71,18 @@
         "header": "延後更新",
         "message": "將 {name} 的更新延後 {days} 天？",
         "acceptLabel": "延後"
+      },
+      "bulkApprove": {
+        "header": "核准所選更新",
+        "message": "核准所選更新（{count}）？每個更新都會重新檢查，並以與「核准」按鈕相同的方式執行，因此該按鈕會拒絕的更新將被回報而不是被套用。",
+        "acceptLabel": "核准所選項目",
+        "holdsSuffix": "\n\n這些更新存在未解決的暫緩原因，核准將覆蓋它們：\n{list}",
+        "excludedSuffix": "\n\n已封鎖並略過（{count}）：\n{list}"
+      },
+      "bulkReject": {
+        "header": "拒絕所選更新",
+        "message": "拒絕所選更新（{count}）？這些更新將不會自動套用。",
+        "acceptLabel": "拒絕所選項目"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "已拒絕 {name} 的更新",
       "rejectFailed": "無法拒絕 {name}",
       "deferred": "已延後 {name} 的更新",
-      "deferFailed": "無法延後 {name}"
+      "deferFailed": "無法延後 {name}",
+      "bulkApproved": "已請求核准所選更新：{count}",
+      "bulkRejected": "已拒絕所選更新：{count}",
+      "bulkPartialFailure": "部分更新無法處理（{count}）：{list}",
+      "bulkFailed": "無法處理所選更新"
+    },
+    "bulk": {
+      "selectRow": "選取 {name}",
+      "selectAll": "選取所有可見的核准項目",
+      "barLabel": "已選取的核准項目",
+      "count": "已選取：{count}",
+      "approveSelected": "核准所選項目",
+      "rejectSelected": "拒絕所選項目",
+      "clear": "清除選取"
     }
   }
 }

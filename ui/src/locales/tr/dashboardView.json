@@ -43,6 +43,7 @@
       "updateAll": "Tümünü güncelle",
       "noUpdates": "Güncelleme yok",
       "securityBlocked": "Güvenlik engellendi",
+      "maturityCountdown": "{countdown} sonra açılır ({date})",
       "updateContainer": "Kapsayıcıyı güncelle",
       "compactSingle": "{count} güncellemesi mevcut",
       "compactPlural": "{count} güncellemeleri mevcut",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} yeni · {mature} mevcut",
       "securityIssues": "Güvenlik Sorunları",
       "registries": "Kayıt Defterleri",
-      "approvals": "Onaylar"
+      "approvals": "Onaylar",
+      "images": "İmajlar",
+      "imageDetail": "{count} güncellemeli",
+      "triggers": "Tetikleyiciler",
+      "triggerDetail": "{actions} eylem · {notifications} bildirim",
+      "watchers": "İzleyiciler",
+      "watcherDetailHealthy": "Tümü bağlı",
+      "watcherDetailDisconnected": "{healthy} bağlı · {disconnected} bağlantısı kopuk"
     },
     "updateKind": {
       "major": "Ana",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Son etkinlik",
+      "viewAudit": "Denetim günlüğünü görüntüle →",
+      "loading": "Etkinlik yükleniyor...",
+      "loadFailed": "Son etkinlik yüklenemedi",
+      "empty": "Yakın zamanda etkinlik yok",
+      "system": "Sistem"
     }
   }
 }

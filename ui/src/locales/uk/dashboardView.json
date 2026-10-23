@@ -43,6 +43,7 @@
       "updateAll": "Оновити всі",
       "noUpdates": "Оновлень немає",
       "securityBlocked": "Заблоковано безпекою",
+      "maturityCountdown": "Розблокується через {countdown} ({date})",
       "updateContainer": "Оновити контейнер",
       "compactSingle": "{count} доступне оновлення",
       "compactPlural": "{count} доступних оновлень",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} нових · {mature} зрілих",
       "securityIssues": "Проблеми безпеки",
       "registries": "Реєстри",
-      "approvals": "Схвалення"
+      "approvals": "Схвалення",
+      "images": "Образи",
+      "imageDetail": "{count} з оновленнями",
+      "triggers": "Тригери",
+      "triggerDetail": "{actions} дій · {notifications} сповіщень",
+      "watchers": "Спостерігачі",
+      "watcherDetailHealthy": "Усі підключені",
+      "watcherDetailDisconnected": "{healthy} підключено · {disconnected} відключено"
     },
     "updateKind": {
       "major": "Мажорне",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Остання активність",
+      "viewAudit": "Відкрити журнал аудиту →",
+      "loading": "Завантаження активності...",
+      "loadFailed": "Не вдалося завантажити останню активність",
+      "empty": "Немає останньої активності",
+      "system": "Система"
     }
   }
 }

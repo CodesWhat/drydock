@@ -1305,6 +1305,40 @@ describe('SecurityView', () => {
     });
   });
 
+  describe('scanner asset details', () => {
+    it('adds resolved version, digest and database age to the provider tooltip', async () => {
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'docker',
+        providers: [
+          { provider: 'trivy', role: 'scanner', status: 'ready', message: 'Trivy ready' },
+        ],
+        assets: [
+          {
+            provider: 'trivy',
+            state: 'ready',
+            version: '0.73.0',
+            resolvedDigest:
+              'sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
+            databaseUpdatedAt: '2026-10-22T01:00:00Z',
+          },
+        ],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const tooltip = (wrapper.vm as any).providerTooltip(
+        { provider: 'trivy', message: 'Trivy ready' },
+        (wrapper.vm as any).runtimeStatus.assets,
+      );
+      expect(tooltip).toBe(
+        'Trivy ready · Version 0.73.0 · Image sha256:7cced7cae583 · Database updated 2026-10-22T01:00:00.000Z',
+      );
+    });
+  });
+
   describe('compact scanner asset controls', () => {
     it('renders touch-friendly pull and warm controls and runs the selected operation', async () => {
       mockWindowNarrow.value = true;
@@ -1336,6 +1370,40 @@ describe('SecurityView', () => {
       await flushPromises();
 
       expect(mockGetSecurityRuntime).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('worker asset controls under the command backend', () => {
+    it('keeps pull and warm controls when a missing binary fell back to a worker', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'command',
+        providers: [],
+        assets: [{ provider: 'trivy', state: 'missing' }],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-button-stub[aria-label="Pull trivy"]').exists()).toBe(true);
+    });
+
+    it('shows no asset controls when the command backend has no worker assets', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'command',
+        providers: [],
+        assets: [],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-button-stub[aria-label^="Pull"]').exists()).toBe(false);
     });
   });
 

@@ -25,7 +25,7 @@ describe('trigger execution error responses', () => {
       `${i18n.global.t('triggersView.test.defaultError')} (HTTP 502)`,
     );
     expect(fetch).toHaveBeenCalledExactlyOnceWith(
-      '/api/v1/triggers/http/alerts%2Fprimary/edge%20east',
+      '/api/v1/notification-triggers/http/alerts%2Fprimary/edge%20east',
       {
         method: 'POST',
         credentials: 'include',
@@ -85,7 +85,7 @@ describe('trigger execution error responses', () => {
       vi.mocked(fetch).mockResolvedValue(Response.json(payload));
       await expect(runTrigger({ ...request, triggerAgent: undefined })).resolves.toEqual(payload);
       expect(fetch).toHaveBeenCalledWith(
-        '/api/v1/triggers/http/alerts%2Fprimary',
+        '/api/v1/notification-triggers/http/alerts%2Fprimary',
         expect.any(Object),
       );
     },

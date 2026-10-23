@@ -63,11 +63,11 @@ const countStyle = {
       @click="!tab.disabled && $emit('update:modelValue', tab.id)"
     >
       <span class="inline-flex items-center">
-        <AppIcon v-if="tab.icon" :name="tab.icon" :size="iconSize" :class="!iconOnly && 'mr-1.5'" />
+        <AppIcon v-if="tab.icon" :name="tab.icon" :size="iconSize" :class="!iconOnly && 'me-1.5'" />
         <span v-if="!iconOnly">{{ tab.label }}</span>
         <span
           v-if="tab.count != null"
-          class="ml-1.5 badge dd-text-badge-xs px-1.5 py-0"
+          class="ms-1.5 badge dd-text-badge-xs px-1.5 py-0"
           :style="countStyle"
         >
           {{ tab.count }}
@@ -75,7 +75,7 @@ const countStyle = {
       </span>
       <div
         v-if="tab.id === modelValue"
-        class="absolute bottom-0 left-0 right-0 h-[2px] rounded-t-full"
+        class="absolute bottom-0 start-0 end-0 h-[2px] rounded-t-full"
         style="background-color: var(--color-drydock-secondary)"
       />
     </button>

@@ -141,6 +141,7 @@
         "recently-applied": "Skipped: the update was just applied, waiting for the watcher to confirm.",
         "digest-buffered": "Held for the next digest."
       },
+      "notificationSkipAt": "Last skipped {date}",
       "backupsRollback": "Backups & Rollback",
       "rollingBack": "Rolling back...",
       "rollbackLatest": "Rollback Latest",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "Queued",
+      "updateFailed": "Update failed",
       "statusScanning": "Scanning",
       "statusUpdating": "Updating",
       "statusPulling": "Pulling…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
       "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
       "groupManualOnly": "Group policy '{group}' allows manual updates only. Drydock won't apply this one automatically.",
+      "updateAvailableRuleDisabled": "The Update Available notification rule is off, and it also gates automatic updates. Turn it on in Settings > Notifications > Update Available to let Drydock apply this update on its own.",
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
       "notificationsOnlyButton": "Notifications only",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "No update trigger configured",
         "self-update-unavailable": "Self-update unavailable",
         "maintenance-window-closed": "Maintenance window closed",
+        "update-available-rule-disabled": "Update Available rule is off",
         "group-notify-only": "Group allows notifications only",
         "group-manual-only": "Group requires manual updates",
         "dry-run-trigger": "Dry-run trigger configuration",
@@ -536,6 +540,7 @@
         "configureThreshold": "Configure trigger threshold",
         "configureSelfUpdate": "Configure self-update",
         "configureMaintenance": "Configure maintenance window",
+        "configureNotificationRule": "Open notification rules",
         "editGroupPolicy": "Edit group policy"
       },
       "releaseMaturityCount": "Waiting for stable releases in family {family}: {count} of {required} earlier releases available.",
@@ -653,6 +658,7 @@
         "snoozed": "Updates snoozed",
         "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
         "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
+        "maturityCountdown": "{message}. Unlocks in {countdown} ({date})",
         "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
         "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
         "maturityAllowAll": "Maturity policy allows all updates",

@@ -43,6 +43,7 @@
       "updateAll": "Zaktualizuj wszystko",
       "noUpdates": "Brak dostępnych aktualizacji",
       "securityBlocked": "Zabezpieczenia zablokowane",
+      "maturityCountdown": "Odblokuje się za {countdown} ({date})",
       "updateContainer": "Zaktualizuj kontener",
       "compactSingle": "Dostępna aktualizacja {count}",
       "compactPlural": "Dostępne aktualizacje {count}",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} nowych · {mature} dojrzałych",
       "securityIssues": "Problemy z bezpieczeństwem",
       "registries": "Rejestry",
-      "approvals": "Zatwierdzenia"
+      "approvals": "Zatwierdzenia",
+      "images": "Obrazy",
+      "imageDetail": "{count} z aktualizacjami",
+      "triggers": "Triggery",
+      "triggerDetail": "{actions} akcji · {notifications} powiadomień",
+      "watchers": "Watchery",
+      "watcherDetailHealthy": "Wszystkie połączone",
+      "watcherDetailDisconnected": "{healthy} połączonych · {disconnected} rozłączonych"
     },
     "updateKind": {
       "major": "Główna",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Ostatnia aktywność",
+      "viewAudit": "Pokaż dziennik audytu →",
+      "loading": "Ładowanie aktywności...",
+      "loadFailed": "Nie udało się załadować ostatniej aktywności",
+      "empty": "Brak ostatniej aktywności",
+      "system": "System"
     }
   }
 }

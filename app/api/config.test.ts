@@ -808,8 +808,8 @@ describe('Config Router', () => {
     // the two real cases where a section key can appear without a `sources`
     // entry: a Joi default (never in the merged env at all, so this generic
     // derivation wouldn't produce it either) and a `_file`-resolved secret
-    // (`sources` still names the old `..._FILE` key, never the base key
-    // `replaceSecrets` writes the resolved value under). Either way, this
+    // (`sources` is keyed by the base name `replaceSecrets` writes the
+    // resolved value under, never the `..._FILE` spelling). Either way, this
     // never invents a third "default" source value — the section value
     // shows up, `sources` simply omits it.
     configRouter.init();

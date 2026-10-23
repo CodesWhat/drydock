@@ -122,6 +122,10 @@ describe('OpenAPI document', () => {
       in: 'header',
       name: 'x-drydock-signature',
     });
+    expect(openApiDocument.components.securitySchemes.registryWebhookStaticSecret).toMatchObject({
+      type: 'http',
+      scheme: 'bearer',
+    });
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth).toBeDefined();
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth.type).toBe('http');
     expect(openApiDocument.components.securitySchemes.metricsBearerAuth.scheme).toBe('bearer');

@@ -5,7 +5,8 @@
       "detailLoadFailed": "Nie udało się wczytać zatwierdzenia",
       "approveFailed": "Nie udało się zatwierdzić aktualizacji",
       "rejectFailed": "Nie udało się odrzucić aktualizacji",
-      "deferFailed": "Nie udało się odroczyć aktualizacji"
+      "deferFailed": "Nie udało się odroczyć aktualizacji",
+      "bulkFailed": "Nie udało się rozstrzygnąć zaznaczonych aktualizacji"
     },
     "ofCount": "Wyświetlono: {count}",
     "refresh": "Odśwież",
@@ -70,6 +71,18 @@
         "header": "Odrocz aktualizację",
         "message": "Odroczyć aktualizację {name} o {days} dni?",
         "acceptLabel": "Odrocz"
+      },
+      "bulkApprove": {
+        "header": "Zatwierdź zaznaczone aktualizacje",
+        "message": "Zatwierdzić zaznaczone aktualizacje ({count})? Każda jest sprawdzana ponownie i uruchamiana tak samo jak przyciskiem Zatwierdź, więc aktualizacja, którą ten przycisk by odrzucił, zostanie zgłoszona zamiast zastosowana.",
+        "acceptLabel": "Zatwierdź zaznaczone",
+        "holdsSuffix": "\n\nTe aktualizacje mają otwarte powody wstrzymania, które zatwierdzenie pomija:\n{list}",
+        "excludedSuffix": "\n\nZablokowane i pominięte ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Odrzuć zaznaczone aktualizacje",
+        "message": "Odrzucić zaznaczone aktualizacje ({count})? Nie zostaną zastosowane automatycznie.",
+        "acceptLabel": "Odrzuć zaznaczone"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Odrzucono aktualizację {name}",
       "rejectFailed": "Nie udało się odrzucić {name}",
       "deferred": "Odroczono aktualizację {name}",
-      "deferFailed": "Nie udało się odroczyć {name}"
+      "deferFailed": "Nie udało się odroczyć {name}",
+      "bulkApproved": "Wysłano żądanie zatwierdzenia zaznaczonych aktualizacji: {count}",
+      "bulkRejected": "Odrzucono zaznaczone aktualizacje: {count}",
+      "bulkPartialFailure": "Nie udało się rozstrzygnąć części aktualizacji ({count}): {list}",
+      "bulkFailed": "Nie udało się rozstrzygnąć zaznaczonych aktualizacji"
+    },
+    "bulk": {
+      "selectRow": "Zaznacz {name}",
+      "selectAll": "Zaznacz wszystkie widoczne zatwierdzenia",
+      "barLabel": "Zaznaczone zatwierdzenia",
+      "count": "Zaznaczono: {count}",
+      "approveSelected": "Zatwierdź zaznaczone",
+      "rejectSelected": "Odrzuć zaznaczone",
+      "clear": "Wyczyść zaznaczenie"
     }
   }
 }

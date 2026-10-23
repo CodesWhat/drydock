@@ -13,6 +13,8 @@ const METRIC_IP_LOCKED = 'drydock_auth_ip_locked_total';
 // counter takes every attempt, including the suppressed ones, so the audit
 // throttle never hides the volume of an attack.
 const METRIC_API_KEY_FAILURE = 'drydock_auth_api_key_failure_total';
+const METRIC_ACCOUNT_LOCKOUT = 'drydock_auth_account_lockout_total';
+const METRIC_IP_LOCKOUT = 'drydock_auth_ip_lockout_total';
 
 let authLoginCounter: Counter<string> | undefined;
 let authLoginDurationHistogram: Histogram<string> | undefined;
@@ -20,6 +22,8 @@ let authUsernameMismatchCounter: Counter<string> | undefined;
 let authAccountLockedGauge: Gauge<string> | undefined;
 let authIpLockedGauge: Gauge<string> | undefined;
 let authApiKeyFailureCounter: Counter<string> | undefined;
+let authAccountLockoutCounter: Counter<string> | undefined;
+let authIpLockoutCounter: Counter<string> | undefined;
 
 export function init() {
   if (authLoginCounter) {
@@ -72,6 +76,24 @@ export function init() {
     name: METRIC_API_KEY_FAILURE,
     help: 'API key authentication failures, including those suppressed by the audit throttle',
   });
+
+  if (authAccountLockoutCounter) {
+    register.removeSingleMetric(METRIC_ACCOUNT_LOCKOUT);
+  }
+  authAccountLockoutCounter = new Counter({
+    name: METRIC_ACCOUNT_LOCKOUT,
+    help: 'Account lockouts started, by authentication provider',
+    labelNames: ['provider'],
+  });
+
+  if (authIpLockoutCounter) {
+    register.removeSingleMetric(METRIC_IP_LOCKOUT);
+  }
+  authIpLockoutCounter = new Counter({
+    name: METRIC_IP_LOCKOUT,
+    help: 'IP lockouts started, by authentication provider',
+    labelNames: ['provider'],
+  });
 }
 
 export function getAuthLoginCounter() {
@@ -92,6 +114,14 @@ export function getAuthAccountLockedGauge() {
 
 export function getAuthIpLockedGauge() {
   return authIpLockedGauge;
+}
+
+export function getAuthAccountLockoutCounter() {
+  return authAccountLockoutCounter;
+}
+
+export function getAuthIpLockoutCounter() {
+  return authIpLockoutCounter;
 }
 
 export function recordAuthLogin(outcome: AuthLoginOutcome, provider: AuthProvider): void {
@@ -126,6 +156,14 @@ export function setAuthIpLockedTotal(total: number): void {
   authIpLockedGauge?.set(total);
 }
 
+export function recordAuthAccountLockout(provider: AuthProvider): void {
+  authAccountLockoutCounter?.inc({ provider });
+}
+
+export function recordAuthIpLockout(provider: AuthProvider): void {
+  authIpLockoutCounter?.inc({ provider });
+}
+
 export function _resetAuthPrometheusStateForTests(): void {
   if (authLoginCounter) {
     register.removeSingleMetric(METRIC_LOGIN_TOTAL);
@@ -145,6 +183,12 @@ export function _resetAuthPrometheusStateForTests(): void {
   if (authApiKeyFailureCounter) {
     register.removeSingleMetric(METRIC_API_KEY_FAILURE);
   }
+  if (authAccountLockoutCounter) {
+    register.removeSingleMetric(METRIC_ACCOUNT_LOCKOUT);
+  }
+  if (authIpLockoutCounter) {
+    register.removeSingleMetric(METRIC_IP_LOCKOUT);
+  }
 
   authLoginCounter = undefined;
   authLoginDurationHistogram = undefined;
@@ -152,4 +196,6 @@ export function _resetAuthPrometheusStateForTests(): void {
   authAccountLockedGauge = undefined;
   authIpLockedGauge = undefined;
   authApiKeyFailureCounter = undefined;
+  authAccountLockoutCounter = undefined;
+  authIpLockoutCounter = undefined;
 }

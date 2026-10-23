@@ -57,7 +57,10 @@ async function getSecurityRuntime(req, res) {
 async function manageSecurityAsset(req, res) {
   const provider = `${req.params?.provider || ''}`;
   const operation = `${req.params?.operation || ''}`;
-  if (!['trivy', 'grype', 'syft'].includes(provider) || !['pull', 'warm'].includes(operation)) {
+  if (
+    !['trivy', 'grype', 'syft', 'cosign'].includes(provider) ||
+    !['pull', 'warm'].includes(operation)
+  ) {
     res.status(400).json({ error: 'Unsupported scanner asset operation' });
     return;
   }
@@ -72,10 +75,10 @@ async function manageSecurityAsset(req, res) {
     const status =
       operation === 'pull'
         ? await manager.pull(
-            provider as 'trivy' | 'grype' | 'syft',
+            provider as 'trivy' | 'grype' | 'syft' | 'cosign',
             Object.keys(auth).length > 0 ? auth : undefined,
           )
-        : await manager.warm(provider as 'trivy' | 'grype' | 'syft');
+        : await manager.warm(provider as 'trivy' | 'grype' | 'syft' | 'cosign');
     res.status(200).json(status);
   } catch (error: unknown) {
     const details = sanitizeLogParam(getErrorMessage(error));

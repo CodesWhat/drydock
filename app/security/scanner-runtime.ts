@@ -7,6 +7,10 @@ import {
   type ScannerAssetProvider,
   type ScannerAssetProviderId,
 } from './assets.js';
+import {
+  type BackendResolutionConfiguration,
+  resolveProviderExecution,
+} from './backend-resolution.js';
 import { createDockerScannerBackend } from './backends/docker.js';
 
 type ScannerBackend = {
@@ -26,12 +30,18 @@ type ScannerBackend = {
   inspectImage(image: string): Promise<{ digest: string; version?: string }>;
 };
 
-type ScannerRuntimeConfiguration = {
+type ProviderCommandSettings = { command?: string; commandExplicit?: boolean };
+
+type ScannerRuntimeConfiguration = BackendResolutionConfiguration & {
   scanner: string;
   backend: string;
-  trivy: { workerImage: string; timeout: number };
-  grype: { workerImage: string; timeout: number };
-  syft: { workerImage: string; timeout: number };
+  trivy: { workerImage: string; timeout: number } & ProviderCommandSettings;
+  grype: { workerImage: string; timeout: number } & ProviderCommandSettings;
+  syft: { workerImage: string; timeout: number } & ProviderCommandSettings;
+  signature?: {
+    verify: boolean;
+    cosign: { workerImage: string; timeout: number } & ProviderCommandSettings;
+  };
   sbom: { enabled: boolean; generator?: string };
   docker?: {
     socket: string;
@@ -62,26 +72,44 @@ const PROVIDER_ENV_ALLOWLIST: Record<ScannerAssetProviderId, readonly string[]> 
   trivy: ['TRIVY_USERNAME', 'TRIVY_PASSWORD'],
   grype: ['SYFT_REGISTRY_AUTH_USERNAME', 'SYFT_REGISTRY_AUTH_PASSWORD'],
   syft: ['SYFT_REGISTRY_AUTH_USERNAME', 'SYFT_REGISTRY_AUTH_PASSWORD'],
+  cosign: ['COSIGN_REGISTRY_USERNAME', 'COSIGN_REGISTRY_PASSWORD', 'COSIGN_PUBLIC_KEY'],
 };
 
+// The cosign worker runs as a non-root user and only /tmp (tmpfs) is writable by it, so the
+// sigstore trust root cache lives there instead of the shared cache volume.
 const PROVIDER_CACHE_ENV: Record<ScannerAssetProviderId, Record<string, string>> = {
-  trivy: { TRIVY_CACHE_DIR: '/cache' },
-  grype: { GRYPE_DB_CACHE_DIR: '/cache' },
-  syft: { SYFT_CACHE_DIR: '/cache' },
+  // TMPDIR points at a per-worker scratch volume (removed with the worker) because the 64 MiB
+  // tmpfs cannot hold the Grype database download or Syft/Trivy image layer extraction, and the
+  // shared cache volume would keep whatever an interrupted worker leaves behind.
+  trivy: { TRIVY_CACHE_DIR: '/cache', TMPDIR: '/scratch' },
+  grype: { GRYPE_DB_CACHE_DIR: '/cache', TMPDIR: '/scratch' },
+  syft: { SYFT_CACHE_DIR: '/cache', TMPDIR: '/scratch' },
+  cosign: { HOME: '/tmp', TUF_ROOT: '/tmp/tuf' },
 };
+
+const SUPPORTED_BACKENDS = ['auto', 'command', 'docker', 'remote'];
+
+function getProviderSettings(
+  configuration: ScannerRuntimeConfiguration,
+  provider: ScannerAssetProviderId,
+): { workerImage: string; timeout: number } {
+  return provider === 'cosign'
+    ? (configuration.signature as NonNullable<ScannerRuntimeConfiguration['signature']>).cosign
+    : configuration[provider];
+}
 
 function getWorkerImage(
   configuration: ScannerRuntimeConfiguration,
   provider: ScannerAssetProviderId,
 ): string {
-  return configuration[provider].workerImage;
+  return getProviderSettings(configuration, provider).workerImage;
 }
 
 function getProviderTimeout(
   configuration: ScannerRuntimeConfiguration,
   provider: ScannerAssetProviderId,
 ): number {
-  return configuration[provider].timeout;
+  return getProviderSettings(configuration, provider).timeout;
 }
 
 function resolveSbomGenerator(configuration: ScannerRuntimeConfiguration): 'trivy' | 'syft' {
@@ -105,7 +133,13 @@ function selectProviderIds(
   if (configuration.sbom.enabled) {
     providers.add(sbomGenerator);
   }
-  return (['trivy', 'grype', 'syft'] as const).filter((provider) => providers.has(provider));
+  if (configuration.signature?.verify) {
+    providers.add('cosign');
+  }
+  return (['trivy', 'grype', 'syft', 'cosign'] as const).filter(
+    (provider) =>
+      providers.has(provider) && resolveProviderExecution(provider, configuration) === 'worker',
+  );
 }
 
 function requireBackend(
@@ -150,9 +184,12 @@ export function createScannerRuntime(options: CreateScannerRuntimeOptions): {
   assets: ScannerAssetManager;
   sbomGenerator: 'trivy' | 'syft';
 } {
-  if (!['docker', 'remote'].includes(options.configuration.backend)) {
-    throw new Error('Docker scanner runtime requires docker or remote backend');
+  if (!SUPPORTED_BACKENDS.includes(options.configuration.backend)) {
+    throw new Error(
+      `Docker scanner runtime does not support backend ${options.configuration.backend}`,
+    );
   }
+  const assetBackend = options.configuration.backend === 'remote' ? 'remote' : 'docker';
   const sbomGenerator = resolveSbomGenerator(options.configuration);
   const providerIds = selectProviderIds(options.configuration, sbomGenerator);
   providerIds.forEach((provider) => requireBackend(options.backends, provider));
@@ -177,7 +214,7 @@ export function createScannerRuntime(options: CreateScannerRuntimeOptions): {
     let databaseUpdatedAt: string | undefined;
     return {
       id: provider,
-      backend: options.configuration.backend,
+      backend: assetBackend,
       configuredImage,
       async inspect() {
         try {
@@ -238,9 +275,6 @@ let defaultRuntimeFingerprint = '';
 
 export function getDefaultScannerRuntime(): ReturnType<typeof createScannerRuntime> {
   const configuration = getSecurityConfiguration();
-  if (!['docker', 'remote'].includes(configuration.backend)) {
-    throw new Error('Docker scanner runtime is not configured');
-  }
   const fingerprint = JSON.stringify({
     backend: configuration.backend,
     scanner: configuration.scanner,
@@ -248,6 +282,7 @@ export function getDefaultScannerRuntime(): ReturnType<typeof createScannerRunti
     trivy: configuration.trivy,
     grype: configuration.grype,
     syft: configuration.syft,
+    signature: configuration.signature,
     docker: configuration.docker,
   });
   if (defaultRuntime && defaultRuntimeFingerprint === fingerprint) {
@@ -262,7 +297,7 @@ export function getDefaultScannerRuntime(): ReturnType<typeof createScannerRunti
       }
     : { socketPath: configuration.docker.socket };
   const dockerClient = new Docker(dockerOptions);
-  const providerIds = ['trivy', 'grype', 'syft'] as const;
+  const providerIds = ['trivy', 'grype', 'syft', 'cosign'] as const;
   const backends = Object.fromEntries(
     providerIds.map((provider) => {
       const cacheDir = `volume:${configuration.docker.cacheVolumePrefix}-${provider}`;
@@ -271,7 +306,10 @@ export function getDefaultScannerRuntime(): ReturnType<typeof createScannerRunti
         createDockerScannerBackend({
           client: dockerClient,
           cacheDir,
-          hardening: { networkMode: configuration.docker.network },
+          hardening: {
+            networkMode: configuration.docker.network,
+            ...(provider === 'cosign' ? {} : { scratchTarget: '/scratch' }),
+          },
         }),
       ];
     }),

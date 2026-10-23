@@ -218,4 +218,37 @@ describe('watcher schedule editor controls', () => {
     expect(saveWatcherEdits).not.toHaveBeenCalled();
     wrapper.unmount();
   });
+
+  it('labels a field set by an environment literal as environment-owned even when the file also holds a _file entry', async () => {
+    vi.mocked(getWatcherEditor).mockResolvedValue({
+      available: true,
+      revision: 'first',
+      watchers: [
+        {
+          id: 'docker.local',
+          name: 'local',
+          fields: {
+            cron: {
+              present: true,
+              source: 'env',
+              readOnlyReason: 'environment-owned',
+              effectiveValue: '0 4 * * *',
+            },
+            maintenancewindow: { present: false, source: 'default', path: ['x'] },
+            maintenancewindowtz: { present: false, source: 'default', path: ['x'] },
+            maintenancewindowscope: { present: false, source: 'default', path: ['x'] },
+          },
+        },
+      ],
+    } as never);
+    const wrapper = mountWithPlugins(WatcherScheduleEditor, {
+      props: { watcher: { id: 'docker.local', name: 'local' } },
+    });
+    await wrapper.get('[data-testid="edit-schedule"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Set by the environment');
+    expect(wrapper.text()).not.toContain('Referenced values stay on the server');
+    expect(wrapper.text()).toContain('0 4 * * *');
+    wrapper.unmount();
+  });
 });

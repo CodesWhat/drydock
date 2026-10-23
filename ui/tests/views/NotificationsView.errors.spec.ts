@@ -33,7 +33,8 @@ describe.each(['fr', 'ar'] as const)('Notifications loading errors in %s', (loca
 
   it.each([
     ['/api/v1/notifications', 'notificationsView.loadError'],
-    ['/api/v1/triggers', 'triggersView.loadError'],
+    ['/api/v1/actions', 'triggersView.loadError'],
+    ['/api/v1/notification-triggers', 'triggersView.loadError'],
   ])('shows the real service error for %s with status and no mutations', async (url, key) => {
     vi.mocked(fetch).mockImplementation(async (input) =>
       input === url ? new Response(null, { status: 503 }) : Response.json({ data: [] }),
@@ -44,9 +45,12 @@ describe.each(['fr', 'ar'] as const)('Notifications loading errors in %s', (loca
     expect(wrapper.text()).not.toContain('Failed to get');
     expect(wrapper.text()).not.toContain(i18n.global.t('notificationsView.loadingRules'));
     expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe('security');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
     expect(fetch).toHaveBeenCalledWith('/api/v1/notifications', { credentials: 'include' });
-    expect(fetch).toHaveBeenCalledWith('/api/v1/triggers', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/v1/actions', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/v1/notification-triggers', {
+      credentials: 'include',
+    });
   });
 
   it('keeps the HTTP reason next to the translated load message', async () => {
@@ -63,7 +67,7 @@ describe.each(['fr', 'ar'] as const)('Notifications loading errors in %s', (loca
     expect(wrapper.text()).toContain(
       `${i18n.global.t('notificationsView.loadError')} (HTTP 502): Upstream unavailable`,
     );
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 
   it('preserves network diagnostics without retrying or changing the filter', async () => {
@@ -75,6 +79,6 @@ describe.each(['fr', 'ar'] as const)('Notifications loading errors in %s', (loca
 
     expect(wrapper.text()).toContain('Connection unavailable');
     expect((wrapper.get('input[type="text"]').element as HTMLInputElement).value).toBe('security');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenCalledTimes(3);
   });
 });

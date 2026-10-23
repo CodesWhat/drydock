@@ -125,8 +125,11 @@ interface OidcConfiguration {
   redirect: boolean;
   logouturl?: string;
   timeout: number;
+  bearer: boolean;
   beareraudiences?: string;
 }
+
+const BEARER_DISABLED_WARNING_INTERVAL_MS = 5 * 60 * 1000;
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0;
@@ -392,6 +395,7 @@ class Oidc extends Authentication<OidcConfiguration> {
   logoutUrl?: string;
   oidcFetch?: openidClientLibrary.CustomFetch;
   bearerJwks?: { uri: string; getKey: JWTVerifyGetKey };
+  private lastBearerDisabledWarningAt = Number.NEGATIVE_INFINITY;
 
   getSessionKey() {
     return this.name || 'default';
@@ -418,6 +422,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       redirect: this.joi.boolean().default(false),
       logouturl: this.joi.string().uri({ scheme: ['http', 'https'] }),
       timeout: this.joi.number().greater(500).default(5000),
+      bearer: this.joi.boolean().default(false),
       beareraudiences: this.joi.string().allow(''),
     });
   }
@@ -448,6 +453,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       redirect: this.configuration.redirect,
       ...(this.configuration.logouturl ? { logouturl: this.configuration.logouturl } : {}),
       timeout: this.configuration.timeout,
+      bearer: this.configuration.bearer,
       ...(this.configuration.beareraudiences
         ? { beareraudiences: this.configuration.beareraudiences }
         : {}),
@@ -547,6 +553,11 @@ class Oidc extends Authentication<OidcConfiguration> {
 
   async initAuthentication() {
     this.logoutUrl = this.configuration.logouturl;
+    if (this.configuration.bearer) {
+      this.log.info(
+        'OIDC bearer authentication is enabled: access tokens issued for this client are accepted as Authorization: Bearer',
+      );
+    }
 
     try {
       await this.ensureClientInitialized();
@@ -623,6 +634,10 @@ class Oidc extends Authentication<OidcConfiguration> {
       this.log.debug('No bearer token provided');
       return Promise.resolve(undefined);
     }
+    if (!this.configuration.bearer) {
+      this.warnBearerDisabled();
+      return Promise.resolve(undefined);
+    }
 
     return new Promise((resolve) => {
       void this.verify(accessToken, (error, user) => {
@@ -635,6 +650,18 @@ class Oidc extends Authentication<OidcConfiguration> {
         resolve({ kind: 'oidc', username: user.username });
       });
     });
+  }
+
+  /** Warn about a rejected Bearer header at most once per interval. */
+  private warnBearerDisabled(): void {
+    const now = Date.now();
+    if (now - this.lastBearerDisabledWarningAt < BEARER_DISABLED_WARNING_INTERVAL_MS) {
+      return;
+    }
+    this.lastBearerDisabledWarningAt = now;
+    this.log.warn(
+      `OIDC bearer authentication is disabled; set DD_AUTH_OIDC_${this.name.toUpperCase()}_BEARER=true`,
+    );
   }
 
   getStrategyDescription() {

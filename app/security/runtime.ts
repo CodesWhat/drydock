@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { isAbsolute as isAbsolutePath, win32 as win32Path } from 'node:path';
 import { getSecurityConfiguration, type SecuritySbomFormat } from '../configuration/index.js';
 import type { ScannerAssetManager, ScannerAssetStatus } from './assets.js';
+import { resolveProviderExecution } from './backend-resolution.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
 
 type SecurityRuntimeToolStatus = {
@@ -306,13 +307,21 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
   }
 
   const configuration = getSecurityConfiguration();
-  if (configuration.backend !== 'command') {
+  const scannerProviderIds: Array<'trivy' | 'grype'> =
+    configuration.scanner === 'both'
+      ? ['trivy', 'grype']
+      : configuration.scanner === 'grype'
+        ? ['grype']
+        : ['trivy'];
+  if (
+    scannerProviderIds.some(
+      (provider) => resolveProviderExecution(provider, configuration) === 'worker',
+    )
+  ) {
     try {
       const assets = await getDefaultScannerRuntime().assets.status();
       const selected = assets.filter((asset) =>
-        configuration.scanner === 'both'
-          ? asset.provider === 'trivy' || asset.provider === 'grype'
-          : asset.provider === configuration.scanner,
+        scannerProviderIds.includes(asset.provider as 'trivy' | 'grype'),
       );
       if (selected.length === 0) {
         return undefined;
@@ -369,7 +378,7 @@ export async function getTrivyDatabaseStatus(): Promise<TrivyDatabaseStatus | un
 
 export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus> {
   const configuration = getSecurityConfiguration();
-  const backend = configuration.backend || 'command';
+  const backend = configuration.backend || 'auto';
   const sbomGenerator: 'trivy' | 'syft' =
     configuration.sbom.generator === 'syft' ||
     (configuration.sbom.generator === 'auto' && configuration.scanner === 'grype')
@@ -385,21 +394,40 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
   const requiredProviders = Array.from(
     new Set([...scannerProviders, ...(configuration.sbom.enabled ? [sbomGenerator] : [])]),
   ) as Array<'trivy' | 'grype' | 'syft'>;
+  const execution = (provider: 'trivy' | 'grype' | 'syft' | 'cosign') =>
+    resolveProviderExecution(provider, configuration);
+  const cosignExecution = configuration.signature.verify ? execution('cosign') : 'command';
+  const workerProviders = [
+    ...requiredProviders.filter((provider) => execution(provider) === 'worker'),
+    ...(cosignExecution === 'worker' ? (['cosign'] as const) : []),
+  ];
   let assets: ScannerAssetStatus[] = [];
-  let providerStatuses: SecurityRuntimeProviderStatus[];
+  let assetsError: string | undefined;
+  if (workerProviders.length > 0) {
+    try {
+      assets = await getDefaultScannerRuntime().assets.status();
+    } catch (error: unknown) {
+      assetsError =
+        error instanceof Error ? error.message : 'Docker scanner runtime is unavailable';
+    }
+  }
 
-  if (backend === 'command') {
-    providerStatuses = await Promise.all(
-      requiredProviders.map(async (provider) => {
-        const providerConfiguration = configuration[provider];
-        const check = await resolveRuntimeToolCheck(true, providerConfiguration.command, provider);
+  const providerStatuses: SecurityRuntimeProviderStatus[] = await Promise.all(
+    requiredProviders.map(async (provider): Promise<SecurityRuntimeProviderStatus> => {
+      const role = scannerProviders.includes(provider as 'trivy' | 'grype') ? 'scanner' : 'sbom';
+      if (execution(provider) === 'command') {
+        const check = await resolveRuntimeToolCheck(
+          true,
+          configuration[provider].command,
+          provider,
+        );
         const toolName = `${provider[0].toUpperCase()}${provider.slice(1)}` as
           | 'Trivy'
           | 'Grype'
           | 'Syft';
         return {
           provider,
-          role: scannerProviders.includes(provider as 'trivy' | 'grype') ? 'scanner' : 'sbom',
+          role,
           enabled: true,
           command: check.command,
           commandAvailable: check.availability.available,
@@ -408,38 +436,33 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
             ? `${toolName} is ready`
             : getUnavailableCommandMessage(toolName, check.command, check.availability.invalidPath),
         };
-      }),
-    );
-  } else {
-    try {
-      assets = await getDefaultScannerRuntime().assets.status();
-      providerStatuses = requiredProviders.map((provider) => {
-        const asset = assets.find((candidate) => candidate.provider === provider);
+      }
+      if (assetsError !== undefined) {
         return {
           provider,
-          role: scannerProviders.includes(provider as 'trivy' | 'grype') ? 'scanner' : 'sbom',
+          role,
           enabled: true,
-          command: asset?.configuredImage || configuration[provider].workerImage,
-          commandAvailable: asset?.state === 'ready',
-          status: asset?.state === 'ready' ? 'ready' : 'missing',
-          message:
-            asset?.state === 'ready'
-              ? `${provider} worker image is ready`
-              : asset?.lastError || `${provider} worker image is not ready`,
+          command: configuration[provider].workerImage,
+          commandAvailable: false,
+          status: 'missing',
+          message: assetsError,
         };
-      });
-    } catch (error: unknown) {
-      providerStatuses = requiredProviders.map((provider) => ({
+      }
+      const asset = assets.find((candidate) => candidate.provider === provider);
+      return {
         provider,
-        role: scannerProviders.includes(provider as 'trivy' | 'grype') ? 'scanner' : 'sbom',
+        role,
         enabled: true,
-        command: configuration[provider].workerImage,
-        commandAvailable: false,
-        status: 'missing',
-        message: error instanceof Error ? error.message : 'Docker scanner runtime is unavailable',
-      }));
-    }
-  }
+        command: asset?.configuredImage || configuration[provider].workerImage,
+        commandAvailable: asset?.state === 'ready',
+        status: asset?.state === 'ready' ? 'ready' : 'missing',
+        message:
+          asset?.state === 'ready'
+            ? `${provider} worker image is ready`
+            : asset?.lastError || `${provider} worker image is not ready`,
+      };
+    }),
+  );
 
   const scannerProviderStatuses = providerStatuses.filter(
     (provider) => provider.role === 'scanner',
@@ -453,10 +476,20 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
     availability: { available: scannersReady, invalidPath: false },
   };
   const signatureCheck = await resolveRuntimeToolCheck(
-    Boolean(configuration.signature.verify),
+    Boolean(configuration.signature.verify) && cosignExecution === 'command',
     configuration.signature.cosign.command,
     'cosign',
   );
+  const scannerExecutions = scannerProviders.map(execution);
+  const scannerVia =
+    scannerExecutions.length > 0 &&
+    scannerExecutions.every((value) => value === scannerExecutions[0])
+      ? scannerExecutions[0] === 'command'
+        ? 'command'
+        : backend === 'remote'
+          ? 'remote'
+          : 'docker'
+      : 'auto';
 
   const scannerStatus = configuration.enabled
     ? {
@@ -465,7 +498,7 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
         commandAvailable: scannersReady,
         status: scannersReady ? ('ready' as const) : ('missing' as const),
         message:
-          configuration.scanner === 'trivy' && backend === 'command'
+          configuration.scanner === 'trivy' && execution('trivy') === 'command'
             ? scannersReady
               ? configuration.trivy.server
                 ? 'Trivy client is ready (server mode enabled)'
@@ -473,8 +506,8 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
               : getUnavailableProviderMessage(scannerProviderStatuses, 'Trivy is unavailable')
             : scannersReady
               ? configuration.scanner === 'both'
-                ? `Both scanners are ready via ${backend}`
-                : `${configuration.scanner} scanner is ready via ${backend}`
+                ? `Both scanners are ready via ${scannerVia}`
+                : `${configuration.scanner} scanner is ready via ${scannerVia}`
               : getUnavailableProviderMessage(
                   scannerProviderStatuses,
                   'One or more configured scanner providers are unavailable',
@@ -487,15 +520,36 @@ export async function getSecurityRuntimeStatus(): Promise<SecurityRuntimeStatus>
         scanner: configuration.scanner,
         server: configuration.trivy.server || '',
       };
-  const signatureStatus = buildSignatureRuntimeStatus(signatureCheck);
+  const cosignAsset =
+    cosignExecution === 'worker'
+      ? assets.find((candidate) => candidate.provider === 'cosign')
+      : undefined;
+  const cosignWorkerReady = assetsError === undefined && cosignAsset?.state === 'ready';
+  const cosignWorkerImage =
+    cosignAsset?.configuredImage || configuration.signature.cosign.workerImage;
+  const signatureStatus: SecurityRuntimeToolStatus =
+    configuration.signature.verify && cosignExecution === 'worker'
+      ? {
+          enabled: true,
+          command: cosignWorkerImage,
+          commandAvailable: cosignWorkerReady,
+          status: cosignWorkerReady ? 'ready' : 'missing',
+          message: cosignWorkerReady
+            ? 'Cosign worker is ready for signature verification'
+            : assetsError || cosignAsset?.lastError || 'Cosign worker image is not ready',
+        }
+      : buildSignatureRuntimeStatus(signatureCheck);
   const requirements = [
     ...providerStatuses
       .filter((provider) => provider.status !== 'ready')
       .map((provider) =>
-        backend === 'command'
+        execution(provider.provider) === 'command'
           ? `Install ${provider.provider} (configured command: "${provider.command}")`
           : `Pull and warm ${provider.provider} worker (${provider.command})`,
       ),
+    cosignExecution === 'worker' && !cosignWorkerReady
+      ? `Pull and warm cosign worker (${cosignWorkerImage})`
+      : undefined,
     buildRequirement('cosign', signatureCheck),
   ].filter(isDefinedValue);
 

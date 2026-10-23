@@ -119,7 +119,19 @@ const DataTableStub = defineComponent({
 
 type DisplayContainer = Container & { _pending?: true };
 
-function makeContainer(overrides: Partial<Container> & { _pending?: true } = {}): DisplayContainer {
+type FixtureOperation = { id: string; status: string; phase: string; updatedAt: string };
+
+// The mocked context's status predicates read these fixtures by container id,
+// standing in for the operations store selector the real context uses.
+const fixtureOperations = new Map<string, FixtureOperation>();
+
+function makeContainer(
+  allOverrides: Partial<Container> & { _pending?: true; updateOperation?: FixtureOperation } = {},
+): DisplayContainer {
+  const { updateOperation, ...overrides } = allOverrides;
+  if (updateOperation) {
+    fixtureOperations.set(overrides.id ?? 'c-1', updateOperation);
+  }
   return {
     id: overrides.id ?? 'c-1',
     identityKey: overrides.identityKey ?? overrides.id ?? 'c-1',
@@ -179,13 +191,19 @@ function makeContext(overrides: Record<string, unknown> = {}) {
 
   const policyMap: Record<
     string,
-    { snoozed: boolean; skipped: boolean; maturityBlocked: boolean }
+    { snoozed: boolean; skipped: boolean; maturityBlocked: boolean; liftableAt?: string }
   > = {
     alpha: { snoozed: false, skipped: false, maturityBlocked: false },
     beta: { snoozed: true, skipped: false, maturityBlocked: false },
     gamma: { snoozed: false, skipped: true, maturityBlocked: false },
     delta: { snoozed: true, skipped: true, maturityBlocked: false },
     epsilon: { snoozed: false, skipped: false, maturityBlocked: true },
+    zeta: {
+      snoozed: false,
+      skipped: false,
+      maturityBlocked: true,
+      liftableAt: new Date(Date.now() + 3 * 60 * 60_000 + 30_000).toISOString(),
+    },
   };
   const resolvePolicyName = (target: string | { name?: string }) =>
     typeof target === 'string' ? target : (target.name ?? '');
@@ -237,33 +255,20 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled by server configuration'),
     actionInProgress,
-    isContainerUpdateInProgress: (target: {
-      id?: string;
-      name?: string;
-      _pending?: true;
-      updateOperation?: { status?: string };
-    }) =>
+    isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean(target._pending) ||
-      target.updateOperation?.status === 'in-progress' ||
+      fixtureOperations.get(target.id ?? '')?.status === 'in-progress' ||
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'update',
-    isContainerUpdateQueued: (target: {
-      id?: string;
-      name?: string;
-      updateOperation?: { status?: string };
-    }) =>
-      target.updateOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id ?? ''),
+    isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
+      fixtureOperations.get(target.id ?? '')?.status === 'queued' ||
+      groupUpdateQueue.value.has(target.id ?? ''),
     isContainerScanInProgress: (target: { id?: string; name?: string }) =>
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'scan',
-    isContainerRowLocked: (target: {
-      id?: string;
-      name?: string;
-      _pending?: true;
-      updateOperation?: { status?: string };
-    }) =>
+    isContainerRowLocked: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean(target._pending) ||
-      target.updateOperation?.status === 'in-progress' ||
+      fixtureOperations.get(target.id ?? '')?.status === 'in-progress' ||
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'update' ||
-      target.updateOperation?.status === 'queued' ||
+      fixtureOperations.get(target.id ?? '')?.status === 'queued' ||
       groupUpdateQueue.value.has(target.id ?? ''),
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
@@ -568,6 +573,7 @@ describe('ContainersGroupedViews', () => {
 
   beforeEach(() => {
     setActivePinia(pinia);
+    fixtureOperations.clear();
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
@@ -1993,6 +1999,59 @@ describe('ContainersGroupedViews', () => {
     expect(wrapper.find('[aria-label="Maturity-blocked updates"]').exists()).toBe(true);
   });
 
+  it('shows a live countdown label next to the maturity icon in list and card views', async () => {
+    const maturing = makeContainer({ id: 'c-zeta', name: 'zeta', newTag: null, updateKind: null });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [maturing];
+    refs.displayContainers.value = [maturing];
+    refs.renderGroups.value = [
+      {
+        key: 'group-zeta',
+        name: 'group-zeta',
+        containers: [maturing],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    const labels = wrapper.findAll('[data-test="maturity-countdown-label"]');
+    expect(labels.length).toBeGreaterThan(0);
+    expect(labels[0].text()).toMatch(/^3h \d+m$/);
+  });
+
+  it('omits the countdown label when the maturity block has no liftableAt', async () => {
+    const maturing = makeContainer({
+      id: 'c-eps',
+      name: 'epsilon',
+      newTag: null,
+      updateKind: null,
+    });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [maturing];
+    refs.displayContainers.value = [maturing];
+    refs.renderGroups.value = [
+      {
+        key: 'group-eps',
+        name: 'group-eps',
+        containers: [maturing],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    await nextTick();
+
+    expect(wrapper.find('[data-test="maturity-countdown-label"]').exists()).toBe(false);
+  });
+
   it('keeps the stack Update all button visible when all updates are security-blocked', async () => {
     const blockedA = makeContainer({
       id: 'c-blocked-a',
@@ -3047,9 +3106,8 @@ describe('ContainersGroupedViews', () => {
         updateKind: 'major',
         bouncer: 'safe',
         status: 'running',
-        // The status predicates in the mocked context still read the prop;
-        // the phase label must come from the operations store, so the prop
-        // carries a decoy phase.
+        // The mocked context's status predicates read this fixture; the phase
+        // label must come from the operations store, so it carries a decoy phase.
         updateOperation: {
           id: 'op-1',
           status: 'in-progress',

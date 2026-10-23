@@ -232,6 +232,19 @@ describe('watcher configuration editor', () => {
     expect(mockReload).not.toHaveBeenCalled();
   });
 
+  test('an environment literal plus a file _file entry reads as env, not reference, and stays read-only', async () => {
+    fixture('watcher:\n  local:\n    cron:\n      _file: /private/credential\n');
+    setConfigFileLayer({ DD_WATCHER_LOCAL_CRON__FILE: '/private/credential' }, new Set(), {
+      path: configPath,
+      modifiedAt: new Date().toISOString(),
+    });
+    vi.stubEnv('DD_WATCHER_LOCAL_CRON', '0 4 * * *');
+    const field = (await getWatcherEditSnapshot()).watchers[0].fields.cron;
+    expect(field.source).toBe('env');
+    expect(field.readOnlyReason).toBe('environment-owned');
+    expect(field.path).toBeUndefined();
+  });
+
   test('environment maintenance aliases make the corresponding canonical field read-only', async () => {
     fixture('watcher:\n  local:\n    cron: "0 */6 * * *"\n');
     vi.stubEnv('DD_WATCHER_LOCAL_MAINTENANCE_WINDOW', '0 0 * * *');

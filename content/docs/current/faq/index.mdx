@@ -110,7 +110,7 @@ On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `pe
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     volumes:
       - /run/podman/podman.sock:/var/run/docker.sock:Z
 ```
@@ -207,7 +207,7 @@ The same missing configuration also breaks the dashboard's log viewer (`WS /api/
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     environment:
       - DD_SERVER_TRUSTPROXY=1  # Trust one proxy hop (Traefik, Nginx, etc.)
 ```
@@ -223,7 +223,7 @@ Most reverse proxies (Traefik, Nginx, NGINX Proxy Manager, Caddy) set `X-Forward
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     environment:
       - DD_SERVER_TRUSTPROXY=1
       # ... other DD_ variables ...
@@ -254,7 +254,7 @@ NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     environment:
       - DD_SERVER_TRUSTPROXY=1
       # ... other DD_ variables ...
@@ -372,7 +372,7 @@ You're running the stable release. The build only names the candidate it was pro
 
 ## Trivy or Cosign not found errors
 
-Since v1.4.0, drydock ships a **single image** that bundles both Trivy and Cosign. If you see "not found" errors, you are likely running a custom or older image that does not include them.
+As of v1.8.0 the drydock image bundles none of the scanner tools (Trivy, Grype, Syft, cosign). With the default `DD_SECURITY_BACKEND=auto`, each tool runs in a pinned worker container instead, which needs a Docker API connection that can create containers. A "not found" error means a tool was forced onto a local command: `DD_SECURITY_BACKEND=command`, or `DD_SECURITY_<PROVIDER>_COMMAND` pointing at a binary that isn't in the container.
 
 Verify tool availability at runtime via the API:
 
@@ -380,7 +380,7 @@ Verify tool availability at runtime via the API:
 curl http://drydock:3000/api/v1/server/security/runtime
 ```
 
-If you build a custom image, ensure Trivy and Cosign are installed in your Dockerfile. See [Security](/docs/configuration/security) for scanning configuration.
+Either let `auto` use the worker (unset the command and the `command` backend), or mount your own binary and point `DD_SECURITY_<PROVIDER>_COMMAND` at it. If a scan fails with an error naming three Trivy setups, Docker refused to create the Trivy worker. Switch to `DD_SECURITY_SCANNER=grype`, use `DD_SECURITY_BACKEND=remote` with `DD_SECURITY_TRIVY_SERVER`, or mount a Trivy binary. See [Security](/docs/configuration/security) for scanning configuration.
 
 ## Vulnerability report download button does nothing
 

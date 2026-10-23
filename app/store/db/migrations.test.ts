@@ -3,11 +3,13 @@ import type { Database } from './driver.js';
 import { StoreConstraintError } from './driver.js';
 import {
   AGENT_KEY_ROTATION_MIGRATION_VERSION,
+  assertSchemaSupported,
   GROUP_POLICIES_MIGRATION_VERSION,
   getAppliedSchemaVersions,
   LABEL_OVERRIDES_MIGRATION_VERSION,
   MIGRATIONS,
   migrate,
+  StoreSchemaTooNewError,
   TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
   TOTP_MIGRATION_VERSION,
   TOTP_SUBJECT_STATE_MIGRATION_VERSION,
@@ -426,6 +428,58 @@ describe('store/db/migrations', () => {
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,
       });
+    });
+  });
+
+  describe('schema version guard', () => {
+    const highest = Math.max(...MIGRATIONS.map((migration) => migration.version));
+
+    test('migrate refuses a database recorded at a newer schema version and changes nothing', () => {
+      migrate(db);
+      db.prepare(
+        "INSERT INTO schema_migrations (version, applied_at, note) VALUES (?, 'now', 'future')",
+      ).run(highest + 3);
+
+      expect(() => migrate(db)).toThrow(StoreSchemaTooNewError);
+      expect(getAppliedSchemaVersions(db)).toEqual([
+        ...MIGRATIONS.map((m) => m.version),
+        highest + 3,
+      ]);
+    });
+
+    test('the error names both versions and both restore paths', () => {
+      migrate(db);
+      db.prepare(
+        "INSERT INTO schema_migrations (version, applied_at, note) VALUES (?, 'now', 'future')",
+      ).run(highest + 1);
+
+      let thrown: unknown;
+      try {
+        assertSchemaSupported(db, MIGRATIONS, '/store/dd.sqlite');
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toBeInstanceOf(StoreSchemaTooNewError);
+      const error = thrown as StoreSchemaTooNewError;
+      expect(error.databaseVersion).toBe(highest + 1);
+      expect(error.supportedVersion).toBe(highest);
+      expect(error.message).toContain(`version ${highest + 1}`);
+      expect(error.message).toContain(`version ${highest}`);
+      expect(error.message).toContain('at /store/dd.sqlite');
+      expect(error.message).toContain('newer Drydock build');
+      expect(error.message).toContain('pre-migration');
+    });
+
+    test('an empty or current database is supported and returns its applied versions', () => {
+      expect(assertSchemaSupported(db)).toEqual([]);
+      migrate(db);
+      expect(assertSchemaSupported(db)).toEqual(MIGRATIONS.map((m) => m.version));
+    });
+
+    test('an empty migration list supports only an empty database', () => {
+      expect(assertSchemaSupported(db, [])).toEqual([]);
+      migrate(db);
+      expect(() => assertSchemaSupported(db, [])).toThrow(StoreSchemaTooNewError);
     });
   });
 });

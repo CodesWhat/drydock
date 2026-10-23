@@ -2,6 +2,7 @@ import { computed, readonly, ref } from 'vue';
 import { i18n } from '../boot/i18n';
 import { getServer } from '../services/server';
 import { errorMessage } from '../utils/error';
+import { useConnectivity } from './useConnectivity';
 
 type ServerFeatureFlags = Record<string, boolean>;
 
@@ -57,13 +58,21 @@ async function loadServerFeatures(): Promise<void> {
   return loadPromise;
 }
 
-const containerActionsEnabled = computed(() => isFeatureEnabled('containeractions'));
-const deleteEnabled = computed(() => isFeatureEnabled('delete'));
-const containerActionsDisabledReason = computed(() =>
-  containerActionsEnabled.value
-    ? ''
-    : i18n.global.t('sharedComponents.serverFeatures.actionsDisabledReason'),
+// Mutating actions are also off while offline or while the server is
+// unreachable: the views are showing last-known data and a write would fail.
+const connectivity = useConnectivity();
+const containerActionsEnabled = computed(
+  () => isFeatureEnabled('containeractions') && !connectivity.isReadOnly.value,
 );
+const deleteEnabled = computed(() => isFeatureEnabled('delete') && !connectivity.isReadOnly.value);
+const containerActionsDisabledReason = computed(() => {
+  if (connectivity.isReadOnly.value) {
+    return connectivity.readOnlyReason.value;
+  }
+  return containerActionsEnabled.value
+    ? ''
+    : i18n.global.t('sharedComponents.serverFeatures.actionsDisabledReason');
+});
 
 interface UseServerFeaturesOptions {
   autoLoad?: boolean;

@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · 서버: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM 생성 활성화됨 ({formats})",
-      "sbomDisabled": "SBOM 생성 비활성화됨"
+      "sbomDisabled": "SBOM 생성 비활성화됨",
+      "assetVersion": "버전 {version}",
+      "assetDigest": "이미지 {digest}",
+      "assetDatabaseUpdated": "데이터베이스 업데이트 {updatedAt}",
+      "assetCacheUpdated": "캐시 업데이트 {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "아직 취약성 데이터가 없습니다",
@@ -426,6 +430,14 @@
       "status": "상태",
       "refreshing": "트리거 상세 정보 새로 고침 중...",
       "noConfig": "구성 속성이 없습니다"
+    },
+    "skips": {
+      "title": "최근 건너뜀",
+      "description": "이 트리거가 최근에 건너뛴 컨테이너와 그 이유입니다. 메모리에 보관되므로 Drydock을 다시 시작하면 초기화됩니다.",
+      "loading": "건너뜀 기록을 불러오는 중...",
+      "loadError": "최근 건너뜀을 불러올 수 없습니다",
+      "empty": "최근 건너뜀 없음",
+      "showMore": "더 보기"
     }
   },
   "watchersView": {

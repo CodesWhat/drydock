@@ -25,6 +25,8 @@ export interface DockerScannerRegistryAuth {
 
 interface DockerScannerHardeningOptions {
   cacheTarget?: string;
+  /** Container path for a per-worker anonymous volume used for temporary files. */
+  scratchTarget?: string;
   memoryBytes?: number;
   networkMode?: string;
   pidsLimit?: number;
@@ -74,7 +76,7 @@ interface DockerScannerContainer {
   wait: () => Promise<{ StatusCode?: number }>;
   stop: (options: { t: number }) => Promise<unknown>;
   kill: () => Promise<unknown>;
-  remove: (options: { force: boolean }) => Promise<unknown>;
+  remove: (options: { force: boolean; v?: boolean }) => Promise<unknown>;
 }
 
 interface DockerScannerClient {
@@ -102,6 +104,7 @@ interface DockerScannerClient {
 
 interface ResolvedHardeningOptions {
   cacheTarget: string;
+  scratchTarget?: string;
   memoryBytes: number;
   networkMode: string;
   pidsLimit: number;
@@ -148,12 +151,19 @@ function resolveHardeningOptions(
 ): ResolvedHardeningOptions {
   const resolved = {
     cacheTarget: hardening?.cacheTarget ?? DEFAULT_CACHE_TARGET,
+    scratchTarget: hardening?.scratchTarget,
     memoryBytes: hardening?.memoryBytes ?? DEFAULT_MEMORY_BYTES,
     networkMode: hardening?.networkMode ?? 'none',
     pidsLimit: hardening?.pidsLimit ?? DEFAULT_PIDS_LIMIT,
     tmpfsSizeBytes: hardening?.tmpfsSizeBytes ?? DEFAULT_TMPFS_SIZE_BYTES,
   };
   assertAbsoluteContainerPath(resolved.cacheTarget, 'hardening.cacheTarget');
+  if (resolved.scratchTarget !== undefined) {
+    assertAbsoluteContainerPath(resolved.scratchTarget, 'hardening.scratchTarget');
+    if (resolved.scratchTarget === resolved.cacheTarget) {
+      throw new Error('hardening.scratchTarget must differ from hardening.cacheTarget');
+    }
+  }
   assertPositiveInteger(resolved.memoryBytes, 'hardening.memoryBytes');
   assertPositiveInteger(resolved.pidsLimit, 'hardening.pidsLimit');
   assertPositiveInteger(resolved.tmpfsSizeBytes, 'hardening.tmpfsSizeBytes');
@@ -262,6 +272,11 @@ function buildContainerConfiguration(
           Target: hardening.cacheTarget,
           ReadOnly: false,
         },
+        // No Source: Docker creates an anonymous, disk-backed volume per worker. It is removed with
+        // the container (remove with v: true), so interrupted scans cannot leave temp data behind.
+        ...(hardening.scratchTarget
+          ? [{ Type: 'volume', Target: hardening.scratchTarget, ReadOnly: false }]
+          : []),
       ],
     },
   };
@@ -583,7 +598,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         !container
       ) {
         void createContainerPromise
-          .then((lateContainer) => lateContainer.remove({ force: true }))
+          .then((lateContainer) => lateContainer.remove({ force: true, v: true }))
           .catch(() => undefined);
       }
       if (
@@ -600,7 +615,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       cancellation.clear();
       if (container) {
         try {
-          await container.remove({ force: true });
+          await container.remove({ force: true, v: true });
         } catch {
           // Best-effort cleanup must not hide the scanner result or primary failure.
         }

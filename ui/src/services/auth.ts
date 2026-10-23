@@ -3,6 +3,7 @@
  */
 
 import { errorMessage } from '../utils/error';
+import { clearLastKnown } from '../utils/last-known';
 
 interface CurrentUser {
   username: string;
@@ -110,6 +111,9 @@ async function getUser() {
       if (response.ok) {
         return await response.json();
       }
+      if (response.status === 401) {
+        clearLastKnown();
+      }
       return undefined;
     } catch (e: unknown) {
       console.debug(`Unable to fetch current user: ${errorMessage(e)}`);
@@ -160,6 +164,7 @@ async function loginBasic(username: string, password: string, remember: boolean 
     return { challenge: parseLoginChallenge(await response.json()) };
   }
   clearCachedUser();
+  clearLastKnown();
   return await response.json();
 }
 
@@ -237,6 +242,8 @@ async function acknowledgeApiKeyReview(): Promise<void> {
  * @returns {Promise<unknown>}
  */
 async function logout() {
+  // Wipe first: signing out offline must still drop the remembered data.
+  clearLastKnown();
   const response = await fetch(`/auth/logout`, {
     method: 'POST',
     credentials: 'include',

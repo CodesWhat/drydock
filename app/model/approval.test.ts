@@ -210,6 +210,77 @@ describe('shouldQueueForApproval', () => {
     );
   });
 
+  describe('trigger threshold under auto mode', () => {
+    const major = () =>
+      createContainer({
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '2.0.0', semverDiff: 'major' },
+        result: { tag: '2.0.0' },
+      });
+    const minor = () =>
+      createContainer({
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.3.0', semverDiff: 'minor' },
+        result: { tag: '1.3.0' },
+      });
+
+    test('a major below an auto action threshold of minor is queued, not auto-dispatched', () => {
+      const triggers = createTrigger({ auto: 'all', threshold: 'minor' });
+
+      expect(isAutoDispatchable(major(), triggers, 'auto')).toBe(false);
+      expect(classifyApprovalCandidate(major(), triggers, 'auto')).toBe('queue');
+      expect(shouldQueueForApproval(major(), triggers, 'auto')).toBe(true);
+    });
+
+    test('a minor within the same threshold is auto-dispatched', () => {
+      const triggers = createTrigger({ auto: 'all', threshold: 'minor' });
+
+      expect(isAutoDispatchable(minor(), triggers, 'auto')).toBe(true);
+      expect(classifyApprovalCandidate(minor(), triggers, 'auto')).toBe('auto-dispatch');
+    });
+
+    test('threshold all auto-dispatches a major', () => {
+      expect(
+        isAutoDispatchable(major(), createTrigger({ auto: 'all', threshold: 'all' }), 'auto'),
+      ).toBe(true);
+      expect(isAutoDispatchable(major(), createTrigger({ auto: 'all' }), 'auto')).toBe(true);
+    });
+
+    test('judges the threshold of the winning trigger when several actions are configured', () => {
+      const compose = (threshold: string): ActionPolicyTrigger =>
+        ({
+          type: 'dockercompose',
+          configuration: { auto: 'all', threshold },
+          getId: () => 'dockercompose.stack',
+        }) as unknown as ActionPolicyTrigger;
+      const docker = (threshold: string): ActionPolicyTrigger =>
+        createTrigger({ auto: 'all', threshold })['docker.local'];
+
+      // The more specific compose action wins and accepts the major, so auto is correct.
+      expect(
+        isAutoDispatchable(
+          major(),
+          { 'docker.local': docker('minor'), 'dockercompose.stack': compose('all') },
+          'auto',
+        ),
+      ).toBe(true);
+      // The winner declines the major; the dispatcher never falls through to a lesser action.
+      expect(
+        isAutoDispatchable(
+          major(),
+          { 'docker.local': docker('all'), 'dockercompose.stack': compose('minor') },
+          'auto',
+        ),
+      ).toBe(false);
+    });
+
+    test('manual and notify behaviour is unchanged', () => {
+      const triggers = createTrigger({ auto: 'all', threshold: 'minor' });
+
+      expect(isAutoDispatchable(major(), triggers, 'manual')).toBe(false);
+      expect(isAutoDispatchable(minor(), triggers, 'manual')).toBe(false);
+      expect(isAutoDispatchable(major(), triggers, 'notify')).toBe(false);
+    });
+  });
+
   test('an in-flight update operation does not suppress the row', () => {
     const container = createContainer({
       updateOperation: { id: 'op-1', status: 'in-progress' },

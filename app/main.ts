@@ -15,6 +15,8 @@ import * as prometheus from './prometheus/index.js';
 import * as registry from './registry/index.js';
 import { warmTrivyDatabase } from './security/scan.js';
 import * as securityScheduler from './security/scheduler.js';
+import { StoreSchemaTooNewError } from './store/db/migrations.js';
+import { StoreSnapshotError } from './store/db/pre-migration.js';
 import * as store from './store/index.js';
 import {
   recoverInProgressOperationsOnStartup,
@@ -74,7 +76,18 @@ if (commandExitCode !== null) {
   }
 
   // Init store
-  await store.init({ memory: isAgent });
+  // A database from a newer build, or a failed pre-migration snapshot, is an
+  // operator problem with a stated fix: print it as one log line and exit
+  // instead of letting a stack trace scroll past in a restart loop.
+  try {
+    await store.init({ memory: isAgent });
+  } catch (error: unknown) {
+    if (error instanceof StoreSchemaTooNewError || error instanceof StoreSnapshotError) {
+      log.error(error.message);
+      process.exit(1);
+    }
+    throw error;
+  }
 
   // Start local Trivy database warm-up early in both controller and agent mode.
   // The first scan shares and awaits this best-effort single-flight operation.

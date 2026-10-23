@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · serwer: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Generowanie SBOM włączone ({formats})",
-      "sbomDisabled": "Generowanie SBOM wyłączone"
+      "sbomDisabled": "Generowanie SBOM wyłączone",
+      "assetVersion": "Wersja {version}",
+      "assetDigest": "Obraz {digest}",
+      "assetDatabaseUpdated": "Baza danych zaktualizowana {updatedAt}",
+      "assetCacheUpdated": "Pamięć podręczna zaktualizowana {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Brak danych o podatnościach",
@@ -426,6 +430,14 @@
       "status": "Stan",
       "refreshing": "Odświeżanie szczegółów wyzwalacza...",
       "noConfig": "Brak właściwości konfiguracyjnych"
+    },
+    "skips": {
+      "title": "Ostatnio pominięte",
+      "description": "Kontenery, które ten trigger niedawno pominął, i dlaczego. Przechowywane w pamięci, więc znikają po restarcie Drydock.",
+      "loading": "Ładowanie pominiętych...",
+      "loadError": "Nie udało się wczytać ostatnio pominiętych",
+      "empty": "Brak ostatnio pominiętych",
+      "showMore": "Pokaż więcej"
     }
   },
   "watchersView": {

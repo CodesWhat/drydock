@@ -10,14 +10,11 @@ type UpdateOperationSequenceLike = Pick<
 
 type UpdateOperationContainerLike = {
   id: string;
-  updateOperation?: UpdateOperationSequenceLike;
 };
 
 type ResolveUpdateOperation = (
   container: UpdateOperationContainerLike,
 ) => UpdateOperationSequenceLike | undefined;
-
-const resolveOperationFromProp: ResolveUpdateOperation = (container) => container.updateOperation;
 
 function hasPersistedUpdateBatchId(operation?: UpdateOperationSequenceLike): boolean {
   return Boolean(operation?.batchId);
@@ -94,10 +91,10 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   operation?: UpdateOperationSequenceLike;
   targetId?: string;
   hasExternalActiveHead?: boolean;
-  /** Where a container's operation comes from. Defaults to the container's updateOperation prop. */
-  resolveOperation?: ResolveUpdateOperation;
+  /** Where a container's operation comes from (the operations store selector). */
+  resolveOperation: ResolveUpdateOperation;
 }): boolean {
-  const resolveOperation = args.resolveOperation ?? resolveOperationFromProp;
+  const { resolveOperation } = args;
   if (!isStandaloneQueuedUpdateOperation(args.operation)) {
     return false;
   }

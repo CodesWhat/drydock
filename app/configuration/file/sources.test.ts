@@ -108,7 +108,7 @@ describe('mergeConfigLayers', () => {
       const sources = mergeConfigLayers(envVars, { [KEY]: 'from-file' });
 
       expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-env' });
-      expect(sources).toStrictEqual({ [FILE_KEY]: 'env' });
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
     });
 
     test('a file secret-file entry is dropped when the environment sets the secret-file form', () => {
@@ -116,7 +116,7 @@ describe('mergeConfigLayers', () => {
       const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
 
       expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-env' });
-      expect(sources).toStrictEqual({ [FILE_KEY]: 'env' });
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
     });
 
     test.each([
@@ -128,7 +128,7 @@ describe('mergeConfigLayers', () => {
       const sources = mergeConfigLayers(envVars, fileLayer);
 
       expect(envVars).toStrictEqual(environment);
-      expect(sources).toStrictEqual({ [KEY]: 'env', [FILE_KEY]: 'env' });
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
     });
 
     test('the file supplies the secret-file form when the environment sets neither', () => {
@@ -136,7 +136,7 @@ describe('mergeConfigLayers', () => {
       const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
 
       expect(envVars).toStrictEqual({ [FILE_KEY]: '/run/secrets/from-file' });
-      expect(sources).toStrictEqual({ [FILE_KEY]: 'file' });
+      expect(sources).toStrictEqual({ [KEY]: 'file' });
     });
 
     test.each([
@@ -149,11 +149,25 @@ describe('mergeConfigLayers', () => {
         const sources = mergeConfigLayers(envVars, fileLayer);
 
         expect(envVars).toStrictEqual({ [unsetKey]: undefined, ...fileLayer });
-        expect(sources).toStrictEqual(
-          Object.fromEntries(Object.keys(fileLayer).map((key) => [key, 'file'])),
-        );
+        expect(sources).toStrictEqual({ [KEY]: 'file' });
       },
     );
+
+    test('a file secret-file entry is keyed by its base name, with the original spelling kept out of the map', () => {
+      const sources = mergeConfigLayers({}, { [FILE_KEY]: '/run/secrets/from-file' });
+
+      expect(Object.keys(sources)).toStrictEqual([KEY]);
+    });
+
+    test('an interpolated secret-file entry attributes as env under the base name', () => {
+      const sources = mergeConfigLayers(
+        {},
+        { [FILE_KEY]: '/run/secrets/from-file' },
+        new Set([FILE_KEY]),
+      );
+
+      expect(sources).toStrictEqual({ [KEY]: 'env' });
+    });
 
     test('a dropped entry named in envSourcedFileKeys still leaves no trace in sources', () => {
       const envVars: Record<string, string | undefined> = { [KEY]: 'from-env' };
@@ -172,7 +186,7 @@ describe('mergeConfigLayers', () => {
       const sources = mergeConfigLayers(envVars, { [FILE_KEY]: '/run/secrets/from-file' });
 
       expect(envVars[FILE_KEY]).toBe('/run/secrets/from-file');
-      expect(sources[FILE_KEY]).toBe('file');
+      expect(sources[KEY]).toBe('file');
     });
   });
 });

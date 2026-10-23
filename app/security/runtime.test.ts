@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
@@ -53,16 +56,19 @@ function createEnabledConfiguration() {
     trivy: {
       server: '',
       command: 'trivy',
+      commandExplicit: true,
       timeout: 120000,
       workerImage: `aquasec/trivy@sha256:${'a'.repeat(64)}`,
     },
     grype: {
       command: 'grype',
+      commandExplicit: true,
       timeout: 120000,
       workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
     },
     syft: {
       command: 'syft',
+      commandExplicit: true,
       timeout: 120000,
       workerImage: `anchore/syft@sha256:${'c'.repeat(64)}`,
     },
@@ -70,6 +76,8 @@ function createEnabledConfiguration() {
       verify: true,
       cosign: {
         command: 'cosign',
+        commandExplicit: true,
+        workerImage: `ghcr.io/sigstore/cosign/cosign@sha256:${'d'.repeat(64)}`,
         timeout: 60000,
         key: '',
         identity: '',
@@ -94,6 +102,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 test('hasValidCommandPath should reject Windows absolute paths on non-Windows runtimes', () => {
@@ -374,7 +383,7 @@ test('getSecurityRuntimeStatus reports command scanner and SBOM providers with d
 
   expect(status).toMatchObject({
     ready: true,
-    backend: 'command',
+    backend: 'auto',
     availabilityPolicy: 'block',
     gate: { mode: 'on', allowNoWorse: true },
     sbom: { enabled: true, generator: 'syft' },
@@ -1490,5 +1499,281 @@ describe('getTrivyDatabaseStatus', () => {
       downloadedAt: '2025-06-02T12:00:00Z',
     });
     expect(thirdResult).toEqual(secondResult);
+  });
+});
+
+describe('per-provider backend resolution', () => {
+  const noExplicitCommands = () => {
+    const base = createEnabledConfiguration();
+    return {
+      ...base,
+      backend: 'auto',
+      trivy: { ...base.trivy, commandExplicit: false },
+      grype: { ...base.grype, commandExplicit: false },
+      syft: { ...base.syft, commandExplicit: false },
+      signature: {
+        ...base.signature,
+        cosign: { ...base.signature.cosign, commandExplicit: false },
+      },
+    };
+  };
+  const cosignImage = `ghcr.io/sigstore/cosign/cosign@sha256:${'d'.repeat(64)}`;
+  let binDirectory: string;
+
+  beforeEach(() => {
+    binDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-runtime-bin-'));
+    vi.stubEnv('PATH', binDirectory);
+  });
+
+  afterEach(() => {
+    fs.rmSync(binDirectory, { recursive: true, force: true });
+  });
+
+  function installExecutable(name: string) {
+    fs.writeFileSync(path.join(binDirectory, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  }
+
+  test('auto reports worker assets for providers whose binary is missing', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      {
+        provider: 'grype',
+        backend: 'docker',
+        configuredImage: 'ghcr.io/anchore/grype@sha256:abc',
+        state: 'ready',
+      },
+    ]);
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status).toMatchObject({
+      ready: true,
+      backend: 'auto',
+      scanner: { status: 'ready', message: 'grype scanner is ready via docker' },
+      providers: [{ provider: 'grype', command: 'ghcr.io/anchore/grype@sha256:abc' }],
+    });
+    expect(childProcessControl.execFileImpl).toBeNull();
+  });
+
+  test('auto reports a local command when the binary resolves on PATH', async () => {
+    installExecutable('grype');
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, 'ready', '');
+      return { exitCode: 0 };
+    };
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.scanner.message).toBe('grype scanner is ready via command');
+    expect(mockScannerAssetsStatus).not.toHaveBeenCalled();
+  });
+
+  test('mixed providers report each execution and an auto label', async () => {
+    installExecutable('grype');
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'both',
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, 'ready', '');
+      return { exitCode: 0 };
+    };
+    mockScannerAssetsStatus.mockResolvedValue([
+      {
+        provider: 'trivy',
+        configuredImage: 'ghcr.io/aquasecurity/trivy@sha256:abc',
+        state: 'ready',
+      },
+    ]);
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.scanner.message).toBe('Both scanners are ready via auto');
+    expect(status.providers).toMatchObject([
+      { provider: 'trivy', status: 'ready', command: 'ghcr.io/aquasecurity/trivy@sha256:abc' },
+      { provider: 'grype', status: 'ready', command: 'grype' },
+    ]);
+  });
+
+  test('explicit command backend still runs Trivy as a worker when no binary resolves', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      backend: 'command',
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      {
+        provider: 'trivy',
+        configuredImage: 'ghcr.io/aquasecurity/trivy@sha256:abc',
+        state: 'ready',
+      },
+    ]);
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.backend).toBe('command');
+    expect(status.scanner.message).toBe('trivy scanner is ready via docker');
+  });
+
+  test('remote backend labels worker scanners as remote', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      backend: 'remote',
+      trivy: { ...noExplicitCommands().trivy, server: 'http://trivy:4954' },
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      { provider: 'trivy', configuredImage: 'x', state: 'ready' },
+    ]);
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.scanner.message).toBe('trivy scanner is ready via remote');
+  });
+
+  test('reports a ready cosign worker for signature verification', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      backend: 'docker',
+    });
+    mockScannerAssetsStatus.mockResolvedValue([
+      { provider: 'grype', configuredImage: 'g', state: 'ready' },
+      { provider: 'cosign', configuredImage: cosignImage, state: 'ready' },
+    ]);
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.ready).toBe(true);
+    expect(status.signature).toEqual({
+      enabled: true,
+      command: cosignImage,
+      commandAvailable: true,
+      status: 'ready',
+      message: 'Cosign worker is ready for signature verification',
+    });
+    expect(status.requirements).toEqual([]);
+  });
+
+  test.each([
+    [
+      'an errored asset',
+      [{ provider: 'cosign', state: 'error', lastError: 'pull failed' }],
+      'pull failed',
+    ],
+    ['a missing asset', [], 'Cosign worker image is not ready'],
+  ])(
+    'reports %s for the cosign worker as missing with a pull requirement',
+    async (_label, assets, message) => {
+      mockGetSecurityConfiguration.mockReturnValue({
+        ...noExplicitCommands(),
+        scanner: 'grype',
+        backend: 'docker',
+      });
+      mockScannerAssetsStatus.mockResolvedValue([
+        { provider: 'grype', configuredImage: 'g', state: 'ready' },
+        ...assets,
+      ]);
+
+      const status = await getSecurityRuntimeStatus();
+
+      expect(status.ready).toBe(false);
+      expect(status.signature).toMatchObject({
+        status: 'missing',
+        commandAvailable: false,
+        message,
+      });
+      expect(status.requirements).toEqual([`Pull and warm cosign worker (${cosignImage})`]);
+    },
+  );
+
+  test('reports an unavailable Docker runtime for every worker provider including cosign', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      backend: 'docker',
+    });
+    mockScannerAssetsStatus.mockRejectedValue(new Error('daemon unavailable'));
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.ready).toBe(false);
+    expect(status.providers[0]).toMatchObject({
+      provider: 'grype',
+      status: 'missing',
+      message: 'daemon unavailable',
+    });
+    expect(status.signature).toMatchObject({ status: 'missing', message: 'daemon unavailable' });
+  });
+
+  test('falls back to a generic message when the Docker runtime failure is not an Error', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      backend: 'docker',
+      signature: { ...noExplicitCommands().signature, verify: false },
+    });
+    mockScannerAssetsStatus.mockRejectedValue('boom');
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.providers[0].message).toBe('Docker scanner runtime is unavailable');
+  });
+
+  test('keeps cosign on the command check when its command is set explicitly', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...noExplicitCommands(),
+      scanner: 'grype',
+      signature: {
+        ...noExplicitCommands().signature,
+        cosign: {
+          ...noExplicitCommands().signature.cosign,
+          command: '/opt/cosign',
+          commandExplicit: true,
+        },
+      },
+    });
+    installExecutable('grype');
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      callback(null, 'ready', '');
+      return { exitCode: 0 };
+    };
+
+    const status = await getSecurityRuntimeStatus();
+
+    expect(status.signature).toMatchObject({ command: '/opt/cosign', status: 'ready' });
+    expect(mockScannerAssetsStatus).not.toHaveBeenCalled();
+  });
+
+  test('uses the Docker asset fingerprint for a Trivy worker under auto', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({ ...noExplicitCommands(), scanner: 'trivy' });
+    mockScannerAssetsStatus.mockResolvedValue([
+      { provider: 'trivy', resolvedDigest: 'sha256:trivy', configuredImage: 'trivy:configured' },
+    ]);
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: 'trivy:sha256:trivy:unknown',
+    });
+  });
+
+  test('uses the Docker asset fingerprint for a Grype worker under auto', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({ ...noExplicitCommands(), scanner: 'grype' });
+    mockScannerAssetsStatus.mockResolvedValue([
+      { provider: 'grype', configuredImage: 'grype:configured', cacheUpdatedAt: 'now' },
+    ]);
+
+    await expect(getTrivyDatabaseStatus()).resolves.toEqual({
+      updatedAt: 'grype:grype:configured:now',
+    });
   });
 });

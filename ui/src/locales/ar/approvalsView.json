@@ -5,7 +5,8 @@
       "detailLoadFailed": "فشل تحميل الموافقة",
       "approveFailed": "فشلت الموافقة على التحديث",
       "rejectFailed": "فشل رفض التحديث",
-      "deferFailed": "فشل تأجيل التحديث"
+      "deferFailed": "فشل تأجيل التحديث",
+      "bulkFailed": "فشل البت في التحديثات المحددة"
     },
     "ofCount": "المعروض: {count}",
     "refresh": "تحديث",
@@ -70,6 +71,18 @@
         "header": "تأجيل التحديث",
         "message": "هل تريد تأجيل تحديث {name} لمدة {days} أيام؟",
         "acceptLabel": "تأجيل"
+      },
+      "bulkApprove": {
+        "header": "الموافقة على التحديثات المحددة",
+        "message": "هل تريد الموافقة على التحديثات المحددة ({count})؟ يُعاد فحص كل تحديث ويُرسل بالطريقة نفسها التي يعمل بها زر الموافقة، لذلك يُبلَّغ عن أي تحديث كان الزر سيرفضه بدلًا من تطبيقه.",
+        "acceptLabel": "الموافقة على المحدد",
+        "holdsSuffix": "\n\nلدى هذه التحديثات أسباب تعليق مفتوحة ستتجاوزها الموافقة:\n{list}",
+        "excludedSuffix": "\n\nمحظورة وتم تخطيها ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "رفض التحديثات المحددة",
+        "message": "هل تريد رفض التحديثات المحددة ({count})؟ لن تُطبّق تلقائيًا.",
+        "acceptLabel": "رفض المحدد"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "تم رفض تحديث {name}",
       "rejectFailed": "تعذّر رفض {name}",
       "deferred": "تم تأجيل تحديث {name}",
-      "deferFailed": "تعذّر تأجيل {name}"
+      "deferFailed": "تعذّر تأجيل {name}",
+      "bulkApproved": "تم طلب الموافقة على التحديثات المحددة: {count}",
+      "bulkRejected": "تم رفض التحديثات المحددة: {count}",
+      "bulkPartialFailure": "تعذّر البت في بعض التحديثات ({count}): {list}",
+      "bulkFailed": "فشل البت في التحديثات المحددة"
+    },
+    "bulk": {
+      "selectRow": "تحديد {name}",
+      "selectAll": "تحديد كل الموافقات المعروضة",
+      "barLabel": "الموافقات المحددة",
+      "count": "المحدد: {count}",
+      "approveSelected": "الموافقة على المحدد",
+      "rejectSelected": "رفض المحدد",
+      "clear": "مسح التحديد"
     }
   }
 }

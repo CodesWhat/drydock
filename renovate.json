@@ -63,6 +63,15 @@
       "datasourceTemplate": "repology",
       "packageNameTemplate": "alpine_3_24/{{{depName}}}",
       "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the scanner worker images pinned in app/configuration/index.ts (Trivy, Grype, Syft, cosign). Each constant is `<image>:<tag>@sha256:<index digest>`, so Renovate bumps the tag and the digest together. The workers run the scanners that used to be baked into the Drydock image, so a stale pin means stale vulnerability data or a scanner with known bugs.",
+      "managerFilePatterns": ["/^app/configuration/index\\.ts$/"],
+      "matchStrings": [
+        "const DEFAULT_[A-Z]+_WORKER_IMAGE =\\s*'(?<depName>[^:'@]+):(?<currentValue>[^@']+)@(?<currentDigest>sha256:[a-f0-9]{64})'"
+      ],
+      "datasourceTemplate": "docker"
     }
   ]
 }

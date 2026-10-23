@@ -7,9 +7,14 @@ const lists = [
     name: 'notification rules',
     run: getAllNotificationRules,
     key: 'notificationsView.loadError',
-    url: '/api/v1/notifications',
+    urls: ['/api/v1/notifications'],
   },
-  { name: 'triggers', run: getAllTriggers, key: 'triggersView.loadError', url: '/api/v1/triggers' },
+  {
+    name: 'triggers',
+    run: getAllTriggers,
+    key: 'triggersView.loadError',
+    urls: ['/api/v1/actions', '/api/v1/notification-triggers'],
+  },
 ];
 const originalLocale = i18n.global.locale.value;
 
@@ -19,14 +24,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe.each(lists)('$name list failures', ({ run, key, url }) => {
+describe.each(lists)('$name list failures', ({ run, key, urls }) => {
   it.each(SUPPORTED_LOCALES)('uses the existing %s message and HTTP status', async (locale) => {
     i18n.global.locale.value = locale;
     expect(i18n.global.te(key, locale)).toBe(true);
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 503 }));
 
     await expect(run()).rejects.toThrow(`${i18n.global.t(key)} (HTTP 503)`);
-    expect(fetch).toHaveBeenCalledExactlyOnceWith(url, { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledTimes(urls.length);
+    for (const url of urls) {
+      expect(fetch).toHaveBeenCalledWith(url, { credentials: 'include' });
+    }
   });
 
   it('retains the HTTP reason without parsing an unsuccessful body', async () => {
@@ -39,7 +47,7 @@ describe.each(lists)('$name list failures', ({ run, key, url }) => {
 
     await expect(run()).rejects.toThrow(`${i18n.global.t(key)} (HTTP 502): Upstream unavailable`);
     expect(response.bodyUsed).toBe(false);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(urls.length);
   });
 
   it('uses the selected locale when the response arrives', async () => {
@@ -57,6 +65,6 @@ describe.each(lists)('$name list failures', ({ run, key, url }) => {
     vi.mocked(fetch).mockRejectedValue(error);
 
     await expect(run()).rejects.toBe(error);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(urls.length);
   });
 });

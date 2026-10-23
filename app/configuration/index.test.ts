@@ -878,7 +878,7 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: false,
       scanner: '',
-      backend: 'command',
+      backend: 'auto',
       availabilityPolicy: 'block',
       docker: {
         socket: '/var/run/docker.sock',
@@ -892,19 +892,21 @@ describe('getSecurityConfiguration', () => {
       trivy: {
         server: '',
         command: 'trivy',
+        commandExplicit: false,
         timeout: 600000,
         maxOutputBytes: 67108864,
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c',
       },
       grype: {
         command: 'grype',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
+          'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
       },
       signature: {
         verify: false,
@@ -914,6 +916,9 @@ describe('getSecurityConfiguration', () => {
           key: '',
           identity: '',
           issuer: '',
+          commandExplicit: false,
+          workerImage:
+            'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d',
         },
       },
       sbom: {
@@ -923,10 +928,11 @@ describe('getSecurityConfiguration', () => {
       },
       syft: {
         command: 'syft',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
+          'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a',
       },
       gate: {
         mode: 'on',
@@ -968,7 +974,7 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: true,
       scanner: 'trivy',
-      backend: 'command',
+      backend: 'auto',
       availabilityPolicy: 'block',
       docker: {
         socket: '/var/run/docker.sock',
@@ -982,19 +988,21 @@ describe('getSecurityConfiguration', () => {
       trivy: {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
+        commandExplicit: true,
         timeout: 60000,
         maxOutputBytes: 134217728,
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f',
+          'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c',
       },
       grype: {
         command: 'grype',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
+          'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
       },
       signature: {
         verify: true,
@@ -1004,6 +1012,9 @@ describe('getSecurityConfiguration', () => {
           key: `${TEST_DIRECTORY}/secret.txt`,
           identity: 'maintainer@example.com',
           issuer: 'https://token.actions.githubusercontent.com',
+          commandExplicit: true,
+          workerImage:
+            'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d',
         },
       },
       sbom: {
@@ -1013,10 +1024,11 @@ describe('getSecurityConfiguration', () => {
       },
       syft: {
         command: 'syft',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
+          'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a',
       },
       gate: {
         mode: 'on',
@@ -1425,6 +1437,27 @@ describe('getSecurityConfiguration', () => {
     expect(result.prune.onBlock).toBe(true);
 
     delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
+  });
+});
+
+describe('getConfiguredPublicUrl', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('returns the validated DD_PUBLIC_URL origin', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com/base/';
+    expect(configuration.getConfiguredPublicUrl()).toBe('https://dd.example.com');
+  });
+
+  test('returns undefined when unset', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
+  });
+
+  test('returns undefined when the value is unsafe', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+    expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
   });
 });
 
@@ -3276,6 +3309,10 @@ describe('getSecurityConfiguration – schema validation field assertions', () =
       key: '',
       identity: '',
       issuer: '',
+      commandExplicit: false,
+      workerImage: expect.stringMatching(
+        /^ghcr\.io\/sigstore\/cosign\/cosign:v.+@sha256:[a-f0-9]{64}$/,
+      ),
     });
   });
 
@@ -3861,6 +3898,40 @@ describe('${NAME} interpolation in drydock.yml', () => {
     );
   });
 
+  test('a file _file entry is keyed by its base name in sources at boot, with the secret resolved beneath it', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-sources-'));
+    const secretPath = path.join(directory, 'secret');
+    fs.writeFileSync(secretPath, 'file-secret\n', { mode: 0o600 });
+    try {
+      vi.resetModules();
+      const { setConfigFileLayer } = await import('./file/layer.js');
+      setConfigFileLayer(
+        {
+          DD_REGISTRY_GHCR_PRIVATE_TOKEN__FILE: secretPath,
+          DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE: secretPath,
+        },
+        new Set(['DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE']),
+      );
+      const freshConfiguration = await import('./index.js');
+
+      expect(freshConfiguration.ddEnvVars.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file-secret');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_GHCR_PRIVATE_TOKEN).toBe('file');
+      expect(freshConfiguration.configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('env');
+      expect(freshConfiguration.configFileSecretPaths).toStrictEqual({
+        DD_REGISTRY_GHCR_PRIVATE_TOKEN: secretPath,
+        DD_REGISTRY_HUB_PRIVATE_PASSWORD: secretPath,
+      });
+      expect(
+        Object.keys(freshConfiguration.configFileSources).filter((key) => key.endsWith('__FILE')),
+      ).toEqual([]);
+      expect([...freshConfiguration.configFileInterpolatedKeys]).toEqual([
+        'DD_REGISTRY_HUB_PRIVATE_PASSWORD',
+      ]);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   test('a literal value with no ${...} pattern is still sourced as "file"', async () => {
     await withConfigFile('server:\n  name: literal-name\n', async (freshConfiguration) => {
       expect(freshConfiguration.ddEnvVars.DD_SERVER_NAME).toBe('literal-name');
@@ -4073,5 +4144,90 @@ describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
 
     const actual = [...varNames].filter((name) => !name.startsWith('DD_SELF_UPDATE_')).sort();
     expect(actual).toStrictEqual([...UNSUPPORTED_FILE_KEYS]);
+  });
+});
+
+describe('getRegistryWebhookAuthConfiguration', () => {
+  const keys = () =>
+    Object.keys(configuration.ddEnvVars).filter((key) => key.startsWith('DD_SERVER_WEBHOOK_'));
+
+  beforeEach(() => {
+    for (const key of keys()) {
+      delete configuration.ddEnvVars[key];
+    }
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET = 'hmac-secret';
+  });
+
+  afterEach(() => {
+    for (const key of keys()) {
+      delete configuration.ddEnvVars[key];
+    }
+  });
+
+  test('defaults every provider to hmac only with no static secret', () => {
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    for (const provider of configuration.REGISTRY_WEBHOOK_PROVIDERS) {
+      expect(auth[provider]).toStrictEqual({ modes: ['hmac'], staticSecret: '' });
+    }
+  });
+
+  test('parses a comma list of modes, de-duplicating and ignoring case and spacing', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_DOCKERHUB_MODES = ' Path, query ,path,,';
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    expect(auth.dockerhub).toStrictEqual({
+      modes: ['path', 'query'],
+      staticSecret: 'shared-static-secret-1',
+    });
+    expect(auth.ghcr.modes).toStrictEqual(['hmac']);
+  });
+
+  test('a provider secret overrides the shared static secret', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_MODES = 'bearer,hmac';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_SECRET = 'harbor-only-secret-1';
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    expect(auth.harbor).toStrictEqual({
+      modes: ['bearer', 'hmac'],
+      staticSecret: 'harbor-only-secret-1',
+    });
+  });
+
+  test('rejects an unknown mode', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_QUAY_MODES = 'basic';
+    expect(() => configuration.getRegistryWebhookAuthConfiguration()).toThrow(
+      'Invalid registry webhook auth mode "basic" for quay',
+    );
+  });
+
+  test('rejects a static-secret mode with no secret when enabled', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_ACR_MODES = 'bearer';
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'Registry webhook acr allows static-secret auth but no secret is configured',
+    );
+  });
+
+  test('does not validate static secrets while webhooks are disabled', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'false';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_ACR_MODES = 'bearer';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('a static secret alone satisfies the "some auth mechanism" requirement', () => {
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('a per-provider secret alone satisfies the "some auth mechanism" requirement', () => {
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_QUAY_SECRET = 'quay-only-secret-0001';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('rejects static secrets shorter than 16 characters', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'short';
+    expect(() => configuration.getWebhookConfiguration()).toThrow();
   });
 });

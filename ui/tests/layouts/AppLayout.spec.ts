@@ -495,15 +495,15 @@ describe('AppLayout', () => {
       expect(navItem?.find('.app-icon-stub').attributes('data-icon')).toBe('outbox');
     });
 
-    it('applies asymmetric horizontal padding on main: pl-6 left, pr-[9px] right', async () => {
+    it('applies asymmetric horizontal padding on main: ps-6 start, pe-[9px] end', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);
       await flushPromises();
 
       const main = wrapper.find('main');
       expect(main.exists()).toBe(true);
-      expect(main.classes()).toContain('sm:pl-6');
-      expect(main.classes()).toContain('sm:pr-[9px]');
+      expect(main.classes()).toContain('sm:ps-6');
+      expect(main.classes()).toContain('sm:pe-[9px]');
     });
 
     it('exposes the matched route name on the main content landmark', async () => {
@@ -714,6 +714,30 @@ describe('AppLayout', () => {
     }
   });
 
+  it('flags the server unreachable and shows no blocking overlay unless a self-update is running', async () => {
+    const { useConnectivity } = await import('@/composables/useConnectivity');
+    const wrapper = mountLayout({ teleport: false, Transition: false });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+      event: string,
+      payload?: unknown,
+    ) => void;
+
+    emit('connection-lost');
+    await flushPromises();
+    expect(useConnectivity().status.value).toBe('server-unreachable');
+    expect(document.body.innerHTML).not.toContain('disconnect-bounce');
+
+    emit('sse:connected');
+    await flushPromises();
+    expect(useConnectivity().status.value).toBe('online');
+
+    emit('self-update', { opId: 'abc12345' });
+    await flushPromises();
+    expect(document.body.innerHTML).toContain('disconnect-bounce');
+  });
+
   it('stops connectivity polling when connectivity check succeeds', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
@@ -721,7 +745,7 @@ describe('AppLayout', () => {
     mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
 
     try {
-      const wrapper = mountLayout();
+      const wrapper = mountLayout({ teleport: false });
       mountedWrappers.push(wrapper);
       await flushPromises();
 

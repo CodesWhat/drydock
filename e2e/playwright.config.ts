@@ -32,7 +32,7 @@ export default defineConfig({
     {
       name: 'chromium',
       testMatch: /.*\.spec\.ts/,
-      testIgnore: [/login\.spec\.ts/, /v16-mobile\.spec\.ts/],
+      testIgnore: [/login\.spec\.ts/, /v16-mobile\.spec\.ts/, /totp\.spec\.ts/],
       use: {
         storageState: 'playwright/.auth/user.json',
       },
@@ -56,6 +56,17 @@ export default defineConfig({
       use: {
         storageState: { cookies: [], origins: [] },
       },
+    },
+    {
+      // Enrolling TOTP ends every session of the account it enrolls. The spec
+      // uses its own account, and still runs after the other projects so a
+      // failure here can't strand them mid-run.
+      name: 'totp',
+      testMatch: /totp\.spec\.ts/,
+      use: {
+        storageState: { cookies: [], origins: [] },
+      },
+      dependencies: ['chromium', 'mobile-chromium', 'login'],
     },
   ],
 });

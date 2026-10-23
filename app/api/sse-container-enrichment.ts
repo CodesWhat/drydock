@@ -7,6 +7,7 @@ import {
 } from '../model/update-eligibility.js';
 import { getContainerMaintenanceWindowOpen } from '../model/watcher-maintenance-window.js';
 import * as registry from '../registry/index.js';
+import { isUpdateAvailableRuleEnabled } from '../store/notification.js';
 import { getUpdateMode } from '../store/settings.js';
 import {
   getActiveOperationByContainerId,
@@ -25,6 +26,7 @@ export function buildEligibilityContext(container: Container): UpdateEligibility
   return {
     triggers: registryState.trigger,
     updateMode: getUpdateMode(),
+    updateAvailableRuleEnabled: isUpdateAvailableRuleEnabled(),
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
     maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, registryState.watcher),
     isAgentPendingRegistration: (agentName) =>

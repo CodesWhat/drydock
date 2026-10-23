@@ -42,4 +42,17 @@ describe('triggerPaths', () => {
       },
     });
   });
+
+  test('documents the per-trigger skip list routes', () => {
+    const local = triggerPaths['/api/v1/triggers/{type}/{name}/skips'].get;
+    const remote = triggerPaths['/api/v1/triggers/{type}/{name}/{agent}/skips'].get;
+    expect(local.operationId).toBe('getTriggerSkips');
+    expect(remote.operationId).toBe('getRemoteTriggerSkips');
+    for (const op of [local, remote]) {
+      expect(op.responses[200]).toStrictEqual(
+        jsonResponse('Trigger skips', { $ref: '#/components/schemas/TriggerSkipsResult' }),
+      );
+      expect(op.responses[404]).toStrictEqual(errorResponse('Trigger not found'));
+    }
+  });
 });

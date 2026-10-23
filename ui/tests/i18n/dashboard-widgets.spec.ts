@@ -12,6 +12,10 @@ const titleKeys = [
   'dashboardView.resourceUsage.title',
   'dashboardView.hostStatus.title',
   'dashboardView.updateBreakdown.title',
+  'dashboardView.stats.images',
+  'dashboardView.stats.triggers',
+  'dashboardView.stats.watchers',
+  'dashboardView.recentActivity.title',
 ];
 
 describe('dashboard widget picker translations', () => {

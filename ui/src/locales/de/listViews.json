@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · Server: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM-Generierung aktiviert ({formats})",
-      "sbomDisabled": "SBOM-Generierung deaktiviert"
+      "sbomDisabled": "SBOM-Generierung deaktiviert",
+      "assetVersion": "Version {version}",
+      "assetDigest": "Image {digest}",
+      "assetDatabaseUpdated": "Datenbank aktualisiert {updatedAt}",
+      "assetCacheUpdated": "Cache aktualisiert {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Noch keine Schwachstellendaten",
@@ -426,6 +430,14 @@
       "status": "Status",
       "refreshing": "Trigger-Details werden aktualisiert...",
       "noConfig": "Keine Konfigurationseigenschaften"
+    },
+    "skips": {
+      "title": "Zuletzt übersprungen",
+      "description": "Container, die dieser Trigger zuletzt übersprungen hat, und warum. Wird im Speicher gehalten und beim Neustart von Drydock zurückgesetzt.",
+      "loading": "Übersprungene werden geladen...",
+      "loadError": "Letzte übersprungene Container konnten nicht geladen werden",
+      "empty": "Zuletzt nichts übersprungen",
+      "showMore": "Mehr anzeigen"
     }
   },
   "watchersView": {

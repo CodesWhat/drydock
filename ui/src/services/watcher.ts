@@ -2,6 +2,7 @@ import { i18n } from '../boot/i18n';
 import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import { ApiError } from '../utils/error';
+import { withLastKnown } from './last-known';
 
 interface WatcherDetailPathOptions {
   type: string;
@@ -62,14 +63,16 @@ function getWatcherProviderColor(type: string) {
 }
 
 async function getAllWatchers() {
-  const response = await fetch('/api/v1/watchers', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(
-      `${i18n.global.t('watchersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
-    );
-  }
-  const payload = await readJsonResponse(response);
-  return extractCollectionData<ApiComponentResponse>(payload);
+  return withLastKnown('watchers', async () => {
+    const response = await fetch('/api/v1/watchers', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(
+        `${i18n.global.t('watchersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+      );
+    }
+    const payload = await readJsonResponse(response);
+    return extractCollectionData<ApiComponentResponse>(payload);
+  });
 }
 
 function buildWatcherDetailPath({ type, name, agent }: WatcherDetailPathOptions) {

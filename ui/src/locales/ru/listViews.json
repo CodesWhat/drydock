@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · сервер: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Генерация SBOM включена ({formats})",
-      "sbomDisabled": "Генерация SBOM отключена"
+      "sbomDisabled": "Генерация SBOM отключена",
+      "assetVersion": "Версия {version}",
+      "assetDigest": "Образ {digest}",
+      "assetDatabaseUpdated": "База данных обновлена {updatedAt}",
+      "assetCacheUpdated": "Кэш обновлён {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Данных об уязвимостях пока нет",
@@ -426,6 +430,14 @@
       "status": "Статус",
       "refreshing": "Обновление данных триггера...",
       "noConfig": "Свойства конфигурации отсутствуют"
+    },
+    "skips": {
+      "title": "Недавние пропуски",
+      "description": "Контейнеры, которые этот триггер недавно пропустил, и причины. Хранится в памяти и сбрасывается при перезапуске Drydock.",
+      "loading": "Загрузка пропусков...",
+      "loadError": "Не удалось загрузить недавние пропуски",
+      "empty": "Недавних пропусков нет",
+      "showMore": "Показать ещё"
     }
   },
   "watchersView": {

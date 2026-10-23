@@ -666,7 +666,7 @@ This operation triggers a vulnerability scan, optional signature verification, a
 
 Candidate scans that pass through `DD_SECURITY_GATE_RELATIVE=true` include `relativeGate: { decision, reason, currentSummary }`. `decision=passed` means every candidate severity count was less than or equal to the exact running image's saved scan. Missing, failed, or stale current scans return a blocked decision with `reason=current-scan-unavailable`; a higher candidate count returns `reason=candidate-worse`.
 
-Requires `DD_SECURITY_SCANNER=trivy`, `grype`, or `both` to be configured.
+Requires `DD_SECURITY_SCANNER=grype`, `trivy`, or `both` to be configured.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/scan

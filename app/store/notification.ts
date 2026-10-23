@@ -438,6 +438,14 @@ export function getNotificationRule(id: string): NotificationRule | undefined {
   return getNotificationRules().find((rule) => rule.id === idNormalized);
 }
 
+/**
+ * The `update-available` rule is the master switch for automatic actions as well as the
+ * notification. A missing rule counts as enabled, as the trigger paths treat it.
+ */
+export function isUpdateAvailableRuleEnabled(): boolean {
+  return getNotificationRule('update-available')?.enabled !== false;
+}
+
 export function getNotificationTemplate(
   ruleId: string,
   triggerId: string,

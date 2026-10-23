@@ -2,6 +2,7 @@ import {
   ApprovalApiError,
   type ApprovalRecord,
   approveApproval,
+  bulkDecideApprovals,
   deferApproval,
   getApproval,
   getApprovalSummary,
@@ -65,6 +66,11 @@ describe('approval service', () => {
       'defer',
       () => deferApproval('approval-1'),
       'Failed to defer update (HTTP 503): Service Unavailable',
+    ],
+    [
+      'bulk',
+      () => bulkDecideApprovals(['approval-1'], 'reject'),
+      'Failed to decide selected updates (HTTP 503): Service Unavailable',
     ],
   ] as const)('%s error responses', (_name, request, fallback) => {
     it.each([
@@ -375,6 +381,125 @@ describe('approval service', () => {
       });
 
       await expect(deferApproval('approval-1', { days: 0 })).rejects.toThrow('Invalid days');
+    });
+  });
+
+  describe('bulkDecideApprovals', () => {
+    function bulkResponse(accepted: string[], rejected: string[] = []) {
+      return {
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({
+          accepted: accepted.map((id) => ({
+            id,
+            containerId: `c-${id}`,
+            containerName: id,
+            decision: 'approved',
+          })),
+          rejected: rejected.map((id) => ({
+            id,
+            statusCode: 409,
+            message: 'Approval already decided',
+          })),
+        }),
+      };
+    }
+
+    it('POSTs the ids and action to /api/v1/approvals/bulk with the confirmation header for approve', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(bulkResponse(['a', 'b']));
+
+      const result = await bulkDecideApprovals(['a', 'b'], 'approve', { note: 'weekly' });
+
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/approvals/bulk', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-DD-Confirm-Action': 'approvals-bulk-approve',
+        },
+        body: JSON.stringify({ ids: ['a', 'b'], action: 'approve', note: 'weekly' }),
+      });
+      expect(result.accepted.map((entry) => entry.id)).toEqual(['a', 'b']);
+      expect(result.rejected).toEqual([]);
+    });
+
+    it('sends no confirmation header and no note for reject', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(bulkResponse(['a']));
+
+      await bulkDecideApprovals(['a'], 'reject');
+
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/approvals/bulk', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['a'], action: 'reject' }),
+      });
+    });
+
+    it('splits a selection past 200 ids into several calls and merges the results', async () => {
+      const ids = Array.from({ length: 450 }, (_unused, index) => `a-${index}`);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(bulkResponse(ids.slice(0, 200)))
+        .mockResolvedValueOnce(bulkResponse(ids.slice(200, 399), [ids[399]]))
+        .mockResolvedValueOnce(bulkResponse(ids.slice(400)));
+
+      const result = await bulkDecideApprovals(ids, 'approve');
+
+      const sentSizes = vi
+        .mocked(global.fetch)
+        .mock.calls.map(([, init]) => JSON.parse(String((init as RequestInit).body)).ids.length);
+      expect(sentSizes).toEqual([200, 200, 50]);
+      expect(result.accepted).toHaveLength(449);
+      expect(result.rejected).toEqual([
+        { id: 'a-399', statusCode: 409, message: 'Approval already decided' },
+      ]);
+    });
+
+    it('throws when the first call fails, because nothing was decided', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 428,
+        statusText: 'Precondition Required',
+        json: vi.fn().mockResolvedValue({ error: 'Confirmation required' }),
+      });
+
+      const err = await bulkDecideApprovals(['a'], 'approve').catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ApprovalApiError);
+      expect((err as ApprovalApiError).statusCode).toBe(428);
+    });
+
+    it('reports the ids of a later failed call as rejected instead of losing the earlier result', async () => {
+      const ids = Array.from({ length: 201 }, (_unused, index) => `a-${index}`);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(bulkResponse(ids.slice(0, 200)))
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 500,
+          statusText: 'Server Error',
+          json: vi.fn().mockResolvedValue({ error: 'boom' }),
+        });
+
+      const result = await bulkDecideApprovals(ids, 'reject');
+
+      expect(result.accepted).toHaveLength(200);
+      expect(result.rejected).toEqual([{ id: 'a-200', statusCode: 500, message: 'boom' }]);
+    });
+
+    it('reports a non-API failure of a later call with status 0', async () => {
+      const ids = Array.from({ length: 201 }, (_unused, index) => `a-${index}`);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(bulkResponse(ids.slice(0, 200)))
+        .mockRejectedValueOnce(new TypeError('network down'));
+
+      const first = await bulkDecideApprovals(ids, 'reject');
+      expect(first.rejected).toEqual([{ id: 'a-200', statusCode: 0, message: 'network down' }]);
+
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(bulkResponse(ids.slice(0, 200)))
+        .mockRejectedValueOnce('plain');
+      const second = await bulkDecideApprovals(ids, 'reject');
+      expect(second.rejected).toEqual([{ id: 'a-200', statusCode: 0, message: 'plain' }]);
     });
   });
 });

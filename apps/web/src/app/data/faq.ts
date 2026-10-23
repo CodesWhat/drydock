@@ -27,12 +27,12 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "How does Drydock compare to Watchtower?",
     answer:
-      "Watchtower auto-updates containers on a schedule with minimal config and no UI. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Trivy/Grype CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
+      "Watchtower auto-updates containers on a schedule with minimal config and no UI. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Grype/Trivy CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
   },
   {
     question: "Does Drydock support vulnerability scanning and image signature verification?",
     answer:
-      "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=trivy|grype|both) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
+      "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=grype|trivy|both, with Grype recommended) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
   },
   {
     question: "What does the 100% TypeScript coverage claim include?",

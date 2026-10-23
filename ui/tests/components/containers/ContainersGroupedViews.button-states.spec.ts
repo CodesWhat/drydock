@@ -157,33 +157,16 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     containerActionsEnabled,
     containerActionsDisabledReason: ref('Actions disabled'),
     actionInProgress,
-    isContainerUpdateInProgress: (target: {
-      id?: string;
-      name?: string;
-      _pending?: true;
-      updateOperation?: { status?: string };
-    }) =>
+    isContainerUpdateInProgress: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean((target as any)._pending) ||
-      target.updateOperation?.status === 'in-progress' ||
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'update',
-    isContainerUpdateQueued: (target: {
-      id?: string;
-      name?: string;
-      updateOperation?: { status?: string };
-    }) =>
-      target.updateOperation?.status === 'queued' || groupUpdateQueue.value.has(target.id ?? ''),
+    isContainerUpdateQueued: (target: { id?: string; name?: string }) =>
+      groupUpdateQueue.value.has(target.id ?? ''),
     isContainerScanInProgress: (target: { id?: string; name?: string }) =>
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'scan',
-    isContainerRowLocked: (target: {
-      id?: string;
-      name?: string;
-      _pending?: true;
-      updateOperation?: { status?: string };
-    }) =>
+    isContainerRowLocked: (target: { id?: string; name?: string; _pending?: true }) =>
       Boolean((target as any)._pending) ||
-      target.updateOperation?.status === 'in-progress' ||
       actionInProgress.value.get(target.id ?? target.name ?? '') === 'update' ||
-      target.updateOperation?.status === 'queued' ||
       groupUpdateQueue.value.has(target.id ?? ''),
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: vi.fn(),

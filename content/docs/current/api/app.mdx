@@ -13,7 +13,7 @@ curl http://drydock:3000/api/v1/app
 {
   "name":"drydock",
   "version":"1.8.0",
-  "build":"1.8.0-rc.5"
+  "build":"1.8.0-rc.6"
 }
 ```
 
@@ -52,7 +52,7 @@ curl http://drydock:3000/api/v1/server
 
 ## Get security runtime status
 
-Returns backend, provider, scanner-asset, Cosign, and SBOM-generator status. Command mode checks local binaries; Docker/remote modes inspect digest-pinned worker assets.
+Returns backend, provider, scanner-asset, Cosign, and SBOM-generator status. Providers that run as local commands are checked as binaries; providers that run in workers (`auto` without a resolvable binary, `docker`, `remote`) are checked as digest-pinned worker assets.
 
 ```bash
 curl http://drydock:3000/api/v1/server/security/runtime
@@ -60,16 +60,16 @@ curl http://drydock:3000/api/v1/server/security/runtime
 {
   "checkedAt": "2026-03-18T19:33:00.000Z",
   "ready": true,
-  "backend": "docker",
+  "backend": "auto",
   "availabilityPolicy": "block",
   "gate": { "mode": "on", "allowNoWorse": true },
   "scanner": {
     "enabled": true,
-    "command": "aquasec/trivy@sha256:…",
+    "command": "ghcr.io/anchore/grype:v0.121.0@sha256:…",
     "commandAvailable": true,
     "status": "ready",
-    "message": "trivy scanner is ready via docker",
-    "scanner": "trivy",
+    "message": "grype scanner is ready via docker",
+    "scanner": "grype",
     "server": ""
   },
   "signature": {
@@ -82,10 +82,10 @@ curl http://drydock:3000/api/v1/server/security/runtime
   "sbom": {
     "enabled": true,
     "formats": ["spdx-json", "cyclonedx-json"],
-    "generator": "trivy"
+    "generator": "syft"
   },
-  "providers": [{ "provider": "trivy", "role": "scanner", "status": "ready" }],
-  "assets": [{ "provider": "trivy", "state": "ready", "resolvedDigest": "sha256:…" }],
+  "providers": [{ "provider": "grype", "role": "scanner", "status": "ready" }],
+  "assets": [{ "provider": "grype", "state": "ready", "resolvedDigest": "sha256:…" }],
   "requirements": []
 }
 ```
@@ -96,18 +96,18 @@ curl http://drydock:3000/api/v1/server/security/runtime
 | --- | --- | --- |
 | `checkedAt` | string | ISO 8601 timestamp of the check |
 | `ready` | boolean | `true` when every required scanner/SBOM provider is ready |
-| `backend` | string | `command`, `docker`, or Trivy-only `remote` |
+| `backend` | string | Configured backend: `auto` (default), `command`, `docker`, or Trivy-only `remote` |
 | `availabilityPolicy` | string | Fail-closed `block` or explicit advisory `warn` |
 | `gate.mode` | string | Effective global gate mode: `on` or `off` |
 | `gate.allowNoWorse` | boolean | Whether blocked candidates can pass a fail-closed severity-by-severity comparison with the current image scan |
 | `scanner.enabled` | boolean | Whether vulnerability scanning is configured |
-| `scanner.command` | string | Scanner command (e.g. `trivy`) |
+| `scanner.command` | string | Scanner command, or the worker image when the scanner runs in a worker |
 | `scanner.commandAvailable` | boolean \| null | Whether the command was found in the runtime; `null` when disabled |
 | `scanner.status` | string | `ready`, `missing`, or `disabled` |
 | `scanner.server` | string | Trivy server URL (empty when using local mode) |
 | `signature.enabled` | boolean | Whether signature verification is configured |
-| `signature.command` | string | Cosign command |
-| `signature.commandAvailable` | boolean \| null | Whether cosign was found in the runtime |
+| `signature.command` | string | Cosign command, or the worker image when cosign runs in a worker |
+| `signature.commandAvailable` | boolean \| null | Whether cosign (or its worker image) is ready |
 | `signature.status` | string | `ready`, `missing`, or `disabled` |
 | `sbom.enabled` | boolean | Whether SBOM generation is enabled |
 | `sbom.formats` | string[] | Configured SBOM output formats |
@@ -120,20 +120,20 @@ Returns 200 on success, or 500 if the runtime check fails.
 
 ## Pull or warm scanner assets
 
-Docker/remote backends expose an audited lifecycle action:
+Providers that run in workers expose an audited lifecycle action:
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/server/security/assets/grype/pull
 curl -X POST http://drydock:3000/api/v1/server/security/assets/grype/warm
 ```
 
-Providers are `trivy`, `grype`, and `syft`; operations are `pull` and `warm`. The response is the resulting asset status. Invalid combinations return 400, while runtime/pull/warm failures return 503 without exposing credentials.
+Providers are `trivy`, `grype`, `syft`, and `cosign`; operations are `pull` and `warm`. The response is the resulting asset status. Invalid combinations return 400, while runtime/pull/warm failures return 503 without exposing credentials.
 
 ## Download diagnostic debug dump
 
 Downloads a comprehensive, redacted diagnostic dump of the running drydock instance as a JSON file. Useful for troubleshooting and support requests.
 
-The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. In v1.8.0-rc.5 builds, store statistics report SQLite table row counts under the compatibility field `collections` (each entry has `name` and `documents`). The aggregate `serializedBytes` is SQLite's `page_count` multiplied by `page_size`, not JSON serialization size or per-table byte attribution. Internal migration and store-metadata tables are excluded from the row counts; raw stored rows are not included.
+The dump includes runtime metadata, component state (watchers, registries, triggers, agents, containers), Docker API diagnostics, MQTT Home Assistant sensor definitions, recent Docker events, store statistics, and `DD_*` environment variable names. In v1.8.0-rc.6 builds, store statistics report SQLite table row counts under the compatibility field `collections` (each entry has `name` and `documents`). The aggregate `serializedBytes` is SQLite's `page_count` multiplied by `page_size`, not JSON serialization size or per-table byte attribution. Internal migration and store-metadata tables are excluded from the row counts; raw stored rows are not included.
 
 Redaction works on the key name, and the exact rule matters — a key that falls outside it is returned verbatim:
 
