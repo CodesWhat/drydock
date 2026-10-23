@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.6] - 2026-10-23
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes the [v1.8.0-rc.1 features](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.1), the [v1.8.0-rc.2 fixes](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.2), and the [v1.8.0-rc.3](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.3), [v1.8.0-rc.4](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.4) and [v1.8.0-rc.5](https://github.com/CodesWhat/drydock/releases/tag/v1.8.0-rc.5) changes, and retains their upgrade warnings. The image no longer bundles Trivy or cosign, and Grype is now the default scanner. `DD_SECURITY_BACKEND=auto` runs Trivy and cosign in pinned worker containers, so if you set `DD_SECURITY_SCANNER=trivy` you will see a deprecation warning, and Drydock needs permission to create and attach containers on its Docker socket. Without that permission, use `DD_SECURITY_BACKEND=remote` with a Trivy server or mount a Trivy binary through `DD_SECURITY_TRIVY_COMMAND`. The Update Available notification rule now explains when it skips automatic actions ([#1281](https://github.com/CodesWhat/drydock/issues/1281)). v1.8 GA is not released; v1.7.0 (GA 2026-10-19) is the latest stable release. RC6 has its own publication-based soak.
+
 ### Security
 
 - Bump `nodemailer` to 10.0.10 (GHSA-39m8-27wv-hr27, used by the SMTP notification trigger) and the `ip-address` override to 10.7.4 (GHSA-rxp7-6hxx-x8q5), and the website's `dompurify` to 3.4.17 (GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr).
@@ -20,9 +27,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
-- The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR. The image no longer bundles Trivy, so the worker default is now the only Trivy pin and the release SBOM uses Syft.
+- Trivy versions can no longer drift apart. The default Trivy worker had stayed on 0.72.0 while the image bundled 0.73.0; the image no longer bundles Trivy, so the worker default is the only Trivy pin, a test fails if another appears, and the release SBOM uses Syft.
 - The Update Available notification rule also gates automatic actions, and Drydock now says so. With that rule turned off, a batch action trigger (such as `dockercompose`) skipped every pending update with no log line and no reason in the UI, so updates sat there and never installed. The batch path now logs the rule being off, a group policy holding a container back, a threshold miss and a trigger-condition exclusion, in the same wording as the simple path. The container's update status also gets a soft "Update Available rule is off" reason that points at Settings > Notifications > Update Available; manual updates are unaffected.
-- The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR.
 - The Security view now shows the scanner version, image digest, and vulnerability database or cache update time in each scanner's tooltip, using the asset details the API already returned.
 - Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
 - Show when a notification was last skipped. The container detail notification section already named the reason, and now also shows the local date and time of the last skip for each trigger.
@@ -3592,7 +3598,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...HEAD
+[1.8.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...v1.8.0-rc.6
 [1.8.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.4...v1.8.0-rc.5
 [1.8.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...v1.8.0-rc.4
 [1.8.0-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.2...v1.8.0-rc.3
