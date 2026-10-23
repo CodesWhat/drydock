@@ -142,7 +142,10 @@ const runtimeError = ref<string | null>(null);
 const runtimeStatus = ref<SecurityRuntimeStatus | null>(null);
 const assetOperation = ref<string | null>(null);
 
-async function runAssetOperation(provider: 'trivy' | 'grype' | 'syft', operation: 'pull' | 'warm') {
+async function runAssetOperation(
+  provider: 'trivy' | 'grype' | 'syft' | 'cosign',
+  operation: 'pull' | 'warm',
+) {
   assetOperation.value = `${provider}:${operation}`;
   runtimeError.value = null;
   try {
@@ -703,7 +706,7 @@ onUnmounted(() => {
                 size="xs"
                 uppercase
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
-              <template v-if="runtimeStatus.backend !== 'command'">
+              <template v-if="runtimeStatus.backend !== 'command' || runtimeStatus.assets.length > 0">
                 <AppIconButton
                   v-for="asset in runtimeStatus.assets"
                   :key="`compact-asset-${asset.provider}`"
@@ -734,7 +737,7 @@ onUnmounted(() => {
                 :label="t('securityView.runtimeTools.sbom')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
-              <template v-if="runtimeStatus.backend !== 'command'">
+              <template v-if="runtimeStatus.backend !== 'command' || runtimeStatus.assets.length > 0">
                 <AppStatusIndicator
                   v-for="provider in runtimeStatus.providers"
                   :key="provider.provider"

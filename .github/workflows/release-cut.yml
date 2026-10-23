@@ -1116,7 +1116,7 @@ jobs:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-          TRIVY_IMAGE: aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c  # 0.73.0
+          SYFT_IMAGE: ghcr.io/anchore/syft@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a  # v1.55.0
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -1126,12 +1126,9 @@ jobs:
           docker run --rm \
             --volume "${PWD}/dist:/out" \
             --volume "${HOME}/.docker:/root/.docker:ro" \
-            "${TRIVY_IMAGE}" \
-            image \
-            --format spdx-json \
-            --output "/out/$(basename "${sbom_path}")" \
-            --timeout 15m \
-            "${image_ref}"
+            "${SYFT_IMAGE}" \
+            "registry:${image_ref}" \
+            --output "spdx-json=/out/$(basename "${sbom_path}")"
 
           jq -e '.spdxVersion == "SPDX-2.3" and (.packages | type == "array")' "${sbom_path}" >/dev/null
 

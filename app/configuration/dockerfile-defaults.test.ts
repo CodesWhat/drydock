@@ -43,15 +43,14 @@ describe('Dockerfile release defaults', () => {
     expect(dockerfile).toMatch(/\(#1021\)/u);
   });
 
-  test('release image copies Trivy from the digest-pinned multi-arch image', () => {
+  test('release image bundles neither Trivy nor cosign', () => {
     const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
 
-    expect(dockerfile).toContain(
-      'FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin',
-    );
-    expect(dockerfile).toContain('COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy');
+    expect(dockerfile).not.toContain('trivy-bin');
+    expect(dockerfile).not.toContain('aquasec/trivy');
+    expect(dockerfile).not.toMatch(/apk add[^\n]*(trivy|cosign)/u);
+    expect(dockerfile).not.toMatch(/^\s+cosign=/mu);
     expect(dockerfile).not.toContain('alpine/edge/testing');
-    expect(dockerfile).not.toMatch(/apk add[^\n]*trivy/u);
   });
 
   test('release image pins the available Alpine tzdata revision', () => {

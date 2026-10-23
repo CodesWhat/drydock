@@ -26,6 +26,28 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 
 ## Removed compatibility behaviors
 
+### Bundled Trivy and cosign binaries in the Docker image
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.8.0 |
+| **Removed in** | v1.8.0 |
+| **Affects** | Installs with `DD_SECURITY_SCANNER=trivy` or `both` that relied on the `trivy` binary in the image, and installs with `DD_SECURITY_VERIFY_SIGNATURES=true` that relied on the `cosign` binary |
+
+Through v1.7.x the image carried a vendored `trivy` binary (`/usr/local/bin/trivy`) and an Alpine `cosign` package. Both were Go binaries whose module graphs produced vulnerability findings Drydock could not patch independently, so the image Grype gate ignored them by location and never covered them. v1.8.0 removes both from the image. Trivy is now supported through a worker or a remote server only, and cosign, Grype and Syft run from pinned worker images.
+
+`DD_SECURITY_BACKEND` has a new default, `auto`. For each provider it runs a local command when `DD_SECURITY_<PROVIDER>_COMMAND` is set or the binary is on `PATH`, and a hardened, digest-pinned Docker worker otherwise. `command`, `docker` and `remote` keep their explicit meanings. `remote` stays Trivy-only.
+
+- **`DD_SECURITY_SCANNER=trivy` or `both` without a Trivy binary** keeps scanning through the pinned Trivy worker. Drydock logs one `WARN` per process naming the change and counts it in the deprecation banner and in `dd_legacy_input_total{source="env"}`.
+- **If Docker denies creating or attaching the worker** (for example a socket proxy that blocks container creation), the scan fails with an error naming the three setups that work: `DD_SECURITY_SCANNER=grype` (recommended), `DD_SECURITY_BACKEND=remote` with `DD_SECURITY_TRIVY_SERVER`, or a binary you mount and point `DD_SECURITY_TRIVY_COMMAND` at.
+- **`DD_SECURITY_TRIVY_COMMAND` pointing at a mounted binary, and `DD_SECURITY_BACKEND=remote`, keep working unchanged.**
+- **cosign** now runs in a worker by default with the same hardening as the scanner workers (read-only root filesystem, all capabilities dropped, no Docker socket, environment allowlist). `DD_SECURITY_COSIGN_COMMAND` is still honored and keeps cosign local. A `DD_SECURITY_COSIGN_KEY` file is read by Drydock and passed to the worker by value.
+- **The release SBOM** is generated with Syft instead of Trivy. The SPDX 2.3 format is unchanged.
+
+**Migration:** Set `DD_SECURITY_SCANNER=grype`. Trivy is marked "supported via worker/remote only": keep `trivy` if you run a Trivy server (`DD_SECURITY_BACKEND=remote`) or mount your own binary. Make sure Drydock has a Docker API connection that can create containers (`DD_SECURITY_DOCKER_SOCKET`, or `DD_SECURITY_DOCKER_HOST` and `DD_SECURITY_DOCKER_PORT` for a socket proxy). See [Update Bouncer](https://getdrydock.com/docs/configuration/security#execution-backends).
+
+---
+
 ### `curl` in Docker image
 
 | | |

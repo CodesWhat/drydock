@@ -31,7 +31,7 @@ async function getSecurityRuntime() {
 }
 
 async function manageSecurityAsset(
-  provider: 'trivy' | 'grype' | 'syft',
+  provider: 'trivy' | 'grype' | 'syft' | 'cosign',
   operation: 'pull' | 'warm',
 ) {
   const response = await fetch(`/api/v1/server/security/assets/${provider}/${operation}`, {

@@ -31,12 +31,6 @@
       "groupSlug": "playwright"
     },
     {
-      "description": "Keep every pinned Trivy digest (Dockerfile, default scanner worker image, release SBOM job) in one update PR so the bundled and worker scanners never drift",
-      "matchPackageNames": ["aquasec/trivy"],
-      "groupName": "trivy image pins",
-      "groupSlug": "trivy-image-pins"
-    },
-    {
       "description": "@babel/core is only present as an unscoped override consumed by @stryker-mutator/instrumenter, which requires ~7.29.0 with matching 7.x sibling plugins; npm overrides are global, so a core@8 bump forces an unsupported mix under the instrumenter and breaks the monthly mutation-testing workflow. Re-enable once Stryker supports Babel 8 (recorded 2026-08-13; re-check at each Stryker major).",
       "matchPackageNames": ["@babel/core"],
       "matchUpdateTypes": ["major"],
@@ -51,16 +45,6 @@
     }
   ],
   "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Track the Trivy image digest pinned outside the Dockerfile (default Docker scanner worker image and the release SBOM job) so it bumps together with the Dockerfile trivy-bin stage",
-      "managerFilePatterns": [
-        "/^app/configuration/index\\.ts$/",
-        "/^\\.github/workflows/release-cut\\.yml$/"
-      ],
-      "matchStrings": ["(?<depName>aquasec/trivy)@(?<currentDigest>sha256:[a-f0-9]{64})"],
-      "datasourceTemplate": "docker"
-    },
     {
       "customType": "regex",
       "description": "Update the Playwright Docker image pinned in the E2E workflow",
@@ -79,6 +63,15 @@
       "datasourceTemplate": "repology",
       "packageNameTemplate": "alpine_3_24/{{{depName}}}",
       "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the scanner worker images pinned in app/configuration/index.ts (Trivy, Grype, Syft, cosign). Each constant is `<image>:<tag>@sha256:<index digest>`, so Renovate bumps the tag and the digest together. The workers run the scanners that used to be baked into the Drydock image, so a stale pin means stale vulnerability data or a scanner with known bugs.",
+      "managerFilePatterns": ["/^app/configuration/index\\.ts$/"],
+      "matchStrings": [
+        "const DEFAULT_[A-Z]+_WORKER_IMAGE =\\s*'(?<depName>[^:'@]+):(?<currentValue>[^@']+)@(?<currentDigest>sha256:[a-f0-9]{64})'"
+      ],
+      "datasourceTemplate": "docker"
     }
   ]
 }

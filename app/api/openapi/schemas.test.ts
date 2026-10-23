@@ -51,7 +51,7 @@ describe('scanner runtime OpenAPI schemas', () => {
     expect(openApiSchemas.ScannerAssetStatus).toStrictEqual({
       type: 'object',
       properties: {
-        provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+        provider: { type: 'string', enum: ['trivy', 'grype', 'syft', 'cosign'] },
         backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
         configuredImage: { type: 'string' },
         resolvedDigest: { type: 'string' },

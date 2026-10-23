@@ -205,11 +205,11 @@ Drydock's Update Bouncer scans candidate images for known vulnerabilities before
 
 ```yaml
 environment:
-  - DD_SECURITY_SCANNER=trivy
+  - DD_SECURITY_SCANNER=grype
   - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
 ```
 
-The official Drydock image bundles Trivy — no additional installation needed.
+The Drydock image ships no scanner binaries. Grype runs in a pinned, hardened worker container that Drydock creates through the Docker API, so no installation is needed. Trivy (`DD_SECURITY_SCANNER=trivy`) is supported through a worker or a remote server only.
 
 ### Scan modes
 
@@ -267,7 +267,7 @@ The `SECURITYMODE` setting is independent of the update-notification `MODE`. A t
 
 ### High-volume environments
 
-For environments with many containers, use a dedicated Trivy server to avoid repeated vulnerability database downloads:
+For environments with many containers, Grype keeps its vulnerability database in a cache volume shared by every scan. If you prefer Trivy, use a dedicated Trivy server to avoid repeated vulnerability database downloads:
 
 ```yaml
 services:
@@ -280,6 +280,7 @@ services:
       - trivy
     environment:
       - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_BACKEND=remote
       - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
 ```
 
@@ -419,17 +420,11 @@ services:
       retries: 3
       start_period: 5s
 
-  trivy:
-    image: aquasec/trivy:latest
-    command: server --listen 0.0.0.0:4954
-
   drydock:
     image: codeswhat/drydock:1.8.0-rc.5
     depends_on:
       socket-proxy:
         condition: service_healthy
-      trivy:
-        condition: service_started
     volumes:
       - /opt/drydock/store:/store
     environment:
@@ -443,9 +438,10 @@ services:
       - DD_AUTH_BASIC_ADMIN_HASH__FILE=/run/secrets/admin_hash
 
       # Vulnerability scanning
-      - DD_SECURITY_SCANNER=trivy
+      - DD_SECURITY_SCANNER=grype
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
-      - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
+      - DD_SECURITY_DOCKER_HOST=socket-proxy
+      - DD_SECURITY_DOCKER_PORT=2375
       - DD_SECURITY_SCAN_CRON=0 3 * * *
 
       # Image signatures
@@ -480,7 +476,7 @@ Use this checklist to verify your deployment covers each layer:
 | Podman | Direct rootless Podman socket mounts are preferred first; socket proxy/TCP Podman paths depend on Podman's Docker-compatible HTTP API | [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) |
 | Authentication | Basic Auth or OIDC configured and enforced | [Authentication](/docs/configuration/authentications) |
 | Secret management | All credentials use `__FILE` or Docker secrets — none in compose files | [Configuration](/docs/configuration) |
-| Vulnerability scanning | `DD_SECURITY_SCANNER=trivy` set, blocking severities configured | [Update Bouncer](/docs/configuration/security) |
+| Vulnerability scanning | `DD_SECURITY_SCANNER=grype` set, blocking severities configured | [Update Bouncer](/docs/configuration/security) |
 | Scheduled scans | `DD_SECURITY_SCAN_CRON` set for regular background scanning | [Update Bouncer](/docs/configuration/security#scheduled-scanning) |
 | Signature verification | `DD_SECURITY_VERIFY_SIGNATURES=true` for supply chain integrity | [Update Bouncer](/docs/configuration/security#signature-verification-cosign) |
 | SBOM generation | `DD_SECURITY_SBOM_ENABLED=true` for compliance and auditing | [Update Bouncer](/docs/configuration/security#sbom-generation) |

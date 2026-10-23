@@ -20,12 +20,16 @@ export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as co
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
+// Scanner worker pins (tag plus index digest). Renovate bumps these constants through the
+// regex manager in renovate.json, so keep the `const DEFAULT_<NAME>_WORKER_IMAGE = '<image>:<tag>@sha256:<digest>'` shape.
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c';
+  'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c';
 const DEFAULT_GRYPE_WORKER_IMAGE =
-  'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
+  'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea';
 const DEFAULT_SYFT_WORKER_IMAGE =
-  'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
+  'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a';
+const DEFAULT_COSIGN_WORKER_IMAGE =
+  'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d';
 const DEFAULT_PORTWING_POLL_INTERVAL = 300;
 const DEFAULT_DIGEST_WATCH_SCHEMA = joi.boolean().label('DD_DEFAULTS_WATCH_DIGEST');
 
@@ -1174,7 +1178,11 @@ export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
     scanner: joi.string().insensitive().valid('trivy', 'grype', 'both').allow('').default(''),
-    backend: joi.string().insensitive().valid('command', 'docker', 'remote').default('command'),
+    backend: joi
+      .string()
+      .insensitive()
+      .valid('auto', 'command', 'docker', 'remote')
+      .default('auto'),
     availability: joi
       .object({
         policy: joi.string().insensitive().valid('block', 'warn').default('block'),
@@ -1247,6 +1255,11 @@ export function getSecurityConfiguration() {
           .pattern(/^(?!.*\.\.)/, 'no path traversal'),
         identity: joi.string().allow('').default(''),
         issuer: joi.string().allow('').default(''),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_COSIGN_WORKER_IMAGE),
+          })
+          .default({}),
       })
       .default({}),
     sbom: joi
@@ -1304,7 +1317,7 @@ export function getSecurityConfiguration() {
 
   const configuration = configurationToValidate.value;
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
-  const backend = configuration.backend.toLowerCase() as 'command' | 'docker' | 'remote';
+  const backend = configuration.backend.toLowerCase() as 'auto' | 'command' | 'docker' | 'remote';
   if (
     backend === 'remote' &&
     (scanner !== 'trivy' || !`${configuration.trivy?.server || ''}`.trim())
@@ -1316,6 +1329,18 @@ export function getSecurityConfiguration() {
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
   const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
+  // `auto` backend treats an explicitly set DD_SECURITY_<PROVIDER>_COMMAND as a request for the
+  // local command even when it does not resolve, so a typo fails loudly instead of silently
+  // switching to a worker.
+  const isCommandExplicit = (provider: 'trivy' | 'grype' | 'syft' | 'cosign') => {
+    const providerConfiguration = configurationFromEnv[provider] as
+      | { command?: unknown }
+      | undefined;
+    return (
+      typeof providerConfiguration?.command === 'string' &&
+      providerConfiguration.command.trim() !== ''
+    );
+  };
 
   return {
     enabled: scanner !== '',
@@ -1336,6 +1361,7 @@ export function getSecurityConfiguration() {
     trivy: {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
+      commandExplicit: isCommandExplicit('trivy'),
       timeout: configuration.trivy?.timeout || 600000,
       maxOutputBytes: configuration.trivy?.maxoutputbytes || DEFAULT_TRIVY_MAX_OUTPUT_BYTES,
       imageSrc: configuration.trivy?.image?.src || '',
@@ -1344,6 +1370,7 @@ export function getSecurityConfiguration() {
     },
     grype: {
       command: configuration.grype?.command || 'grype',
+      commandExplicit: isCommandExplicit('grype'),
       timeout: configuration.grype?.timeout || 600000,
       extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
       workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
@@ -1356,6 +1383,8 @@ export function getSecurityConfiguration() {
         key: cosignKey,
         identity: configuration.cosign?.identity || '',
         issuer: configuration.cosign?.issuer || '',
+        commandExplicit: isCommandExplicit('cosign'),
+        workerImage: configuration.cosign?.worker?.image || DEFAULT_COSIGN_WORKER_IMAGE,
       },
     },
     sbom: {
@@ -1368,6 +1397,7 @@ export function getSecurityConfiguration() {
     },
     syft: {
       command: configuration.syft?.command || 'syft',
+      commandExplicit: isCommandExplicit('syft'),
       timeout: configuration.syft?.timeout || 600000,
       extraArgs: parseSecurityExtraArgs(configuration.syft?.args, 'DD_SECURITY_SYFT_ARGS'),
       workerImage: configuration.syft?.worker?.image || DEFAULT_SYFT_WORKER_IMAGE,

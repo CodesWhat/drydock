@@ -10,6 +10,10 @@ vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: (...args: unknown[]) => mockGetSecurityConfiguration(...args),
 }));
 
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+}));
+
 vi.mock('dockerode', () => ({
   default: function MockDocker(options: unknown) {
     mockDockerConstructor(options);
@@ -50,6 +54,13 @@ function createConfiguration(overrides: Record<string, unknown> = {}) {
     trivy: { workerImage: `aquasec/trivy@sha256:${'a'.repeat(64)}`, timeout: 1000 },
     grype: { workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`, timeout: 2000 },
     syft: { workerImage: `anchore/syft@sha256:${'c'.repeat(64)}`, timeout: 3000 },
+    signature: {
+      verify: false,
+      cosign: {
+        workerImage: `ghcr.io/sigstore/cosign/cosign@sha256:${'d'.repeat(64)}`,
+        timeout: 4000,
+      },
+    },
     sbom: { enabled: true, generator: 'auto' },
     docker: {
       socket: '/var/run/docker.sock',
@@ -65,6 +76,7 @@ function createConfiguration(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('PATH', '');
   clearDefaultScannerRuntime();
   mockGetSecurityConfiguration.mockReturnValue(createConfiguration());
   mockCreateDockerScannerBackend.mockImplementation(() => createBackend());
@@ -95,6 +107,7 @@ test('executes provider invocations in hardened Docker workers with bounded prov
     args: ['image', '--format', 'json', 'registry/app:1'],
     env: {
       TRIVY_CACHE_DIR: '/cache',
+      TMPDIR: '/scratch',
       TRIVY_USERNAME: 'user',
       TRIVY_PASSWORD: 'token',
     },
@@ -152,7 +165,7 @@ test('asset pull and warm operations drive provider worker assets', async () => 
   expect(grype.run).toHaveBeenCalledWith(
     expect.objectContaining({
       args: ['db', 'update'],
-      env: { GRYPE_DB_CACHE_DIR: '/cache' },
+      env: { GRYPE_DB_CACHE_DIR: '/cache', TMPDIR: '/scratch' },
     }),
   );
   expect((await runtime.assets.status())[0]).toMatchObject({
@@ -162,13 +175,201 @@ test('asset pull and warm operations drive provider worker assets', async () => 
   });
 });
 
-test('rejects command backend because it does not use Docker worker assets', () => {
+test('rejects an unknown backend', () => {
   expect(() =>
     createScannerRuntime({
-      configuration: createConfiguration({ backend: 'command' }),
+      configuration: createConfiguration({ backend: 'bogus' }),
       backends: {},
     }),
-  ).toThrow('Docker scanner runtime requires docker or remote backend');
+  ).toThrow('Docker scanner runtime does not support backend bogus');
+});
+
+test('command backend builds worker assets only for providers without a local command', () => {
+  const trivy = createBackend();
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      backend: 'command',
+      scanner: 'both',
+      trivy: {
+        workerImage: `aquasec/trivy@sha256:${'a'.repeat(64)}`,
+        timeout: 1000,
+        command: 'trivy',
+        commandExplicit: false,
+      },
+      grype: {
+        workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
+        timeout: 2000,
+        command: '/opt/grype',
+        commandExplicit: true,
+      },
+      sbom: { enabled: false },
+    }),
+    backends: { trivy },
+  });
+
+  expect(runtime.assets.get('trivy').backend).toBe('docker');
+  expect(() => runtime.assets.get('grype')).toThrow();
+});
+
+test('command backend with every provider local builds an empty runtime', async () => {
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      backend: 'command',
+      scanner: 'grype',
+      grype: {
+        workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
+        timeout: 2000,
+        commandExplicit: true,
+      },
+      sbom: { enabled: false },
+    }),
+    backends: {},
+  });
+  await expect(runtime.assets.status()).resolves.toEqual([]);
+});
+
+test('auto backend uses a worker for each provider whose command does not resolve', () => {
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      backend: 'auto',
+      scanner: 'grype',
+      grype: {
+        workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
+        timeout: 2000,
+        commandExplicit: true,
+      },
+      sbom: { enabled: true, generator: 'auto' },
+    }),
+    backends: { syft: createBackend() },
+  });
+
+  expect(runtime.sbomGenerator).toBe('syft');
+  expect(runtime.assets.get('syft').backend).toBe('docker');
+  expect(() => runtime.assets.get('grype')).toThrow();
+});
+
+test('remote backend labels worker assets as remote', () => {
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      backend: 'remote',
+      scanner: 'trivy',
+      sbom: { enabled: false },
+    }),
+    backends: { trivy: createBackend() },
+  });
+  expect(runtime.assets.get('trivy').backend).toBe('remote');
+});
+
+test('runs cosign in a worker with the registry auth and key env allowlist only', async () => {
+  const cosign = createBackend();
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      scanner: 'grype',
+      sbom: { enabled: false },
+      signature: {
+        verify: true,
+        cosign: {
+          workerImage: `ghcr.io/sigstore/cosign/cosign@sha256:${'d'.repeat(64)}`,
+          timeout: 4000,
+        },
+      },
+    }),
+    backends: { grype: createBackend(), cosign },
+  });
+
+  await runtime.run({
+    provider: 'cosign',
+    args: ['verify', '--output', 'json', 'registry/app:1'],
+    env: {
+      DD_SESSION_SECRET: 'must-not-leak',
+      COSIGN_REGISTRY_USERNAME: 'user',
+      COSIGN_REGISTRY_PASSWORD: 'secret',
+      COSIGN_PUBLIC_KEY: 'PEM',
+      HOME: '/root',
+    },
+    timeoutMs: 4000,
+    maxOutputBytes: 1024,
+  });
+
+  expect(cosign.run).toHaveBeenCalledWith({
+    image: expect.stringMatching(/^ghcr\.io\/sigstore\/cosign\/cosign@sha256:d+$/),
+    args: ['verify', '--output', 'json', 'registry/app:1'],
+    env: {
+      HOME: '/tmp',
+      TUF_ROOT: '/tmp/tuf',
+      COSIGN_REGISTRY_USERNAME: 'user',
+      COSIGN_REGISTRY_PASSWORD: 'secret',
+      COSIGN_PUBLIC_KEY: 'PEM',
+    },
+    timeoutMs: 4000,
+    maxOutputBytes: 1024,
+    signal: undefined,
+  });
+});
+
+test('cosign worker assets pull with the configured timeout and have no warm-up command', async () => {
+  const cosign = createBackend();
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      scanner: 'grype',
+      sbom: { enabled: false },
+      signature: {
+        verify: true,
+        cosign: {
+          workerImage: `ghcr.io/sigstore/cosign/cosign@sha256:${'d'.repeat(64)}`,
+          timeout: 4000,
+        },
+      },
+    }),
+    backends: { grype: createBackend(), cosign },
+  });
+
+  await runtime.assets.warm('cosign');
+  expect(cosign.pullImage).toHaveBeenCalledWith(expect.any(String), undefined, 4000);
+  expect(cosign.run).not.toHaveBeenCalled();
+  expect(runtime.assets.get('cosign')).toMatchObject({ provider: 'cosign', state: 'ready' });
+});
+
+test('does not build a cosign asset unless signature verification is enabled', () => {
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({ scanner: 'grype', sbom: { enabled: false } }),
+    backends: { grype: createBackend() },
+  });
+  expect(() => runtime.assets.get('cosign')).toThrow();
+});
+
+test('requires a worker backend for cosign when verification is enabled', () => {
+  expect(() =>
+    createScannerRuntime({
+      configuration: createConfiguration({
+        scanner: 'grype',
+        sbom: { enabled: false },
+        signature: { verify: true, cosign: { workerImage: 'x', timeout: 1 } },
+      }),
+      backends: { grype: createBackend() },
+    }),
+  ).toThrow('Docker scanner backend for cosign is not configured');
+});
+
+test('cosign command setting keeps cosign out of the worker runtime', () => {
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({
+      backend: 'auto',
+      scanner: 'grype',
+      grype: {
+        workerImage: `anchore/grype@sha256:${'b'.repeat(64)}`,
+        timeout: 2000,
+        commandExplicit: true,
+      },
+      sbom: { enabled: false },
+      signature: {
+        verify: true,
+        cosign: { workerImage: 'x', timeout: 1, commandExplicit: true },
+      },
+    }),
+    backends: {},
+  });
+  expect(() => runtime.assets.get('cosign')).toThrow();
 });
 
 test('honors explicit SBOM generators and requires every selected provider backend', () => {
@@ -250,7 +451,7 @@ test('warms Trivy with a bounded database-only command and forwards pull authent
   expect(trivy.run).toHaveBeenCalledWith(
     expect.objectContaining({
       args: ['image', '--download-db-only', '--timeout', '2s'],
-      env: { TRIVY_CACHE_DIR: '/cache' },
+      env: { TRIVY_CACHE_DIR: '/cache', TMPDIR: '/scratch' },
     }),
   );
 });
@@ -262,18 +463,18 @@ test('builds and caches the default socket runtime with named provider cache vol
   expect(cached).toBe(runtime);
   expect(mockDockerConstructor).toHaveBeenCalledOnce();
   expect(mockDockerConstructor).toHaveBeenCalledWith({ socketPath: '/var/run/docker.sock' });
-  expect(mockCreateDockerScannerBackend).toHaveBeenCalledTimes(3);
+  expect(mockCreateDockerScannerBackend).toHaveBeenCalledTimes(4);
   expect(mockCreateDockerScannerBackend).toHaveBeenNthCalledWith(
     1,
     expect.objectContaining({
       client: mockDockerClient,
       cacheDir: 'volume:drydock-scanner-trivy',
-      hardening: { networkMode: 'bridge' },
+      hardening: { networkMode: 'bridge', scratchTarget: '/scratch' },
     }),
   );
 });
 
-test('rebuilds the default runtime for TCP Docker changes and rejects command configuration', () => {
+test('rebuilds the default runtime for TCP Docker changes and builds for command configuration', () => {
   getDefaultScannerRuntime();
   mockGetSecurityConfiguration.mockReturnValue(
     createConfiguration({
@@ -294,8 +495,11 @@ test('rebuilds the default runtime for TCP Docker changes and rejects command co
   });
 
   clearDefaultScannerRuntime();
-  mockGetSecurityConfiguration.mockReturnValue(createConfiguration({ backend: 'command' }));
-  expect(() => getDefaultScannerRuntime()).toThrow('Docker scanner runtime is not configured');
+  mockGetSecurityConfiguration.mockReturnValue(
+    createConfiguration({ backend: 'command', scanner: '', sbom: { enabled: false } }),
+  );
+  expect(getDefaultScannerRuntime().sbomGenerator).toBe('trivy');
+  expect(mockCreateDockerScannerBackend).toHaveBeenCalledTimes(12);
 });
 
 test('maps default runtime asset audit lifecycle outcomes without exposing worker internals', async () => {
@@ -346,4 +550,41 @@ test('maps default runtime asset audit lifecycle outcomes without exposing worke
       }),
     ),
   );
+});
+
+test('scanner workers spill temporary data to the per-worker scratch volume, not the cache or the 64 MiB tmpfs', async () => {
+  const syft = createBackend();
+  const runtime = createScannerRuntime({
+    configuration: createConfiguration({ scanner: 'grype', sbom: { enabled: true } }),
+    backends: { grype: createBackend(), syft },
+  });
+
+  await runtime.run({
+    provider: 'syft',
+    args: ['registry:registry/app:1'],
+    timeoutMs: 1000,
+    maxOutputBytes: 1024,
+  });
+
+  expect(syft.run).toHaveBeenCalledWith(
+    expect.objectContaining({ env: { SYFT_CACHE_DIR: '/cache', TMPDIR: '/scratch' } }),
+  );
+});
+
+test('default runtime gives scanner workers (not cosign) a scratch mount', () => {
+  getDefaultScannerRuntime();
+
+  const hardeningByCacheDir = Object.fromEntries(
+    mockCreateDockerScannerBackend.mock.calls.map(([options]) => [
+      options.cacheDir,
+      options.hardening,
+    ]),
+  );
+  for (const provider of ['trivy', 'grype', 'syft']) {
+    expect(hardeningByCacheDir[`volume:drydock-scanner-${provider}`]).toEqual({
+      networkMode: 'bridge',
+      scratchTarget: '/scratch',
+    });
+  }
+  expect(hardeningByCacheDir['volume:drydock-scanner-cosign']).toEqual({ networkMode: 'bridge' });
 });

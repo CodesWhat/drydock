@@ -209,7 +209,7 @@ docker run -d \
 > **默认情况下需要身份验证**。有关 OIDC、匿名访问和其他选项，请参阅 [auth docs](https://getdrydock.com/docs/configuration/authentications)。
 > 新安装和升级后的实例都必须通过 `DD_ANONYMOUS_AUTH_CONFIRM=true` 明确确认匿名访问。若未确认，无论是未配置身份验证还是匿名身份验证尚未确认，实例都会以故障关闭模式启动：受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可用，`/health` 返回 `503`。
 
-该镜像包含`trivy`和`cosign`二进制文件，用于本地漏洞扫描和镜像验证。
+该镜像不包含扫描器二进制文件。设置 `DD_SECURITY_SCANNER=grype` 后，Drydock 会在固定版本的 worker 容器中运行 Grype、Syft 和 cosign。
 
 有关 Docker Compose、套接字安全、反向代理和替代注册表，请参阅[快速入门指南](https://getdrydock.com/docs/quickstart)。
 
