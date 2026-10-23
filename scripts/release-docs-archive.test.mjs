@@ -165,7 +165,7 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
       lines.splice(change.startLine - 1, change.endLine - change.startLine + 1, change.replacement);
       assert.ok(
         readFileSync(join('content/docs/current', path), 'utf8').includes(
-          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.5\n'),
+          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.6\n'),
         ),
         path,
       );

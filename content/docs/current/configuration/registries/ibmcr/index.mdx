@@ -28,7 +28,7 @@ Drydock automatically detects IBMCR registries by matching `*.icr.io` hostnames.
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_REGISTRY_IBMCR_PRIVATE_APIKEY=xxxxx
@@ -40,7 +40,7 @@ services:
 docker run \
   -e "DD_REGISTRY_IBMCR_PRIVATE_APIKEY=xxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -53,7 +53,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_REGISTRY_IBMCR_PRIVATE_LOGIN=iamapikey
@@ -67,7 +67,7 @@ docker run \
   -e "DD_REGISTRY_IBMCR_PRIVATE_LOGIN=iamapikey" \
   -e "DD_REGISTRY_IBMCR_PRIVATE_PASSWORD=xxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -80,7 +80,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH
@@ -92,7 +92,7 @@ services:
 docker run \
   -e "DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>

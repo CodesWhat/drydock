@@ -5,6 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.6 Highlights - October 23, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **The image no longer bundles Trivy or cosign, and Grype is the default scanner.** `DD_SECURITY_BACKEND=auto` runs Trivy and cosign in pinned worker containers. If you set `DD_SECURITY_SCANNER=trivy`, you will see a deprecation warning, and Drydock needs permission to create and attach containers on its Docker socket. Without it, use `DD_SECURITY_BACKEND=remote` with a Trivy server, or mount a Trivy binary through `DD_SECURITY_TRIVY_COMMAND`. See [security configuration](/docs/configuration/security).
+- **The Update Available rule now explains skipped automatic actions.** With the rule turned off, batch action triggers used to skip every pending update with no log line and no reason in the UI. Drydock now logs the cause and shows it in the container's update status ([#1281](https://github.com/CodesWhat/drydock/issues/1281)).
+- RC6 includes the RC1, RC2, RC3, RC4 and RC5 changes below, including the fix for registries that list tags oldest first ([#1453](https://github.com/CodesWhat/drydock/issues/1453)), and starts its own soak when published. v1.7.0 (GA 2026-10-19) is the latest stable release.
+
 ## v1.8.0-rc.5 Highlights - October 22, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

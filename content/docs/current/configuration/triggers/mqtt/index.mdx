@@ -46,7 +46,7 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 
 <Callout type="warning">**Multi-agent deployments:** Home Assistant MQTT topics include an `agent/<name>` segment for agent-owned containers by default as of v1.7.0, scoping topics, watcher running-status, sensor counts, and discovery cleanup per agent so multiple agents sharing the default watcher name `local` no longer collide. This changed the Home Assistant entity IDs for agent containers on upgrade — update any automations or dashboards that reference the old (agent-less) entity IDs. Drydock does not retroactively remove the old discovery entities; they remain retained on the broker and show up as orphaned, frozen-at-last-state duplicates until manually removed. Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_AGENTTOPICSEGMENT=false` to temporarily opt back into the pre-v1.7.0 unscoped layout — see [Deprecations](https://getdrydock.com/docs/deprecations). Toggling `HASS_AGENTTOPICSEGMENT` in either direction moves the retained state topic and the old one is not cleared automatically, because the unscoped topic can legitimately belong to a controller-local container of the same name and drydock cannot tell that case apart from a stale one. If you flip the setting, publish an empty retained message to the old topic yourself to clear it.</Callout>
 
-<Callout type="warning">**v1.8.0-rc.5 uses container identity for topics and `unique_id`.** The state topic segment (`{container}` below) is an encoded Compose `project.service` pair when both `com.docker.compose.project` and `com.docker.compose.service` labels are present, and the sanitized container name otherwise. Each Compose component doubles literal hyphens and replaces dots with hyphens before joining with a dot. For example, `<topic>/<watcher>/<container>` becomes `dd/container/local/myapp.web`, not `dd/container/local/myapp_web_1`. Home Assistant `unique_id` is `dd_` plus a hash of the identity, independent of the topic. Rename and recreate stability applies to Compose-labeled containers only; standalone containers remain name-identified. Update hand-written subscriptions to the new shape. Discovery resync clears replaced legacy topics for known containers, records successful cleanup per configured route, and retries failed publishes. It does not enumerate or repair every retained broker entity. See [Deprecations](/docs/deprecations#mqtt-identity-based-topics-and-discovery).</Callout>
+<Callout type="warning">**v1.8.0-rc.6 uses container identity for topics and `unique_id`.** The state topic segment (`{container}` below) is an encoded Compose `project.service` pair when both `com.docker.compose.project` and `com.docker.compose.service` labels are present, and the sanitized container name otherwise. Each Compose component doubles literal hyphens and replaces dots with hyphens before joining with a dot. For example, `<topic>/<watcher>/<container>` becomes `dd/container/local/myapp.web`, not `dd/container/local/myapp_web_1`. Home Assistant `unique_id` is `dd_` plus a hash of the identity, independent of the topic. Rename and recreate stability applies to Compose-labeled containers only; standalone containers remain name-identified. Update hand-written subscriptions to the new shape. Discovery resync clears replaced legacy topics for known containers, records successful cleanup per configured route, and retries failed publishes. It does not enumerate or repair every retained broker entity. See [Deprecations](/docs/deprecations#mqtt-identity-based-topics-and-discovery).</Callout>
 
 ## Home Assistant devices
 
@@ -93,7 +93,7 @@ the pre-v1.8.0 layout, where every entity sits on the single `drydock` device.
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -105,7 +105,7 @@ services:
 docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -118,7 +118,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
@@ -140,7 +140,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTCERT="/drydock/mqtt/client-cert.pem" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CACHAIN="/drydock/mqtt/ca.pem" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -153,7 +153,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
@@ -171,7 +171,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_TOPIC="john@doe.com/drydock/image" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -212,7 +212,7 @@ Drydock integrates with [Home Assistant](https://www.home-assistant.io/) via [MQ
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -228,7 +228,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_ENABLED="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
@@ -273,7 +273,7 @@ Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_COMMANDS=true` to let Home Assista
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -291,7 +291,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_COMMANDS="true" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 </Tabs>
