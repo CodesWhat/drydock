@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { auditEntries } from '../apps/demo/src/mocks/data/audit.ts';
 
-const BASE_VERSION = '1.7.0';
-const RC_VERSION = '1.7.0';
+const BASE_VERSION = '1.7.1';
+const RC_VERSION = '1.7.1-rc.1';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',

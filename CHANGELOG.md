@@ -10,12 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.1] — 2026-10-23
+
+This is a release candidate for the maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. 1.7.1 fixes data loss and breakage when Drydock recreates a container (anonymous volumes are kept, and containers sharing a network namespace with an updated container are recreated against it), updates services defined in compose `include:` files, and finishes the dependency work 1.7.0 described with a dependency view and update guards in the UI. It also adds an offline indicator that shows last-known data, a `scan` or `install` scope for the maintenance window (`scan` stays the default), maturity countdowns wherever a held update is listed, one pinned Trivy version with scanner versions shown in the Security view, the `/api/v1/actions` and `/api/v1/notification-triggers` routes (with `/api/v1/triggers` deprecated), optional dashboard widgets, translations for the remaining hard-coded UI strings, and a `musl-dev` pin so the image builds again.
+
 ### Fixed
 
 - Pin `musl-dev` to `1.2.6-r3` in the healthcheck build stage. Alpine 3.24 retired `1.2.6-r2`, so the image build failed at `apk add`.
 - The update-status panel now shows the Manual and Blocked action policy badges, not only Auto, and the full-page associated-triggers rows carry the per-trigger policy tooltip and Auto badge like the other trigger lists.
 - Translate the remaining hard-coded UI strings and gate against new ones. Seven English literals are now localized in all 17 locales: the yes/no values in the container preview and compose-write rows, the "Page" and "unknown image" search subtitles, the preview-request fallback error, and a missing `containerComponents.groupedViews.updateFailed` key that rendered its raw key path when an update failed over SSE. New i18n specs fail CI when a key used in `ui/src` is absent from the English locale files (including dynamic `t(\`prefix.${x}\`)` keys) and when a user-facing literal reaches a template expression, toast, dialog or label property outside a documented allowlist.
 - **The v1.7.0 dependency promise is now delivered in the UI.** The release notes described a dependency-aware update flow, but only the API and wave ordering shipped. Besides the dependency rows, chain update and parent guard above, updating a single container now lists the containers that depend on it and says they are not updated or restarted with it, and a stack, group or dependency-group Update All that would update a child while its parent has its own pending update outside the batch asks first, naming the children and parents, with "Update anyway" to continue.
+- Keep anonymous volumes when recreating a container. Containers whose image declares a `VOLUME` with no named volume or bind mount, such as a default `postgres` or `mysql` setup, came back from an update with a fresh empty volume while the old one, with the data on it, was left orphaned. The docker and dockercompose actions, and self-update, now reattach the existing volume at the same path, as `docker compose up` does.
 - Containers that share a replaced container's network namespace or volumes now follow it. When Drydock updated a container that others attach to with `network_mode: container:<id>` or `service:<name>` (the Gluetun pattern) or `volumes_from`, those containers kept pointing at the removed container and lost their network, and restarting them failed with "joining network namespace of container: No such container". Drydock now recreates them against the new container, keeping the rest of their configuration.
 - Update images for services defined in included compose files. Compose records only the files named on the command line in the `config_files` label, never the ones pulled in with `include:`, so Drydock could not find a service defined in an included file and skipped the compose file rewrite. Drydock now follows `include:` entries (nested ones too) from the listed files and rewrites the file that defines the service. Services that inherit their image through `extends` are still left alone.
 - Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
@@ -36,7 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 - `/api/v1/triggers` is deprecated in favor of `/api/v1/actions` and `/api/v1/notification-triggers`. It keeps working and now sends `Deprecation: true` and a `Link: <successor>; rel="successor-version"` header, and logs a one-time warning per process. Removal is planned no earlier than v1.9.0 (see DEPRECATIONS.md).
-- Keep anonymous volumes when recreating a container. Containers whose image declares a `VOLUME` with no named volume or bind mount, such as a default `postgres` or `mysql` setup, came back from an update with a fresh empty volume while the old one, with the data on it, was left orphaned. The docker and dockercompose actions, and self-update, now reattach the existing volume at the same path, as `docker compose up` does.
 
 ### Security
 
@@ -2951,7 +2955,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...HEAD
+[1.7.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1-rc.1
 [1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0
 [1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24
 [1.7.0-rc.23]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...v1.7.0-rc.23
