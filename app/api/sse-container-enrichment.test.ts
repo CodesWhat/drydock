@@ -14,6 +14,14 @@ var {
   };
 });
 
+const { mockIsUpdateAvailableRuleEnabled } = vi.hoisted(() => ({
+  mockIsUpdateAvailableRuleEnabled: vi.fn(() => true),
+}));
+
+vi.mock('../store/notification.js', () => ({
+  isUpdateAvailableRuleEnabled: mockIsUpdateAvailableRuleEnabled,
+}));
+
 vi.mock('../store/settings.js', () => ({
   getUpdateMode: mockGetUpdateMode,
 }));
@@ -45,6 +53,7 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
     mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetAgent.mockReturnValue(undefined);
     mockGetUpdateMode.mockReturnValue('auto');
+    mockIsUpdateAvailableRuleEnabled.mockReturnValue(true);
   });
 
   describe('update mode reflection', () => {
@@ -80,6 +89,47 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
         source: 'group',
         group: 'payments',
       });
+    });
+  });
+
+  describe('update-available rule reflection', () => {
+    const payload = {
+      id: 'c1',
+      name: 'mysql',
+      watcher: 'local',
+      image: { name: 'mysql', tag: { value: '9.6.0' } },
+      result: { tag: '9.7.0' },
+    } as any;
+    const autoTrigger = {
+      type: 'docker',
+      agent: undefined,
+      configuration: { threshold: 'all' },
+      getId: () => 'docker.update',
+    };
+
+    test('adds the soft rule-disabled blocker when the rule is off and an action would auto-dispatch', () => {
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': autoTrigger },
+        watcher: {},
+      } as any);
+      mockIsUpdateAvailableRuleEnabled.mockReturnValue(false);
+
+      const result = enrichContainerLifecyclePayloadWithEligibility(payload) as any;
+
+      expect(result.updateEligibility.blockers).toEqual([
+        expect.objectContaining({ reason: 'update-available-rule-disabled', severity: 'soft' }),
+      ]);
+    });
+
+    test('adds nothing while the rule is on', () => {
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': autoTrigger },
+        watcher: {},
+      } as any);
+
+      const result = enrichContainerLifecyclePayloadWithEligibility(payload) as any;
+
+      expect(result.updateEligibility.blockers).toEqual([]);
     });
   });
 

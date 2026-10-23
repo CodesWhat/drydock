@@ -2237,6 +2237,7 @@ describe('container-mapper', () => {
       'agent-mismatch',
       'no-update-trigger-configured',
       'maintenance-window-closed',
+      'update-available-rule-disabled',
       'group-notify-only',
     ] as const;
 

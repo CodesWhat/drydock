@@ -480,6 +480,7 @@
       "maturityClockPublished": "候補は {date} に公開されました — {minDays} 日の最低期間まであと {count} 日",
       "maturityClockDetected": "候補は {date} に検出されました — {minDays} 日の最低期間まであと {count} 日",
       "groupManualOnly": "グループポリシー '{group}' は手動更新のみを許可しています。Drydock はこの更新を自動では適用しません。",
+      "updateAvailableRuleDisabled": "Update Available 通知ルールがオフです。このルールは自動更新も制御します。Drydock がこの更新を自動で適用するには、Settings > Notifications > Update Available でオンにしてください。",
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
       "notificationsOnlyButton": "通知のみ",
@@ -522,6 +523,7 @@
         "no-update-trigger-configured": "更新トリガーが構成されていません",
         "self-update-unavailable": "自己更新は利用できません",
         "maintenance-window-closed": "メンテナンスウィンドウは終了しています",
+        "update-available-rule-disabled": "Update Available ルールがオフです",
         "group-notify-only": "グループは通知のみ許可しています",
         "group-manual-only": "グループは手動更新を必須にしています",
         "dry-run-trigger": "トリガー構成がドライランモードです",
@@ -538,6 +540,7 @@
         "configureThreshold": "トリガーのしきい値を構成",
         "configureSelfUpdate": "自己更新を構成",
         "configureMaintenance": "メンテナンスウィンドウを構成",
+        "configureNotificationRule": "通知ルールを開く",
         "editGroupPolicy": "グループポリシーを編集"
       },
       "releaseMaturityCount": "ファミリー {family} の安定版を待機中です。必要な先行リリース {required} 件のうち {count} 件が利用可能です。",

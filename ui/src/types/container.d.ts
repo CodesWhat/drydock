@@ -22,6 +22,7 @@ export type UpdateBlockerReason =
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
   | 'maintenance-window-closed'
+  | 'update-available-rule-disabled'
   | 'group-notify-only';
 
 /**

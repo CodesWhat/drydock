@@ -480,6 +480,7 @@
       "maturityClockPublished": "Candidato publicado el {date} — falta {count} día para el mínimo de {minDays} días | Candidato publicado el {date} — faltan {count} días para el mínimo de {minDays} días",
       "maturityClockDetected": "Candidato detectado el {date} — falta {count} día para el mínimo de {minDays} días | Candidato detectado el {date} — faltan {count} días para el mínimo de {minDays} días",
       "groupManualOnly": "La política del grupo '{group}' solo permite actualizaciones manuales. Drydock no aplicará esta automáticamente.",
+      "updateAvailableRuleDisabled": "La regla de notificación Update Available está desactivada y también controla las actualizaciones automáticas. Actívala en Settings > Notifications > Update Available para que Drydock aplique esta actualización por su cuenta.",
       "updateButton": "Actualizar ahora",
       "blockedButton": "Actualización bloqueada",
       "notificationsOnlyButton": "Sólo notificaciones",
@@ -522,6 +523,7 @@
         "no-update-trigger-configured": "No hay un trigger de actualización configurado",
         "self-update-unavailable": "Autoactualización no disponible",
         "maintenance-window-closed": "Ventana de mantenimiento cerrada",
+        "update-available-rule-disabled": "La regla Update Available está desactivada",
         "group-notify-only": "El grupo solo permite notificaciones",
         "group-manual-only": "El grupo exige actualizaciones manuales",
         "dry-run-trigger": "Configuración del trigger en modo dry-run",
@@ -538,6 +540,7 @@
         "configureThreshold": "Configurar umbral del trigger",
         "configureSelfUpdate": "Configurar autoactualización",
         "configureMaintenance": "Configurar ventana de mantenimiento",
+        "configureNotificationRule": "Abrir reglas de notificación",
         "editGroupPolicy": "Editar política de grupo"
       },
       "releaseMaturityCount": "Esperando versiones estables de la familia {family}: hay {count} de {required} versiones anteriores disponibles.",

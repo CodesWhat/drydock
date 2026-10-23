@@ -1019,6 +1019,14 @@ class Trigger<
     );
   }
 
+  /** Batch-path twin of the simple path's group-cap log, with the group and its mode added. */
+  private logGroupPolicyBatchHold(container: Container) {
+    const ceiling = resolveUpdateModeCeiling(container, 'auto');
+    this.log.debug(
+      `Group policy update mode does not allow automatic actions for ${fullName(container)} => ignore (group '${container.groupPolicy?.group}', mode '${ceiling.value}')`,
+    );
+  }
+
   private getAutoMode() {
     return Trigger.normalizeAutoMode(this.configuration.auto);
   }
@@ -2457,11 +2465,18 @@ class Trigger<
       return false;
     }
     if (!Trigger.isThresholdReached(container, this.getSimpleModeThreshold())) {
+      // Same wording as the simple path so one grep finds both.
+      this.getContainerLogger(container).debug(
+        `Threshold not reached => ignore (threshold=${this.getSimpleModeThreshold()}, updateKind=${container.updateKind?.kind ?? 'unknown'}, semverDiff=${container.updateKind?.semverDiff ?? 'unknown'})`,
+      );
       this.recordSkip(container, 'threshold-not-met', `threshold=${this.getSimpleModeThreshold()}`);
       return false;
     }
     const mustTriggerDecision = this.getMustTriggerDecision(container);
     if (!mustTriggerDecision.allowed) {
+      this.getContainerLogger(container).debug(
+        `Trigger conditions not met => ignore (${mustTriggerDecision.reason})`,
+      );
       this.recordSkip(container, 'trigger-excluded', mustTriggerDecision.reason);
       return false;
     }
@@ -2788,6 +2803,10 @@ class Trigger<
     if (!batchDispatchDecision.enabled) {
       for (const report of containerReports) {
         if (report.container.updateAvailable) {
+          // Same wording as the simple path so one grep finds both.
+          this.log.debug(
+            `Skipping update-available notification for ${fullName(report.container)} (${batchDispatchDecision.reason})`,
+          );
           this.recordSkip(report.container, 'rule-disabled', batchDispatchDecision.reason);
         }
       }
@@ -2800,9 +2819,15 @@ class Trigger<
     }
     // Per report, after the global gate: a member whose group caps the mode never enters the
     // batch, so it is never reserved, sent or recorded as notified.
-    const dispatchableReports = containerReports.filter(
-      (report) => !this.isAutomaticActionDispatchBlockedFor(report.container),
-    );
+    const dispatchableReports = containerReports.filter((report) => {
+      if (!this.isAutomaticActionDispatchBlockedFor(report.container)) {
+        return true;
+      }
+      if (report.container.updateAvailable) {
+        this.logGroupPolicyBatchHold(report.container);
+      }
+      return false;
+    });
 
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
@@ -2818,6 +2843,7 @@ class Trigger<
       // A retry is judged on the current container, so a group that has since capped the mode
       // holds it back without a reservation. It stays buffered, as it does under a global gate.
       if (this.isAutomaticActionDispatchBlockedFor(container)) {
+        this.logGroupPolicyBatchHold(container);
         continue;
       }
       const businessId = getContainerNotificationKey(container) || fullName(container);

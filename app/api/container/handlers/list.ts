@@ -12,6 +12,7 @@ import {
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
 import { getContainerMaintenanceWindowOpen } from '../../../model/watcher-maintenance-window.js';
+import { isUpdateAvailableRuleEnabled } from '../../../store/notification.js';
 import { getUpdateMode } from '../../../store/settings.js';
 import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
@@ -120,6 +121,7 @@ function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibility
   return {
     triggers: context.getTriggers ? context.getTriggers() : undefined,
     updateMode: getUpdateMode(),
+    updateAvailableRuleEnabled: isUpdateAvailableRuleEnabled(),
     isAgentPendingRegistration: (agentName) =>
       context.getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (container: Container) => {

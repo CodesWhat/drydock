@@ -9,6 +9,7 @@
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
 import * as storeContainer from '../../store/container.js';
+import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import Trigger from './Trigger.js';
 
@@ -350,6 +351,119 @@ describe('batch mode', () => {
       expect(recorded.map((call) => call[1])).toEqual(['c2']);
     },
   );
+
+  test.each(CEILINGS)(
+    'a %s group logs why its report is filtered out of an automatic batch, like simple mode',
+    async (_name, actions) => {
+      const action = createTrigger('docker', 'batch');
+      vi.spyOn(action, 'runAcceptedUpdateBatch').mockResolvedValue({
+        dispatched: true,
+        deferredIds: new Set(),
+      });
+      const debug = vi.fn();
+      action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      const blocked = createContainer('c1', actions);
+
+      await action.handleContainerReports([report(blocked), report(createContainer('c2'))]);
+
+      expect(debug).toHaveBeenCalledWith(
+        `Group policy update mode does not allow automatic actions for ${blocked.watcher}_${blocked.name} => ignore (group 'payments', mode '${actions.updateMode}')`,
+      );
+      expect(
+        debug.mock.calls.filter(([message]) =>
+          String(message).startsWith('Group policy update mode does not allow'),
+        ),
+      ).toHaveLength(1);
+    },
+  );
+
+  test('a retried entry held back by its current group is logged too', async () => {
+    const action = createTrigger('docker', 'batch');
+    const debug = vi.fn();
+    action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    action.batchRetryBuffer.set('app-c1', createContainer('c1'));
+    const nowBlocked = createContainer('c1', { updateMode: 'manual' });
+    vi.mocked(storeContainer.getContainersRaw).mockReturnValue([nowBlocked]);
+
+    await action.handleContainerReports([]);
+
+    expect(debug).toHaveBeenCalledWith(
+      `Group policy update mode does not allow automatic actions for ${nowBlocked.watcher}_${nowBlocked.name} => ignore (group 'payments', mode 'manual')`,
+    );
+  });
+
+  test('a disabled update-available rule is logged for every pending container in the batch', async () => {
+    vi.mocked(notificationStore.getTriggerDispatchDecisionForRule).mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    });
+    const action = createTrigger('docker', 'batch');
+    const run = vi.spyOn(action, 'runAcceptedUpdateBatch');
+    const debug = vi.fn();
+    action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const pending = createContainer('c1');
+    const settled = createContainer('c2', undefined, { updateAvailable: false });
+
+    await action.handleContainerReports([report(pending), report(settled)]);
+
+    expect(run).not.toHaveBeenCalled();
+    expect(debug).toHaveBeenCalledWith(
+      `Skipping update-available notification for ${pending.watcher}_${pending.name} (rule-disabled)`,
+    );
+    expect(debug).not.toHaveBeenCalledWith(expect.stringContaining(settled.name));
+  });
+
+  test('a batch logs the threshold and trigger-condition skips with the simple path wording', async () => {
+    const action = createTrigger('docker', 'batch');
+    action.configuration.threshold = 'major-only';
+    const debug = vi.fn();
+    action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    action.log.child = () => action.log;
+    const belowThreshold = createContainer('c1');
+    const excluded = createContainer('c2', undefined, {
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+    });
+    vi.spyOn(action, 'getMustTriggerDecision').mockImplementation((container: any) =>
+      container.id === 'c2' ? { allowed: false, reason: 'excluded by test' } : { allowed: true },
+    );
+
+    await action.handleContainerReports([report(belowThreshold), report(excluded)]);
+
+    expect(debug).toHaveBeenCalledWith(
+      'Threshold not reached => ignore (threshold=major-only, updateKind=tag, semverDiff=minor)',
+    );
+    expect(debug).toHaveBeenCalledWith('Trigger conditions not met => ignore (excluded by test)');
+  });
+
+  test('a batch logs a threshold miss on a container with no update kind as unknown', async () => {
+    const action = createTrigger('docker', 'batch');
+    action.configuration.threshold = 'digest';
+    const debug = vi.fn();
+    action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    action.log.child = () => action.log;
+
+    await action.handleContainerReports([
+      report(createContainer('c1', undefined, { updateKind: undefined })),
+    ]);
+
+    expect(debug).toHaveBeenCalledWith(
+      'Threshold not reached => ignore (threshold=digest, updateKind=unknown, semverDiff=unknown)',
+    );
+  });
+
+  test('a group-capped member with no pending update is dropped from the batch without a log', async () => {
+    const action = createTrigger('docker', 'batch');
+    const debug = vi.fn();
+    action.log = { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+    await action.handleContainerReports([
+      report(createContainer('c1', { updateMode: 'manual' }, { updateAvailable: false })),
+    ]);
+
+    expect(debug).not.toHaveBeenCalledWith(
+      expect.stringContaining('Group policy update mode does not allow'),
+    );
+  });
 
   test('a batch holding only group-blocked reports sends and records nothing', async () => {
     const action = createTrigger('docker', 'batch');

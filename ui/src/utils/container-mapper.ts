@@ -828,6 +828,7 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'agent-mismatch',
   'no-update-trigger-configured',
   'maintenance-window-closed',
+  'update-available-rule-disabled',
   'group-notify-only',
 ]);
 

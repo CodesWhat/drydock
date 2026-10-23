@@ -480,6 +480,7 @@
       "maturityClockPublished": "Кандидат опубликован {date} — остался {count} день до минимума в {minDays} дн. | Кандидат опубликован {date} — осталось {count} дней до минимума в {minDays} дн.",
       "maturityClockDetected": "Кандидат обнаружен {date} — остался {count} день до минимума в {minDays} дн. | Кандидат обнаружен {date} — осталось {count} дней до минимума в {minDays} дн.",
       "groupManualOnly": "Политика группы '{group}' разрешает только ручные обновления. Drydock не будет применять это обновление автоматически.",
+      "updateAvailableRuleDisabled": "Правило уведомлений Update Available выключено, а оно управляет и автоматическими обновлениями. Включите его в Settings > Notifications > Update Available, чтобы Drydock применил это обновление сам.",
       "updateButton": "Обновить сейчас",
       "blockedButton": "Обновление заблокировано",
       "notificationsOnlyButton": "Только уведомления",
@@ -522,6 +523,7 @@
         "no-update-trigger-configured": "Триггер обновления не настроен",
         "self-update-unavailable": "Самообновление недоступно",
         "maintenance-window-closed": "Окно обслуживания закрыто",
+        "update-available-rule-disabled": "Правило Update Available выключено",
         "group-notify-only": "Группа разрешает только уведомления",
         "group-manual-only": "Группа требует ручных обновлений",
         "dry-run-trigger": "Конфигурация триггера в режиме dry-run",
@@ -538,6 +540,7 @@
         "configureThreshold": "Настроить порог триггера",
         "configureSelfUpdate": "Настроить самообновление",
         "configureMaintenance": "Настроить окно обслуживания",
+        "configureNotificationRule": "Открыть правила уведомлений",
         "editGroupPolicy": "Изменить политику группы"
       },
       "releaseMaturityCount": "Ожидание стабильных выпусков семейства {family}: доступно {count} из {required} предыдущих выпусков.",

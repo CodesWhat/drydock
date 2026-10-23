@@ -547,6 +547,7 @@ describe('deriveUpdateStatus', () => {
     ['no-update-trigger-configured', 'hard', 'danger', 'external'],
     ['self-update-unavailable', 'hard', 'danger', 'external'],
     ['maintenance-window-closed', 'soft', 'warning', 'external'],
+    ['update-available-rule-disabled', 'soft', 'warning', 'route'],
   ] as const)(
     'maps %s to a localized presentation and safe action',
     (reason, severity, tone, actionKind) => {
@@ -570,6 +571,28 @@ describe('deriveUpdateStatus', () => {
       expect(condition.action?.kind).toBe(actionKind);
     },
   );
+
+  it('explains the disabled Update Available rule in the UI language and links to the rules', () => {
+    const status = deriveUpdateStatus(
+      input({
+        mode: 'auto',
+        container: {
+          id: 'container-1',
+          name: 'nginx',
+          newTag: '1.2.3',
+          updateEligibility: eligibility([
+            blocker({ reason: 'update-available-rule-disabled', severity: 'soft' }),
+          ]),
+        },
+      }),
+    );
+    const condition = status.conditions[0];
+
+    expect(status.state).toBe('soft-blocked');
+    expect(condition.body).toContain('Settings > Notifications > Update Available');
+    expect(condition.body).not.toBe('Test message.');
+    expect(condition.action).toMatchObject({ kind: 'route', to: { path: '/notifications' } });
+  });
 
   it('composes the maturity condition body from a trusted-publishedAt clock (#display-honesty)', () => {
     const clockStartAt = '2026-07-18T00:00:00.000Z';

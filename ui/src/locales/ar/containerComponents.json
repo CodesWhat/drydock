@@ -480,6 +480,7 @@
       "maturityClockPublished": "نُشر المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | نُشر المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "maturityClockDetected": "اكتُشف المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | اكتُشف المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "groupManualOnly": "سياسة المجموعة '{group}' تسمح بالتحديثات اليدوية فقط. لن يطبّق Drydock هذا التحديث تلقائيًا.",
+      "updateAvailableRuleDisabled": "قاعدة الإشعار Update Available متوقفة، وهي تتحكم أيضًا في التحديثات التلقائية. فعّلها من Settings > Notifications > Update Available حتى يطبّق Drydock هذا التحديث تلقائيًا.",
       "updateButton": "تحديث الآن",
       "blockedButton": "التحديث محظور",
       "notificationsOnlyButton": "إشعارات فقط",
@@ -522,6 +523,7 @@
         "no-update-trigger-configured": "لم يُهيَّأ مشغّل تحديث",
         "self-update-unavailable": "التحديث الذاتي غير متاح",
         "maintenance-window-closed": "نافذة الصيانة مغلقة",
+        "update-available-rule-disabled": "قاعدة Update Available متوقفة",
         "group-notify-only": "المجموعة تسمح بالإشعارات فقط",
         "group-manual-only": "المجموعة تتطلب تحديثات يدوية",
         "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية",
@@ -538,6 +540,7 @@
         "configureThreshold": "تهيئة حد المشغّل",
         "configureSelfUpdate": "تهيئة التحديث الذاتي",
         "configureMaintenance": "تهيئة نافذة الصيانة",
+        "configureNotificationRule": "فتح قواعد الإشعارات",
         "editGroupPolicy": "تعديل سياسة المجموعة"
       },
       "releaseMaturityCount": "بانتظار إصدارات مستقرة ضمن العائلة {family}: يتوفر {count} من أصل {required} إصدارًا أقدم.",

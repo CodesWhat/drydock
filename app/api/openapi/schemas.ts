@@ -1028,6 +1028,7 @@ export const openApiSchemas = {
           'no-update-trigger-configured',
           'self-update-unavailable',
           'maintenance-window-closed',
+          'update-available-rule-disabled',
         ],
       },
       severity: { type: 'string', enum: ['hard', 'soft'] },

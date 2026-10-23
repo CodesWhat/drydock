@@ -197,6 +197,13 @@ function conditionAction(
       href: ELIGIBILITY_DOCS,
     };
   }
+  if (blocker.reason === 'update-available-rule-disabled') {
+    return {
+      kind: 'route',
+      label: t('containerComponents.updateStatus.actions.configureNotificationRule'),
+      to: { path: '/notifications' },
+    };
+  }
   /* v8 ignore next -- final visible reason; no-update-available is filtered before this mapper */
   if (blocker.reason === 'self-update-unavailable') {
     return {
@@ -221,6 +228,7 @@ const CONDITION_ICONS: Record<UpdateStatusConditionReason, string> = {
   'maturity-not-reached': 'uptime',
   'maturity-releases-not-reached': 'uptime',
   'maintenance-window-closed': 'uptime',
+  'update-available-rule-disabled': 'notifications',
   'active-operation': 'spinner',
   'agent-mismatch': 'triggers',
   'no-update-trigger-configured': 'triggers',
@@ -290,7 +298,9 @@ function toCondition(
         ? maturitySentence(blocker, t)
         : blocker.reason === 'maturity-releases-not-reached'
           ? formatReleaseMaturityMessage(blocker, t)
-          : blocker.message,
+          : blocker.reason === 'update-available-rule-disabled'
+            ? t('containerComponents.updateStatus.updateAvailableRuleDisabled')
+            : blocker.message,
     liftableAt: blocker.liftableAt,
     action: conditionAction(blocker, container, t),
   };

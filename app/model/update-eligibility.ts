@@ -30,6 +30,8 @@ import {
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
 
+const UPDATE_AVAILABLE_RULE_SETTINGS_PATH = 'Settings > Notifications > Update Available';
+
 export type UpdateBlockerReason =
   | 'no-update-available'
   | 'rollback-container'
@@ -48,7 +50,8 @@ export type UpdateBlockerReason =
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
   | 'self-update-unavailable'
-  | 'maintenance-window-closed';
+  | 'maintenance-window-closed'
+  | 'update-available-rule-disabled';
 
 /**
  * Severity controls how a blocker is enforced:
@@ -84,6 +87,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'group-notify-only': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
+  // soft: the Update Available rule gates automatic actions only; manual updates are unaffected
+  'update-available-rule-disabled': 'soft',
 };
 
 export interface UpdateBlocker {
@@ -197,6 +202,15 @@ export interface UpdateEligibilityContext {
    * eligibility model. Manual UI/API update requests leave it undefined and are never gated by it.
    */
   maintenanceWindowOpen?: boolean;
+  /**
+   * Optional. Display surfaces pass `false` when the `update-available` notification rule is
+   * disabled. That rule is the master switch for automatic actions too: the trigger paths
+   * return before dispatching, so an update an action trigger would otherwise apply on its own
+   * just sits there. A soft `update-available-rule-disabled` blocker says so, but only when
+   * automatic dispatch would otherwise have applied this container (global mode and group
+   * ceiling `auto`, an auto action trigger). Manual admission leaves it undefined.
+   */
+  updateAvailableRuleEnabled?: boolean;
   /**
    * Optional. Called with the container's own agent name when the `agent-mismatch` or
    * `no-update-trigger-configured` branch is about to fire. Returning `true` (e.g. because
@@ -347,6 +361,28 @@ export function computeUpdateEligibility(
         reason: 'maintenance-window-closed',
         message: 'Outside maintenance window — auto update deferred until the window opens.',
         actionable: false,
+      }),
+    );
+  }
+
+  // update-available-rule-disabled: fires only on an explicit `false`, and only for a container
+  // the automatic paths would otherwise apply, so a group `manual` ceiling or a manual trigger
+  // is not blamed on the rule. Soft: manual updates never read the notification rule.
+  if (
+    context.updateAvailableRuleEnabled === false &&
+    ceiling?.value === 'auto' &&
+    selectActionTrigger(
+      context.triggers as unknown as Record<string, ActionPolicyTrigger> | undefined,
+      container,
+      { requireAuto: true },
+    )?.state === 'auto'
+  ) {
+    blockers.push(
+      makeBlocker({
+        reason: 'update-available-rule-disabled',
+        message: `The Update Available notification rule is off, and it also gates automatic updates. Turn it on in ${UPDATE_AVAILABLE_RULE_SETTINGS_PATH} to let Drydock apply this update on its own.`,
+        actionable: true,
+        actionHint: `Enable the rule in ${UPDATE_AVAILABLE_RULE_SETTINGS_PATH}.`,
       }),
     );
   }
