@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.0';
-const PREV_RC_VERSION = '1.6.0';
-const RC_DATE = '2026-10-19';
-const RC_DISPLAY_DATE = 'October 19, 2026';
+const RC_VERSION = '1.7.1-rc.1';
+const PREV_RC_VERSION = '1.7.0';
+const RC_DATE = '2026-10-23';
+const RC_DISPLAY_DATE = 'October 23, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -287,10 +287,7 @@ test('v1.6.0 is released and public release routing advances to v1.7', () => {
   );
   assert.match(
     siteContent,
-    new RegExp(
-      `version: "v${escapeRegExp(RC_VERSION)}",[\\s\\S]{0,500}?status: "released",[\\s\\S]{0,100}?border-emerald-500`,
-      'u',
-    ),
+    /version: "v1\.7\.0",[\s\S]{0,500}?status: "released",[\s\S]{0,100}?border-emerald-500/u,
   );
   assert.match(
     docsVersions,
