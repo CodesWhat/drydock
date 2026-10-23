@@ -1373,6 +1373,40 @@ describe('SecurityView', () => {
     });
   });
 
+  describe('worker asset controls under the command backend', () => {
+    it('keeps pull and warm controls when a missing binary fell back to a worker', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'command',
+        providers: [],
+        assets: [{ provider: 'trivy', state: 'missing' }],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-button-stub[aria-label="Pull trivy"]').exists()).toBe(true);
+    });
+
+    it('shows no asset controls when the command backend has no worker assets', async () => {
+      mockWindowNarrow.value = true;
+      mockGetSecurityRuntime.mockResolvedValue({
+        ...readyRuntimeStatus(),
+        backend: 'command',
+        providers: [],
+        assets: [],
+      });
+
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetSecurityRuntime).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(wrapper.find('.app-icon-button-stub[aria-label^="Pull"]').exists()).toBe(false);
+    });
+  });
+
   describe('scan coverage display', () => {
     it('updates rendered scan and filtered-image counts when the locale changes', async () => {
       const originalLocale = i18n.global.locale.value;

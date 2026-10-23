@@ -1,7 +1,7 @@
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { getErrorMessage } from '../util/error.js';
 
-export type ScannerAssetProviderId = 'trivy' | 'grype' | 'syft';
+export type ScannerAssetProviderId = 'trivy' | 'grype' | 'syft' | 'cosign';
 type ScannerAssetState = 'missing' | 'pulling' | 'warming' | 'ready' | 'error';
 type ScannerAssetOperation = 'pull' | 'warm';
 
@@ -95,6 +95,7 @@ const PROVIDER_ORDER = [
   'trivy',
   'grype',
   'syft',
+  'cosign',
 ] as const satisfies readonly ScannerAssetProviderId[];
 function isSupportedProviderId(value: unknown): value is ScannerAssetProviderId {
   return PROVIDER_ORDER.includes(value as ScannerAssetProviderId);
@@ -139,6 +140,18 @@ function getScannerAssetErrorMessage(error: unknown, auth?: ScannerAssetAuth): s
     }
   }
   return sanitizeLogParam(message) || 'Unknown scanner asset error';
+}
+
+/** Keep the primitive status metadata callers classify errors by; the message is already sanitized. */
+function withErrorMetadata(target: Error, source: unknown): Error {
+  const { statusCode, code } = (source ?? {}) as { statusCode?: unknown; code?: unknown };
+  if (typeof statusCode === 'number') {
+    Object.assign(target, { statusCode });
+  }
+  if (typeof code === 'string') {
+    Object.assign(target, { code });
+  }
+  return target;
 }
 
 function diagnosticsFromStatus(status: ScannerAssetStatus): ScannerAssetAuditDiagnostics {
@@ -325,7 +338,7 @@ export function createScannerAssetManager(
         timestamp: completedAt,
         diagnostics: diagnosticsFromStatus(failedStatus),
       });
-      throw new Error(lastError);
+      throw withErrorMetadata(new Error(lastError), error);
     }
   }
 

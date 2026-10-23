@@ -260,7 +260,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
 /**
  * Run a specifically targeted remote trigger.
  */
-async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
+export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Response) {
   const { agent: agentName, type: triggerType, name: triggerName } = req.params;
 
   // Before the agent lookup, for the same reason: a 404 here would otherwise
@@ -368,7 +368,7 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
  * @returns {*}
  */
 export function init() {
-  const router = component.init('trigger', registerTriggerSkipRoutes);
+  const router = component.init('trigger', undefined, registerTriggerSkipRoutes);
   router.post('/:type/:name', scoped(DYNAMIC_SCOPE, runTrigger));
   router.post('/:type/:name/:agent', scoped(DYNAMIC_SCOPE, runRemoteTrigger));
   return router;

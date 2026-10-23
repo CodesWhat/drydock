@@ -5,6 +5,9 @@ const SECURITY_KEYS = [
   'DD_SECURITY_BACKEND',
   'DD_SECURITY_AVAILABILITY_POLICY',
   'DD_SECURITY_TRIVY_WORKER_IMAGE',
+  'DD_SECURITY_TRIVY_COMMAND',
+  'DD_SECURITY_COSIGN_COMMAND',
+  'DD_SECURITY_COSIGN_WORKER_IMAGE',
   'DD_SECURITY_GRYPE_COMMAND',
   'DD_SECURITY_GRYPE_TIMEOUT',
   'DD_SECURITY_GRYPE_WORKER_IMAGE',
@@ -32,20 +35,24 @@ describe('scanner provider and execution backend configuration', () => {
     });
   });
 
-  test('keeps the command Trivy runtime as the compatibility default', () => {
+  test('defaults the backend to auto with the pinned ghcr worker images', () => {
     expect(configuration.getSecurityConfiguration()).toMatchObject({
       enabled: false,
       scanner: '',
-      backend: 'command',
+      backend: 'auto',
       availabilityPolicy: 'block',
       trivy: {
         command: 'trivy',
-        workerImage: expect.stringMatching(/^aquasec\/trivy@sha256:[a-f0-9]{64}$/),
+        workerImage: expect.stringMatching(
+          /^ghcr\.io\/aquasecurity\/trivy:[\w.-]+@sha256:[a-f0-9]{64}$/,
+        ),
       },
       grype: {
         command: 'grype',
         timeout: 600000,
-        workerImage: expect.stringMatching(/^anchore\/grype@sha256:[a-f0-9]{64}$/),
+        workerImage: expect.stringMatching(
+          /^ghcr\.io\/anchore\/grype:v[\w.-]+@sha256:[a-f0-9]{64}$/,
+        ),
       },
       sbom: {
         generator: 'auto',
@@ -53,9 +60,55 @@ describe('scanner provider and execution backend configuration', () => {
       syft: {
         command: 'syft',
         timeout: 600000,
-        workerImage: expect.stringMatching(/^anchore\/syft@sha256:[a-f0-9]{64}$/),
+        workerImage: expect.stringMatching(
+          /^ghcr\.io\/anchore\/syft:v[\w.-]+@sha256:[a-f0-9]{64}$/,
+        ),
       },
     });
+  });
+
+  test('pins the cosign worker image by tag and digest', () => {
+    expect(configuration.getSecurityConfiguration().signature.cosign).toMatchObject({
+      command: 'cosign',
+      commandExplicit: false,
+      workerImage: expect.stringMatching(
+        /^ghcr\.io\/sigstore\/cosign\/cosign:v[\w.-]+@sha256:[a-f0-9]{64}$/,
+      ),
+    });
+  });
+
+  test('overrides the cosign worker image', () => {
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_WORKER_IMAGE = 'registry.example/cosign@sha256:abc';
+    expect(configuration.getSecurityConfiguration().signature.cosign.workerImage).toBe(
+      'registry.example/cosign@sha256:abc',
+    );
+  });
+
+  test('reports which provider commands were set explicitly', () => {
+    expect(configuration.getSecurityConfiguration()).toMatchObject({
+      trivy: { commandExplicit: false },
+      grype: { commandExplicit: false },
+      syft: { commandExplicit: false },
+    });
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND = '/mnt/trivy';
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_COMMAND = '/opt/grype';
+    configuration.ddEnvVars.DD_SECURITY_SYFT_COMMAND = '/opt/syft';
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND = '/opt/cosign';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.commandExplicit).toBe(true);
+    expect(result.grype.commandExplicit).toBe(true);
+    expect(result.syft.commandExplicit).toBe(true);
+    expect(result.signature.cosign.commandExplicit).toBe(true);
+  });
+
+  test('does not treat a blank command as explicit', () => {
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_COMMAND = '   ';
+    expect(configuration.getSecurityConfiguration().grype.commandExplicit).toBe(false);
+  });
+
+  test.each(['auto', 'command', 'docker', 'AUTO'] as const)('accepts backend %s', (backend) => {
+    configuration.ddEnvVars.DD_SECURITY_BACKEND = backend;
+    expect(configuration.getSecurityConfiguration().backend).toBe(backend.toLowerCase());
   });
 
   test.each(['grype', 'both'] as const)('accepts the %s scanner provider selection', (scanner) => {

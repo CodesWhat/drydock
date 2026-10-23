@@ -66,6 +66,11 @@ vi.mock('./app', mockInit);
 vi.mock('./container', mockInit);
 vi.mock('./watcher', mockInit);
 vi.mock('./trigger', mockInit);
+vi.mock('./trigger-routes', () => ({
+  initActions: vi.fn(() => ({ name: 'actions' })),
+  initNotificationTriggers: vi.fn(() => ({ name: 'notification-triggers' })),
+  deprecateLegacyTriggerRoutes: vi.fn(),
+}));
 vi.mock('./registry', mockInit);
 vi.mock('./authentication', mockInit);
 vi.mock('./icons', mockInit);
@@ -367,6 +372,9 @@ describe('API Router', () => {
     expect(containerRouter.init).toHaveBeenCalled();
     expect(watcherRouter.init).toHaveBeenCalled();
     expect(triggerRouter.init).toHaveBeenCalled();
+    const triggerRoutes = await import('./trigger-routes.js');
+    expect(triggerRoutes.initActions).toHaveBeenCalled();
+    expect(triggerRoutes.initNotificationTriggers).toHaveBeenCalled();
     expect(registryRouter.init).toHaveBeenCalled();
     expect(authenticationRouter.init).toHaveBeenCalled();
     expect(iconsRouter.init).toHaveBeenCalled();

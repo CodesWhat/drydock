@@ -878,7 +878,7 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: false,
       scanner: '',
-      backend: 'command',
+      backend: 'auto',
       availabilityPolicy: 'block',
       docker: {
         socket: '/var/run/docker.sock',
@@ -892,19 +892,21 @@ describe('getSecurityConfiguration', () => {
       trivy: {
         server: '',
         command: 'trivy',
+        commandExplicit: false,
         timeout: 600000,
         maxOutputBytes: 67108864,
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
+          'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c',
       },
       grype: {
         command: 'grype',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
+          'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
       },
       signature: {
         verify: false,
@@ -914,6 +916,9 @@ describe('getSecurityConfiguration', () => {
           key: '',
           identity: '',
           issuer: '',
+          commandExplicit: false,
+          workerImage:
+            'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d',
         },
       },
       sbom: {
@@ -923,10 +928,11 @@ describe('getSecurityConfiguration', () => {
       },
       syft: {
         command: 'syft',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
+          'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a',
       },
       gate: {
         mode: 'on',
@@ -968,7 +974,7 @@ describe('getSecurityConfiguration', () => {
     expect(result).toEqual({
       enabled: true,
       scanner: 'trivy',
-      backend: 'command',
+      backend: 'auto',
       availabilityPolicy: 'block',
       docker: {
         socket: '/var/run/docker.sock',
@@ -982,19 +988,21 @@ describe('getSecurityConfiguration', () => {
       trivy: {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
+        commandExplicit: true,
         timeout: 60000,
         maxOutputBytes: 134217728,
         imageSrc: '',
         extraArgs: [],
         workerImage:
-          'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
+          'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c',
       },
       grype: {
         command: 'grype',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1',
+          'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
       },
       signature: {
         verify: true,
@@ -1004,6 +1012,9 @@ describe('getSecurityConfiguration', () => {
           key: `${TEST_DIRECTORY}/secret.txt`,
           identity: 'maintainer@example.com',
           issuer: 'https://token.actions.githubusercontent.com',
+          commandExplicit: true,
+          workerImage:
+            'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d',
         },
       },
       sbom: {
@@ -1013,10 +1024,11 @@ describe('getSecurityConfiguration', () => {
       },
       syft: {
         command: 'syft',
+        commandExplicit: false,
         timeout: 600000,
         extraArgs: [],
         workerImage:
-          'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36',
+          'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a',
       },
       gate: {
         mode: 'on',
@@ -3297,6 +3309,10 @@ describe('getSecurityConfiguration – schema validation field assertions', () =
       key: '',
       identity: '',
       issuer: '',
+      commandExplicit: false,
+      workerImage: expect.stringMatching(
+        /^ghcr\.io\/sigstore\/cosign\/cosign:v.+@sha256:[a-f0-9]{64}$/,
+      ),
     });
   });
 

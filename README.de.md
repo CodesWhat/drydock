@@ -209,7 +209,7 @@ docker run -d \
 > Authentifizierung ist **standardmäßig erforderlich**. Informationen zu OIDC, anonymem Zugriff und anderen Optionen finden Sie in den [auth docs](https://getdrydock.com/docs/configuration/authentications).
 > Anonymer Zugriff muss bei neuen und aktualisierten Instanzen gleichermaßen ausdrücklich mit `DD_ANONYMOUS_AUTH_CONFIRM=true` bestätigt werden. Ohne diese Bestätigung startet eine Instanz ohne konfigurierte Authentifizierung oder mit unbestätigter anonymer Authentifizierung geschlossen: Geschützte API-Anfragen geben `401` zurück, öffentliche Routen für Authentifizierungserkennung und -status bleiben verfügbar und `/health` gibt `503` zurück.
 
-Das Image enthält die Binärdateien `trivy` und `cosign` für die lokale Suche nach Schwachstellen und die Image-Verifizierung.
+Das Image enthält keine Scanner-Binärdateien. Mit `DD_SECURITY_SCANNER=grype` führt Drydock Grype, Syft und cosign in angepinnten Worker-Containern aus.
 
 Weitere Informationen zu Docker Compose, Socket-Sicherheit, Reverse-Proxy und alternativen Registrierungen finden Sie im [Quick Start Guide](https://getdrydock.com/docs/quickstart).
 

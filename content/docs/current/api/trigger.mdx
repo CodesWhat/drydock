@@ -7,6 +7,10 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 <Callout type="info">[Need to add a new Trigger?](/docs/configuration/triggers)</Callout>
 
+<Callout type="warn">
+`/api/v1/triggers` is deprecated. Use [`/api/v1/actions`](/docs/api/action) for action triggers (`docker`, `dockercompose`, `portainer`, `command`) and [`/api/v1/notification-triggers`](/docs/api/notification-trigger) for notification triggers. (`/api/v1/notifications` is the notification rules collection, so notification triggers live under their own path.) The routes keep working with the same behavior, and every response carries `Deprecation: true` plus a `Link: <...>; rel="successor-version"` header pointing at the replacement. Removal is planned no earlier than v1.9.0. See [Deprecations](https://github.com/CodesWhat/drydock/blob/main/DEPRECATIONS.md).
+</Callout>
+
 ## Get all Triggers
 
 This operation lets you get all the configured triggers.

@@ -468,3 +468,16 @@ describe('getNotificationRules caching', () => {
     expect(countRuleTableReads()).toBe(readsBeforeGetAfterWrite + 1);
   });
 });
+
+describe('isUpdateAvailableRuleEnabled', () => {
+  test('is true by default and follows the update-available rule', () => {
+    notification.createCollections(db);
+    expect(notification.isUpdateAvailableRuleEnabled()).toBe(true);
+
+    notification.updateNotificationRule('update-available', { enabled: false });
+    expect(notification.isUpdateAvailableRuleEnabled()).toBe(false);
+
+    notification.updateNotificationRule('update-available', { enabled: true });
+    expect(notification.isUpdateAvailableRuleEnabled()).toBe(true);
+  });
+});

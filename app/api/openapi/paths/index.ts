@@ -12,6 +12,7 @@ import {
 import { apiKeyPaths } from './api-keys.js';
 import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
+import { categoryTriggerPaths } from './category-triggers.js';
 import { componentReadPaths } from './component-read.js';
 import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
@@ -446,7 +447,7 @@ export const openApiPaths = {
           name: 'provider',
           in: 'path',
           required: true,
-          schema: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+          schema: { type: 'string', enum: ['trivy', 'grype', 'syft', 'cosign'] },
         },
         {
           name: 'operation',
@@ -559,6 +560,7 @@ export const openApiPaths = {
     },
   },
   ...triggerPaths,
+  ...categoryTriggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
   ...watcherInventoryPaths,

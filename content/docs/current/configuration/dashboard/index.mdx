@@ -9,7 +9,7 @@ The dashboard is the landing page after login. It provides a real-time overview 
 
 ## Widgets
 
-The dashboard contains **9 widgets** in two categories:
+The dashboard contains **14 widgets** in two categories. Ten are shown by default and four are optional, hidden until you enable them in the Customize panel.
 
 ### Stat cards
 
@@ -21,8 +21,19 @@ Compact single-metric tiles displayed across the top row.
 | **Updates Available** | Pending updates with new / mature split | `/containers?filterKind=any` |
 | **Security Issues** | Vulnerability count across scanned images | `/security` |
 | **Registries** | Number of configured registries | `/registries` |
+| **Approvals** | Updates waiting for an approval decision | `/approvals` |
 
 Stat cards are color-coded — green when healthy, amber or red as the severity ratio increases.
+
+#### Optional stat cards
+
+These cards are hidden by default. Open the Customize panel (pencil icon, then the checkbox list) and tick them to show them. They appear at the bottom of the grid, so drag them where you want them.
+
+| Widget | Shows | Click navigates to |
+| --- | --- | --- |
+| **Images** | Number of distinct images in use, with how many have an update available | `/containers` |
+| **Triggers** | Total configured triggers, split into actions (Docker, Docker Compose, Portainer, Command) and notifications | `/triggers` |
+| **Watchers** | Number of watchers. The card turns red and shows how many are disconnected when an agent-backed watcher loses its agent | `/watchers` |
 
 ### Detail widgets
 
@@ -35,6 +46,7 @@ Larger panels that visualize trends and breakdowns.
 | **Resource Usage** | Live CPU and memory utilization. Aggregate progress bars (green < 60%, amber 60–85%, red > 85%) plus ranked lists of the top 5 consumers by CPU and memory. |
 | **Host Status** | Agent and watcher connectivity. Shows each host's connection status (green = connected, red = disconnected), address, and running / total container count. |
 | **Update Breakdown** | Four-column grid showing major, minor, patch, and same-tag **image update** counts with color-coded pills and proportional progress bars. |
+| **Recent Activity** | Optional, hidden by default. The latest 10 audit log entries with time, actor (the trigger that acted, or System), action and target. Click a row to open the Audit view filtered to that container, or use **View audit log** for the full list. It reads the same audit API as the Audit view, so it needs the same access, and it only fetches while the widget is shown. Minimum size 4 columns by 4 rows. |
 
 All detail widgets use a `ResizeObserver` to detect their rendered height and progressively collapse content as the widget shrinks — headers hide below ~200 px, list items reduce from 5 to 3 to 1, and charts switch between full and compact layouts. This means a widget resized to a compact size still displays meaningful data instead of overflowing.
 
@@ -57,11 +69,12 @@ All changes are saved automatically to `localStorage` and persist across page re
 
 ### Default layout
 
-Out of the box the dashboard arranges widgets in this order:
+Out of the box the dashboard arranges the ten default widgets in this order. The optional widgets are hidden and sit below them.
 
 | Row | Widgets |
 | --- | --- |
 | Top | Containers, Updates Available, Security Issues, Registries (stat cards, 3 columns each) |
+| Second | Approvals (stat card, 3 columns) |
 | Middle | Resource Usage (4 col), Security Overview (4 col), Host Status (4 col) |
 | Middle–lower | Update Breakdown (below Host Status) |
 | Bottom | Recent Updates (full 12-column width) |
@@ -83,6 +96,7 @@ On narrow screens stat cards stack vertically and detail widgets fill the full w
 The dashboard refreshes automatically via SSE events from the server:
 
 - **Container change** — triggers a quick summary refresh (debounced to 1 second).
+- **Recent Activity** — when shown, the widget re-reads the audit log on update and container events (debounced to 1 second) and every 60 seconds while the tab is visible. The audit log has no SSE channel of its own.
 - **SSE reconnected** — triggers a full data refresh after a connection drop.
 
 Container-change events patch the affected dashboard data and refresh the summary. Security-scan completion does not force a separate full-dashboard refresh; the security surfaces update through their own data flow.
@@ -96,7 +110,7 @@ No polling is required. When the browser tab is hidden, refresh events are defer
 Dashboard preferences are stored under the `dd-preferences` key in the browser's `localStorage`:
 
 - **Widget order** — the sequence widgets appear in the grid.
-- **Hidden widgets** — which widgets are toggled off.
+- **Hidden widgets** — which widgets are toggled off. The optional widgets above start in this list, and upgrading from a version without them adds them once, so your existing layout is unchanged. Unhiding one is remembered.
 - **Grid layout** — each widget's position (x, y) and size (width, height).
 
 <Callout type="info">Dashboard preferences are per-browser by default. Signed-in users can opt into per-account cross-device synchronization in **Config > Appearance**; anonymous sessions remain local-only.</Callout>

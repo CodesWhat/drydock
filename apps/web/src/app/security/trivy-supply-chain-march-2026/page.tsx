@@ -254,18 +254,23 @@ git push -f origin refs/tags/0.24.0`}</code>
                 pipeline was never exposed to the compromised entrypoint scripts.
               </p>
 
-              <h3>2. Bundled Trivy binary is a safe version</h3>
+              <h3>2. Trivy is no longer bundled, and the last bundled version was a safe one</h3>
               <p>
-                Drydock&apos;s Docker image includes Trivy and cosign binaries for local
-                vulnerability scanning and image signature verification. The Trivy binary is copied
-                from a dedicated, digest-pinned <code>trivy-bin</code> build stage in the Dockerfile
-                &mdash; not installed from Alpine&apos;s package repository. Image digests, unlike
-                tags, cannot be silently repointed, so this stage is immune to the tag-repointing
-                mechanism this advisory describes. The bundled version is currently{" "}
+                Through v1.7.x, Drydock&apos;s Docker image included Trivy and cosign binaries for
+                local vulnerability scanning and image signature verification. The Trivy binary was
+                copied from a dedicated, digest-pinned <code>trivy-bin</code> build stage in the
+                Dockerfile &mdash; not installed from Alpine&apos;s package repository. Image
+                digests, unlike tags, cannot be silently repointed, so that stage was immune to the
+                tag-repointing mechanism this advisory describes. The last bundled version was{" "}
                 <strong>Trivy 0.73.0</strong>, well past the compromised v0.69.4 release.
               </p>
+              <p>
+                <strong>As of v1.8.0, the image contains no Trivy binary at all.</strong> Drydock
+                runs scanners in ephemeral worker containers from digest-pinned images instead, and
+                Grype is the recommended default scanner.
+              </p>
               <pre>
-                <code>{`# From Drydock's Dockerfile — Trivy copied from a digest-pinned build stage
+                <code>{`# From Drydock's v1.7.x Dockerfile — Trivy copied from a digest-pinned build stage
 FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
 ...
 COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy`}</code>
@@ -347,18 +352,17 @@ uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294    # v7.
 
               <h2>Verifying your Drydock installation</h2>
               <p>
-                Drydock bundles Trivy and cosign in its Docker image for local vulnerability
-                scanning and image signature verification. Current Drydock images ship Trivy 0.73.0,
-                sourced from a digest-pinned official image, so a tampered upstream tag cannot
-                silently reach a Drydock build. The compromised releases were v0.69.4 (published
-                across GitHub, Docker Hub, GHCR, and ECR) and the Docker Hub-only v0.69.5 and
-                v0.69.6 images. You can check the version running inside your container:
+                Drydock v1.8.0 and later images do not bundle Trivy or cosign. Scanner workers run
+                from digest-pinned images, so a tampered upstream tag cannot silently reach a
+                Drydock build. The compromised releases were v0.69.4 (published across GitHub,
+                Docker Hub, GHCR, and ECR) and the Docker Hub-only v0.69.5 and v0.69.6 images. On a
+                v1.7.x image you can check the version running inside your container:
               </p>
               <pre>
-                <code>{`# Check the Trivy version inside your Drydock container
+                <code>{`# v1.7.x images only: check the bundled Trivy version
 docker exec drydock trivy --version
 
-# Expected: 0.73.0 — the digest-pinned build Drydock ships. This is a local
+# Expected: 0.73.0 — the digest-pinned build those images shipped. This is a local
 # version check only; it does not attest to Trivy builds obtained elsewhere.`}</code>
               </pre>
               <p>

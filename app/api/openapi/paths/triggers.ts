@@ -7,9 +7,14 @@ import {
   paginationQueryParams,
 } from '../common.js';
 
+const DEPRECATED_DESCRIPTION =
+  'Deprecated alias for the category-specific routes (/api/v1/actions and /api/v1/notification-triggers). Responses carry Deprecation: true and a Link header with rel="successor-version". Removal is planned no earlier than v1.9.0.';
+
 export const triggerPaths = {
   '/api/v1/triggers': {
     get: {
+      deprecated: true,
+      description: DEPRECATED_DESCRIPTION,
       tags: ['Triggers'],
       summary: 'List triggers',
       operationId: 'listTriggers',
@@ -22,6 +27,8 @@ export const triggerPaths = {
   },
   '/api/v1/triggers/{type}/{name}': {
     get: {
+      deprecated: true,
+      description: DEPRECATED_DESCRIPTION,
       tags: ['Triggers'],
       summary: 'Get trigger by type and name',
       operationId: 'getTriggerByTypeAndName',
@@ -33,6 +40,8 @@ export const triggerPaths = {
       },
     },
     post: {
+      deprecated: true,
+      description: DEPRECATED_DESCRIPTION,
       tags: ['Triggers', 'Actions'],
       summary: 'Run trigger for a provided container payload',
       operationId: 'runTrigger',
@@ -64,6 +73,7 @@ export const triggerPaths = {
   },
   '/api/v1/triggers/{type}/{name}/skips': {
     get: {
+      deprecated: true,
       tags: ['Triggers'],
       summary: 'List recent notification skips for a trigger',
       operationId: 'getTriggerSkips',
@@ -80,6 +90,7 @@ export const triggerPaths = {
   },
   '/api/v1/triggers/{type}/{name}/{agent}/skips': {
     get: {
+      deprecated: true,
       tags: ['Triggers'],
       summary: 'List recent notification skips for a remote trigger',
       operationId: 'getRemoteTriggerSkips',
@@ -98,6 +109,8 @@ export const triggerPaths = {
   },
   '/api/v1/triggers/{type}/{name}/{agent}': {
     get: {
+      deprecated: true,
+      description: DEPRECATED_DESCRIPTION,
       tags: ['Triggers'],
       summary: 'Get remote trigger by type, name, and agent',
       operationId: 'getTriggerByTypeAndNameAndAgent',
@@ -109,6 +122,8 @@ export const triggerPaths = {
       },
     },
     post: {
+      deprecated: true,
+      description: DEPRECATED_DESCRIPTION,
       tags: ['Triggers', 'Actions'],
       summary: 'Run remote trigger for a provided container payload',
       operationId: 'runRemoteTrigger',

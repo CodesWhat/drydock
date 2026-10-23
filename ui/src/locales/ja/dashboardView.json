@@ -99,7 +99,14 @@
       "updateDetail": "{fresh} 新規 · {mature} 成熟",
       "securityIssues": "セキュリティ問題",
       "registries": "レジストリ",
-      "approvals": "承認"
+      "approvals": "承認",
+      "images": "イメージ",
+      "imageDetail": "{count} 件に更新あり",
+      "triggers": "トリガー",
+      "triggerDetail": "{actions} 件のアクション · {notifications} 件の通知",
+      "watchers": "ウォッチャー",
+      "watcherDetailHealthy": "すべて接続済み",
+      "watcherDetailDisconnected": "{healthy} 接続済み · {disconnected} 切断"
     },
     "updateKind": {
       "major": "メジャー",
@@ -124,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "最近のアクティビティ",
+      "viewAudit": "監査ログを表示 →",
+      "loading": "アクティビティを読み込み中...",
+      "loadFailed": "最近のアクティビティを読み込めませんでした",
+      "empty": "最近のアクティビティはありません",
+      "system": "システム"
     }
   }
 }

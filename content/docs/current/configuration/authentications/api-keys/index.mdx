@@ -84,7 +84,7 @@ Some routes aren't reachable with a key at any scope, because they only make sen
 
 ### Trigger routes
 
-Both `POST /api/v1/containers/:id/triggers/:type/:name` and `POST /api/v1/triggers/:type/:name` resolve their scope from the trigger you name, along with their agent-qualified forms. An **action** provider (`docker`, `dockercompose`, `portainer`, `command`) does something to the host, so firing one needs `containers:update`. A **notification** provider only sends a message, so it needs `triggers:test`. `triggers:test` never reaches an action provider on either route.
+`POST /api/v1/containers/:id/triggers/:type/:name`, `POST /api/v1/actions/:type/:name`, `POST /api/v1/notification-triggers/:type/:name` and the deprecated `POST /api/v1/triggers/:type/:name` all resolve their scope from the trigger you name, along with their agent-qualified forms. An **action** provider (`docker`, `dockercompose`, `portainer`, `command`) does something to the host, so firing one needs `containers:update`. A **notification** provider only sends a message, so it needs `triggers:test`. `triggers:test` never reaches an action provider on either route.
 
 The check runs before the container and agent lookups, so an unauthorized caller gets `403` whether or not the container exists and whichever agents are enrolled.
 

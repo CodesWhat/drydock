@@ -1,13 +1,16 @@
 import { i18n } from '../boot/i18n';
+import { withLastKnown } from './last-known';
 
 async function getServer() {
-  const response = await fetch('/api/v1/server', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(
-      `${i18n.global.t('serversView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
-    );
-  }
-  return response.json();
+  return withLastKnown('server', async () => {
+    const response = await fetch('/api/v1/server', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(
+        `${i18n.global.t('serversView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+      );
+    }
+    return response.json();
+  });
 }
 
 async function apiErrorDetails(response: Response): Promise<string> {
@@ -31,7 +34,7 @@ async function getSecurityRuntime() {
 }
 
 async function manageSecurityAsset(
-  provider: 'trivy' | 'grype' | 'syft',
+  provider: 'trivy' | 'grype' | 'syft' | 'cosign',
   operation: 'pull' | 'warm',
 ) {
   const response = await fetch(`/api/v1/server/security/assets/${provider}/${operation}`, {

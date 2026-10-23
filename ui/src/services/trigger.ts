@@ -108,8 +108,16 @@ function getTriggerProviderColor(type: string) {
   }
 }
 
-async function getAllTriggers() {
-  const response = await fetch('/api/v1/triggers', { credentials: 'include' });
+const ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer', 'command']);
+const ACTIONS_PATH = '/api/v1/actions';
+const NOTIFICATION_TRIGGERS_PATH = '/api/v1/notification-triggers';
+
+function getTriggerCollectionPath(type: string) {
+  return ACTION_TRIGGER_TYPES.has(type.toLowerCase()) ? ACTIONS_PATH : NOTIFICATION_TRIGGERS_PATH;
+}
+
+async function fetchTriggerCollection(path: string) {
+  const response = await fetch(path, { credentials: 'include' });
   if (!response.ok) {
     throw new Error(
       `${i18n.global.t('triggersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
@@ -119,8 +127,18 @@ async function getAllTriggers() {
   return extractCollectionData<ApiComponentResponse>(payload);
 }
 
+async function getAllTriggers() {
+  const [actions, notificationTriggers] = await Promise.all([
+    fetchTriggerCollection(ACTIONS_PATH),
+    fetchTriggerCollection(NOTIFICATION_TRIGGERS_PATH),
+  ]);
+  return [...actions, ...notificationTriggers].sort(
+    (a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name),
+  );
+}
+
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
-  const segments = ['/api/v1/triggers'];
+  const segments = [getTriggerCollectionPath(type)];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
@@ -163,9 +181,11 @@ async function runTrigger({
   container,
   triggerAgent,
 }: RunTriggerRequest) {
-  const path = triggerAgent
-    ? `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/${encodeURIComponent(triggerAgent)}`
-    : `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
+  const path = buildTriggerDetailPath({
+    type: triggerType,
+    name: triggerName,
+    agent: triggerAgent,
+  });
   const response = await fetch(path, {
     method: 'POST',
     credentials: 'include',

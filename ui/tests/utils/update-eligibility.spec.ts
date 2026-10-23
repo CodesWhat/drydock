@@ -62,6 +62,7 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');
     expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
     expect(BLOCKER_SEVERITY['maintenance-window-closed']).toBe('soft');
+    expect(BLOCKER_SEVERITY['update-available-rule-disabled']).toBe('soft');
   });
 });
 

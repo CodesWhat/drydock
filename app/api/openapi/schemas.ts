@@ -582,7 +582,7 @@ export const openApiSchemas = {
     properties: {
       checkedAt: { type: 'string', format: 'date-time' },
       ready: { type: 'boolean' },
-      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      backend: { type: 'string', enum: ['auto', 'command', 'docker', 'remote'] },
       availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
       gate: {
         type: 'object',
@@ -653,7 +653,7 @@ export const openApiSchemas = {
   ScannerAssetStatus: {
     type: 'object',
     properties: {
-      provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+      provider: { type: 'string', enum: ['trivy', 'grype', 'syft', 'cosign'] },
       backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
       configuredImage: { type: 'string' },
       resolvedDigest: { type: 'string' },
@@ -1028,6 +1028,7 @@ export const openApiSchemas = {
           'no-update-trigger-configured',
           'self-update-unavailable',
           'maintenance-window-closed',
+          'update-available-rule-disabled',
         ],
       },
       severity: { type: 'string', enum: ['hard', 'soft'] },

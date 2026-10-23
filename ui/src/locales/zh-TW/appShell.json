@@ -1,5 +1,14 @@
 {
   "appShell": {
+    "offline": {
+      "offlineTitle": "您已離線",
+      "offlineBody": "正在顯示最近一次已知的資料。重新連線前無法進行變更。",
+      "unreachableTitle": "無法連線至 Drydock 伺服器",
+      "unreachableBody": "正在顯示最近一次已知的資料。變更已停用，Drydock 會持續重試。",
+      "lastUpdated": "最後更新：{time}。",
+      "actionsDisabledOffline": "離線時無法使用",
+      "actionsDisabledUnreachable": "Drydock 伺服器無法連線時無法使用"
+    },
     "toast": {
       "dismiss": "關閉"
     },
@@ -120,6 +129,7 @@
         "unknownImage": "未知映像",
         "localHost": "本機",
         "containerSubtitle": "容器 · {image} · {status} · {host}",
+        "pageSubtitle": "頁面 · {route}",
         "agentSubtitle": "代理 · {status} · {host}",
         "triggerSubtitle": "觸發器 · {type}",
         "watcherSubtitle": "監視器 · {type}",
@@ -149,11 +159,8 @@
         }
       },
       "connection": {
-        "lostTitle": "連線遺失",
         "applyingUpdateTitle": "正在應用更新",
-        "lostMessage": "伺服器無法存取。正在等待其重新上線……",
         "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線……",
-        "reconnecting": "重新連線中",
         "restartingService": "重啟服務中"
       },
       "shortcuts": {

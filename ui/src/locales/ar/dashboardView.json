@@ -99,7 +99,14 @@
       "updateDetail": "{fresh} جديدة · {mature} ناضجة",
       "securityIssues": "مشكلات الأمان",
       "registries": "السجلات",
-      "approvals": "الموافقات"
+      "approvals": "الموافقات",
+      "images": "الصور",
+      "imageDetail": "{count} لديها تحديثات",
+      "triggers": "المشغّلات",
+      "triggerDetail": "{actions} إجراءات · {notifications} إشعارات",
+      "watchers": "المراقبون",
+      "watcherDetailHealthy": "الكل متصل",
+      "watcherDetailDisconnected": "{healthy} متصل · {disconnected} غير متصل"
     },
     "updateKind": {
       "major": "رئيسي",
@@ -124,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "النشاط الأخير",
+      "viewAudit": "عرض سجل التدقيق →",
+      "loading": "جارٍ تحميل النشاط...",
+      "loadFailed": "فشل تحميل النشاط الأخير",
+      "empty": "لا يوجد نشاط حديث",
+      "system": "النظام"
     }
   }
 }

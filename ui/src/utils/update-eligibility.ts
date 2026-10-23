@@ -34,6 +34,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'group-notify-only': 'hard',
   // soft: manual UI updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
+  // soft: the rule gates automatic dispatch only; manual updates never read it
+  'update-available-rule-disabled': 'soft',
 };
 
 export function severityOf(blocker: UpdateBlocker): UpdateBlockerSeverity {

@@ -287,6 +287,19 @@ describe('Server Router', () => {
     expect(mockRes.json).toHaveBeenCalledWith({ provider: 'syft', state: 'ready' });
   });
 
+  test('should warm the cosign scanner asset', async () => {
+    const router = serverRouter.init();
+    const assetRoute = router.post.mock.calls.find(
+      (call) => call[0] === '/security/assets/:provider/:operation',
+    );
+    const mockRes = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+    await assetRoute[1]({ params: { provider: 'cosign', operation: 'warm' }, body: {} }, mockRes);
+
+    expect(mockAssetManager.warm).toHaveBeenCalledWith('cosign');
+    expect(mockRes.status).toHaveBeenCalledWith(200);
+  });
+
   test('should omit empty authentication when pulling a scanner asset', async () => {
     const router = serverRouter.init();
     const assetRoute = router.post.mock.calls.find(

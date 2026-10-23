@@ -209,7 +209,7 @@ docker run -d \
 > Uwierzytelnienie jest **wymagane domyślnie**. Zobacz [auth docs](https://getdrydock.com/docs/configuration/authentications) dla OIDC, dostępu anonimowego i innych opcji.
 > Dostęp anonimowy musi zostać jawnie potwierdzony ustawieniem `DD_ANONYMOUS_AUTH_CONFIRM=true` zarówno w nowych, jak i aktualizowanych instalacjach. Bez tego instancja bez skonfigurowanego uwierzytelniania lub z niepotwierdzonym trybem anonimowym uruchamia się w trybie zamkniętym: chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`.
 
-Obraz zawiera pliki binarne `trivy` i `cosign` do lokalnego skanowania pod kątem luk i weryfikacji obrazu.
+Obraz nie zawiera plików binarnych skanerów. Z `DD_SECURITY_SCANNER=grype` Drydock uruchamia Grype, Syft i cosign w przypiętych kontenerach roboczych.
 
 Zobacz [Przewodnik szybkiego startu](https://getdrydock.com/docs/quickstart) dla Docker Compose, bezpieczeństwo gniazd, odwrotne proxy i alternatywne rejestry.
 

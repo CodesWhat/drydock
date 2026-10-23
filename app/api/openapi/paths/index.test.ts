@@ -627,7 +627,7 @@ describe('openApiPaths', () => {
               name: 'provider',
               in: 'path',
               required: true,
-              schema: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+              schema: { type: 'string', enum: ['trivy', 'grype', 'syft', 'cosign'] },
             },
             {
               name: 'operation',

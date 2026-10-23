@@ -99,7 +99,14 @@
       "updateDetail": "{fresh} neu · {mature} reif",
       "securityIssues": "Sicherheitsprobleme",
       "registries": "Registries",
-      "approvals": "Genehmigungen"
+      "approvals": "Genehmigungen",
+      "images": "Images",
+      "imageDetail": "{count} mit Updates",
+      "triggers": "Trigger",
+      "triggerDetail": "{actions} Aktionen · {notifications} Benachrichtigungen",
+      "watchers": "Watcher",
+      "watcherDetailHealthy": "Alle verbunden",
+      "watcherDetailDisconnected": "{healthy} verbunden · {disconnected} getrennt"
     },
     "updateKind": {
       "major": "Major",
@@ -124,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Letzte Aktivität",
+      "viewAudit": "Audit-Log anzeigen →",
+      "loading": "Aktivität wird geladen...",
+      "loadFailed": "Letzte Aktivität konnte nicht geladen werden",
+      "empty": "Keine aktuelle Aktivität",
+      "system": "System"
     }
   }
 }

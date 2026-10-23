@@ -30,14 +30,15 @@ describe('notification policy editor integration', () => {
         calls.push({ path, method: options?.method ?? 'GET' });
         const response = intercept?.(path, options);
         if (response) return response;
-        if (path === '/api/v1/triggers')
+        if (path === '/api/v1/actions') return Response.json({ data: [], total: 0 });
+        if (path === '/api/v1/notification-triggers')
           return Response.json({
             data: [trigger, { ...trigger, id: 'smtp.other', type: 'smtp', name: 'other' }],
             total: 2,
           });
-        if (path === '/api/v1/triggers/smtp/other')
+        if (path === '/api/v1/notification-triggers/smtp/other')
           return Response.json({ ...trigger, id: 'smtp.other', type: 'smtp', name: 'other' });
-        if (path === `/api/v1/triggers/${type}/policy`) return Response.json(trigger);
+        if (path === `/api/v1/notification-triggers/${type}/policy`) return Response.json(trigger);
         if (path === '/api/v1/config/editor/triggers')
           return Response.json(
             options?.method === 'PATCH' ? notificationOutcome() : notificationSnapshot(),
@@ -107,7 +108,7 @@ describe('notification policy editor integration', () => {
       expect(wrapper.text()).toContain('Source: reference');
       expect(wrapper.html()).not.toContain('private-reference');
       expect(wrapper.html()).not.toContain('private-effective');
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(4);
     } finally {
       wrapper.unmount();
     }
@@ -131,7 +132,7 @@ describe('notification policy editor integration', () => {
           wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
         ).toBeDefined();
         expect(wrapper.find('[data-field]').exists()).toBe(false);
-        expect(calls).toHaveLength(3);
+        expect(calls).toHaveLength(4);
       } finally {
         wrapper.unmount();
       }
@@ -151,7 +152,7 @@ describe('notification policy editor integration', () => {
         expect(
           wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
         ).toBeDefined();
-        expect(calls).toHaveLength(3);
+        expect(calls).toHaveLength(4);
       } finally {
         wrapper.unmount();
       }
@@ -174,8 +175,11 @@ describe('notification policy editor integration', () => {
       configuration: {},
     };
     const { wrapper, calls } = await setup((path) => {
-      if (path === '/api/v1/triggers') return Response.json({ data: [trigger], total: 1 });
-      if (path === '/api/v1/triggers/discord/policy/Local') return Response.json(trigger);
+      if (path === '/api/v1/actions') return Response.json({ data: [], total: 0 });
+      if (path === '/api/v1/notification-triggers')
+        return Response.json({ data: [trigger], total: 1 });
+      if (path === '/api/v1/notification-triggers/discord/policy/Local')
+        return Response.json(trigger);
       if (path === '/api/v1/config/editor/triggers') return Response.json(snapshot);
     });
     try {
@@ -183,7 +187,9 @@ describe('notification policy editor integration', () => {
       expect(wrapper.html()).not.toContain('private-agent');
       for (const field of wrapper.findAll('[data-field]'))
         expect(field.attributes('disabled')).toBeDefined();
-      expect(calls.map((call) => call.path)).toContain('/api/v1/triggers/discord/policy/Local');
+      expect(calls.map((call) => call.path)).toContain(
+        '/api/v1/notification-triggers/discord/policy/Local',
+      );
     } finally {
       wrapper.unmount();
     }
@@ -202,7 +208,7 @@ describe('notification policy editor integration', () => {
         wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
       ).toBeDefined();
       expect(wrapper.get<HTMLSelectElement>('[data-field="mode"]').element.value).toBe('digest');
-      expect(calls).toHaveLength(4);
+      expect(calls).toHaveLength(5);
     } finally {
       wrapper.unmount();
     }
@@ -267,7 +273,7 @@ describe('notification policy editor integration', () => {
         expect(wrapper.text()).not.toContain('Saved and applied');
         await wrapper.get('form').trigger('submit');
         await flushPromises();
-        expect(calls).toHaveLength(4);
+        expect(calls).toHaveLength(5);
         expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1);
         expect(calls.some((call) => call.method === 'POST')).toBe(false);
       } finally {
@@ -288,7 +294,7 @@ describe('notification policy editor integration', () => {
       expect(
         wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
       ).toBeDefined();
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(4);
     } finally {
       wrapper.unmount();
     }
@@ -329,7 +335,7 @@ describe('notification policy editor integration', () => {
       const { wrapper, calls } = await setup(undefined, type);
       try {
         expect(wrapper.findComponent(NotificationPolicyEditor).exists()).toBe(false);
-        expect(calls).toHaveLength(2);
+        expect(calls).toHaveLength(3);
       } finally {
         wrapper.unmount();
       }
@@ -361,14 +367,14 @@ describe('notification policy editor integration', () => {
       await flushPromises();
       expect(wrapper.get<HTMLSelectElement>('[data-field="mode"]').element.value).toBe('digest');
       expect(wrapper.text()).toContain('Rejected edit');
-      expect(calls).toHaveLength(4);
+      expect(calls).toHaveLength(5);
       if (status === 409) {
         expect(
           wrapper.get('[data-testid="save-notification-policy"]').attributes('disabled'),
         ).toBeDefined();
         await wrapper.get('[data-testid="reload-notification-policy"]').trigger('click');
         await flushPromises();
-        expect(calls).toHaveLength(5);
+        expect(calls).toHaveLength(6);
         expect(wrapper.get<HTMLSelectElement>('[data-field="mode"]').element.value).toBe('simple');
       }
     } finally {
@@ -406,7 +412,7 @@ describe('notification policy editor integration', () => {
             }),
           );
         }
-        if (saved && path === '/api/v1/triggers/discord/policy')
+        if (saved && path === '/api/v1/notification-triggers/discord/policy')
           return Response.json({
             id: 'discord.policy',
             type: 'discord',
@@ -419,7 +425,7 @@ describe('notification policy editor integration', () => {
         await wrapper.get('[data-field="mode"]').setValue('digest');
         await wrapper.get('form').trigger('submit');
         await flushPromises();
-        expect(calls).toHaveLength(5);
+        expect(calls).toHaveLength(6);
         if (kind === 'contradictory-reload') {
           expect(wrapper.get('[role="alert"]').text()).toContain('operation reported problems');
           expect(wrapper.text()).not.toContain('Saved and applied');
@@ -452,7 +458,7 @@ describe('notification policy editor integration', () => {
       await wrapper.get('.close-detail').trigger('click');
       finish(Response.json(notificationOutcome()));
       await flushPromises();
-      expect(calls).toHaveLength(4);
+      expect(calls).toHaveLength(5);
       expect(wrapper.findComponent(NotificationPolicyEditor).exists()).toBe(false);
     } finally {
       wrapper.unmount();
@@ -472,7 +478,7 @@ describe('notification policy editor integration', () => {
           saved = true;
           return Response.json(notificationOutcome());
         }
-        if (saved && path === '/api/v1/triggers/discord/policy') return pending;
+        if (saved && path === '/api/v1/notification-triggers/discord/policy') return pending;
       });
       try {
         await wrapper.get('[data-field="mode"]').setValue('digest');
@@ -535,8 +541,10 @@ describe('notification policy editor integration', () => {
           body: options?.body ? JSON.parse(String(options.body)) : undefined,
         });
         const trigger = { ...identity, agent: null, configuration: saved ? changed : current };
-        if (path === '/api/v1/triggers') return Response.json({ data: [trigger], total: 1 });
-        if (path === '/api/v1/triggers/discord/policy') return Response.json(trigger);
+        if (path === '/api/v1/actions') return Response.json({ data: [], total: 0 });
+        if (path === '/api/v1/notification-triggers')
+          return Response.json({ data: [trigger], total: 1 });
+        if (path === '/api/v1/notification-triggers/discord/policy') return Response.json(trigger);
         if (path === '/api/v1/config/editor/triggers' && options?.method === 'PATCH') {
           saved = true;
           return Response.json({
@@ -579,7 +587,7 @@ describe('notification policy editor integration', () => {
       await flushPromises();
       await wrapper.get('.row-click-first').trigger('click');
       await flushPromises();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(3);
       expect(wrapper.find('[data-testid="edit-notification-policy"]').exists()).toBe(true);
       await wrapper.get('[data-testid="edit-notification-policy"]').trigger('click');
       await flushPromises();
@@ -610,7 +618,7 @@ describe('notification policy editor integration', () => {
         },
       ]);
       expect(calls.filter((call) => call.method === 'POST')).toEqual([]);
-      expect(calls).toHaveLength(5);
+      expect(calls).toHaveLength(6);
       expect(wrapper.findComponent(dataViewStubs.DataTable).props('rows')[0].config).toEqual(
         changed,
       );

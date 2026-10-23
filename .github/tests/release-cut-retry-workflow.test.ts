@@ -317,14 +317,15 @@ test('release-cut prepares a draft before its recoverable public finalization se
   expect(indexOf('Push release tag')).toBeLessThan(indexOf('Publish GitHub Release'));
 });
 
-test('release-cut generates the container SBOM with a pinned Trivy image', () => {
+test('release-cut generates the container SBOM with a pinned Syft image', () => {
   const sbomStep = getStep('Generate container SBOM');
 
   expect(sbomStep?.env).toMatchObject({
-    TRIVY_IMAGE:
-      'aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c',
+    SYFT_IMAGE:
+      'ghcr.io/anchore/syft@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a',
   });
-  expect(sbomStep?.run).toContain('"${TRIVY_IMAGE}"');
-  expect(sbomStep?.run).not.toContain('--entrypoint trivy');
-  expect(sbomStep?.run).not.toContain('"${image_ref}" \\\n            image');
+  expect(sbomStep?.run).toContain('"${SYFT_IMAGE}"');
+  expect(sbomStep?.run).toContain('"registry:${image_ref}"');
+  expect(sbomStep?.run).toContain('--output "spdx-json=/out/');
+  expect(sbomStep?.run).not.toMatch(/trivy/i);
 });
