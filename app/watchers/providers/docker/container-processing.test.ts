@@ -253,3 +253,20 @@ describe('watchContainer maturity-cleared hook', () => {
     );
   });
 });
+
+describe('watchContainer renamed predecessor skip (DR-147)', () => {
+  test('skips the scan and the store write when the container is a superseded predecessor', async () => {
+    const findNewVersion = vi.fn();
+    const dependencies = {
+      ...createDependencies(findNewVersion),
+      isRenamedPredecessorOfReplacement: vi.fn().mockReturnValue(true),
+    };
+
+    const report = await watchContainer(createValidatedContainer(), dependencies as any);
+
+    expect(report.changed).toBe(false);
+    expect(findNewVersion).not.toHaveBeenCalled();
+    expect(dependencies.mapContainerToContainerReport).not.toHaveBeenCalled();
+    expect(eventMocks.emitContainerReport).not.toHaveBeenCalled();
+  });
+});

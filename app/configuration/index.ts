@@ -7,7 +7,7 @@ import { logWarn } from '../log/warn.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { getConfigFileInterpolatedKeys, getConfigFileLayer } from './file/layer.js';
-import { type ConfigValueSource, mergeConfigLayers } from './file/sources.js';
+import { type ConfigValueSource, mergeConfigLayers, toSettingKey } from './file/sources.js';
 
 const VAR_FILE_SUFFIX = '__FILE';
 const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
@@ -20,12 +20,16 @@ export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as co
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
+// Scanner worker pins (tag plus index digest). Renovate bumps these constants through the
+// regex manager in renovate.json, so keep the `const DEFAULT_<NAME>_WORKER_IMAGE = '<image>:<tag>@sha256:<digest>'` shape.
 const DEFAULT_TRIVY_WORKER_IMAGE =
-  'aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f';
+  'ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c';
 const DEFAULT_GRYPE_WORKER_IMAGE =
-  'anchore/grype@sha256:af65fbc0c664691067788fe95ff88760b435543e45595eb2ca6f102fc476fbe1';
+  'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea';
 const DEFAULT_SYFT_WORKER_IMAGE =
-  'anchore/syft@sha256:5999d209a342e55e9edf70bf8930fb5b86d8f2a783fa401178372c50e21b1d36';
+  'ghcr.io/anchore/syft:v1.55.0@sha256:4cc92b64ca74ffca4c94d4c8fcc01f217731375300be14d0b6eeb2e82eaa110a';
+const DEFAULT_COSIGN_WORKER_IMAGE =
+  'ghcr.io/sigstore/cosign/cosign:v3.1.4@sha256:0f06154836d2de34f887a5c273506d52ca43edaa1d9e53e6510fa78a48f69c2d';
 const DEFAULT_PORTWING_POLL_INTERVAL = 300;
 const DEFAULT_DIGEST_WATCH_SCHEMA = joi.boolean().label('DD_DEFAULTS_WATCH_DIGEST');
 
@@ -166,7 +170,12 @@ Object.keys(process.env)
 // reads `'env'` exactly like a genuinely environment-owned key's does, and
 // this is the only way it can tell the two apart on a *later* reload.
 const configFileLayer = getConfigFileLayer();
-export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInterpolatedKeys());
+const configFileInterpolatedFileKeys = getConfigFileInterpolatedKeys();
+// Keyed by setting (`DD_X`) like `configFileSources`, whichever spelling the
+// file used; the merge below still takes the file's own `DD_X__FILE` names.
+export const configFileInterpolatedKeys: Set<string> = new Set(
+  [...configFileInterpolatedFileKeys].map(toSettingKey),
+);
 
 // 3. Merge the file layer beneath the real environment: a setting already
 // provided in step 1 wins, an unset one is filled in from the file, and Joi
@@ -180,7 +189,25 @@ export const configFileInterpolatedKeys: Set<string> = new Set(getConfigFileInte
 export const configFileSources: Record<string, ConfigValueSource> = mergeConfigLayers(
   ddEnvVars,
   configFileLayer,
-  configFileInterpolatedKeys,
+  configFileInterpolatedFileKeys,
+);
+
+// The `DD_X__FILE` path each file-supplied secret-file setting was resolved
+// from, keyed by setting (`DD_X`). `replaceSecrets` below consumes the path and
+// leaves only the secret's contents in `ddEnvVars`, so this is the only record
+// of what is actually live; `POST /config/validate` compares against it rather
+// than the latest published file layer, which can move ahead of the live state
+// when a restart-required setting changes (`applyConfigurationReload`).
+export const configFileSecretPaths: Record<string, string> = Object.fromEntries(
+  Object.entries(configFileLayer)
+    .filter(
+      ([key, path]) =>
+        key.endsWith('__FILE') &&
+        ddEnvVars[key] === path &&
+        (configFileSources[toSettingKey(key)] === 'file' ||
+          configFileInterpolatedKeys.has(toSettingKey(key))),
+    )
+    .map(([key, path]) => [toSettingKey(key), path]),
 );
 
 // 4. Replace all secret files referenced by their secret values. Runs after
@@ -248,6 +275,11 @@ export async function validateStartupConfiguration(): Promise<{
  * `Object.keys(ddEnvVars)` walk (`get()` above, every section getter) never
  * sees it.
  *
+ * `secretPathsDelta` carries the secret-file path of every reloadable-section
+ * setting the file now supplies (`undefined`: it no longer does), applied the
+ * same way. Restart-required settings never appear in it, so
+ * `configFileSecretPaths` keeps naming what is actually live for them.
+ *
  * `newInterpolatedKeys` — `reload.ts`'s full, whole-file interpolated-keys
  * set for the reload just applied (the same set it hands `setConfigFileLayer`)
  * — keeps `configFileInterpolatedKeys` in sync for exactly the keys this
@@ -264,7 +296,15 @@ export function applyConfigurationReload(
   envDelta: Record<string, string | undefined>,
   sourcesDelta: Record<string, ConfigValueSource | undefined>,
   newInterpolatedKeys: ReadonlySet<string> = new Set(),
+  secretPathsDelta: Record<string, string | undefined> = {},
 ): void {
+  for (const [key, secretPath] of Object.entries(secretPathsDelta)) {
+    if (secretPath === undefined) {
+      delete configFileSecretPaths[key];
+    } else {
+      configFileSecretPaths[key] = secretPath;
+    }
+  }
   for (const [key, value] of Object.entries(envDelta)) {
     if (value === undefined) {
       delete ddEnvVars[key];
@@ -842,6 +882,59 @@ export function getPrometheusConfiguration() {
   return configurationToValidate.value;
 }
 
+export const REGISTRY_WEBHOOK_PROVIDERS = [
+  'dockerhub',
+  'ghcr',
+  'harbor',
+  'quay',
+  'acr',
+  'ecr',
+] as const;
+export type RegistryWebhookProvider = (typeof REGISTRY_WEBHOOK_PROVIDERS)[number];
+
+export const REGISTRY_WEBHOOK_AUTH_MODES = ['hmac', 'path', 'query', 'bearer'] as const;
+export type RegistryWebhookAuthMode = (typeof REGISTRY_WEBHOOK_AUTH_MODES)[number];
+
+export interface RegistryWebhookProviderAuth {
+  modes: RegistryWebhookAuthMode[];
+  /** Effective static secret: the provider's own, else the shared one. Empty when none. */
+  staticSecret: string;
+}
+
+interface RegistryWebhookAuthSource {
+  staticsecret?: string;
+  registries?: Partial<Record<RegistryWebhookProvider, { modes?: string; secret?: string }>>;
+}
+
+function normalizeRegistryWebhookAuth(
+  source: RegistryWebhookAuthSource,
+): Record<RegistryWebhookProvider, RegistryWebhookProviderAuth> {
+  const result = {} as Record<RegistryWebhookProvider, RegistryWebhookProviderAuth>;
+  for (const provider of REGISTRY_WEBHOOK_PROVIDERS) {
+    const providerSource = source.registries?.[provider];
+    const rawModes = (providerSource?.modes ?? '')
+      .split(',')
+      .map((mode) => mode.trim().toLowerCase())
+      .filter((mode) => mode !== '');
+    const modes: RegistryWebhookAuthMode[] = [];
+    for (const rawMode of rawModes) {
+      if (!(REGISTRY_WEBHOOK_AUTH_MODES as readonly string[]).includes(rawMode)) {
+        throw new Error(
+          `Invalid registry webhook auth mode "${rawMode}" for ${provider} (DD_SERVER_WEBHOOK_REGISTRIES_${provider.toUpperCase()}_MODES). Allowed values: ${REGISTRY_WEBHOOK_AUTH_MODES.join(', ')}`,
+        );
+      }
+      if (!modes.includes(rawMode as RegistryWebhookAuthMode)) {
+        modes.push(rawMode as RegistryWebhookAuthMode);
+      }
+    }
+    result[provider] = {
+      modes: modes.length > 0 ? modes : ['hmac'],
+      staticSecret: providerSource?.secret || source.staticsecret || '',
+    };
+  }
+  return result;
+}
+
 /**
  * Get Webhook configurations.
  */
@@ -850,6 +943,19 @@ export function getWebhookConfiguration() {
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(false),
     secret: joi.string().allow('').default(''),
+    // Static secret for registries that cannot sign (Docker Hub, Quay, Harbor, ACR).
+    staticsecret: joi.string().min(16).allow(''),
+    registries: joi.object(
+      Object.fromEntries(
+        REGISTRY_WEBHOOK_PROVIDERS.map((provider) => [
+          provider,
+          joi.object({
+            modes: joi.string().allow(''),
+            secret: joi.string().min(16).allow(''),
+          }),
+        ]),
+      ),
+    ),
     token: joi.string().allow('').default(''),
     tokens: joi
       .object({
@@ -875,7 +981,15 @@ export function getWebhookConfiguration() {
     configuration.tokens?.watch,
     configuration.tokens?.update,
   ].some((token) => typeof token === 'string' && token.length > 0);
-  const hasSecret = typeof configuration.secret === 'string' && configuration.secret.length > 0;
+  const registryAuth = normalizeRegistryWebhookAuth(configuration);
+  const hasStaticSecret =
+    Boolean(configuration.staticsecret) ||
+    REGISTRY_WEBHOOK_PROVIDERS.some((provider) =>
+      Boolean(configuration.registries?.[provider]?.secret),
+    );
+  const hasSecret =
+    (typeof configuration.secret === 'string' && configuration.secret.length > 0) ||
+    hasStaticSecret;
 
   const endpointTokens = [
     configuration.tokens?.watchall,
@@ -897,11 +1011,31 @@ export function getWebhookConfiguration() {
 
   if (configuration.enabled && !hasAnyToken && !hasSecret) {
     throw new Error(
-      'At least one webhook auth mechanism (DD_SERVER_WEBHOOK_SECRET, DD_SERVER_WEBHOOK_TOKEN, or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
+      'At least one webhook auth mechanism (DD_SERVER_WEBHOOK_SECRET, DD_SERVER_WEBHOOK_STATICSECRET, DD_SERVER_WEBHOOK_TOKEN, or DD_SERVER_WEBHOOK_TOKENS_*) must be configured when webhooks are enabled',
     );
   }
 
+  if (configuration.enabled) {
+    for (const provider of REGISTRY_WEBHOOK_PROVIDERS) {
+      const { modes, staticSecret } = registryAuth[provider];
+      if (!staticSecret && modes.some((mode) => mode !== 'hmac')) {
+        throw new Error(
+          `Registry webhook ${provider} allows static-secret auth but no secret is configured (DD_SERVER_WEBHOOK_STATICSECRET or DD_SERVER_WEBHOOK_REGISTRIES_${provider.toUpperCase()}_SECRET)`,
+        );
+      }
+    }
+  }
+
   return configuration;
+}
+
+/**
+ * Per-provider registry webhook auth: the allowed modes (default `hmac`, the
+ * pre-1.8 behaviour) and the static secret that path, query and bearer modes
+ * compare against.
+ */
+export function getRegistryWebhookAuthConfiguration() {
+  return normalizeRegistryWebhookAuth(getWebhookConfiguration());
 }
 
 function parseSecuritySeverityList(rawValue: string | undefined): SecuritySeverity[] {
@@ -1044,7 +1178,11 @@ export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
     scanner: joi.string().insensitive().valid('trivy', 'grype', 'both').allow('').default(''),
-    backend: joi.string().insensitive().valid('command', 'docker', 'remote').default('command'),
+    backend: joi
+      .string()
+      .insensitive()
+      .valid('auto', 'command', 'docker', 'remote')
+      .default('auto'),
     availability: joi
       .object({
         policy: joi.string().insensitive().valid('block', 'warn').default('block'),
@@ -1117,6 +1255,11 @@ export function getSecurityConfiguration() {
           .pattern(/^(?!.*\.\.)/, 'no path traversal'),
         identity: joi.string().allow('').default(''),
         issuer: joi.string().allow('').default(''),
+        worker: joi
+          .object({
+            image: joi.string().default(DEFAULT_COSIGN_WORKER_IMAGE),
+          })
+          .default({}),
       })
       .default({}),
     sbom: joi
@@ -1174,7 +1317,7 @@ export function getSecurityConfiguration() {
 
   const configuration = configurationToValidate.value;
   const scanner = configuration.scanner ? configuration.scanner.toLowerCase() : '';
-  const backend = configuration.backend.toLowerCase() as 'command' | 'docker' | 'remote';
+  const backend = configuration.backend.toLowerCase() as 'auto' | 'command' | 'docker' | 'remote';
   if (
     backend === 'remote' &&
     (scanner !== 'trivy' || !`${configuration.trivy?.server || ''}`.trim())
@@ -1186,6 +1329,18 @@ export function getSecurityConfiguration() {
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
   const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
+  // `auto` backend treats an explicitly set DD_SECURITY_<PROVIDER>_COMMAND as a request for the
+  // local command even when it does not resolve, so a typo fails loudly instead of silently
+  // switching to a worker.
+  const isCommandExplicit = (provider: 'trivy' | 'grype' | 'syft' | 'cosign') => {
+    const providerConfiguration = configurationFromEnv[provider] as
+      | { command?: unknown }
+      | undefined;
+    return (
+      typeof providerConfiguration?.command === 'string' &&
+      providerConfiguration.command.trim() !== ''
+    );
+  };
 
   return {
     enabled: scanner !== '',
@@ -1206,6 +1361,7 @@ export function getSecurityConfiguration() {
     trivy: {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
+      commandExplicit: isCommandExplicit('trivy'),
       timeout: configuration.trivy?.timeout || 600000,
       maxOutputBytes: configuration.trivy?.maxoutputbytes || DEFAULT_TRIVY_MAX_OUTPUT_BYTES,
       imageSrc: configuration.trivy?.image?.src || '',
@@ -1214,6 +1370,7 @@ export function getSecurityConfiguration() {
     },
     grype: {
       command: configuration.grype?.command || 'grype',
+      commandExplicit: isCommandExplicit('grype'),
       timeout: configuration.grype?.timeout || 600000,
       extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
       workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
@@ -1226,6 +1383,8 @@ export function getSecurityConfiguration() {
         key: cosignKey,
         identity: configuration.cosign?.identity || '',
         issuer: configuration.cosign?.issuer || '',
+        commandExplicit: isCommandExplicit('cosign'),
+        workerImage: configuration.cosign?.worker?.image || DEFAULT_COSIGN_WORKER_IMAGE,
       },
     },
     sbom: {
@@ -1238,6 +1397,7 @@ export function getSecurityConfiguration() {
     },
     syft: {
       command: configuration.syft?.command || 'syft',
+      commandExplicit: isCommandExplicit('syft'),
       timeout: configuration.syft?.timeout || 600000,
       extraArgs: parseSecurityExtraArgs(configuration.syft?.args, 'DD_SECURITY_SYFT_ARGS'),
       workerImage: configuration.syft?.worker?.image || DEFAULT_SYFT_WORKER_IMAGE,
@@ -1326,6 +1486,14 @@ function parseSafePublicUrlCandidate(value: unknown): URL | undefined {
     return undefined;
   }
   return parsedUrl;
+}
+
+/**
+ * The validated `DD_PUBLIC_URL` origin, or undefined when it is unset or unsafe. Request-free,
+ * for notifications that have no inbound request to infer a host from.
+ */
+export function getConfiguredPublicUrl(): string | undefined {
+  return parseSafePublicUrlCandidate(ddEnvVars.DD_PUBLIC_URL)?.origin;
 }
 
 export function getPublicUrl(req: Request) {

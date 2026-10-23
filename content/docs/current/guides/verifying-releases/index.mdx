@@ -85,7 +85,7 @@ gh attestation verify \
 
 ### Verify the container SBOM attestation
 
-The container image also carries a signed Software Bill of Materials, generated with [Trivy](https://trivy.dev/) in [SPDX 2.3](https://spdx.dev/) format and attested the same way as the provenance above. The image digest carries both attestation types, so pass `--predicate-type` to verify the SBOM specifically:
+The container image also carries a signed Software Bill of Materials, generated with [Syft](https://github.com/anchore/syft) in [SPDX 2.3](https://spdx.dev/) format and attested the same way as the provenance above. The image digest carries both attestation types, so pass `--predicate-type` to verify the SBOM specifically:
 
 ```bash
 gh attestation verify \

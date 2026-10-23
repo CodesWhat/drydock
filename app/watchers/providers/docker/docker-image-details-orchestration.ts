@@ -957,6 +957,7 @@ function removeStaleContainerEntriesWithSameName(
       storeContainer.deleteContainer(staleContainer.id, {
         replacementExpected: true,
         excludedContainerId: staleContainer.id,
+        supersededByContainerId: containerToReturn.id,
       }),
     );
 }

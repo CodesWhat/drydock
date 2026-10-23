@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
@@ -16,11 +16,13 @@ import { useUpdateMode } from '@/composables/useUpdateMode';
 import { getContainerReleaseNotes } from '@/services/container';
 import {
   approveApproval,
+  bulkDecideApprovals,
   deferApproval,
   getApproval,
   getApprovalSummary,
   listApprovals,
   rejectApproval,
+  type ApprovalDetailResponse,
   type ApprovalHoldReason,
   type ApprovalRecord,
   type ApprovalStatusFilter,
@@ -65,7 +67,11 @@ const expandedId = ref<string | null>(null);
 const focusedId = ref<string | null>(null);
 const releaseNotesById = ref<Record<string, ContainerReleaseNotes | null>>({});
 const holdReasonsById = ref<Record<string, ApprovalHoldReason[]>>({});
+const hardBlockersById = ref<Record<string, ApprovalHoldReason[]>>({});
 const detailLoadingId = ref<string | null>(null);
+const selectedIds = ref<Set<string>>(new Set());
+const bulkActing = ref(false);
+const selectAllRef = ref<HTMLInputElement | null>(null);
 let loadRequestId = 0;
 
 const isNotifyMode = computed(() => updateMode.value === 'notify');
@@ -96,7 +102,58 @@ function rowKey(row: TableRow): string {
   return isDetailRow(row) ? row.__key : row.id;
 }
 
+// Decided rows can't be decided again, so the Decided tab has nothing to select.
+const isSelectionEnabled = computed(() => status.value !== 'decided');
+const selectedCount = computed(() => selectedIds.value.size);
+const visibleIds = computed(() => approvals.value.map((approval) => approval.id));
+const selectAllState = computed<'none' | 'some' | 'all'>(() => {
+  if (visibleIds.value.length === 0 || selectedCount.value === 0) return 'none';
+  return visibleIds.value.every((id) => selectedIds.value.has(id)) ? 'all' : 'some';
+});
+
+watchEffect(() => {
+  const el = selectAllRef.value;
+  if (el) el.indeterminate = selectAllState.value === 'some';
+});
+
+// A reload or a tab switch can drop rows the selection still names, and a bulk decision
+// would then be sent for rows nobody can see.
+watch(visibleIds, (ids) => {
+  const visible = new Set(ids);
+  const kept = [...selectedIds.value].filter((id) => visible.has(id));
+  if (kept.length !== selectedIds.value.size) selectedIds.value = new Set(kept);
+});
+
+function toggleSelected(id: string) {
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  selectedIds.value = next;
+}
+
+function toggleSelectAll() {
+  selectedIds.value = selectAllState.value === 'all' ? new Set() : new Set(visibleIds.value);
+}
+
+function clearSelection() {
+  selectedIds.value = new Set();
+}
+
 const tableColumns = computed<DataTableColumn[]>(() => [
+  ...(isSelectionEnabled.value
+    ? [
+        {
+          key: 'select',
+          label: '',
+          sortable: false,
+          size: 44,
+          minSize: 44,
+          maxSize: 44,
+          autoSize: 'fixed' as const,
+          px: 'px-0',
+        },
+      ]
+    : []),
   {
     key: 'containerName',
     label: t('approvalsView.columns.container'),
@@ -195,6 +252,13 @@ function selectStatus(next: ApprovalStatusFilter) {
   router.replace({ query: { ...route.query, status: next } });
 }
 
+// A blocker with no severity is a legacy payload and is treated as hard, the safe reading.
+function hardBlockersOf(detail: ApprovalDetailResponse | undefined): ApprovalHoldReason[] {
+  return (detail?.eligibility?.blockers ?? []).filter(
+    (blocker) => blocker.severity === undefined || blocker.severity === 'hard',
+  );
+}
+
 async function ensureDetailLoaded(approval: ApprovalRecord) {
   if (holdReasonsById.value[approval.id] !== undefined) return;
   detailLoadingId.value = approval.id;
@@ -206,6 +270,10 @@ async function ensureDetailLoaded(approval: ApprovalRecord) {
     holdReasonsById.value = {
       ...holdReasonsById.value,
       [approval.id]: detail?.holdReasons ?? [],
+    };
+    hardBlockersById.value = {
+      ...hardBlockersById.value,
+      [approval.id]: hardBlockersOf(detail),
     };
     releaseNotesById.value = {
       ...releaseNotesById.value,
@@ -227,17 +295,28 @@ function toggleExpanded(approval: ApprovalRecord) {
   void ensureDetailLoaded(approval);
 }
 
-async function getHoldReasons(approval: ApprovalRecord): Promise<ApprovalHoldReason[]> {
-  if (holdReasonsById.value[approval.id] !== undefined) {
-    return holdReasonsById.value[approval.id];
+async function getBlockers(
+  approval: ApprovalRecord,
+): Promise<{ soft: ApprovalHoldReason[]; hard: ApprovalHoldReason[] }> {
+  if (
+    holdReasonsById.value[approval.id] !== undefined &&
+    hardBlockersById.value[approval.id] !== undefined
+  ) {
+    return { soft: holdReasonsById.value[approval.id], hard: hardBlockersById.value[approval.id] };
   }
   try {
     const detail = await getApproval(approval.id);
+    const hard = hardBlockersOf(detail);
     holdReasonsById.value = { ...holdReasonsById.value, [approval.id]: detail.holdReasons };
-    return detail.holdReasons;
+    hardBlockersById.value = { ...hardBlockersById.value, [approval.id]: hard };
+    return { soft: detail.holdReasons, hard };
   } catch {
-    return [];
+    return { soft: [], hard: [] };
   }
+}
+
+async function getHoldReasons(approval: ApprovalRecord): Promise<ApprovalHoldReason[]> {
+  return (await getBlockers(approval)).soft;
 }
 
 function semverTone(diff: string): 'danger' | 'warning' | 'success' | 'caution' | 'neutral' {
@@ -312,6 +391,100 @@ async function deferRow(approval: ApprovalRecord) {
   } finally {
     actingId.value = null;
   }
+}
+
+async function runBulk(action: 'approve' | 'reject', ids: string[]) {
+  if (bulkActing.value || actingId.value) return;
+  if (ids.length === 0) return;
+  bulkActing.value = true;
+  try {
+    const result = await bulkDecideApprovals(ids, action);
+    if (result.accepted.length > 0) {
+      toast.success(
+        t(
+          action === 'approve'
+            ? 'approvalsView.toast.bulkApproved'
+            : 'approvalsView.toast.bulkRejected',
+          {
+            count: result.accepted.length,
+          },
+        ),
+      );
+    }
+    if (result.rejected.length > 0) {
+      const list = [...new Set(result.rejected.map((entry) => entry.message))].join('; ');
+      toast.warning(
+        t('approvalsView.toast.bulkPartialFailure', { count: result.rejected.length, list }),
+      );
+    }
+    clearSelection();
+    expandedId.value = null;
+    await refresh();
+  } catch (e: unknown) {
+    toast.error(errorMessage(e, t('approvalsView.toast.bulkFailed')));
+  } finally {
+    bulkActing.value = false;
+  }
+}
+
+async function confirmBulkApprove() {
+  const selected = approvals.value.filter((approval) => selectedIds.value.has(approval.id));
+  const blockers = await Promise.all(selected.map((approval) => getBlockers(approval)));
+  const approvable: ApprovalRecord[] = [];
+  const skipped: string[] = [];
+  const holds: string[] = [];
+  selected.forEach((approval, index) => {
+    const { soft, hard } = blockers[index];
+    if (hard.length > 0) {
+      skipped.push(`• ${approval.containerName}: ${hard.map((b) => b.message).join('; ')}`);
+      return;
+    }
+    approvable.push(approval);
+    for (const reason of soft) holds.push(`• ${approval.containerName}: ${reason.message}`);
+  });
+
+  // Every selected row is refused by the same gate the Approve button would hit, so there
+  // is nothing to confirm; say why instead of opening a dialog that approves nothing.
+  if (approvable.length === 0) {
+    toast.warning(
+      t('approvalsView.toast.bulkPartialFailure', {
+        count: skipped.length,
+        list: skipped.join('\n'),
+      }),
+    );
+    return;
+  }
+
+  let message = t('approvalsView.confirm.bulkApprove.message', { count: approvable.length });
+  if (holds.length > 0) {
+    message += t('approvalsView.confirm.bulkApprove.holdsSuffix', { list: holds.join('\n') });
+  }
+  if (skipped.length > 0) {
+    message += t('approvalsView.confirm.bulkApprove.excludedSuffix', {
+      count: skipped.length,
+      list: skipped.join('\n'),
+    });
+  }
+  const ids = approvable.map((approval) => approval.id);
+  confirm.require({
+    header: t('approvalsView.confirm.bulkApprove.header'),
+    message,
+    rejectLabel: t('approvalsView.confirm.cancel'),
+    acceptLabel: t('approvalsView.confirm.bulkApprove.acceptLabel'),
+    severity: 'warn',
+    accept: () => runBulk('approve', ids),
+  });
+}
+
+function confirmBulkReject() {
+  confirm.require({
+    header: t('approvalsView.confirm.bulkReject.header'),
+    message: t('approvalsView.confirm.bulkReject.message', { count: selectedCount.value }),
+    rejectLabel: t('approvalsView.confirm.cancel'),
+    acceptLabel: t('approvalsView.confirm.bulkReject.acceptLabel'),
+    severity: 'warn',
+    accept: () => runBulk('reject', [...selectedIds.value]),
+  });
 }
 
 async function confirmApprove(approval: ApprovalRecord) {
@@ -469,6 +642,33 @@ onUnmounted(() => {
       {{ t('approvalsView.notifyModeBanner') }}
     </div>
 
+    <div v-if="selectedCount > 0"
+         role="region"
+         :aria-label="t('approvalsView.bulk.barLabel')"
+         data-testid="approval-selection-bar"
+         class="mb-3 flex flex-wrap items-center justify-between gap-3 px-3 py-2 dd-rounded dd-bg-elevated dd-text">
+      <span class="text-2xs-plus font-semibold">{{ t('approvalsView.bulk.count', { count: selectedCount }) }}</span>
+      <div class="flex items-center gap-2">
+        <AppButton size="sm" variant="text-muted" weight="medium" data-testid="approval-bulk-clear"
+                   @click="clearSelection">
+          {{ t('approvalsView.bulk.clear') }}
+        </AppButton>
+        <AppButton size="sm" variant="danger-subtle" weight="bold" data-testid="approval-bulk-reject"
+                   :disabled="bulkActing || actingId !== null"
+                   @click="confirmBulkReject">
+          <AppIcon name="xmark" :size="12" class="mr-1" />
+          {{ t('approvalsView.bulk.rejectSelected') }}
+        </AppButton>
+        <AppButton size="sm" variant="success-subtle" weight="bold" data-testid="approval-bulk-approve"
+                   :disabled="bulkActing || actingId !== null || isNotifyMode"
+                   :title="isNotifyMode ? t('approvalsView.actions.approveDisabledNotify') : undefined"
+                   @click="confirmBulkApprove">
+          <AppIcon name="check" :size="12" class="mr-1" />
+          {{ t('approvalsView.bulk.approveSelected') }}
+        </AppButton>
+      </div>
+    </div>
+
     <div v-if="error"
          class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
@@ -490,6 +690,29 @@ onUnmounted(() => {
       :full-width-row="(row) => isDetailRow(row)"
       :row-class="(row) => (!isDetailRow(row) && row.id === focusedId ? 'dd-data-table-row-selected' : '')"
     >
+      <template v-if="isSelectionEnabled" #header-select>
+        <input
+          ref="selectAllRef"
+          type="checkbox"
+          :checked="selectAllState === 'all'"
+          :aria-label="t('approvalsView.bulk.selectAll')"
+          data-testid="approval-select-all"
+          class="accent-[var(--dd-secondary)]"
+          @click.stop="toggleSelectAll"
+        />
+      </template>
+      <template #cell-select="{ row }">
+        <input
+          v-if="!isDetailRow(row)"
+          type="checkbox"
+          :checked="selectedIds.has(row.id)"
+          :aria-label="t('approvalsView.bulk.selectRow', { name: row.containerName })"
+          data-testid="approval-select"
+          class="accent-[var(--dd-secondary)]"
+          @click.stop="toggleSelected(row.id)"
+          @keydown.stop
+        />
+      </template>
       <template #cell-containerName="{ row }">
         <template v-if="!isDetailRow(row)">
           <span data-testid="approval-container-name" class="block min-w-0 truncate whitespace-nowrap font-semibold text-2xs-plus dd-text" :title="row.containerName">
@@ -545,7 +768,7 @@ onUnmounted(() => {
             variant="success-subtle"
             weight="bold"
             class="inline-flex min-w-[74px] items-center justify-center gap-1 whitespace-nowrap"
-            :disabled="actingId === row.id || isNotifyMode"
+            :disabled="actingId === row.id || bulkActing || isNotifyMode"
             :title="isNotifyMode ? t('approvalsView.actions.approveDisabledNotify') : undefined"
             :aria-label="t('approvalsView.actions.approveAriaLabel')"
             @click.stop="confirmApprove(row)"
@@ -558,7 +781,7 @@ onUnmounted(() => {
             variant="danger-subtle"
             weight="bold"
             class="inline-flex min-w-[74px] items-center justify-center gap-1 whitespace-nowrap"
-            :disabled="actingId === row.id"
+            :disabled="actingId === row.id || bulkActing"
             :aria-label="t('approvalsView.actions.rejectAriaLabel')"
             @click.stop="confirmReject(row)"
           >
@@ -570,7 +793,7 @@ onUnmounted(() => {
             variant="text-muted"
             weight="bold"
             class="inline-flex min-w-[74px] items-center justify-center gap-1 whitespace-nowrap"
-            :disabled="actingId === row.id"
+            :disabled="actingId === row.id || bulkActing"
             :aria-label="t('approvalsView.actions.deferAriaLabel')"
             @click.stop="confirmDefer(row)"
           >

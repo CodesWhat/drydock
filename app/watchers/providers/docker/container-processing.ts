@@ -55,6 +55,12 @@ interface WatchContainerDependencies {
    * scans, which are not part of a generation-tracked bulk scan.
    */
   isScanStale?: () => boolean;
+  /**
+   * DR-147: true for a renamed old container that a replacement has superseded, still listed
+   * after the discovery settle. It is skipped before any lookup or store write so it never
+   * becomes a second row that could take the replacement's retained policy.
+   */
+  isRenamedPredecessorOfReplacement?: (container: Container) => boolean;
 }
 
 interface MapContainerToReportDependencies {
@@ -246,6 +252,7 @@ async function runContainerWatch(
     mapContainerToContainerReport,
     emitBatchEvent = false,
     isScanStale,
+    isRenamedPredecessorOfReplacement,
   }: WatchContainerDependencies,
   watchSeq: number,
 ): Promise<ContainerReport> {
@@ -254,6 +261,11 @@ async function runContainerWatch(
   const logContainer = log.child({ container: fullName(container) });
   const containerWithResult = container;
   const watchStartedAtMs = Date.now();
+
+  if (isRenamedPredecessorOfReplacement?.(containerWithResult)) {
+    logContainer.debug('Skipping the renamed predecessor of a replacement');
+    return { container: containerWithResult, changed: false };
+  }
 
   const previousResult = containerWithResult.result;
   const previousCurrentReleaseNotes = containerWithResult.currentReleaseNotes;
@@ -291,6 +303,12 @@ async function runContainerWatch(
     logContainer.debug(
       'Skipping stale scan side effects — the watcher was deregistered while this container was being processed',
     );
+    return { container: containerWithResult, changed: false };
+  }
+
+  // The lookups above are slow; the replacement may have been stored meanwhile.
+  if (isRenamedPredecessorOfReplacement?.(containerWithResult)) {
+    logContainer.debug('Skipping the renamed predecessor of a replacement');
     return { container: containerWithResult, changed: false };
   }
 

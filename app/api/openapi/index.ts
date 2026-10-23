@@ -32,7 +32,12 @@ export const openApiDocument = {
     },
     { name: 'Containers', description: 'Container inventory and container-scoped operations' },
     { name: 'Images', description: 'Image inventory and prune operations across image hosts' },
-    { name: 'Triggers', description: 'Trigger discovery and trigger execution' },
+    {
+      name: 'Triggers',
+      description:
+        'Deprecated combined trigger routes. Use Actions and Notification Triggers instead',
+    },
+    { name: 'Notification Triggers', description: 'Notification trigger discovery and execution' },
     {
       name: 'Actions',
       description:
@@ -91,6 +96,13 @@ export const openApiDocument = {
         name: 'x-drydock-signature',
         description:
           'HMAC-SHA256 registry webhook signature (x-drydock-signature). The endpoint also accepts provider-specific signature headers: x-registry-signature, x-hub-signature-256, x-quay-signature, x-harbor-signature, and x-ms-signature.',
+      },
+      registryWebhookStaticSecret: {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'Static secret',
+        description:
+          'Static registry webhook secret, sent as `Authorization: Bearer <secret>`, as `?secret=<secret>`, or as the last path segment of `/api/v1/webhooks/registry/{provider}/{secret}`. Which of those a provider accepts is set per provider with DD_SERVER_WEBHOOK_REGISTRIES_<PROVIDER>_MODES.',
       },
       metricsBearerAuth: {
         type: 'http',

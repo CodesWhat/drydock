@@ -2,6 +2,8 @@
 # an issue that was reopened on purpose (#565 was closed again by three syncs).
 # This fails a PR into main whose title, body or commit messages hold a GitHub
 # closing keyword (the commits build the squash message).
+# A sync PR head has main as its first parent, so BASE..HEAD would walk all of
+# dev; there the guard scans only the sync commit's own message.
 # `edited` re-runs it when the body is rewritten to clear the finding. Not a
 # required check, so it adds no required context on main.
 name: Closing Keywords Guard
@@ -42,7 +44,17 @@ jobs:
         run: |
           printf '%s\n' "${PR_TITLE}" > "${RUNNER_TEMP}/pr-title.txt"
           printf '%s\n' "${PR_BODY}" > "${RUNNER_TEMP}/pr-body.txt"
-          git log --format=%B "${BASE_SHA}..${HEAD_SHA}" > "${RUNNER_TEMP}/pr-commits.txt"
+          # A dev -> main sync head is a merge whose first parent is the PR base.
+          # BASE..HEAD would then walk every dev commit since the branch cut, so
+          # scan only the sync commit's own message.
+          head_parents="$({ git rev-list --parents -n 1 "${HEAD_SHA}" || true; })"
+          read -r -a head_parts <<< "${head_parents}"
+          first_parent="$({ git rev-parse "${HEAD_SHA}^1" 2>/dev/null || true; })"
+          if [ "${#head_parts[@]}" -gt 2 ] && [ "${first_parent}" = "${BASE_SHA}" ]; then
+            git log -1 --format=%B "${HEAD_SHA}" > "${RUNNER_TEMP}/pr-commits.txt"
+          else
+            git log --format=%B "${BASE_SHA}..${HEAD_SHA}" > "${RUNNER_TEMP}/pr-commits.txt"
+          fi
           node scripts/closing-keywords.mjs \
             "PR title=${RUNNER_TEMP}/pr-title.txt" \
             "PR body=${RUNNER_TEMP}/pr-body.txt" \

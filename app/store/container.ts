@@ -153,6 +153,14 @@ type UpdatePolicyRetentionCacheEntry = {
 
 const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
 
+/**
+ * DR-147: renamed predecessors a replacement has superseded, keyed by the old Docker id.
+ * Independent of policy retention: a container with no overrides stashes nothing, and the
+ * duplicate row it leaves behind is the same bug. Memory only; a restart falls back to the
+ * rollback-name match in isRenamedPredecessorOfReplacement.
+ */
+const supersededPredecessors = new Map<string, { replacementId: string; expiresAt: number }>();
+
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
@@ -1996,6 +2004,9 @@ export function insertContainer(container, context?: ContainerLifecycleEventCont
     });
     emitContainerAdded(containerAddedEventPayload, ...(context ? [context] : []));
   }
+  if (supersededPredecessors.size > 0) {
+    removeSupersededPredecessorRows(containerToSave.id);
+  }
   return containerToSave;
 }
 
@@ -2712,6 +2723,12 @@ interface DeleteContainerOptions {
    */
   excludedContainerId?: string;
   /**
+   * DR-147: Docker id of the replacement whose discovery caused this delete. Recorded
+   * against the removed id so the old container, if it is still listed, is not stored
+   * again while that replacement is stored. Only read with `replacementExpected`.
+   */
+  supersededByContainerId?: string;
+  /**
    * #1280: a removal that may or may not be a recreate, reported by a source that
    * cannot say which (an agent's `dd:container-removed` carries only the id, and a
    * snapshot or inventory pass can drop a container before its replacement is listed).
@@ -2759,6 +2776,68 @@ function shouldStashUpdatePolicyForReplacement(
   );
 }
 
+function recordSupersededPredecessor(predecessorId: string, replacementId: string) {
+  supersededPredecessors.delete(predecessorId);
+  supersededPredecessors.set(predecessorId, {
+    replacementId,
+    expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+  });
+  while (supersededPredecessors.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
+    supersededPredecessors.delete(supersededPredecessors.keys().next().value as string);
+  }
+}
+
+/**
+ * DR-147: a replacement was just stored, so a superseded predecessor that got in ahead of
+ * it (the scan listed the old container first) is a second row for the same container.
+ */
+function removeSupersededPredecessorRows(replacementId: string) {
+  for (const [predecessorId, record] of [...supersededPredecessors]) {
+    if (record.replacementId === replacementId && getContainerRaw(predecessorId)) {
+      deleteContainer(predecessorId);
+    }
+  }
+}
+
+/**
+ * DR-147: whether `incoming` is the renamed predecessor of a replacement and must not be
+ * stored as a row of its own.
+ *
+ * A long health gate or a failed cleanup leaves the old container listed after the
+ * replacement clears the discovery settle. Storing it would show a second row under the
+ * same name. The signal is the supersession the watcher recorded when its discovery of
+ * the replacement removed the old row (old id to replacement id, whether or not any policy
+ * was retained), and it only counts while that replacement is stored right now. A
+ * replacement that was rolled back or removed leaves the old container as the only copy,
+ * which is tracked as usual. A predecessor row already stored while its replacement is stored is
+ * removed on the spot (a concurrent watch can insert it after the replacement's cleanup ran).
+ * After a restart the record is gone, so a container presenting
+ * under Drydock's `-old-<timestamp>` rollback rename with a same-canonical-name record
+ * stored is treated the same way. Controller-local only: agent-owned rows are handled by
+ * the live-predecessor lookup.
+ */
+export function isRenamedPredecessorOfReplacement(incoming): boolean {
+  if (isAgentOwnedContainer(incoming)) {
+    return false;
+  }
+  const record = supersededPredecessors.get(incoming.id);
+  const superseded =
+    record !== undefined && record.expiresAt > Date.now() && getContainerRaw(record.replacementId);
+  if (getContainerRaw(incoming.id)) {
+    // A slow concurrent lookup let the predecessor in after the replacement's cleanup ran
+    // and found nothing to remove. Heal it on the next look, with the normal removal event.
+    if (superseded) {
+      deleteContainer(incoming.id);
+      return true;
+    }
+    return false;
+  }
+  if (superseded) {
+    return true;
+  }
+  return isRollbackContainerName(incoming.name) && findIdentitySiblings(incoming).length > 0;
+}
+
 /**
  * Delete container by id.
  * @param id
@@ -2771,6 +2850,9 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
     db.prepare(CONTAINER_DELETE_BY_ID_SQL).run(id);
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
+    if (options.replacementExpected === true && options.supersededByContainerId !== undefined) {
+      recordSupersededPredecessor(id, options.supersededByContainerId);
+    }
     if (shouldStashUpdatePolicyForReplacement(containerRaw, options)) {
       stashUpdatePolicyForReplacement(
         containerRaw,
@@ -2927,6 +3009,7 @@ export function _resetContainerStoreStateForTests() {
   securityStateCache.clear();
   updateLifecycleCache.clear();
   updatePolicyRetentionCache.clear();
+  supersededPredecessors.clear();
   pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();

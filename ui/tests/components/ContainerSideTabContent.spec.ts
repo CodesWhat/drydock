@@ -956,6 +956,9 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(smtp.text()).toContain('smtp.ops');
     expect(smtp.text()).toContain('Skipped: already notified for this update.');
     expect(smtp.attributes('title')).toBe('2026-10-19T10:00:00.000Z');
+    expect(smtp.get('[data-test="notification-skip-at"]').text()).toBe(
+      `Last skipped ${new Date('2026-10-19T10:00:00.000Z').toLocaleString()}`,
+    );
     expect(wrapper.get('[data-notification-skip-key="slack.team"]').text()).toContain(
       'Held for the next digest.',
     );

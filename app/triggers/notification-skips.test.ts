@@ -3,6 +3,7 @@ import {
   clearNotificationSkipsForContainer,
   clearNotificationSkipsForTrigger,
   getNotificationSkipsForContainer,
+  getNotificationSkipsForTrigger,
   getNotificationSkipsSnapshot,
   markNotificationTriggerRegistered,
   NOTIFICATION_SKIP_MAX_DETAIL_LENGTH,
@@ -58,6 +59,20 @@ describe('notification skip store', () => {
       at: expect.any(String),
     });
     expect(getNotificationSkipsForContainer('missing')).toEqual([]);
+  });
+
+  test("lists one trigger's skips newest first", () => {
+    recordNotificationSkip('smtp.a', 'c1', 'rule-disabled');
+    recordNotificationSkip('slack.b', 'c1', 'digest-buffered');
+    recordNotificationSkip('smtp.a', 'c2', 'recently-applied');
+    // Re-recording c1 moves it to the newest position.
+    recordNotificationSkip('smtp.a', 'c1', 'once-already-sent');
+
+    expect(getNotificationSkipsForTrigger('smtp.a').map((s) => [s.containerId, s.reason])).toEqual([
+      ['c1', 'once-already-sent'],
+      ['c2', 'recently-applied'],
+    ]);
+    expect(getNotificationSkipsForTrigger('missing')).toEqual([]);
   });
 
   test('enforces the cap by dropping the oldest entry', () => {

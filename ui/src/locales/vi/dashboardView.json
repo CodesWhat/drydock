@@ -43,6 +43,7 @@
       "updateAll": "Cập nhật tất cả",
       "noUpdates": "Không có cập nhật nào",
       "securityBlocked": "Bị chặn do bảo mật",
+      "maturityCountdown": "Mở khóa sau {countdown} ({date})",
       "updateContainer": "Cập nhật container",
       "compactSingle": "{count} bản cập nhật có sẵn",
       "compactPlural": "{count} bản cập nhật có sẵn",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} mới · {mature} chín",
       "securityIssues": "Vấn đề bảo mật",
       "registries": "Registry",
-      "approvals": "Phê duyệt"
+      "approvals": "Phê duyệt",
+      "images": "Image",
+      "imageDetail": "{count} có cập nhật",
+      "triggers": "Trigger",
+      "triggerDetail": "{actions} hành động · {notifications} thông báo",
+      "watchers": "Watcher",
+      "watcherDetailHealthy": "Tất cả đã kết nối",
+      "watcherDetailDisconnected": "{healthy} đã kết nối · {disconnected} mất kết nối"
     },
     "updateKind": {
       "major": "Major",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Hoạt động gần đây",
+      "viewAudit": "Xem nhật ký kiểm toán →",
+      "loading": "Đang tải hoạt động...",
+      "loadFailed": "Không thể tải hoạt động gần đây",
+      "empty": "Chưa có hoạt động gần đây",
+      "system": "Hệ thống"
     }
   }
 }

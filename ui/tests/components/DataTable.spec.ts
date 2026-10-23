@@ -103,7 +103,7 @@ describe('DataTable', () => {
     it('right-aligns Actions header text to match action buttons', () => {
       const w = factory({ showActions: true });
       const actionsHeader = w.findAll('thead th')[3];
-      expect(actionsHeader.classes()).toContain('text-right');
+      expect(actionsHeader.classes()).toContain('text-end');
     });
 
     it('does not show Actions header when showActions is false', () => {

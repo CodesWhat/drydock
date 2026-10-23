@@ -9,6 +9,7 @@ import { type Database, MEMORY_DATABASE_LOCATION, openDatabase, type Row } from 
 import { runFirstStartImport } from './db/import.js';
 import { COLLECTION_IMPORTERS } from './db/importers/index.js';
 import { migrate } from './db/migrations.js';
+import { prepareDatabaseForMigration } from './db/pre-migration.js';
 
 const log = logger.child({ component: 'store' });
 
@@ -296,6 +297,7 @@ export async function init(options: { memory?: boolean } = {}) {
     importers: COLLECTION_IMPORTERS,
   });
   sqliteDb = openDatabase(dbPath);
+  prepareDatabaseForMigration(sqliteDb, dbPath);
   migrate(sqliteDb);
   enforceStorePermissions(storeDirectory, storePath);
   enforceSqliteFilePermissions(dbPath);

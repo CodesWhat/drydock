@@ -44,7 +44,7 @@ export interface SecurityRuntimeToolStatus {
 export interface SecurityRuntimeStatus {
   checkedAt: string;
   ready: boolean;
-  backend: 'command' | 'docker' | 'remote';
+  backend: 'auto' | 'command' | 'docker' | 'remote';
   availabilityPolicy: 'block' | 'warn';
   gate: {
     mode: 'on' | 'off';
@@ -67,7 +67,7 @@ export interface SecurityRuntimeStatus {
     }
   >;
   assets: Array<{
-    provider: 'trivy' | 'grype' | 'syft';
+    provider: 'trivy' | 'grype' | 'syft' | 'cosign';
     backend: string;
     configuredImage: string;
     resolvedDigest?: string;

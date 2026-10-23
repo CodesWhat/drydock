@@ -43,6 +43,7 @@
       "updateAll": "Atualizar todos",
       "noUpdates": "Nenhuma atualização disponível",
       "securityBlocked": "Bloqueado por segurança",
+      "maturityCountdown": "Desbloqueia em {countdown} ({date})",
       "updateContainer": "Atualizar contêiner",
       "compactSingle": "{count} atualização disponível",
       "compactPlural": "{count} atualizações disponíveis",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} novas · {mature} maduras",
       "securityIssues": "Problemas de segurança",
       "registries": "Registries",
-      "approvals": "Aprovações"
+      "approvals": "Aprovações",
+      "images": "Imagens",
+      "imageDetail": "{count} com atualizações",
+      "triggers": "Triggers",
+      "triggerDetail": "{actions} ações · {notifications} notificações",
+      "watchers": "Watchers",
+      "watcherDetailHealthy": "Todos conectados",
+      "watcherDetailDisconnected": "{healthy} conectados · {disconnected} desconectados"
     },
     "updateKind": {
       "major": "Principal",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Atividade recente",
+      "viewAudit": "Ver log de auditoria →",
+      "loading": "Carregando atividade...",
+      "loadFailed": "Falha ao carregar a atividade recente",
+      "empty": "Nenhuma atividade recente",
+      "system": "Sistema"
     }
   }
 }

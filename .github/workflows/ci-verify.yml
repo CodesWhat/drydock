@@ -1245,7 +1245,7 @@ jobs:
         id: grype
         env:
           # Load the repo-root .grype.yaml explicitly — see security-grype.yml
-          # for why the bundled cosign/trivy vendored Go-module CVEs are triaged.
+          # for why the path is pinned.
           GRYPE_CONFIG: ${{ github.workspace }}/.grype.yaml
         with:
           image: drydock:dev

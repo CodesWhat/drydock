@@ -423,7 +423,21 @@ const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
 const mockApiUpdateBulk = apiUpdateContainers as ReturnType<typeof vi.fn>;
 const mountedWrappers: Array<{ unmount: () => void }> = [];
 
-function makeContainer(overrides: Partial<Container> = {}): Container {
+// Test-only: fixture rows carry the operation the mocked operations store
+// should report for them. The real Container type has no such field.
+type FixtureContainer = Container & {
+  updateOperation?: {
+    id: string;
+    status: 'queued' | 'in-progress';
+    phase: string;
+    updatedAt: string;
+    batchId?: string;
+    queuePosition?: number;
+    queueTotal?: number;
+  };
+};
+
+function makeContainer(overrides: Partial<FixtureContainer> = {}): FixtureContainer {
   const defaultName = overrides.name ?? 'nginx';
   const defaultServer = overrides.server ?? 'Local';
   return {
@@ -446,7 +460,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
 }
 
 async function mountContainersView(
-  containers: Container[] = [],
+  containers: FixtureContainer[] = [],
   apiContainersInput?: any[],
   options: { initialFilterKind?: string; realTable?: boolean } = {},
 ) {
@@ -1384,7 +1398,7 @@ describe('ContainersView', () => {
         expect(vm.containers).toBe(firstRef);
       });
 
-      it('preserves an active update operation when a reload omits operation metadata', async () => {
+      it('keeps an active update operation in the store when a reload omits operation metadata', async () => {
         const activeOperation = {
           id: 'op-1',
           status: 'in-progress' as const,
@@ -1403,10 +1417,10 @@ describe('ContainersView', () => {
         const wrapper = await mountContainersView([container]);
         const vm = wrapper.vm as any;
 
+        const { updateOperation: _carried, ...containerRow } = container;
         const updatedContainer = makeContainer({
-          ...container,
+          ...containerRow,
           currentTag: '1.0.1',
-          updateOperation: undefined,
         });
         mockGetAllContainers.mockResolvedValue([
           { ...updatedContainer, displayName: updatedContainer.name },
@@ -1418,7 +1432,9 @@ describe('ContainersView', () => {
         await flushPromises();
 
         expect(vm.containers[0].currentTag).toBe('1.0.1');
-        expect(vm.containers[0].updateOperation).toEqual(activeOperation);
+        // The store still reports the operation; the reloaded row carries none.
+        expect(vm.containers[0]).not.toHaveProperty('updateOperation');
+        expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
       });
 
       it('reassigns containers.value when container count changes', async () => {
@@ -4554,8 +4570,6 @@ describe('ContainersView', () => {
 
         expect(operationListener).toBeTypeOf('function');
 
-        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
-
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -4569,12 +4583,10 @@ describe('ContainersView', () => {
         );
 
         const patched = vm.containers.find((c: any) => c.id === 'c1');
-        expect(patched?.updateOperation).toBeDefined();
-        expect(patched.updateOperation.status).toBe('in-progress');
-        expect(patched.updateOperation.phase).toBe('pulling');
-        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
-          'in-progress',
-        );
+        expect(vm.isContainerUpdateInProgress(patched)).toBe(true);
+        expect(
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(true);
 
         vi.advanceTimersByTime(200);
         operationListener?.(
@@ -4590,26 +4602,25 @@ describe('ContainersView', () => {
         );
 
         const rawCleared = vm.containers.find((c: any) => c.id === 'c1');
-        expect(rawCleared?.updateOperation).toBeUndefined();
         expect(vm.isContainerUpdateInProgress(rawCleared)).toBe(true);
         expect(vm.isContainerUpdateQueued(rawCleared)).toBe(false);
-        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
-          'in-progress',
-        );
+        expect(
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(true);
 
         vm.containers = [makeContainer({ id: 'c1', name: 'nginx' })];
         await flushPromises();
         expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
-        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
-          'in-progress',
-        );
+        expect(
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(true);
 
         vi.advanceTimersByTime(1499);
         await flushPromises();
         expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(true);
-        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
-          'in-progress',
-        );
+        expect(
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(true);
 
         vi.advanceTimersByTime(1);
         await flushPromises();
@@ -4617,8 +4628,8 @@ describe('ContainersView', () => {
         expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
         expect(vm.isContainerUpdateQueued(vm.containers[0])).toBe(false);
         expect(
-          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
-        ).toBeUndefined();
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(false);
 
         wrapper.unmount();
       } finally {
@@ -4748,18 +4759,17 @@ describe('ContainersView', () => {
           }),
         );
 
-        expect(vm.containers.find((c: any) => c.id === 'c1')?.updateOperation).toBeUndefined();
         // Hold remains for the settle window so the row does not jump as the raw
         // operation is cleared; released on the terminal timer.
-        expect(vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation?.status).toBe(
-          'in-progress',
-        );
+        expect(
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(true);
 
         vi.advanceTimersByTime(1500);
         await flushPromises();
         expect(
-          vm.displayContainers.find((c: any) => c.id === 'c1')?.updateOperation,
-        ).toBeUndefined();
+          vm.isContainerUpdateInProgress(vm.displayContainers.find((c: any) => c.id === 'c1')),
+        ).toBe(false);
         expect(vm.isContainerUpdateInProgress(vm.containers[0])).toBe(false);
 
         wrapper.unmount();
@@ -5057,7 +5067,6 @@ describe('ContainersView', () => {
         const containerWithoutOp = makeContainer({
           id: 'c1',
           name: 'nginx',
-          updateOperation: undefined,
         });
         (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
         mockGetAllContainers.mockResolvedValueOnce([
@@ -5123,7 +5132,6 @@ describe('ContainersView', () => {
         const containerWithoutOp = makeContainer({
           id: 'c1',
           name: 'nginx',
-          updateOperation: undefined,
         });
         (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
         mockGetAllContainers.mockResolvedValueOnce([
@@ -5209,7 +5217,6 @@ describe('ContainersView', () => {
         const containerWithoutOp = makeContainer({
           id: 'c1',
           name: 'nginx',
-          updateOperation: undefined,
         });
         (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValueOnce([containerWithoutOp]);
         mockGetAllContainers.mockResolvedValueOnce([

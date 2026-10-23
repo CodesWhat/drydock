@@ -89,6 +89,9 @@ describe('createDockerScannerBackend', () => {
     { hardening: { cacheTarget: 'cache' }, message: 'cacheTarget' },
     { hardening: { cacheTarget: '/' }, message: 'cacheTarget' },
     { hardening: { cacheTarget: '/bad\0target' }, message: 'cacheTarget' },
+    { hardening: { scratchTarget: 'scratch' }, message: 'scratchTarget' },
+    { hardening: { scratchTarget: '/' }, message: 'scratchTarget' },
+    { hardening: { cacheTarget: '/cache', scratchTarget: '/cache' }, message: 'scratchTarget' },
     { hardening: { memoryBytes: 1.5 }, message: 'memoryBytes' },
     { hardening: { pidsLimit: 0 }, message: 'pidsLimit' },
     { hardening: { tmpfsSizeBytes: -1 }, message: 'tmpfsSizeBytes' },
@@ -262,7 +265,7 @@ describe('createDockerScannerBackend', () => {
       stderr: true,
     });
     expect(container.start).toHaveBeenCalledOnce();
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
     expect(result).toEqual({ exitCode: 0, stdout: '{"matches":[]}', stderr: 'scanner notice' });
   });
 
@@ -289,6 +292,36 @@ describe('createDockerScannerBackend', () => {
     await expect(backend.pullImage(PINNED_IMAGE, undefined, 10)).rejects.toThrow(
       'timed out after 10ms',
     );
+  });
+
+  test('adds a disk-backed anonymous scratch volume that is removed with the worker', async () => {
+    const { client, container } = createHarness();
+    const backend = createDockerScannerBackend({
+      client,
+      cacheDir: 'volume:drydock-scanner-cache-grype',
+      hardening: { scratchTarget: '/scratch' },
+    });
+
+    await backend.run({
+      image: PINNED_IMAGE,
+      args: ['version'],
+      timeoutMs: 1_000,
+      maxOutputBytes: 1_024,
+    });
+
+    expect(client.createContainer.mock.calls[0][0].HostConfig.Mounts).toEqual([
+      {
+        Type: 'volume',
+        Source: 'drydock-scanner-cache-grype',
+        Target: '/cache',
+        ReadOnly: false,
+      },
+      { Type: 'volume', Target: '/scratch', ReadOnly: false },
+    ]);
+    expect(client.createContainer.mock.calls[0][0].HostConfig.Mounts[1]).not.toHaveProperty(
+      'Source',
+    );
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('uses explicit bounded hardening and network overrides', async () => {
@@ -484,7 +517,7 @@ describe('createDockerScannerBackend', () => {
     ).rejects.toThrow('exceeded 10 bytes');
 
     expect(container.stop).toHaveBeenCalledWith({ t: 0 });
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('detects an output limit after an already-resolved wait and stream completion', async () => {
@@ -515,7 +548,7 @@ describe('createDockerScannerBackend', () => {
 
     expect(container.stop).toHaveBeenCalledWith({ t: 0 });
     expect(container.kill).not.toHaveBeenCalled();
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('stops and removes a worker when its scan is aborted', async () => {
@@ -536,7 +569,7 @@ describe('createDockerScannerBackend', () => {
 
     await expect(runPromise).rejects.toBe(abortError);
     expect(container.stop).toHaveBeenCalledWith({ t: 0 });
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
     expect(removeEventListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
   });
 
@@ -683,7 +716,7 @@ describe('createDockerScannerBackend', () => {
 
     resolveCreated(harness.container);
     await vi.waitFor(() => {
-      expect(harness.container.remove).toHaveBeenCalledWith({ force: true });
+      expect(harness.container.remove).toHaveBeenCalledWith({ force: true, v: true });
     });
   });
 
@@ -701,7 +734,7 @@ describe('createDockerScannerBackend', () => {
     ).rejects.toThrow('timed out after 10ms');
 
     expect(container.kill).toHaveBeenCalledOnce();
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('reports nonzero exits with bounded stderr and always removes the worker', async () => {
@@ -716,7 +749,7 @@ describe('createDockerScannerBackend', () => {
       }),
     ).rejects.toThrow('exited with status 7: database unavailable');
 
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('reports a nonzero exit without appending an empty stderr suffix', async () => {
@@ -745,7 +778,7 @@ describe('createDockerScannerBackend', () => {
       }),
     ).rejects.toThrow('start failed');
 
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test('does not leak an output-limit rejection when startup fails first', async () => {
@@ -820,7 +853,7 @@ describe('createDockerScannerBackend', () => {
       }),
     ).rejects.toThrow('timed out after 10ms');
     expect(container.stop).toHaveBeenCalledWith({ t: 0 });
-    expect(container.remove).toHaveBeenCalledWith({ force: true });
+    expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
   });
 
   test.each([new Error('stream failed'), 'stream failed'])(
@@ -841,7 +874,7 @@ describe('createDockerScannerBackend', () => {
           maxOutputBytes: 1_024,
         }),
       ).rejects.toThrow('stream failed');
-      expect(container.remove).toHaveBeenCalledWith({ force: true });
+      expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
     },
   );
 

@@ -31,6 +31,11 @@ test('auth prometheus metrics should be properly configured', () => {
 
   expect(ipLockedGauge?.name).toBe('drydock_auth_ip_locked_total');
   expect(ipLockedGauge?.labelNames).toEqual([]);
+
+  expect(auth.getAuthAccountLockoutCounter()?.name).toBe('drydock_auth_account_lockout_total');
+  expect(auth.getAuthAccountLockoutCounter()?.labelNames).toEqual(['provider']);
+  expect(auth.getAuthIpLockoutCounter()?.name).toBe('drydock_auth_ip_lockout_total');
+  expect(auth.getAuthIpLockoutCounter()?.labelNames).toEqual(['provider']);
 });
 
 test('helpers should no-op before metrics initialization', () => {
@@ -40,6 +45,27 @@ test('helpers should no-op before metrics initialization', () => {
   expect(() => auth.recordAuthApiKeyFailure()).not.toThrow();
   expect(() => auth.setAuthAccountLockedTotal(1)).not.toThrow();
   expect(() => auth.setAuthIpLockedTotal(2)).not.toThrow();
+  expect(() => auth.recordAuthAccountLockout('basic')).not.toThrow();
+  expect(() => auth.recordAuthIpLockout('basic')).not.toThrow();
+});
+
+test('lockout helpers should increment the labelled counters', () => {
+  auth.init();
+
+  const accountSpy = vi.spyOn(
+    auth.getAuthAccountLockoutCounter() as { inc: (labels: unknown) => void },
+    'inc',
+  );
+  const ipSpy = vi.spyOn(
+    auth.getAuthIpLockoutCounter() as { inc: (labels: unknown) => void },
+    'inc',
+  );
+
+  auth.recordAuthAccountLockout('basic');
+  auth.recordAuthIpLockout('basic');
+
+  expect(accountSpy).toHaveBeenCalledWith({ provider: 'basic' });
+  expect(ipSpy).toHaveBeenCalledWith({ provider: 'basic' });
 });
 
 test('helpers should record values after initialization', () => {
@@ -95,6 +121,8 @@ test('init should replace existing auth metrics when called twice', () => {
   const firstApiKeyFailureCounter = auth.getAuthApiKeyFailureCounter();
   const firstAccountLockedGauge = auth.getAuthAccountLockedGauge();
   const firstIpLockedGauge = auth.getAuthIpLockedGauge();
+  const firstAccountLockoutCounter = auth.getAuthAccountLockoutCounter();
+  const firstIpLockoutCounter = auth.getAuthIpLockoutCounter();
 
   auth.init();
 
@@ -105,4 +133,6 @@ test('init should replace existing auth metrics when called twice', () => {
   expect(auth.getAuthApiKeyFailureCounter()).not.toBe(firstApiKeyFailureCounter);
   expect(auth.getAuthAccountLockedGauge()).not.toBe(firstAccountLockedGauge);
   expect(auth.getAuthIpLockedGauge()).not.toBe(firstIpLockedGauge);
+  expect(auth.getAuthAccountLockoutCounter()).not.toBe(firstAccountLockoutCounter);
+  expect(auth.getAuthIpLockoutCounter()).not.toBe(firstIpLockoutCounter);
 });

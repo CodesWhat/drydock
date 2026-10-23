@@ -141,6 +141,7 @@
         "recently-applied": "Ignorée : la mise à jour vient d'être appliquée, en attente de confirmation du watcher.",
         "digest-buffered": "Retenue pour le prochain résumé."
       },
+      "notificationSkipAt": "Dernier saut {date}",
       "backupsRollback": "Backups et rollback",
       "rollingBack": "Rollback en cours...",
       "rollbackLatest": "Rollback du dernier",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "En file",
+      "updateFailed": "Échec de la mise à jour",
       "statusScanning": "Scan",
       "statusUpdating": "Mise à jour",
       "statusPulling": "Pull en cours…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "Candidat publié le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat publié le {date} — encore {count} jours avant le minimum de {minDays} jours",
       "maturityClockDetected": "Candidat détecté le {date} — encore {count} jour avant le minimum de {minDays} jours | Candidat détecté le {date} — encore {count} jours avant le minimum de {minDays} jours",
       "groupManualOnly": "La politique du groupe '{group}' n'autorise que les mises à jour manuelles. Drydock n'appliquera pas celle-ci automatiquement.",
+      "updateAvailableRuleDisabled": "La règle de notification Update Available est désactivée et elle contrôle aussi les mises à jour automatiques. Activez-la dans Settings > Notifications > Update Available pour que Drydock applique cette mise à jour automatiquement.",
       "updateButton": "Mettre à jour maintenant",
       "blockedButton": "Mise à jour bloquée",
       "notificationsOnlyButton": "Notifications uniquement",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "Aucun trigger de mise à jour configuré",
         "self-update-unavailable": "Mise à jour automatique de l'application indisponible",
         "maintenance-window-closed": "Fenêtre de maintenance fermée",
+        "update-available-rule-disabled": "La règle Update Available est désactivée",
         "group-notify-only": "Le groupe n'autorise que les notifications",
         "group-manual-only": "Le groupe exige des mises à jour manuelles",
         "dry-run-trigger": "Configuration du trigger en mode dry-run",
@@ -536,6 +540,7 @@
         "configureThreshold": "Configurer le seuil du trigger",
         "configureSelfUpdate": "Configurer la mise à jour automatique de l'application",
         "configureMaintenance": "Configurer la fenêtre de maintenance",
+        "configureNotificationRule": "Ouvrir les règles de notification",
         "editGroupPolicy": "Modifier la politique de groupe"
       },
       "releaseMaturityCount": "En attente de versions stables dans la famille {family} : {count} versions antérieures sur {required} sont disponibles.",
@@ -653,6 +658,7 @@
         "snoozed": "Mises à jour reportées",
         "maturityBlockedSingular": "La politique Mature-only bloque les mises à jour plus récentes que {days} jour",
         "maturityBlockedPlural": "La politique Mature-only bloque les mises à jour plus récentes que {days} jours",
+        "maturityCountdown": "{message}. Débloqué dans {countdown} ({date})",
         "maturityActiveSingular": "Politique Mature-only active ({days} jour d'âge minimal)",
         "maturityActivePlural": "Politique Mature-only active ({days} jours d'âge minimal)",
         "maturityAllowAll": "La politique de maturité autorise les mises à jour",

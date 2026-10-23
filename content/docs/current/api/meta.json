@@ -2,6 +2,7 @@
   "title": "API",
   "pages": [
     "index",
+    "action",
     "agent",
     "portwing",
     "app",
@@ -10,6 +11,7 @@
     "approvals",
     "container",
     "log",
+    "notification-trigger",
     "registry",
     "store",
     "trigger",

@@ -3,6 +3,7 @@ import { createMockRequest, createMockResponse } from '../../test/helpers.js';
 const {
   mockRouter,
   mockGetWebhookConfiguration,
+  mockGetRegistryWebhookAuthConfiguration,
   mockVerifyRegistryWebhookSignature,
   mockParseRegistryWebhookPayload,
   mockRunRegistryWebhookDispatch,
@@ -23,6 +24,7 @@ const {
       update: '',
     },
   })),
+  mockGetRegistryWebhookAuthConfiguration: vi.fn(() => ({}) as Record<string, unknown>),
   mockVerifyRegistryWebhookSignature: vi.fn(() => ({ valid: true })),
   mockParseRegistryWebhookPayload: vi.fn(() => ({
     provider: 'dockerhub',
@@ -66,6 +68,7 @@ vi.mock('nocache', () => ({
 
 vi.mock('../../configuration/index.js', () => ({
   getWebhookConfiguration: mockGetWebhookConfiguration,
+  getRegistryWebhookAuthConfiguration: mockGetRegistryWebhookAuthConfiguration,
 }));
 
 vi.mock('./signature.js', () => ({
@@ -140,6 +143,8 @@ describe('api/webhooks/registry', () => {
     expect(mockRouter.use).toHaveBeenCalledWith('rate-limit-middleware');
     expect(mockRouter.use).toHaveBeenCalledWith('nocache-middleware');
     expect(mockRouter.post).toHaveBeenCalledWith('/', expect.any(Function));
+    expect(mockRouter.post).toHaveBeenCalledWith('/:provider', expect.any(Function));
+    expect(mockRouter.post).toHaveBeenCalledWith('/:provider/:secret', expect.any(Function));
   });
 
   test('returns 403 when registry webhooks are disabled', async () => {
@@ -312,5 +317,163 @@ describe('api/webhooks/registry', () => {
       }),
     );
     expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  describe('provider-scoped static secret endpoint', () => {
+    const STATIC_SECRET = 'static-secret-0123456789';
+
+    function getProviderHandler(route = '/:provider/:secret') {
+      registryWebhookRouter.init();
+      return mockRouter.post.mock.calls.find((call) => call[0] === route)?.[1];
+    }
+
+    beforeEach(() => {
+      mockGetRegistryWebhookAuthConfiguration.mockReturnValue({
+        dockerhub: { modes: ['path', 'query'], staticSecret: STATIC_SECRET },
+        harbor: { modes: ['bearer'], staticSecret: STATIC_SECRET },
+        quay: { modes: ['hmac'], staticSecret: '' },
+      });
+    });
+
+    test('returns 403 when registry webhooks are disabled', async () => {
+      mockGetWebhookConfiguration.mockReturnValue({ enabled: false } as any);
+      const res = createMockResponse();
+      await getProviderHandler()(
+        createMockRequest({ params: { provider: 'dockerhub', secret: STATIC_SECRET } }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test('returns 404 for an unknown provider, including inherited property names', async () => {
+      const handler = getProviderHandler();
+      for (const provider of ['nope', 'constructor']) {
+        const res = createMockResponse();
+        await handler(
+          createMockRequest({ params: { provider, secret: STATIC_SECRET } }) as any,
+          res as any,
+        );
+        expect(res.status).toHaveBeenCalledWith(404);
+      }
+    });
+
+    test('accepts the path secret, dispatches and returns 202', async () => {
+      const res = createMockResponse();
+      await getProviderHandler()(
+        createMockRequest({
+          params: { provider: 'DockerHub', secret: STATIC_SECRET },
+          body: { push_data: {} },
+          headers: {},
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(mockRunRegistryWebhookDispatch).toHaveBeenCalledTimes(1);
+    });
+
+    test('accepts the query secret on the provider-only route', async () => {
+      const res = createMockResponse();
+      await getProviderHandler('/:provider')(
+        createMockRequest({
+          params: { provider: 'dockerhub' },
+          query: { secret: STATIC_SECRET },
+          body: {},
+          headers: {},
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    test('accepts a Bearer secret for a bearer provider', async () => {
+      mockParseRegistryWebhookPayload.mockReturnValue({
+        provider: 'harbor',
+        references: [{ image: 'library/nginx', tag: 'latest' }],
+      } as any);
+      const res = createMockResponse();
+      await getProviderHandler('/:provider')(
+        createMockRequest({
+          params: { provider: 'harbor' },
+          body: {},
+          headers: { authorization: `Bearer ${STATIC_SECRET}` },
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    test('returns 401 invalid for a wrong secret and never logs or echoes it', async () => {
+      const res = createMockResponse();
+      await getProviderHandler()(
+        createMockRequest({
+          params: { provider: 'dockerhub', secret: 'wrong-secret-value-123' },
+          originalUrl: '/api/v1/webhooks/registry/dockerhub/wrong-secret-value-123',
+          body: {},
+          headers: {},
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid registry webhook credentials' });
+      expect(JSON.stringify(res.json.mock.calls)).not.toContain('wrong-secret-value-123');
+    });
+
+    test('returns 401 missing when the provider is HMAC-only and no signature is sent', async () => {
+      mockParseRegistryWebhookPayload.mockClear();
+      mockVerifyRegistryWebhookSignature.mockReturnValue({
+        valid: false,
+        reason: 'missing-signature',
+      });
+      const res = createMockResponse();
+      await getProviderHandler('/:provider')(
+        createMockRequest({ params: { provider: 'quay' }, body: {}, headers: {} }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Missing registry webhook credentials' });
+      expect(mockParseRegistryWebhookPayload).not.toHaveBeenCalled();
+    });
+
+    test('falls back to an empty HMAC secret and handles a missing request url', async () => {
+      mockGetWebhookConfiguration.mockReturnValue({ enabled: true } as any);
+      mockVerifyRegistryWebhookSignature.mockReturnValue({
+        valid: false,
+        reason: 'invalid-signature',
+      });
+      const res = createMockResponse();
+      await getProviderHandler('/:provider')(
+        createMockRequest({
+          params: { provider: 'quay' },
+          body: {},
+          headers: { 'x-quay-signature': 'sha256=abcd' },
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(401);
+    });
+
+    test('returns 400 when the payload parses as a different provider than the URL', async () => {
+      mockParseRegistryWebhookPayload.mockReturnValue({
+        provider: 'quay',
+        references: [{ image: 'x/y', tag: 'z' }],
+      } as any);
+      const res = createMockResponse();
+      await getProviderHandler()(
+        createMockRequest({
+          params: { provider: 'dockerhub', secret: STATIC_SECRET },
+          body: {},
+          headers: {},
+        }) as any,
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(mockRunRegistryWebhookDispatch).not.toHaveBeenCalled();
+    });
+
+    test('treats a missing provider param as unknown', async () => {
+      const res = createMockResponse();
+      await getProviderHandler()(createMockRequest({ params: {} }) as any, res as any);
+      expect(res.status).toHaveBeenCalledWith(404);
+    });
   });
 });

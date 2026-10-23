@@ -55,6 +55,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/:id/rollback` | `POST` | `X-DD-Confirm-Action: container-rollback` |
 | `/api/v1/containers/:id` | `DELETE` | `X-DD-Confirm-Action: container-delete` |
 | `/api/v1/dependency-groups/:rootId/update` | `POST` | `X-DD-Confirm-Action: dependency-group-update` |
+| `/api/v1/approvals/bulk` (action `approve` only) | `POST` | `X-DD-Confirm-Action: approvals-bulk-approve` |
 | `/api/v1/api-keys/:keyId` | `DELETE` | `X-DD-Confirm-Action: api-key-revoke` |
 | `/api/v1/images/prune` | `POST` | `X-DD-Confirm-Action: image-prune` |
 
@@ -63,16 +64,18 @@ If the header is missing or does not match the expected token, the API responds 
 | Category | Endpoints | Description |
 | --- | --- | --- |
 | [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
-| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.8.0-rc.5 file configuration and source-aware editors; reads require a session, writes require admin |
+| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.8.0-rc.6 file configuration and source-aware editors; reads require a session, writes require admin |
 | [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
 | [Agents](/docs/api/agent) | `GET /api/v1/agents`, `GET /api/v1/agents/roster` | Remote agent status, roster and logs |
 | [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
 | [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
 | [API Keys](/docs/api/api-keys) | `GET /api/v1/api-keys`, `POST`, `DELETE /:keyId` | Scoped API key management (`api-keys:manage`) |
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
-| [Approvals](/docs/api/approvals) | `GET /api/v1/approvals`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer` | Pending-approval queue: list, count, detail, and decide |
+| [Approvals](/docs/api/approvals) | `GET /api/v1/approvals`, `GET /summary`, `GET /:id`, `POST /:id/approve`, `POST /:id/reject`, `POST /:id/defer`, `POST /bulk` | Pending-approval queue: list, count, detail, and decide one or many |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
-| [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
+| [Actions](/docs/api/action) | `GET /api/v1/actions` | Action trigger configurations (`docker`, `dockercompose`, `portainer`, `command`) |
+| [Notification triggers](/docs/api/notification-trigger) | `GET /api/v1/notification-triggers` | Notification trigger configurations |
+| [Triggers](/docs/api/trigger) (deprecated) | `GET /api/v1/triggers` | Both categories; use the two routes above |
 | [Watchers](/docs/api/watcher) | `GET /api/v1/watchers` | Watcher configurations |
 | Images | `GET /api/v1/images`, `GET /api/v1/images/prune-preview`, `POST /api/v1/images/prune` | Image inventory across hosts, prune preview, and prune (admin; requires `X-DD-Confirm-Action: image-prune`) |
 

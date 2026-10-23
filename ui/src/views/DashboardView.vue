@@ -33,6 +33,7 @@ import { errorMessage } from '../utils/error';
 import { getPrimaryHardBlocker, getSoftBlockers } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
+import DashboardRecentActivityWidget from './dashboard/components/DashboardRecentActivityWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
 import DashboardSecurityOverviewWidget from './dashboard/components/DashboardSecurityOverviewWidget.vue';
@@ -53,6 +54,7 @@ import {
 } from './dashboard/dashboardWidgetLayout';
 import { useDashboardComputed } from './dashboard/useDashboardComputed';
 import { useDashboardData } from './dashboard/useDashboardData';
+import { useDashboardRecentActivity } from './dashboard/useDashboardRecentActivity';
 import { useDashboardWidgetOrder } from './dashboard/useDashboardWidgetOrder';
 
 const { t } = useI18n();
@@ -195,9 +197,16 @@ const {
   recentStatusByIdentity,
   registries,
   serverInfo,
+  triggers,
   watchers,
   approvalPendingCount,
 } = useDashboardData();
+
+const {
+  entries: recentActivityEntries,
+  error: recentActivityError,
+  loading: recentActivityLoading,
+} = useDashboardRecentActivity({ enabled: computed(() => isWidgetVisible('recent-activity')) });
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -230,6 +239,7 @@ const {
   recentStatusByIdentity,
   registries,
   serverInfo,
+  triggers,
   watchers,
   // Project held containers through the snapshot so the Updates Available
   // widget's detectedAt-based sort sees the pre-update timestamp even while
@@ -249,8 +259,8 @@ const pendingUpdates = computed(() =>
 );
 
 // recentUpdates is projected through projectContainerDisplayState in
-// useDashboardComputed so held containers retain their in-progress
-// updateOperation + sortSnapshot across the full hold window, including the
+// useDashboardComputed so held containers retain their
+// in-progress operation + sortSnapshot across the full hold window, including the
 // 1.5s settle window after a terminal SSE arrives. The dashboardPendingUpdateRows
 // ghost merge below is the rc.9-era fallback for when the container drops out
 // of containers.value entirely mid-recreate; the hold-based projection
@@ -504,7 +514,7 @@ function applyDashboardParsedOperationSse(parsed: ParsedUpdateOperationSse) {
   return applyUpdateOperationSseToHold({
     parsed,
     resolveContainer: findDashboardContainerForOperationTarget,
-    // A list-seeded row.updateOperation goes stale once its operation ends, so
+    // A list-seeded row operation goes stale once its operation ends, so
     // the hold takes its prior operation from the operations store instead.
     resolvePreviousOperation: (container) => operationStore.getOperationForContainer(container),
     // DashboardView doesn't mutate container rows — the widget projects held
@@ -931,6 +941,16 @@ function confirmDashboardUpdateAll() {
               :servers="servers"
               :edit-mode="editMode"
               @view-all="navigateTo(ROUTES.SERVERS)" />
+
+            <DashboardRecentActivityWidget
+              v-else-if="item.i === 'recent-activity'"
+              class="h-full"
+              :entries="recentActivityEntries"
+              :error="recentActivityError"
+              :loading="recentActivityLoading"
+              :edit-mode="editMode"
+              @open-entry="navigateTo({ path: ROUTES.AUDIT, query: { container: $event.containerName } })"
+              @view-all="navigateTo(ROUTES.AUDIT)" />
 
             <DashboardUpdateBreakdownWidget
               v-else-if="item.i === 'update-breakdown'"

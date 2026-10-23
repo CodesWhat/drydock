@@ -141,6 +141,7 @@
         "recently-applied": "Saltata: l'aggiornamento è stato appena applicato, in attesa della conferma del watcher.",
         "digest-buffered": "Trattenuta per il prossimo riepilogo."
       },
+      "notificationSkipAt": "Ultimo salto {date}",
       "backupsRollback": "Backup e rollback",
       "rollingBack": "Rollback in corso...",
       "rollbackLatest": "Rollback ultimo",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "In coda",
+      "updateFailed": "Aggiornamento non riuscito",
       "statusScanning": "Scansione",
       "statusUpdating": "Aggiornamento",
       "statusPulling": "Pull in corso…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "Candidato pubblicato il {date} — manca {count} giorno al minimo di {minDays} giorni | Candidato pubblicato il {date} — mancano {count} giorni al minimo di {minDays} giorni",
       "maturityClockDetected": "Candidato rilevato il {date} — manca {count} giorno al minimo di {minDays} giorni | Candidato rilevato il {date} — mancano {count} giorni al minimo di {minDays} giorni",
       "groupManualOnly": "Il criterio del gruppo '{group}' consente solo aggiornamenti manuali. Drydock non applicherà questo automaticamente.",
+      "updateAvailableRuleDisabled": "La regola di notifica Update Available è disattivata e controlla anche gli aggiornamenti automatici. Attivala in Settings > Notifications > Update Available per far applicare a Drydock questo aggiornamento in autonomia.",
       "updateButton": "Aggiorna ora",
       "blockedButton": "Aggiornamento bloccato",
       "notificationsOnlyButton": "Solo notifiche",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "Nessun trigger di aggiornamento configurato",
         "self-update-unavailable": "Autoaggiornamento non disponibile",
         "maintenance-window-closed": "Finestra di manutenzione chiusa",
+        "update-available-rule-disabled": "La regola Update Available è disattivata",
         "group-notify-only": "Il gruppo consente solo notifiche",
         "group-manual-only": "Il gruppo richiede aggiornamenti manuali",
         "dry-run-trigger": "Configurazione del trigger in modalità dry-run",
@@ -536,6 +540,7 @@
         "configureThreshold": "Configura soglia del trigger",
         "configureSelfUpdate": "Configura autoaggiornamento",
         "configureMaintenance": "Configura finestra di manutenzione",
+        "configureNotificationRule": "Apri le regole di notifica",
         "editGroupPolicy": "Modifica criterio di gruppo"
       },
       "releaseMaturityCount": "In attesa di versioni stabili nella famiglia {family}: disponibili {count} versioni precedenti su {required}.",
@@ -653,6 +658,7 @@
         "snoozed": "Aggiornamenti posticipati",
         "maturityBlockedSingular": "La policy solo maturi blocca gli aggiornamenti più recenti di {days} giorno",
         "maturityBlockedPlural": "La policy solo maturi blocca gli aggiornamenti più recenti di {days} giorni",
+        "maturityCountdown": "{message}. Si sblocca tra {countdown} ({date})",
         "maturityActiveSingular": "Policy solo maturi attiva (età minima {days} giorno)",
         "maturityActivePlural": "Policy solo maturi attiva (età minima {days} giorni)",
         "maturityAllowAll": "La policy di maturità consente tutti gli aggiornamenti",

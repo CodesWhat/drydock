@@ -22,7 +22,6 @@ import type {
   ContainerReleaseNotes,
   ContainerSecurityDelta,
   ContainerSecuritySummary,
-  ContainerUpdateOperation,
   LabelOwnedField,
   LabelOwnedSource,
   UpdateBlocker,
@@ -31,11 +30,6 @@ import type {
   UpdateEligibilityUpdateMode,
 } from '../types/container';
 import type { TranslateFn } from '../types/i18n';
-import {
-  isActiveContainerUpdateOperationPhaseForStatus,
-  isActiveContainerUpdateOperationStatus,
-  isContainerUpdateOperationKind,
-} from '../types/update-operation';
 import { normalizeSeverityCount } from '../views/security/securityViewUtils';
 import { buildContainerIdentityKey } from './container-action-key';
 import {
@@ -211,23 +205,11 @@ function asNonEmptyString(value: unknown): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function asPositiveInteger(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return Number.isSafeInteger(value) && value > 0 ? value : undefined;
-  }
-  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
-    return undefined;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
 function asOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-/** Like asPositiveInteger, but accepts 0 — dependency/dependent counts are legitimately zero. */
+/** Accepts 0 — dependency/dependent counts are legitimately zero. */
 function asNonNegativeInteger(value: unknown): number | undefined {
   if (typeof value === 'number') {
     return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
@@ -846,6 +828,7 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'agent-mismatch',
   'no-update-trigger-configured',
   'maintenance-window-closed',
+  'update-available-rule-disabled',
   'group-notify-only',
 ]);
 
@@ -926,53 +909,6 @@ function deriveUpdateEligibility(apiContainer: ApiContainerInput): UpdateEligibi
   };
 }
 
-function deriveUpdateOperation(
-  apiContainer: ApiContainerInput,
-): ContainerUpdateOperation | undefined {
-  const operation = apiContainer.updateOperation;
-  if (!operation || typeof operation !== 'object') {
-    return undefined;
-  }
-
-  const id = asNonEmptyString(operation.id);
-  const kind = isContainerUpdateOperationKind(operation.kind) ? operation.kind : undefined;
-  const status = isActiveContainerUpdateOperationStatus(operation.status)
-    ? operation.status
-    : undefined;
-  const phase =
-    status && isActiveContainerUpdateOperationPhaseForStatus(status, operation.phase)
-      ? operation.phase
-      : undefined;
-  const updatedAt = asNonEmptyString(operation.updatedAt);
-  const batchId = asNonEmptyString(operation.batchId);
-  const queuePosition = asPositiveInteger(operation.queuePosition);
-  const queueTotal = asPositiveInteger(operation.queueTotal);
-
-  if (!id || !status || !phase || !updatedAt) {
-    return undefined;
-  }
-
-  return {
-    id,
-    ...(kind ? { kind } : {}),
-    status,
-    phase,
-    updatedAt,
-    ...(asNonEmptyString(operation.fromVersion)
-      ? { fromVersion: asNonEmptyString(operation.fromVersion) }
-      : {}),
-    ...(asNonEmptyString(operation.toVersion)
-      ? { toVersion: asNonEmptyString(operation.toVersion) }
-      : {}),
-    ...(asNonEmptyString(operation.targetImage)
-      ? { targetImage: asNonEmptyString(operation.targetImage) }
-      : {}),
-    ...(batchId && queuePosition && queueTotal && queuePosition <= queueTotal
-      ? { batchId, queuePosition, queueTotal }
-      : {}),
-  };
-}
-
 /** Map a single API container to the UI Container type. */
 export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
@@ -1011,7 +947,6 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     currentReleaseNotes: deriveCurrentReleaseNotes(apiContainer),
     releaseLink: deriveReleaseLink(apiContainer),
     updateDetectedAt: detectedAt,
-    updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturityTooltip: formatUpdateAge(updateAgeMs, !!apiContainer.updateAvailable, t),
     updateEligibility: deriveUpdateEligibility(apiContainer),
     labelOwnedSources: deriveLabelOwnedSources(apiContainer.labelOwnedSources),

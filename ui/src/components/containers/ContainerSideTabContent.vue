@@ -1016,6 +1016,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="font-semibold dd-text truncate">{{ skip.trigger }}</div>
                   <div class="text-2xs dd-text-muted" data-test="notification-skip-reason">{{ t(`containerComponents.fullPageActions.notificationSkipReason.${skip.reason}`) }}</div>
+                  <div class="text-2xs dd-text-muted" data-test="notification-skip-at">{{ t('containerComponents.fullPageActions.notificationSkipAt', { date: new Date(skip.at).toLocaleString() }) }}</div>
                 </div>
               </div>
             </div>

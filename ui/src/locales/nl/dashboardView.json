@@ -43,6 +43,7 @@
       "updateAll": "Alles bijwerken",
       "noUpdates": "Geen updates beschikbaar",
       "securityBlocked": "Beveiliging geblokkeerd",
+      "maturityCountdown": "Ontgrendelt over {countdown} ({date})",
       "updateContainer": "Container bijwerken",
       "compactSingle": "{count}-update beschikbaar",
       "compactPlural": "{count}-updates beschikbaar",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} nieuw · {mature} volwassen",
       "securityIssues": "Beveiligingsproblemen",
       "registries": "Registers",
-      "approvals": "Goedkeuringen"
+      "approvals": "Goedkeuringen",
+      "images": "Images",
+      "imageDetail": "{count} met updates",
+      "triggers": "Triggers",
+      "triggerDetail": "{actions} acties · {notifications} meldingen",
+      "watchers": "Watchers",
+      "watcherDetailHealthy": "Allemaal verbonden",
+      "watcherDetailDisconnected": "{healthy} verbonden · {disconnected} verbroken"
     },
     "updateKind": {
       "major": "Major",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Recente activiteit",
+      "viewAudit": "Auditlog bekijken →",
+      "loading": "Activiteit laden...",
+      "loadFailed": "Recente activiteit kon niet worden geladen",
+      "empty": "Geen recente activiteit",
+      "system": "Systeem"
     }
   }
 }

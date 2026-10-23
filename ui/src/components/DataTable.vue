@@ -243,7 +243,7 @@ const actionsColumn = computed<ResolvedDataTableColumn>(() => {
     key: ACTIONS_COLUMN_KEY,
     label: t('sharedComponents.dataTable.actions'),
     sortable: false,
-    align: 'text-right',
+    align: 'text-end',
     size,
     minSize: sizing.minSize,
     maxSize: sizing.maxSize,
@@ -1210,7 +1210,7 @@ function handleCardSortChange(event: Event): void {
                 :data-col-key="col.key"
                 scope="col"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : [col.align ?? 'text-center', col.px ?? 'px-5'],
+                  col.icon ? 'text-center ps-5 pe-0 overflow-hidden' : [col.align ?? 'text-center', col.px ?? 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
@@ -1225,7 +1225,7 @@ function handleCardSortChange(event: Event): void {
               <slot :name="'header-' + col.key" :column="col">
                 <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
               </slot>
-              <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
+              <span v-if="sortKey === col.key" class="inline-block ms-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon && !isMobile"
                    role="separator"
@@ -1235,7 +1235,7 @@ function handleCardSortChange(event: Event): void {
                    :aria-valuemax="resizeHandleAriaValue(col.key, 'max')"
                    :aria-valuenow="resizeHandleAriaValue(col.key, 'now')"
                    tabindex="0"
-                   class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
+                   class="absolute top-0 end-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
                    @pointerdown="onResizeStart(col.key, $event)"
                    @keydown="handleResizeKeydown(col.key, $event)"
                    @dblclick.stop.prevent="autosizeColumn(col.key)"
@@ -1248,7 +1248,7 @@ function handleCardSortChange(event: Event): void {
                 :data-col-key="ACTIONS_COLUMN_KEY"
                 scope="col"
                 :class="[
-                  'text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative',
+                  'text-end px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative',
                   hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-20'],
                 ]"
                 :style="{ backgroundColor: tableHeaderBg }">
@@ -1292,7 +1292,7 @@ function handleCardSortChange(event: Event): void {
                   :class="[
                     density === 'compact' ? 'py-1.5 h-[44px]' : 'py-3',
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
-                    col.icon ? 'relative text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                    col.icon ? 'relative text-center ps-5 pe-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
                     pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-10'] : '',
                     col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
                   ]"
@@ -1311,7 +1311,7 @@ function handleCardSortChange(event: Event): void {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="dd-data-table-cell dd-data-table-actions-cell px-3 text-right whitespace-nowrap relative"
+                class="dd-data-table-cell dd-data-table-actions-cell px-3 text-end whitespace-nowrap relative"
                 :class="[density === 'compact' ? 'py-1.5 h-[44px]' : 'py-3', hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']]"
               >
                 <slot name="actions" :row="row" :card-mode="false" />

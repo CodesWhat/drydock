@@ -1,8 +1,4 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
-# Trivy publishes a multi-arch image and installs its binary at this path.
-# Pin the image index so every target architecture resolves reproducibly.
-FROM aquasec/trivy@sha256:7cced7cae583819fc7806d4cbc0dbbc7cad18b99f7d3e235192e6da8c091045c AS trivy-bin
-
 # Common Stage
 # Pin the image index digest, never a per-platform manifest digest: buildx
 # resolves a digest the same for every --platform, so arm64 built amd64 (#1021).
@@ -21,8 +17,8 @@ ENV DD_LOG_FORMAT=text
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
-# Install system packages and cosign. Alpine may publish different cosign
-# package revisions per architecture; keep both revisions pinned.
+# Install system packages. Scanner and signature tooling (Trivy, Grype, Syft, cosign) is not
+# baked into the image; Drydock runs them from pinned worker images (app/configuration/index.ts).
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
     git=2.54.0-r0 \
@@ -33,10 +29,6 @@ RUN apk add --no-cache \
     tini=0.19.0-r3 \
     tzdata=2026e-r0 \
     zlib=1.3.2-r1 \
-    && case "$(apk --print-arch)" in \
-        aarch64) apk add --no-cache cosign=3.0.6-r3 ;; \
-        *) apk add --no-cache cosign=3.0.6-r3 ;; \
-    esac \
     && apk upgrade --no-cache libcrypto3 libssl3 \
     && mkdir -m 0700 /store && chown node:node /store
 
@@ -104,9 +96,6 @@ RUN rm -f /usr/bin/wget /usr/bin/nc \
 
 # Copy healthcheck binary (65KB static, default HEALTHCHECK probe)
 COPY --from=healthcheck-build /bin/healthcheck /bin/healthcheck
-
-# Copy the release-pinned Trivy binary without depending on Alpine edge/testing.
-COPY --from=trivy-bin /usr/local/bin/trivy /usr/local/bin/trivy
 
 # Default entrypoint
 COPY --chmod=755 Docker.entrypoint.sh /usr/bin/entrypoint.sh

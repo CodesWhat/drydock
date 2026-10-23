@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
 import {
   getSecurityConfiguration,
   SECURITY_SBOM_FORMAT_VALUES as SECURITY_SBOM_FORMATS,
@@ -11,6 +12,13 @@ import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { getAbortReason } from './abort.js';
+import {
+  buildTrivyWorkerDeniedError,
+  isBundledTrivyMigration,
+  isDockerAccessDenied,
+  noteBundledTrivyRemoval,
+  resolveProviderExecution,
+} from './backend-resolution.js';
 import { buildGrypeInvocation, parseGrypeOutput } from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
@@ -400,7 +408,14 @@ function isTransientCommandError(error: unknown): boolean {
 const logTrivyWarmup = log.child({ component: 'security.trivy-warmup' });
 
 export const warmTrivyDatabase = createTrivyDatabaseWarmup({
-  getConfiguration: () => getSecurityConfiguration(),
+  // The local database warm-up only applies when Trivy runs as a local command; the worker
+  // path warms its own cache volume through the scanner asset manager.
+  getConfiguration: () => {
+    const configuration = getSecurityConfiguration();
+    return usesLocalCommand('trivy', configuration)
+      ? configuration
+      : { ...configuration, enabled: false };
+  },
   timeoutMs: TRIVY_DB_WARMUP_TIMEOUT_MS,
   failureCooldownMs: 15 * 60 * 1000,
   execute: (operation) => enqueueTrivy(operation),
@@ -502,16 +517,40 @@ function buildTrivyArgs(
   return args;
 }
 
+type SecurityConfiguration = ReturnType<typeof getSecurityConfiguration>;
+
+function usesLocalCommand(
+  provider: 'trivy' | 'grype' | 'syft' | 'cosign',
+  configuration: SecurityConfiguration,
+): boolean {
+  return resolveProviderExecution(provider, configuration) === 'command';
+}
+
+/**
+ * Trivy is no longer bundled in the image. When it runs in the worker only because no binary
+ * resolves, warn once and turn a Docker create/attach denial into an actionable error.
+ */
+function wrapTrivyWorkerFailure(error: unknown, configuration: SecurityConfiguration): unknown {
+  if (isBundledTrivyMigration(configuration) && isDockerAccessDenied(error)) {
+    return buildTrivyWorkerDeniedError(error);
+  }
+  return error;
+}
+
 async function runTrivyWorker(
   invocation: Omit<Parameters<ReturnType<typeof getDefaultScannerRuntime>['run']>[0], 'provider'>,
+  configuration: SecurityConfiguration,
 ): Promise<string> {
+  if (isBundledTrivyMigration(configuration)) {
+    noteBundledTrivyRemoval();
+  }
   try {
     return await getDefaultScannerRuntime().run({ provider: 'trivy', ...invocation });
   } catch (error: unknown) {
     if (DOCKER_WORKER_OUTPUT_LIMIT_PATTERN.test(getScanErrorMessage(error, ''))) {
       throw new Error(buildTrivyOutputLimitMessage(invocation.maxOutputBytes));
     }
-    throw error;
+    throw wrapTrivyWorkerFailure(error, configuration);
   }
 }
 
@@ -538,16 +577,19 @@ function runTrivyVulnerabilityCommand(
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
     };
-    if (configuration.backend === 'command') {
+    if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
     }
-    return runTrivyWorker({
-      args,
-      env: invocation.env,
-      timeoutMs: invocation.timeout,
-      maxOutputBytes: invocation.maxBuffer,
-      signal: options.signal,
-    });
+    return runTrivyWorker(
+      {
+        args,
+        env: invocation.env,
+        timeoutMs: invocation.timeout,
+        maxOutputBytes: invocation.maxBuffer,
+        signal: options.signal,
+      },
+      configuration,
+    );
   }, options.signal);
 }
 
@@ -575,16 +617,19 @@ function runTrivySbomCommand(
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
     };
-    if (configuration.backend === 'command') {
+    if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
     }
-    return runTrivyWorker({
-      args,
-      env: invocation.env,
-      timeoutMs: invocation.timeout,
-      maxOutputBytes: invocation.maxBuffer,
-      signal: options.signal,
-    });
+    return runTrivyWorker(
+      {
+        args,
+        env: invocation.env,
+        timeoutMs: invocation.timeout,
+        maxOutputBytes: invocation.maxBuffer,
+        signal: options.signal,
+      },
+      configuration,
+    );
   }, options.signal);
 }
 
@@ -607,7 +652,7 @@ function runGrypeVulnerabilityCommand(
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
   const invocation = buildGrypeInvocation(options, configuration.grype);
-  if (configuration.backend === 'command') {
+  if (usesLocalCommand('grype', configuration)) {
     return runCommand({ ...invocation, signal: options.signal });
   }
   return getDefaultScannerRuntime().run({
@@ -672,7 +717,7 @@ function runSyftSbomCommand(
     ]),
   ];
   const env = buildSyftEnvironment(options);
-  if (configuration.backend === 'command') {
+  if (usesLocalCommand('syft', configuration)) {
     return runCommand({
       command,
       args,
@@ -693,6 +738,19 @@ function runSyftSbomCommand(
   });
 }
 
+// A worker only gets the target image's own credentials. Copying process.env would hand
+// ambient registry credentials for an unrelated registry to a worker verifying a public image.
+function buildCosignWorkerEnvironment(options: ScanImageOptions): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (options.auth?.username) {
+    env.COSIGN_REGISTRY_USERNAME = options.auth.username;
+  }
+  if (options.auth?.password) {
+    env.COSIGN_REGISTRY_PASSWORD = options.auth.password;
+  }
+  return env;
+}
+
 function buildCosignEnvironment(options: ScanImageOptions) {
   const env = { ...process.env };
   if (options.auth?.username) {
@@ -704,19 +762,42 @@ function buildCosignEnvironment(options: ScanImageOptions) {
   return env;
 }
 
-function runCosignVerifyCommand(
+const MAX_COSIGN_WORKER_KEY_BYTES = 64 * 1024;
+
+// The worker has no host filesystem access, so a key file is handed over by value through an
+// env reference (cosign resolves `env://NAME` key refs) instead of by path.
+function readCosignKeyForWorker(keyPath: string): string {
+  const key = fs.readFileSync(keyPath, 'utf8');
+  if (key.trim() === '' || Buffer.byteLength(key, 'utf8') > MAX_COSIGN_WORKER_KEY_BYTES) {
+    throw new Error(
+      `DD_SECURITY_COSIGN_KEY must be a non-empty key file of at most ${MAX_COSIGN_WORKER_KEY_BYTES} bytes to run Cosign in a worker`,
+    );
+  }
+  return key;
+}
+
+async function runCosignVerifyCommand(
   options: ScanImageOptions,
   configuration: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<string> {
+  const runInWorker = !usesLocalCommand('cosign', configuration);
   const cosignCommand = `${configuration.signature.cosign.command || 'cosign'}`.trim() || 'cosign';
-  if (!hasValidCommandPath(cosignCommand)) {
+  if (!runInWorker && !hasValidCommandPath(cosignCommand)) {
     throw new Error(
       `Cosign command "${sanitizeLogParam(cosignCommand)}" is invalid; use a command name or absolute path`,
     );
   }
+  const env: NodeJS.ProcessEnv = runInWorker
+    ? buildCosignWorkerEnvironment(options)
+    : buildCosignEnvironment(options);
   const args = ['verify', '--output', 'json'];
   if (configuration.signature.cosign.key) {
-    args.push('--key', configuration.signature.cosign.key);
+    if (runInWorker) {
+      env.COSIGN_PUBLIC_KEY = readCosignKeyForWorker(configuration.signature.cosign.key);
+      args.push('--key', 'env://COSIGN_PUBLIC_KEY');
+    } else {
+      args.push('--key', configuration.signature.cosign.key);
+    }
   }
   if (configuration.signature.cosign.identity) {
     args.push('--certificate-identity', configuration.signature.cosign.identity);
@@ -726,12 +807,27 @@ function runCosignVerifyCommand(
   }
   args.push(options.image);
 
+  if (runInWorker) {
+    const runtime = getDefaultScannerRuntime();
+    if (runtime.assets.get('cosign').state !== 'ready') {
+      await runtime.assets.warm('cosign');
+    }
+    return runtime.run({
+      provider: 'cosign',
+      args,
+      env,
+      timeoutMs: configuration.signature.cosign.timeout,
+      maxOutputBytes: MAX_COSIGN_OUTPUT_BYTES,
+      signal: options.signal,
+    });
+  }
+
   return runCommand({
     command: cosignCommand,
     args,
     timeout: configuration.signature.cosign.timeout,
     maxBuffer: MAX_COSIGN_OUTPUT_BYTES,
-    env: buildCosignEnvironment(options),
+    env,
     commandName: 'Cosign',
     signal: options.signal,
   });
@@ -771,6 +867,20 @@ type ProviderScanResult = {
   error?: string;
 };
 
+async function warmTrivyWorker(configuration: SecurityConfiguration): Promise<void> {
+  if (isBundledTrivyMigration(configuration)) {
+    noteBundledTrivyRemoval();
+  }
+  try {
+    const runtime = getDefaultScannerRuntime();
+    if (runtime.assets.get('trivy').state !== 'ready') {
+      await runtime.assets.warm('trivy');
+    }
+  } catch (error: unknown) {
+    throw wrapTrivyWorkerFailure(error, configuration);
+  }
+}
+
 async function scanWithProvider(
   provider: 'trivy' | 'grype',
   options: ScanImageOptions,
@@ -779,13 +889,10 @@ async function scanWithProvider(
   try {
     throwIfAborted(options.signal);
     if (provider === 'trivy') {
-      if (configuration.backend === 'command') {
+      if (usesLocalCommand('trivy', configuration)) {
         await warmTrivyDatabase();
       } else {
-        const runtime = getDefaultScannerRuntime();
-        if (runtime.assets.get('trivy').state !== 'ready') {
-          await runtime.assets.warm('trivy');
-        }
+        await warmTrivyWorker(configuration);
       }
       throwIfAborted(options.signal);
       const output = await runTrivyVulnerabilityCommandWithRetry(options, configuration);
@@ -794,7 +901,7 @@ async function scanWithProvider(
         vulnerabilities: parseTrivyOutput(output, configuration.trivy.maxOutputBytes),
       };
     }
-    if (configuration.backend !== 'command') {
+    if (!usesLocalCommand('grype', configuration)) {
       const runtime = getDefaultScannerRuntime();
       if (runtime.assets.get('grype').state !== 'ready') {
         await runtime.assets.warm('grype');

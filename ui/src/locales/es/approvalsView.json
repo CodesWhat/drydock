@@ -5,7 +5,8 @@
       "detailLoadFailed": "No se pudo cargar la aprobación",
       "approveFailed": "No se pudo aprobar la actualización",
       "rejectFailed": "No se pudo rechazar la actualización",
-      "deferFailed": "No se pudo posponer la actualización"
+      "deferFailed": "No se pudo posponer la actualización",
+      "bulkFailed": "No se pudieron resolver las actualizaciones seleccionadas"
     },
     "ofCount": "{count} mostrada | {count} mostradas",
     "refresh": "Actualizar",
@@ -70,6 +71,18 @@
         "header": "Posponer actualización",
         "message": "¿Posponer la actualización de {name} durante {days} días?",
         "acceptLabel": "Posponer"
+      },
+      "bulkApprove": {
+        "header": "Aprobar las actualizaciones seleccionadas",
+        "message": "¿Aprobar las actualizaciones seleccionadas ({count})? Cada una se vuelve a comprobar y se lanza igual que con el botón Aprobar, así que una actualización que ese botón rechazaría se notifica en lugar de aplicarse.",
+        "acceptLabel": "Aprobar selección",
+        "holdsSuffix": "\n\nEstas actualizaciones tienen motivos de retención abiertos que la aprobación anula:\n{list}",
+        "excludedSuffix": "\n\nBloqueadas y omitidas ({count}):\n{list}"
+      },
+      "bulkReject": {
+        "header": "Rechazar las actualizaciones seleccionadas",
+        "message": "¿Rechazar las actualizaciones seleccionadas ({count})? No se aplicarán automáticamente.",
+        "acceptLabel": "Rechazar selección"
       }
     },
     "toast": {
@@ -78,7 +91,20 @@
       "rejected": "Actualización rechazada para {name}",
       "rejectFailed": "No se pudo rechazar {name}",
       "deferred": "Actualización pospuesta para {name}",
-      "deferFailed": "No se pudo posponer {name}"
+      "deferFailed": "No se pudo posponer {name}",
+      "bulkApproved": "Aprobación solicitada para las actualizaciones seleccionadas: {count}",
+      "bulkRejected": "Actualizaciones seleccionadas rechazadas: {count}",
+      "bulkPartialFailure": "No se pudieron resolver algunas actualizaciones ({count}): {list}",
+      "bulkFailed": "No se pudieron resolver las actualizaciones seleccionadas"
+    },
+    "bulk": {
+      "selectRow": "Seleccionar {name}",
+      "selectAll": "Seleccionar todas las aprobaciones visibles",
+      "barLabel": "Aprobaciones seleccionadas",
+      "count": "Seleccionadas: {count}",
+      "approveSelected": "Aprobar selección",
+      "rejectSelected": "Rechazar selección",
+      "clear": "Borrar selección"
     }
   }
 }

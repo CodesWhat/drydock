@@ -35,6 +35,8 @@ Each action on a row is a thin wrapper over an update primitive that already exi
 - **Reject** writes the container's `skipTags` / `skipDigests` policy, the same effect as the container row's **Skip** action. This is undoable from the **Update policy** menu, and the confirmation dialog says so before you commit to it.
 - **Defer** snoozes the container until the same instant the row is deferred to (7 days by default; see the API for a custom expiry). A deferred row returns to `pending` the moment the snooze expires — there is no sweep job, it's a live check on every read.
 
+Select several rows in the queue to approve or reject them in one go; bulk approve asks for confirmation first, lists the hold reasons it will override, and skips rows with a hard blocker. Each row is still decided on its own, so a row that can't be approved is reported and the rest go through.
+
 Every decision writes one audit entry (`update-approved`, `update-rejected`, or `update-deferred`) carrying the approval id, the decided-by identity, and an optional note, and pushes a `dd:approval-decided` SSE event to any open client.
 
 ## Where it appears
@@ -49,10 +51,16 @@ Rows leave the queue the moment they're decided or their candidate is superseded
 
 ## Notifications
 
-`update-pending-approval` is a registered [notification rule](/docs/configuration/triggers#notification-rules), shipped `enabled: false`. Enabling it and assigning triggers is safe today — the rule exists and can be configured — but no event dispatches to it yet in this release; treat it as reserved for an upcoming one.
+`update-pending-approval` is a [notification rule](/docs/configuration/triggers#notification-rules), shipped `enabled: false`. When you enable it and assign triggers (an empty trigger list means every notification trigger), it fires once when a candidate enters the queue. It's driven by the new row, not by the watch cycle, so the same pending candidate never notifies twice, even across a restart. A superseding candidate is a new row and notifies again. It isn't sent under update mode `notify` or when container actions are disabled, because approving would be refused; the row still appears in the queue. The rule follows the same `THRESHOLD`, include/exclude and `AUTO` gating as `update-available`, and works with `simple`, `batch` and digest trigger modes.
+
+The default title is `Update awaiting approval for container <name>`, and the body names the version change (`1.0.0 to 1.1.0`) followed by a link to the queue row. Templates can read `event.approvalId`, `event.fromRef`, `event.toRef` and `event.approvalUrl`.
+
+<Callout type="info">The link needs `DD_PUBLIC_URL`. Without it the notification is still sent, but `event.approvalUrl` is empty and the link is left out of the default body.</Callout>
+
+It ships disabled because `manual` is the default mode, so enabling it for everyone would send two notifications per candidate (`update-available` plus this one). Treat it as the richer replacement for `update-available` when you review updates through the queue.
 
 ## Related
 
 - [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) — the hard/soft blocker distinction the queue reuses verbatim.
 - [Triggers — Notification Rules](/docs/configuration/triggers#notification-rules) — `update-pending-approval`.
-- [Approvals API](/docs/api/approvals) — list, summary, detail, and the three decision endpoints.
+- [Approvals API](/docs/api/approvals) — list, summary, detail, the three decision endpoints, and bulk.

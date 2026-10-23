@@ -37,6 +37,11 @@ const EXPECTED_ROUTE_SCOPES = [
   'DELETE /api/v1/label-overrides/:overrideId → admin',
   'DELETE /api/v1/notifications/outbox/:id → triggers:test',
   'DELETE /api/v1/portwing/keys/:keyId → session-only',
+  'GET /api/v1/actions → read',
+  'GET /api/v1/actions/:type/:name → read',
+  'GET /api/v1/actions/:type/:name/:agent → read',
+  'GET /api/v1/actions/:type/:name/:agent/skips → read',
+  'GET /api/v1/actions/:type/:name/skips → read',
   'GET /api/v1/agents → read',
   'GET /api/v1/agents/:name/key-rotation → session-only',
   'GET /api/v1/agents/:name/log/entries → read',
@@ -88,6 +93,11 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/log → read',
   'GET /api/v1/log/components → read',
   'GET /api/v1/log/entries → read',
+  'GET /api/v1/notification-triggers → read',
+  'GET /api/v1/notification-triggers/:type/:name → read',
+  'GET /api/v1/notification-triggers/:type/:name/:agent → read',
+  'GET /api/v1/notification-triggers/:type/:name/:agent/skips → read',
+  'GET /api/v1/notification-triggers/:type/:name/skips → read',
   'GET /api/v1/notifications → read',
   'GET /api/v1/notifications/outbox → read',
   'GET /api/v1/openapi.json → read',
@@ -106,6 +116,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/triggers → read',
   'GET /api/v1/triggers/:type/:name → read',
   'GET /api/v1/triggers/:type/:name/:agent → read',
+  'GET /api/v1/triggers/:type/:name/:agent/skips → read',
+  'GET /api/v1/triggers/:type/:name/skips → read',
   'GET /api/v1/update-operations/:id → read',
   'GET /api/v1/watchers → read',
   'GET /api/v1/watchers/:type/:name → read',
@@ -119,11 +131,14 @@ const EXPECTED_ROUTE_SCOPES = [
   'PATCH /api/v1/notifications/:id → admin',
   'PATCH /api/v1/preferences → admin',
   'PATCH /api/v1/settings → admin',
+  'POST /api/v1/actions/:type/:name → dynamic',
+  'POST /api/v1/actions/:type/:name/:agent → dynamic',
   'POST /api/v1/agents/:name/key-rotation → session-only',
   'POST /api/v1/api-keys → api-keys:manage',
   'POST /api/v1/approvals/:id/approve → containers:update',
   'POST /api/v1/approvals/:id/defer → containers:update',
   'POST /api/v1/approvals/:id/reject → containers:update',
+  'POST /api/v1/approvals/bulk → containers:update',
   'POST /api/v1/auth/totp-enrollments → session-only',
   'POST /api/v1/auth/totp-recovery-code-sets → session-only',
   'POST /api/v1/config/reload → admin',
@@ -148,6 +163,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/group-policies → admin',
   'POST /api/v1/images/prune → admin',
   'POST /api/v1/internal/self-update/finalize → session-only',
+  'POST /api/v1/notification-triggers/:type/:name → dynamic',
+  'POST /api/v1/notification-triggers/:type/:name/:agent → dynamic',
   'POST /api/v1/notifications/:id/preview → triggers:test',
   'POST /api/v1/notifications/outbox/:id/retry → triggers:test',
   'POST /api/v1/operations/:id/cancel → containers:update',
@@ -161,6 +178,8 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/webhook/watch → session-only',
   'POST /api/v1/webhook/watch/:containerName → session-only',
   'POST /api/v1/webhooks/registry → session-only',
+  'POST /api/v1/webhooks/registry/:provider → session-only',
+  'POST /api/v1/webhooks/registry/:provider/:secret → session-only',
   'PUT /api/v1/auth/totp-enrollments/:id → session-only',
   'PUT /api/v1/config/:section → admin',
   'PUT /api/v1/group-policies/:id → admin',
@@ -205,9 +224,9 @@ describe('route scope completeness', () => {
 
   test('only the routes that gate internally are declared dynamic', () => {
     // `dynamic` is the one declaration `enforceApiKeyScope` waves through as
-    // route middleware, so each of these four is a hole unless its handler
+    // route middleware, so each of these eight is a hole unless its handler
     // calls the helper itself. Enumerated separately from the table above so
-    // adding a fifth is a deliberate line in a diff rather than a scope
+    // adding a ninth is a deliberate line in a diff rather than a scope
     // silently loosening to nothing.
     const dynamic = declarations
       .filter((declaration) => declaration.scope === DYNAMIC_SCOPE)
@@ -215,8 +234,12 @@ describe('route scope completeness', () => {
       .sort();
 
     expect(dynamic).toStrictEqual([
+      'POST /api/v1/actions/:type/:name → dynamic',
+      'POST /api/v1/actions/:type/:name/:agent → dynamic',
       'POST /api/v1/containers/:id/triggers/:triggerType/:triggerName → dynamic',
       'POST /api/v1/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent → dynamic',
+      'POST /api/v1/notification-triggers/:type/:name → dynamic',
+      'POST /api/v1/notification-triggers/:type/:name/:agent → dynamic',
       'POST /api/v1/triggers/:type/:name → dynamic',
       'POST /api/v1/triggers/:type/:name/:agent → dynamic',
     ]);

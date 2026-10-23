@@ -1,6 +1,7 @@
 import { i18n } from '../boot/i18n';
 import type { ApiAgent, ApiAgentIdentity } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { withLastKnown } from './last-known';
 
 const BASE_URL = '/api/v1/agents';
 
@@ -31,12 +32,14 @@ export async function getAgentRoster(): Promise<ApiAgentIdentity[]> {
 }
 
 export async function getAgents(): Promise<ApiAgent[]> {
-  const response = await fetch(BASE_URL, { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(
-      `${i18n.global.t('agentsView.list.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
-    );
-  }
-  const payload = await readJsonResponse(response);
-  return extractCollectionData<ApiAgent>(payload);
+  return withLastKnown('agents', async () => {
+    const response = await fetch(BASE_URL, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(
+        `${i18n.global.t('agentsView.list.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+      );
+    }
+    const payload = await readJsonResponse(response);
+    return extractCollectionData<ApiAgent>(payload);
+  });
 }

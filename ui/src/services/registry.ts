@@ -1,6 +1,7 @@
 import { i18n } from '../boot/i18n';
 import type { ApiComponentResponse } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
+import { withLastKnown } from './last-known';
 
 /**
  * Get registry provider icon (acr, ecr...).
@@ -81,14 +82,16 @@ function getRegistryProviderColor(provider: string) {
  * @returns {Promise<unknown>}
  */
 async function getAllRegistries() {
-  const response = await fetch('/api/v1/registries', { credentials: 'include' });
-  if (!response.ok) {
-    throw new Error(
-      `${i18n.global.t('registriesView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
-    );
-  }
-  const payload = await readJsonResponse(response);
-  return extractCollectionData<ApiComponentResponse>(payload);
+  return withLastKnown('registries', async () => {
+    const response = await fetch('/api/v1/registries', { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(
+        `${i18n.global.t('registriesView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
+      );
+    }
+    const payload = await readJsonResponse(response);
+    return extractCollectionData<ApiComponentResponse>(payload);
+  });
 }
 
 function buildRegistryDetailPath({ type, name, agent }: RegistryDetailPathOptions) {

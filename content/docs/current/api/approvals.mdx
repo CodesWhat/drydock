@@ -85,7 +85,7 @@ curl http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c
 
 ## Decide an approval
 
-All three decision endpoints reserve the row with a compare-and-set before doing any work, so two operators deciding the same row at once produce exactly one accepted decision and one `409`. A decision is also bound to the exact candidate the row named when it was created — if the container's candidate has moved on since (a newer tag, say), the decision is refused with `409` rather than silently acting on a different version than the row and its audit entry describe.
+All the decision endpoints reserve the row with a compare-and-set before doing any work, so two operators deciding the same row at once produce exactly one accepted decision and one `409`. A decision is also bound to the exact candidate the row named when it was created — if the container's candidate has moved on since (a newer tag, say), the decision is refused with `409` rather than silently acting on a different version than the row and its audit entry describe.
 
 Every decision accepts an optional `note` (string, max 500 characters) recorded on the audit entry.
 
@@ -117,6 +117,37 @@ curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f
   -d '{"days": 14}'
 ```
 
+### Bulk
+
+Decides up to 200 rows in one call. The body is `{ "ids": [...], "action": "approve" | "reject" | "defer" }` plus the optional `note`, and, for `defer` only, `until` or `days` (resolved once, so every row is held to the same instant). Duplicate ids are collapsed.
+
+Like `POST /containers/update`, the call answers `200` with an `accepted` and a `rejected` list, one entry per id, so one row failing never hides the others. Each id runs through the same decision as its per-row route, with the same reservation, candidate binding and admission path, so a row that would `409` on its own `409`s here with the same message. Each decided row writes its own audit entry and `dd:approval-decided` event. Rows are processed one at a time. Requires the same `containers:update` scope as the single decisions.
+
+The `approve` action can start many container updates at once, so it requires `X-DD-Confirm-Action: approvals-bulk-approve` and answers `428` without it. `reject` and `defer` need no header. `approve` is also refused with `403` when container actions are disabled.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/approvals/bulk \
+  -H "Content-Type: application/json" \
+  -H "X-DD-Confirm-Action: approvals-bulk-approve" \
+  -d '{"ids": ["6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c", "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f"], "action": "approve", "note": "weekly window"}'
+
+{
+  "message": "Approval decisions processed",
+  "accepted": [
+    {
+      "id": "6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c",
+      "containerId": "31a61a83...",
+      "containerName": "homeassistant",
+      "decision": "approved",
+      "operationId": "9d8c7b6a-..."
+    }
+  ],
+  "rejected": [
+    { "id": "0c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "statusCode": 409, "message": "Approval already decided" }
+  ]
+}
+```
+
 ## Errors
 
 | Status | Meaning |
@@ -125,6 +156,7 @@ curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f
 | `409` | Already decided, or the row's candidate has been superseded since it was created |
 | `400` | Invalid query parameter or request body |
 | `403` | Container actions are disabled server-wide (approve only) |
+| `428` | Bulk approve sent without `X-DD-Confirm-Action: approvals-bulk-approve` |
 
 ## Events
 

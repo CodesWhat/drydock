@@ -44,7 +44,7 @@ describe('private candidate resolution', () => {
   test('rereads environment-owned secret files instead of freezing their startup contents', async () => {
     vi.stubEnv('DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE', credentialPath);
     ddEnvVars.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'old-private-value';
-    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE = 'env';
+    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'env';
     const result = await resolveCandidateEnvAndDiff({});
     expect(result.candidateEnv.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('new-private-value');
     expect(result.candidateSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('env');
@@ -55,8 +55,8 @@ describe('private candidate resolution', () => {
     ddEnvVars.DD_ = 'old-sectionless';
     configFileSources.DD_ = 'file';
     ddEnvVars.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'old-private-value';
-    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE = 'env';
-    configFileInterpolatedKeys.add('DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE');
+    configFileSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD = 'env';
+    configFileInterpolatedKeys.add('DD_REGISTRY_HUB_PRIVATE_PASSWORD');
     const result = await resolveCandidateEnvAndDiff(
       {
         DD_REGISTRY_HUB_PRIVATE_PASSWORD__FILE: credentialPath,
@@ -72,7 +72,25 @@ describe('private candidate resolution', () => {
       reload: ['registry'],
       restart: ['server'],
     });
-    expect(result.candidateSources.DD_REGISTRY_HUB_PRIVATE_PASSWORD).toBe('env');
+    expect(result.candidateSources).toStrictEqual({
+      DD_REGISTRY_HUB_PRIVATE_PASSWORD: 'env',
+      DD_SERVER_PORT: 'file',
+    });
+  });
+
+  test('keys a literal secret-file entry by its base name and reports an unchanged one as unchanged', async () => {
+    const key = 'DD_REGISTRY_HUB_PRIVATE_PASSWORD';
+    const layer = { [`${key}__FILE`]: credentialPath };
+    const startupEnv: Record<string, string | undefined> = {};
+    const startupSources = mergeConfigLayers(startupEnv, layer);
+    await replaceSecrets(startupEnv);
+    Object.assign(ddEnvVars, startupEnv);
+    Object.assign(configFileSources, startupSources);
+    expect(configFileSources).toStrictEqual({ [key]: 'file' });
+    const result = await resolveCandidateEnvAndDiff(layer);
+    expect(result.candidateSources).toStrictEqual({ [key]: 'file' });
+    expect(result.diff.changed).toEqual([]);
+    expect(result.applyKeys).toEqual([]);
   });
 
   test('secret resolution failures never include paths or private data', async () => {

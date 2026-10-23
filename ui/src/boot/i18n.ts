@@ -42,9 +42,26 @@ export const i18n = createI18n({
   fallbackWarn: false,
 });
 
+const RTL_LANGUAGES = new Set(['ar', 'he', 'fa', 'ur']);
+
+export function getLocaleDirection(locale: string): 'rtl' | 'ltr' {
+  try {
+    const info = new Intl.Locale(locale) as Intl.Locale & {
+      getTextInfo?: () => { direction: string };
+      textInfo?: { direction: string };
+    };
+    const direction = (info.getTextInfo?.() ?? info.textInfo)?.direction;
+    if (direction === 'rtl' || direction === 'ltr') return direction;
+  } catch {
+    // fall through to the static list
+  }
+  return RTL_LANGUAGES.has(locale.split('-')[0].toLowerCase()) ? 'rtl' : 'ltr';
+}
+
 export function setI18nLocale(locale: SupportedLocale): void {
   i18n.global.locale.value = locale;
   if (typeof document !== 'undefined') {
     document.documentElement.lang = locale;
+    document.documentElement.dir = getLocaleDirection(locale);
   }
 }

@@ -1,5 +1,5 @@
 import { i18n } from '../boot/i18n';
-import type { ApiComponentResponse } from '../types/api';
+import type { ApiComponentResponse, ApiTriggerSkipsPage } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface TriggerDetailPathOptions {
@@ -108,8 +108,16 @@ function getTriggerProviderColor(type: string) {
   }
 }
 
-async function getAllTriggers() {
-  const response = await fetch('/api/v1/triggers', { credentials: 'include' });
+const ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer', 'command']);
+const ACTIONS_PATH = '/api/v1/actions';
+const NOTIFICATION_TRIGGERS_PATH = '/api/v1/notification-triggers';
+
+function getTriggerCollectionPath(type: string) {
+  return ACTION_TRIGGER_TYPES.has(type.toLowerCase()) ? ACTIONS_PATH : NOTIFICATION_TRIGGERS_PATH;
+}
+
+async function fetchTriggerCollection(path: string) {
+  const response = await fetch(path, { credentials: 'include' });
   if (!response.ok) {
     throw new Error(
       `${i18n.global.t('triggersView.loadError')} (HTTP ${response.status})${response.statusText ? `: ${response.statusText}` : ''}`,
@@ -119,8 +127,18 @@ async function getAllTriggers() {
   return extractCollectionData<ApiComponentResponse>(payload);
 }
 
+async function getAllTriggers() {
+  const [actions, notificationTriggers] = await Promise.all([
+    fetchTriggerCollection(ACTIONS_PATH),
+    fetchTriggerCollection(NOTIFICATION_TRIGGERS_PATH),
+  ]);
+  return [...actions, ...notificationTriggers].sort(
+    (a, b) => a.type.localeCompare(b.type) || a.name.localeCompare(b.name),
+  );
+}
+
 function buildTriggerDetailPath({ type, name, agent }: TriggerDetailPathOptions) {
-  const segments = ['/api/v1/triggers'];
+  const segments = [getTriggerCollectionPath(type)];
   segments.push(encodeURIComponent(type), encodeURIComponent(name));
   if (agent) {
     segments.push(encodeURIComponent(agent));
@@ -138,15 +156,36 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   return readJsonResponse<ApiComponentResponse>(response);
 }
 
+interface TriggerSkipsOptions extends TriggerDetailPathOptions {
+  limit?: number;
+  offset?: number;
+}
+
+async function getTriggerSkips({ type, name, agent, limit, offset }: TriggerSkipsOptions) {
+  const query = new URLSearchParams();
+  if (limit !== undefined) query.set('limit', String(limit));
+  if (offset !== undefined) query.set('offset', String(offset));
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  const response = await fetch(`${buildTriggerDetailPath({ type, name, agent })}/skips${suffix}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get trigger skips: ${response.statusText}`);
+  }
+  return readJsonResponse<ApiTriggerSkipsPage>(response);
+}
+
 async function runTrigger({
   triggerType,
   triggerName,
   container,
   triggerAgent,
 }: RunTriggerRequest) {
-  const path = triggerAgent
-    ? `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/${encodeURIComponent(triggerAgent)}`
-    : `/api/v1/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`;
+  const path = buildTriggerDetailPath({
+    type: triggerType,
+    name: triggerName,
+    agent: triggerAgent,
+  });
   const response = await fetch(path, {
     method: 'POST',
     credentials: 'include',
@@ -165,4 +204,11 @@ async function runTrigger({
   return json;
 }
 
-export { getAllTriggers, getTrigger, getTriggerProviderColor, getTriggerProviderIcon, runTrigger };
+export {
+  getAllTriggers,
+  getTrigger,
+  getTriggerProviderColor,
+  getTriggerProviderIcon,
+  getTriggerSkips,
+  runTrigger,
+};

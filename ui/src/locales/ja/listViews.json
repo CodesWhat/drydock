@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy：{message} · サーバー：{server}",
       "cosignTooltip": "Cosign：{message}",
       "sbomEnabled": "SBOM 生成が有効です（{formats}）",
-      "sbomDisabled": "SBOM 生成が無効です"
+      "sbomDisabled": "SBOM 生成が無効です",
+      "assetVersion": "バージョン {version}",
+      "assetDigest": "イメージ {digest}",
+      "assetDatabaseUpdated": "データベース更新 {updatedAt}",
+      "assetCacheUpdated": "キャッシュ更新 {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "脆弱性データがまだありません",
@@ -426,6 +430,14 @@
       "status": "ステータス",
       "refreshing": "トリガーの詳細を更新中...",
       "noConfig": "設定プロパティがありません"
+    },
+    "skips": {
+      "title": "最近のスキップ",
+      "description": "このトリガーが最近スキップしたコンテナとその理由です。メモリ上に保持されるため、Drydock の再起動でリセットされます。",
+      "loading": "スキップ履歴を読み込み中...",
+      "loadError": "最近のスキップを読み込めませんでした",
+      "empty": "最近のスキップはありません",
+      "showMore": "さらに表示"
     }
   },
   "watchersView": {

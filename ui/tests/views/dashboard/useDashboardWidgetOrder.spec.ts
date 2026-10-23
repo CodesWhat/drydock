@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
 import { defineComponent, effectScope, h, nextTick, ref } from 'vue';
 import { preferences } from '@/preferences/store';
-import { DASHBOARD_WIDGET_IDS, type DashboardWidgetId } from '@/views/dashboard/dashboardTypes';
+import {
+  DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS,
+  DASHBOARD_WIDGET_IDS,
+  type DashboardWidgetId,
+} from '@/views/dashboard/dashboardTypes';
 import { applyConstraints } from '@/views/dashboard/dashboardWidgetLayout';
 import { useDashboardResponsiveLayouts } from '@/views/dashboard/useDashboardResponsiveLayouts';
 import {
@@ -141,7 +145,7 @@ describe('useDashboardWidgetOrder', () => {
 
     const { state } = await mountWidgetOrderComposable();
 
-    expect(state.hiddenWidgets.value).toEqual([]);
+    expect(state.hiddenWidgets.value).toEqual([...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS]);
   });
 
   it('falls back to default layout when gridLayout is not an array', async () => {
@@ -305,6 +309,10 @@ describe('useDashboardWidgetOrder', () => {
       'security-overview',
       'resource-usage',
       'host-status',
+      'stat-images',
+      'stat-triggers',
+      'stat-watchers',
+      'recent-activity',
     ]);
     expect(state.draggedWidgetId.value).toBeNull();
     expect(preferences.dashboard.widgetOrder).toEqual(state.widgetOrder.value);
@@ -421,7 +429,7 @@ describe('useDashboardWidgetOrder', () => {
 
     state.resetAll();
     await nextTick();
-    expect(state.hiddenWidgets.value).toEqual([]);
+    expect(state.hiddenWidgets.value).toEqual([...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS]);
     expect(state.widgetOrder.value).toEqual(DASHBOARD_WIDGET_IDS);
     expect(state.editMode.value).toBe(true);
   });
@@ -686,7 +694,39 @@ describe('useDashboardWidgetOrder', () => {
       'resource-usage',
       'host-status',
       'update-breakdown',
+      'stat-images',
+      'stat-triggers',
+      'stat-watchers',
+      'recent-activity',
     ]);
+  });
+
+  it('loads a layout saved before the opt-in widgets existed and lets them be shown', async () => {
+    const legacyIds = DASHBOARD_WIDGET_IDS.filter(
+      (id) => !(DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS as readonly string[]).includes(id),
+    );
+    const legacyLayout = legacyIds.map((id, index) => ({ i: id, x: 0, y: index * 4, w: 12, h: 4 }));
+    preferences.dashboard.widgetOrder = [...legacyIds];
+    preferences.dashboard.hiddenWidgets = ['host-status', ...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS];
+    preferences.dashboard.gridLayouts = { lg: legacyLayout };
+    preferences.dashboard.gridLayout = legacyLayout;
+
+    const { state } = await mountWidgetOrderComposable();
+
+    expect(state.widgetOrder.value).toEqual([...legacyIds, ...DASHBOARD_DEFAULT_HIDDEN_WIDGET_IDS]);
+    expect(state.layout.value.map((item) => item.i).sort()).toEqual(
+      [...DASHBOARD_WIDGET_IDS].sort(),
+    );
+    const saved = state.layout.value.find((item) => item.i === 'stat-containers');
+    expect(saved).toMatchObject({ x: 0, y: 0, w: 6 });
+
+    state.toggleWidgetVisibility('recent-activity');
+    await nextTick();
+    expect(state.isWidgetVisible('recent-activity')).toBe(true);
+    expect(state.layout.value.find((item) => item.i === 'recent-activity')).toMatchObject({
+      w: 12,
+      h: 10,
+    });
   });
 
   it('preserves custom positions when widget order changes (#223)', async () => {

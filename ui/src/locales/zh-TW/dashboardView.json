@@ -43,6 +43,7 @@
       "updateAll": "全部更新",
       "noUpdates": "沒有可用更新",
       "securityBlocked": "被安全機制阻止",
+      "maturityCountdown": "{countdown} 後解鎖 ({date})",
       "updateContainer": "更新容器",
       "compactSingle": "{count} 個可用更新",
       "compactPlural": "{count} 個可用更新",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} 新 · {mature} 穩定",
       "securityIssues": "安全風險",
       "registries": "倉庫",
-      "approvals": "審批"
+      "approvals": "審批",
+      "images": "映像",
+      "imageDetail": "{count} 個有更新",
+      "triggers": "觸發器",
+      "triggerDetail": "{actions} 個動作 · {notifications} 個通知",
+      "watchers": "監看器",
+      "watcherDetailHealthy": "全部已連線",
+      "watcherDetailDisconnected": "{healthy} 個已連線 · {disconnected} 個已中斷"
     },
     "updateKind": {
       "major": "主要",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "最近活動",
+      "viewAudit": "檢視稽核日誌 →",
+      "loading": "正在載入活動...",
+      "loadFailed": "無法載入最近活動",
+      "empty": "尚無最近活動",
+      "system": "系統"
     }
   }
 }

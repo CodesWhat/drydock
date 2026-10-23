@@ -141,6 +141,7 @@
         "recently-applied": "Đã bỏ qua: bản cập nhật vừa được áp dụng, đang chờ watcher xác nhận.",
         "digest-buffered": "Đang giữ lại cho bản tổng hợp tiếp theo."
       },
+      "notificationSkipAt": "Lần bỏ qua gần nhất {date}",
       "backupsRollback": "Sao lưu & Khôi phục",
       "rollingBack": "Đang khôi phục...",
       "rollbackLatest": "Khôi phục mới nhất",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "Đang chờ",
+      "updateFailed": "Cập nhật thất bại",
       "statusScanning": "Đang quét",
       "statusUpdating": "Đang cập nhật",
       "statusPulling": "Đang tải…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "Bản ứng viên được phát hành {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
       "maturityClockDetected": "Bản ứng viên được phát hiện {date} — còn {count} ngày nữa để đạt tối thiểu {minDays} ngày",
       "groupManualOnly": "Chính sách nhóm '{group}' chỉ cho phép cập nhật thủ công. Drydock sẽ không tự động áp dụng bản cập nhật này.",
+      "updateAvailableRuleDisabled": "Quy tắc thông báo Update Available đang tắt và nó cũng điều khiển các bản cập nhật tự động. Hãy bật nó tại Settings > Notifications > Update Available để Drydock tự áp dụng bản cập nhật này.",
       "updateButton": "Cập nhật ngay",
       "blockedButton": "Cập nhật bị chặn",
       "notificationsOnlyButton": "Chỉ thông báo",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "Chưa cấu hình trigger cập nhật",
         "self-update-unavailable": "Không thể tự cập nhật",
         "maintenance-window-closed": "Cửa sổ bảo trì đã đóng",
+        "update-available-rule-disabled": "Quy tắc Update Available đang tắt",
         "group-notify-only": "Nhóm chỉ cho phép thông báo",
         "group-manual-only": "Nhóm yêu cầu cập nhật thủ công",
         "dry-run-trigger": "Cấu hình trigger ở chế độ dry-run",
@@ -536,6 +540,7 @@
         "configureThreshold": "Cấu hình ngưỡng trigger",
         "configureSelfUpdate": "Cấu hình tự cập nhật",
         "configureMaintenance": "Cấu hình cửa sổ bảo trì",
+        "configureNotificationRule": "Mở quy tắc thông báo",
         "editGroupPolicy": "Chỉnh sửa chính sách nhóm"
       },
       "releaseMaturityCount": "Đang chờ bản phát hành ổn định trong họ {family}: có {count} trong số {required} bản phát hành trước đó.",
@@ -653,6 +658,7 @@
         "snoozed": "Cập nhật đã hoãn",
         "maturityBlockedSingular": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
         "maturityBlockedPlural": "Chính sách chỉ chín chặn cập nhật mới hơn {days} ngày",
+        "maturityCountdown": "{message}. Mở khóa sau {countdown} ({date})",
         "maturityActiveSingular": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityActivePlural": "Chính sách chỉ chín đang hoạt động (tuổi tối thiểu {days} ngày)",
         "maturityAllowAll": "Chính sách độ chín cho phép tất cả cập nhật",

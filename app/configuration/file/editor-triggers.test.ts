@@ -133,6 +133,22 @@ describe('notification policy editor', () => {
       expect(updated.triggers[0].fields[field].value).toBe(value);
   });
 
+  test('an environment literal plus a file _file entry reads as env, not reference, and stays read-only', async () => {
+    const envKey = 'DD_NOTIFICATION_DISCORD_PRIVATE_THRESHOLD';
+    fixture(
+      'notification:\n  discord:\n    private:\n      threshold:\n        _file: /private/credential\n',
+    );
+    setConfigFileLayer({ [`${envKey}__FILE`]: '/private/credential' }, new Set(), {
+      path: configPath,
+      modifiedAt: new Date().toISOString(),
+    });
+    vi.stubEnv(envKey, 'major');
+    const descriptor = (await getNotificationTriggerEditSnapshot()).triggers[0].fields.threshold;
+    expect(descriptor.source).toBe('env');
+    expect(descriptor.readOnlyReason).toBe('environment-owned');
+    expect(descriptor.path).toBeUndefined();
+  });
+
   test.each(['securitydigesttitle', 'securitydigestbody'])(
     'shows literal environment-owned %s as public text without allowing writes',
     async (field) => {

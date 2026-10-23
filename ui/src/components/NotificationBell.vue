@@ -104,7 +104,7 @@ function isUnread(entry: AuditEntry): boolean {
             @click="toggle"
     />
     <span v-if="unreadCount > 0"
-          class="badge-pulse absolute -top-0.5 -right-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold text-white pointer-events-none"
+          class="badge-pulse absolute -top-0.5 -end-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold text-white pointer-events-none"
           style="background: var(--dd-danger);">
       {{ unreadCount > 9 ? '9+' : unreadCount }}
     </span>
@@ -139,7 +139,7 @@ function isUnread(entry: AuditEntry): boolean {
                class="group relative flex items-stretch transition-colors hover:dd-bg-elevated"
                :style="{ backgroundColor: index % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-zebra-stripe)' }">
             <AppButton size="none" variant="plain" weight="none"
-                    class="flex-1 text-left px-3 py-2 flex items-start gap-2.5 min-w-0"
+                    class="flex-1 text-start px-3 py-2 flex items-start gap-2.5 min-w-0"
                     @click="navigateToEntry(entry)">
               <AppIcon :name="actionIcon(entry.action)"
                        :size="13"
@@ -167,7 +167,7 @@ function isUnread(entry: AuditEntry): boolean {
                 {{ timeAgo(entry.timestamp, locale, t) }}
               </span>
             </AppButton>
-            <div class="dd-bell-dismiss flex items-center pr-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <div class="dd-bell-dismiss flex items-center pe-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <AppIconButton icon="xmark"
                              size="sm"
                              variant="danger"

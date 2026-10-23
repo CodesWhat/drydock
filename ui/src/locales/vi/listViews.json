@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · máy chủ: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "Tạo SBOM đã bật ({formats})",
-      "sbomDisabled": "Tạo SBOM đã tắt"
+      "sbomDisabled": "Tạo SBOM đã tắt",
+      "assetVersion": "Phiên bản {version}",
+      "assetDigest": "Image {digest}",
+      "assetDatabaseUpdated": "Cơ sở dữ liệu cập nhật {updatedAt}",
+      "assetCacheUpdated": "Bộ nhớ đệm cập nhật {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "Chưa có dữ liệu lỗ hổng bảo mật",
@@ -426,6 +430,14 @@
       "status": "Trạng thái",
       "refreshing": "Đang làm mới thông tin trigger...",
       "noConfig": "Không có thuộc tính cấu hình"
+    },
+    "skips": {
+      "title": "Lần bỏ qua gần đây",
+      "description": "Các container mà trigger này đã bỏ qua gần đây và lý do. Lưu trong bộ nhớ nên sẽ được đặt lại khi Drydock khởi động lại.",
+      "loading": "Đang tải các lần bỏ qua...",
+      "loadError": "Không thể tải các lần bỏ qua gần đây",
+      "empty": "Chưa có lần bỏ qua nào gần đây",
+      "showMore": "Xem thêm"
     }
   },
   "watchersView": {

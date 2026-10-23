@@ -110,6 +110,12 @@ If a service uses flow-style mapping without an `image` key (for example `nginx:
 
 Before persisting a compose mutation, Drydock validates the candidate file by parsing the full compose chain in-process. Invalid candidate configs are not written.
 
+### Images set through a variable
+
+If the `image:` of the service being updated uses Compose interpolation (`$VAR`, `${VAR}`, `${VAR:-default}` or `${VAR?error}`), Drydock refuses the update instead of rewriting the file. Flattening `image: ${IMAGE}` or `image: repo/app:${TAG}` to a literal tag would silently break an `.env`-driven setup, because Drydock never edits `.env` and does not read `--env-file`.
+
+The update fails before any file write, backup or container change, with an error that names the variable or variables. Previews and dry runs report the same refusal, and the failure reason is recorded in the audit log and sent to your notification triggers. To update such a service, change the variable yourself (for example `TAG=1.2.3` in `.env`) and recreate the service. An escaped `$$` is a literal dollar sign, not interpolation, so an image containing one is still rewritten. Writing the new value back to the environment file is planned for v1.9.
+
 ## Update Concurrency
 
 Services within the same compose stack are serialized by a **per-compose-project lock** — only one service in a given stack updates at a time. Services in different stacks (or bare containers) can update concurrently. This prevents `docker compose up` orchestration conflicts without restricting cross-stack parallelism.
@@ -207,7 +213,7 @@ Example using `group_add`:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     group_add:
       - "${COMPOSE_FILES_GID}"
     volumes:
@@ -228,7 +234,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.5
+    image: codeswhat/drydock:1.8.0-rc.6
     ...
     volumes:
     - /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
@@ -243,7 +249,7 @@ docker run \
   -v /etc/my-services/docker-compose.yml:/drydock/docker-compose.yml
   -e "DD_ACTION_DOCKERCOMPOSE_EXAMPLE_FILE=/drydock/docker-compose.yml" \
   ...
-  codeswhat/drydock:1.8.0-rc.5
+  codeswhat/drydock:1.8.0-rc.6
 ```
 </Tab>
 <Tab value="Label">

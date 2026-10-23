@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · الخادم: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "إنشاء SBOM مُفعَّل ({formats})",
-      "sbomDisabled": "إنشاء SBOM مُعطَّل"
+      "sbomDisabled": "إنشاء SBOM مُعطَّل",
+      "assetVersion": "الإصدار {version}",
+      "assetDigest": "الصورة {digest}",
+      "assetDatabaseUpdated": "تحديث قاعدة البيانات {updatedAt}",
+      "assetCacheUpdated": "تحديث ذاكرة التخزين المؤقت {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "لا توجد بيانات ثغرات بعد",
@@ -426,6 +430,14 @@
       "status": "الحالة",
       "refreshing": "جارٍ تحديث تفاصيل المشغّل...",
       "noConfig": "لا توجد خصائص إعداد"
+    },
+    "skips": {
+      "title": "عمليات التخطي الأخيرة",
+      "description": "الحاويات التي تخطاها هذا المشغّل مؤخرًا والسبب. تُحفظ في الذاكرة، لذا تُمسح عند إعادة تشغيل Drydock.",
+      "loading": "جارٍ تحميل عمليات التخطي...",
+      "loadError": "تعذّر تحميل عمليات التخطي الأخيرة",
+      "empty": "لا توجد عمليات تخطٍّ حديثة",
+      "showMore": "عرض المزيد"
     }
   },
   "watchersView": {

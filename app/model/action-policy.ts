@@ -7,6 +7,7 @@ import {
 } from '../api/docker-trigger.js';
 import logger from '../log/index.js';
 import { matchesTriggerReferenceList } from '../triggers/providers/trigger-reference-matching.js';
+import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import type { Container } from './container.js';
 import { getGroupExcludeEntries } from './group-policy.js';
 
@@ -50,6 +51,7 @@ export interface ActionPolicyTrigger extends DockerTriggerCandidate {
   configuration?: DockerTriggerCandidate['configuration'] & {
     auto?: boolean | ActionPolicyAutoMode;
     manual?: 'all' | 'oninclude';
+    threshold?: string;
   };
   getId: () => string;
 }
@@ -382,4 +384,16 @@ export function selectActionTrigger(
   }
 
   return undefined;
+}
+
+/**
+ * Whether a trigger's own `threshold` accepts this container's candidate. The same
+ * `isThresholdReached` call and `'all'` default the trigger's auto path makes before it
+ * enqueues an update, so every caller that predicts that path agrees with it.
+ */
+export function isTriggerThresholdReached(
+  trigger: ActionPolicyTrigger,
+  container: Container,
+): boolean {
+  return isThresholdReached(container, (trigger.configuration?.threshold ?? 'all').toLowerCase());
 }

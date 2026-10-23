@@ -582,7 +582,7 @@ export const openApiSchemas = {
     properties: {
       checkedAt: { type: 'string', format: 'date-time' },
       ready: { type: 'boolean' },
-      backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
+      backend: { type: 'string', enum: ['auto', 'command', 'docker', 'remote'] },
       availabilityPolicy: { type: 'string', enum: ['block', 'warn'] },
       gate: {
         type: 'object',
@@ -653,7 +653,7 @@ export const openApiSchemas = {
   ScannerAssetStatus: {
     type: 'object',
     properties: {
-      provider: { type: 'string', enum: ['trivy', 'grype', 'syft'] },
+      provider: { type: 'string', enum: ['trivy', 'grype', 'syft', 'cosign'] },
       backend: { type: 'string', enum: ['command', 'docker', 'remote'] },
       configuredImage: { type: 'string' },
       resolvedDigest: { type: 'string' },
@@ -1028,6 +1028,7 @@ export const openApiSchemas = {
           'no-update-trigger-configured',
           'self-update-unavailable',
           'maintenance-window-closed',
+          'update-available-rule-disabled',
         ],
       },
       severity: { type: 'string', enum: ['hard', 'soft'] },
@@ -1694,6 +1695,44 @@ export const openApiSchemas = {
     required: ['trigger', 'reason', 'at'],
     additionalProperties: false,
   },
+  TriggerSkip: {
+    type: 'object',
+    description:
+      'The most recent skip of one container by a notification trigger (DR-85). ' +
+      'containerName is null when the container is no longer in the store.',
+    properties: {
+      containerId: { type: 'string' },
+      containerName: { type: 'string', nullable: true },
+      reason: {
+        type: 'string',
+        enum: [
+          'rule-disabled',
+          'threshold-not-met',
+          'trigger-excluded',
+          'once-already-sent',
+          'recently-applied',
+          'digest-buffered',
+        ],
+      },
+      at: { type: 'string', format: 'date-time' },
+    },
+    required: ['containerId', 'containerName', 'reason', 'at'],
+    additionalProperties: false,
+  },
+  TriggerSkipsResult: {
+    type: 'object',
+    description:
+      'Recent skips for a trigger, newest first. limit defaults to 50 and is capped at 200.',
+    properties: {
+      data: { type: 'array', items: { $ref: '#/components/schemas/TriggerSkip' } },
+      total: { type: 'integer' },
+      limit: { type: 'integer' },
+      offset: { type: 'integer' },
+      hasMore: { type: 'boolean' },
+    },
+    required: ['data', 'total', 'limit', 'offset', 'hasMore'],
+    additionalProperties: false,
+  },
   ContainerUnassociatedTrigger: {
     type: 'object',
     description:
@@ -1994,6 +2033,80 @@ export const openApiSchemas = {
       approval: { $ref: '#/components/schemas/Approval' },
     },
     required: ['approval'],
+    additionalProperties: false,
+  },
+  ApprovalBulkRequest: {
+    type: 'object',
+    properties: {
+      ids: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 200,
+        items: { type: 'string' },
+        description: 'Approval ids to decide. Duplicates are collapsed.',
+      },
+      action: { type: 'string', enum: ['approve', 'reject', 'defer'] },
+      until: {
+        type: 'string',
+        format: 'date-time',
+        description:
+          'Defer only. Explicit expiry, an RFC 3339 date-time in the future and at most 365 ' +
+          'days from now. Takes precedence over days.',
+      },
+      days: {
+        type: 'integer',
+        minimum: 1,
+        maximum: 365,
+        description: 'Defer only. Days from now. Defaults to 7 when neither field is given.',
+      },
+      note: {
+        type: 'string',
+        maxLength: 500,
+        description: 'Free-text reason recorded on every decided row and its audit entry',
+      },
+    },
+    required: ['ids', 'action'],
+    additionalProperties: false,
+  },
+  ApprovalBulkResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      accepted: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            containerId: { type: 'string' },
+            containerName: { type: 'string' },
+            decision: { type: 'string', enum: ['approved', 'rejected', 'deferred'] },
+            operationId: { type: 'string', description: 'Present for approve' },
+            deferredUntil: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Present for defer',
+            },
+          },
+          required: ['id', 'containerId', 'containerName', 'decision'],
+          additionalProperties: false,
+        },
+      },
+      rejected: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            statusCode: { type: 'integer' },
+            message: { type: 'string' },
+          },
+          required: ['id', 'statusCode', 'message'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['message', 'accepted', 'rejected'],
     additionalProperties: false,
   },
   ApprovalDetail: {

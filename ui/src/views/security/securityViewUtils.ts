@@ -1,5 +1,6 @@
 import type {
   SecurityEmptyState,
+  SecurityRuntimeStatus,
   SecurityRuntimeToolStatus,
   SecurityViewEmptyStateInput,
   SeveritySummaryCounts,
@@ -7,6 +8,7 @@ import type {
 } from './securityViewTypes';
 
 type TranslateFn = (key: string) => string;
+type ParamTranslateFn = (key: string, params: Record<string, unknown>) => string;
 
 export const severityOrder: Record<string, number> = {
   CRITICAL: 0,
@@ -69,6 +71,48 @@ export function formatTimestamp(value: string | null | undefined): string {
     return value;
   }
   return date.toISOString();
+}
+
+const ASSET_DIGEST_DISPLAY_LENGTH = 19; // "sha256:" plus 12 hex chars
+
+export function providerAssetDetails(
+  asset: SecurityRuntimeStatus['assets'][number],
+  t: ParamTranslateFn,
+): string[] {
+  const details: string[] = [];
+  if (asset.version)
+    details.push(t('securityView.runtimeTools.assetVersion', { version: asset.version }));
+  if (asset.resolvedDigest) {
+    details.push(
+      t('securityView.runtimeTools.assetDigest', {
+        digest: asset.resolvedDigest.slice(0, ASSET_DIGEST_DISPLAY_LENGTH),
+      }),
+    );
+  }
+  if (asset.databaseUpdatedAt) {
+    details.push(
+      t('securityView.runtimeTools.assetDatabaseUpdated', {
+        updatedAt: formatTimestamp(asset.databaseUpdatedAt),
+      }),
+    );
+  }
+  if (asset.cacheUpdatedAt) {
+    details.push(
+      t('securityView.runtimeTools.assetCacheUpdated', {
+        updatedAt: formatTimestamp(asset.cacheUpdatedAt),
+      }),
+    );
+  }
+  return details;
+}
+
+export function providerTooltip(
+  provider: { provider: string; message: string },
+  assets: SecurityRuntimeStatus['assets'],
+  t: ParamTranslateFn,
+): string {
+  const asset = assets.find((candidate) => candidate.provider === provider.provider);
+  return [provider.message, ...(asset ? providerAssetDetails(asset, t) : [])].join(' · ');
 }
 
 export function normalizeSeverityCount(value: unknown): number {

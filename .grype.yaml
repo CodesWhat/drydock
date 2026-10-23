@@ -1,36 +1,20 @@
 # Grype configuration — drydock container image scan triage.
 #
-# The grype-image job (.github/workflows/security-grype.yml) fails the build on
-# HIGH/CRITICAL. These ignore rules scope that gate to the dependencies drydock
-# actually controls — the Node runtime, the Alpine OS packages, and the app
-# (npm) dependency graph — and exclude the vendored Go module graphs compiled
-# into the third-party `cosign` and `trivy` CLI binaries the image ships for
-# signature verification and container scanning.
+# The grype-image job (.github/workflows/security-grype.yml) and the PR-built image scan in
+# ci-verify.yml fail the build on HIGH/CRITICAL. This file carries no ignore rules: the image
+# ships the Node runtime, the Alpine OS packages, the app (npm) dependency graph, and the
+# healthcheck binary, and every one of those stays fully gated.
 #
-# Why: those CVEs (golang.org/x/crypto, x/net, Go stdlib, …) live inside upstream
-# tool binaries, not drydock's own code, and reach the binary only as cosign's /
-# trivy's vendored modules. We cannot patch them independently — they clear only
-# when upstream releases a rebuilt Trivy image or Alpine rebuilds Cosign, which we
-# pick up by bumping the pinned Trivy image index or Alpine package (the cosign
-# 2.6.3-r1 -> 3.0.6-r1 bump already cleared the bulk of them). Gating the build
-# on a module graph we don't control is the same manifest-vs-shipped mismatch we
-# dropped Snyk over. The Node runtime, musl, git, and every other OS package
-# (curl was removed from the image in v1.7.0) — plus the entire app dependency
-# graph — stay fully gated, confirmed by the scan, which after the base bump
-# leaves residual HIGH/CRITICAL findings only at these two binary locations.
+# Trivy and cosign used to live in the image as vendored Go binaries, and their module graphs
+# (golang.org/x/crypto, x/net, Go stdlib, ...) produced findings drydock could not patch
+# independently, so earlier revisions of this file ignored the two binary locations. Both tools
+# now run from pinned worker images instead (DD_SECURITY_BACKEND=auto, see
+# app/configuration/index.ts), so there is nothing left to scope out.
 #
-# Revisit on each pinned-tool or base-image bump: fixed upstream binaries make
-# these scopes stop matching anything.
+# Rules for adding an entry back: scope it by CVE and package name, never by location, and say
+# in a comment which upstream release clears it, so the entry can be deleted when the fix lands.
+# An ignore that matches nothing should be removed.
 #
-# CVE-2026-14456 (openssl / libssl3 / libcrypto3) was ignored here from
-# 2026-08-19 until the Dockerfile's `openssl=` pin rolled to 3.5.8-r0 (#881),
-# which carries the upstream fix. A live grype scan of that exact pin
-# (pkg:apk/alpine/openssl@3.5.8-r0) confirms zero matches for CVE-2026-14456
-# or any other finding, so the suppression no longer applies and was removed.
-# Re-add a scoped entry (by CVE and package name, not by location) if a future
-# base-image or pin change reintroduces it.
-ignore:
-  - package:
-      location: "/usr/bin/cosign"
-  - package:
-      location: "/usr/local/bin/trivy"
+# CVE-2026-14456 (openssl / libssl3 / libcrypto3) was ignored here from 2026-08-19 until the
+# Dockerfile's `openssl=` pin rolled to 3.5.8-r0 (#881), which carries the upstream fix. A live
+# grype scan of that exact pin confirms zero matches, so the suppression was removed.

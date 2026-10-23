@@ -1111,6 +1111,116 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockInsertOperation).not.toHaveBeenCalled();
   });
 
+  test('execute recreates shared-namespace dependents after the running owner was replaced', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const recreateSharedNamespaceDependents = vi.fn().mockResolvedValue(undefined);
+    const log = createLog();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue({ ...context.newContainer, start: vi.fn() }),
+      recreateSharedNamespaceDependents,
+    });
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(recreateSharedNamespaceDependents).toHaveBeenCalledWith(
+      context.dockerApi,
+      'old-container-id',
+      'web',
+      log,
+      expect.objectContaining({ id: 'container-id' }),
+    );
+  });
+
+  test('execute records dependents that could not be recreated on the operation without failing it', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue({ ...context.newContainer, start: vi.fn() }),
+      recreateSharedNamespaceDependents: vi.fn().mockResolvedValue(['Unable to recreate app (x)']),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError: 'dependents_recreate_failed: Unable to recreate app (x)',
+      }),
+    );
+  });
+
+  test('execute tolerates the operation row being closed while recording dependent failures', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue({ ...context.newContainer, start: vi.fn() }),
+      recreateSharedNamespaceDependents: vi.fn().mockResolvedValue(['Unable to recreate app (x)']),
+    });
+    mockUpdateOperation.mockImplementation((_id, patch) => {
+      if (patch && 'lastError' in patch) {
+        throw new Error('row closed');
+      }
+      return { id: 'op-1' };
+    });
+
+    try {
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+    } finally {
+      mockUpdateOperation.mockReset();
+    }
+  });
+
+  test('execute skips shared-namespace dependents when the owner was not running', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const recreateSharedNamespaceDependents = vi.fn().mockResolvedValue(undefined);
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      recreateSharedNamespaceDependents,
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(recreateSharedNamespaceDependents).not.toHaveBeenCalled();
+  });
+
+  test('execute keeps the update successful when recreating shared-namespace dependents throws', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const log = createLog();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue({ ...context.newContainer, start: vi.fn() }),
+      recreateSharedNamespaceDependents: vi.fn().mockRejectedValue(new Error('boom')),
+    });
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('sharing the namespace of web (boom)'),
+    );
+  });
+
   test('execute performs successful update without runtime start when old container is stopped', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({

@@ -56,6 +56,10 @@ const eventTestCases = [
     emitter: event.emitApprovalEvent,
     register: event.registerApprovalEvent,
   },
+  {
+    emitter: event.emitApprovalPendingNotification,
+    register: event.registerApprovalPendingNotification,
+  },
 ];
 test.each(eventTestCases)(
   'the registered $register.name function must execute the handler when the $emitter.name emitter function is called',
@@ -491,6 +495,19 @@ test('deregistration of maturity gate cleared handler should work', async () => 
   const deregister = event.registerMaturityGateCleared(handler, { order: 10 });
   deregister();
   await event.emitMaturityGateCleared(makeMaturityGateClearedPayload());
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('clearAllListenersForTests should clear approval pending notification handlers', async () => {
+  const handler = vi.fn();
+  event.registerApprovalPendingNotification(handler, { order: 10 });
+  event.clearAllListenersForTests();
+  await event.emitApprovalPendingNotification({
+    container: { id: 'c1', name: 'web' } as any,
+    approvalId: 'a1',
+    fromRef: '1.0.0',
+    toRef: '1.1.0',
+  });
   expect(handler).not.toHaveBeenCalled();
 });
 

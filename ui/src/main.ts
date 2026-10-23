@@ -18,6 +18,7 @@ import EmptyState from './components/EmptyState.vue';
 import KeyboardShortcutsOverlay from './components/KeyboardShortcutsOverlay.vue';
 import ThemeToggle from './components/ThemeToggle.vue';
 import ToggleSwitch from './components/ToggleSwitch.vue';
+import { installConnectivityMonitor } from './composables/useConnectivity';
 import { loadServerFeatures } from './composables/useServerFeatures';
 import { tooltip as Tooltip } from './directives/tooltip';
 import AppLayout from './layouts/AppLayout.vue';
@@ -32,6 +33,10 @@ import './theme/tokens.css';
 import './style.css';
 
 installVitePreloadErrorHandler();
+
+// Track offline / server-unreachable state before the first API call so the
+// very first failure is seen.
+installConnectivityMonitor();
 
 // Pre-register only the icons we use so they render offline (no CDN fetch)
 registerIcons();

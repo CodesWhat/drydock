@@ -2,7 +2,7 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
-Entries marked v1.8.0 first appear in v1.8.0-rc.1. The current test candidate is v1.8.0-rc.5; v1.7.0 is the latest stable release (GA 2026-10-19), and entries marked v1.7.0 or earlier have shipped in it. v1.8.0 GA is not released.
+Entries marked v1.8.0 first appear in v1.8.0-rc.1. The current test candidate is v1.8.0-rc.6; v1.7.0 is the latest stable release (GA 2026-10-19), and entries marked v1.7.0 or earlier have shipped in it. v1.8.0 GA is not released.
 
 **API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. Two kinds of endpoint used to keep responding at `/api/*` after that removal, both because they were registered directly on the app rather than through the removed alias router: the flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below), and the standalone auth aliases `GET /api/auth/methods` and `GET /api/auth/status`. `GET /api/auth/methods` was removed on its own v1.7.0 schedule (see Removed compatibility behaviors below) and now falls through to the same tombstone as the rest of the unversioned surface; `GET /api/auth/status` remains, with no removal scheduled (see its entry below).
 
@@ -24,7 +24,43 @@ The unversioned `/api/settings` path is not a working alias for this endpoint. L
 
 ---
 
+### `/api/v1/triggers` (combined trigger routes)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.7.1 |
+| **Removal** | No earlier than v1.9.0 (`/api/v1` is frozen, so the removal itself waits for API v2 unless the maintainers schedule it sooner) |
+| **Affects** | API clients calling `GET /api/v1/triggers`, `GET /api/v1/triggers/{type}/{name}[/{agent}]` or `POST /api/v1/triggers/{type}/{name}[/{agent}]` |
+
+The `DD_ACTION_*` / `DD_NOTIFICATION_*` split now has matching API routes: `/api/v1/actions` for action triggers (`docker`, `dockercompose`, `portainer`, `command`) and `/api/v1/notification-triggers` for notification triggers. `/api/v1/notifications` could not be reused because it is already the notification rules collection. Both new routes accept the same methods, auth and response shapes as `/api/v1/triggers`, filtered by category; a trigger of the other category returns 404. The old routes keep working, add `Deprecation: true` and `Link: <successor>; rel="successor-version"` headers, and log a one-time warning per process. The agent-local `/api/triggers` routes used for controller-to-agent calls are not affected.
+
+**Migration:** Call `/api/v1/actions` for `docker`, `dockercompose`, `portainer` and `command` triggers and `/api/v1/notification-triggers` for everything else. Paths after the prefix are unchanged.
+
+---
+
 ## Removed compatibility behaviors
+
+### Bundled Trivy and cosign binaries in the Docker image
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.8.0 |
+| **Removed in** | v1.8.0 |
+| **Affects** | Installs with `DD_SECURITY_SCANNER=trivy` or `both` that relied on the `trivy` binary in the image, and installs with `DD_SECURITY_VERIFY_SIGNATURES=true` that relied on the `cosign` binary |
+
+Through v1.7.x the image carried a vendored `trivy` binary (`/usr/local/bin/trivy`) and an Alpine `cosign` package. Both were Go binaries whose module graphs produced vulnerability findings Drydock could not patch independently, so the image Grype gate ignored them by location and never covered them. v1.8.0 removes both from the image. Trivy is now supported through a worker or a remote server only, and cosign, Grype and Syft run from pinned worker images.
+
+`DD_SECURITY_BACKEND` has a new default, `auto`. For each provider it runs a local command when `DD_SECURITY_<PROVIDER>_COMMAND` is set or the binary is on `PATH`, and a hardened, digest-pinned Docker worker otherwise. `command`, `docker` and `remote` keep their explicit meanings. `remote` stays Trivy-only.
+
+- **`DD_SECURITY_SCANNER=trivy` or `both` without a Trivy binary** keeps scanning through the pinned Trivy worker. Drydock logs one `WARN` per process naming the change and counts it in the deprecation banner and in `dd_legacy_input_total{source="env"}`.
+- **If Docker denies creating or attaching the worker** (for example a socket proxy that blocks container creation), the scan fails with an error naming the three setups that work: `DD_SECURITY_SCANNER=grype` (recommended), `DD_SECURITY_BACKEND=remote` with `DD_SECURITY_TRIVY_SERVER`, or a binary you mount and point `DD_SECURITY_TRIVY_COMMAND` at.
+- **`DD_SECURITY_TRIVY_COMMAND` pointing at a mounted binary, and `DD_SECURITY_BACKEND=remote`, keep working unchanged.**
+- **cosign** now runs in a worker by default with the same hardening as the scanner workers (read-only root filesystem, all capabilities dropped, no Docker socket, environment allowlist). `DD_SECURITY_COSIGN_COMMAND` is still honored and keeps cosign local. A `DD_SECURITY_COSIGN_KEY` file is read by Drydock and passed to the worker by value.
+- **The release SBOM** is generated with Syft instead of Trivy. The SPDX 2.3 format is unchanged.
+
+**Migration:** Set `DD_SECURITY_SCANNER=grype`. Trivy is marked "supported via worker/remote only": keep `trivy` if you run a Trivy server (`DD_SECURITY_BACKEND=remote`) or mount your own binary. Make sure Drydock has a Docker API connection that can create containers (`DD_SECURITY_DOCKER_SOCKET`, or `DD_SECURITY_DOCKER_HOST` and `DD_SECURITY_DOCKER_PORT` for a socket proxy). See [Update Bouncer](https://getdrydock.com/docs/configuration/security#execution-backends).
+
+---
 
 ### `curl` in Docker image
 
@@ -270,6 +306,8 @@ Older builds let the session and main LokiJS engines overwrite the same JSON fil
 
 **Downgrade:** Stop Drydock and restore the intended pre-upgrade JSON snapshot, keeping any separate session JSON file with it. An existing `.pre-1.8.bak` may be from an earlier upgrade; when it already exists, the importer preserves the current `dd.json` instead of replacing that backup. Neither JSON file includes changes made only in SQLite after the upgrade, and a fresh v1.8 install has no pre-upgrade JSON snapshot.
 
+**Snapshot and downgrade guard:** Before applying a pending schema migration to an existing `dd.sqlite`, startup writes a consistent snapshot next to it, `dd.sqlite.pre-migration-v<schema version>-<timestamp>` (owner-only, `VACUUM INTO`), and keeps the newest three. A fresh database gets none. If the snapshot can't be written (disk full, permissions), startup stops with an error instead of migrating without a restore point. Separately, a database whose recorded schema version is newer than the highest migration the running build knows is refused: Drydock logs one error naming both versions and exits 1, so an older build can't open a database a newer one migrated. To go back, run a build at least as new as the one that last ran, or stop Drydock, copy the pre-migration snapshot over `dd.sqlite`, delete any `dd.sqlite-wal` and `dd.sqlite-shm`, and start the older build. Builds before this guard (v1.8.0-rc.6 and earlier) have neither check, so the refusal only protects once the older build also contains the guard. A self-update that rolls back to an older image after the new one migrated the database restarts the old container against the same `/store`; a guarded old image exits with that error (visible in `docker logs`) rather than touching the data.
+
 ## Enforced security changes (no deprecation window)
 
 These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability — keeping it alive behind a warning would have left the hole open. They are listed here for upgrade visibility and migration guidance.
@@ -374,4 +412,6 @@ Before this change, a `dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort` or `dd.
 
 Before this change, Drydock accepted any access token the configured IdP would answer a userinfo call for, whichever client it was issued to. A token minted for an unrelated application on the same IdP therefore authenticated against the Drydock API. Drydock now verifies the token (JWT signature through the IdP's JWKS, or RFC 7662 introspection for opaque tokens) and requires it to be issued for this client: `aud` contains the client ID, or `azp` or `client_id` equals it. A token that can't be verified either way is rejected, and the browser login flow is unaffected.
 
-**Migration:** Request the access token for the Drydock client. If your IdP puts a separate API audience on it, list that audience in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See [OIDC bearer tokens](https://getdrydock.com/docs/configuration/authentications/oidc#bearer-tokens).
+As of v1.8 the bearer path is also off by default. Implicit, always-on OIDC bearer acceptance is replaced by an opt-in with audience validation, so an `Authorization: Bearer` access token is rejected like any unauthenticated request (with a rate-limited warning in the log) until you enable it.
+
+**Migration:** Set `DD_AUTH_OIDC_{name}_BEARER=true` to restore bearer authentication. Request the access token for the Drydock client. If your IdP puts a separate API audience on it, list that audience in `DD_AUTH_OIDC_{name}_BEARERAUDIENCES`. See [OIDC bearer tokens](https://getdrydock.com/docs/configuration/authentications/oidc#bearer-tokens).

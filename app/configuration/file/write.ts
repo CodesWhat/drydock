@@ -258,10 +258,10 @@ async function performWrite(section: string, sectionBody: unknown): Promise<Conf
   );
   // A body's `x: { _file }` (`DD_X__FILE`) and `x: value` (`DD_X`) set the
   // same setting, and the environment may have provided it under either name
-  // too: `configFileSources` holds `DD_X__FILE` for an environment secret file
-  // read at startup and `DD_X` once a reload has resolved it. Either name
-  // attributed to `env` means the environment wins, so the refusal names the
-  // setting, `DD_X`, whichever form the body used.
+  // too: `configFileSources` is keyed by the setting, `DD_X`, so either name
+  // resolves to the same entry. Attributed to `env` means the environment
+  // wins, so the refusal names the setting, `DD_X`, whichever form the body
+  // used.
   const envSourcedKeys = sectionEnvKeys
     .map(toSettingKey)
     .filter((key) => settingKeyForms(key).some((form) => configFileSources[form] === 'env'))

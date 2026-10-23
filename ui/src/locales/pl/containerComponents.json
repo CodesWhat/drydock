@@ -141,6 +141,7 @@
         "recently-applied": "Pominięto: aktualizacja została właśnie zastosowana, czekam na potwierdzenie przez watcher.",
         "digest-buffered": "Wstrzymano do następnego zestawienia."
       },
+      "notificationSkipAt": "Ostatnio pominięto {date}",
       "backupsRollback": "Kopie zapasowe i przywracanie",
       "rollingBack": "Cofanie się...",
       "rollbackLatest": "Wycofaj najnowszą",
@@ -262,6 +263,7 @@
     },
     "groupedViews": {
       "statusQueued": "W kolejce",
+      "updateFailed": "Aktualizacja nie powiodła się",
       "statusScanning": "Skanowanie",
       "statusUpdating": "Aktualizowanie",
       "statusPulling": "Ciągnięcie…",
@@ -478,6 +480,7 @@
       "maturityClockPublished": "Kandydat opublikowany {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat opublikowany {date} — jeszcze {count} dni do minimum {minDays} dni",
       "maturityClockDetected": "Kandydat wykryty {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat wykryty {date} — jeszcze {count} dni do minimum {minDays} dni",
       "groupManualOnly": "Zasady grupy '{group}' dopuszczają tylko ręczne aktualizacje. Drydock nie zastosuje tej automatycznie.",
+      "updateAvailableRuleDisabled": "Reguła powiadomień Update Available jest wyłączona i steruje też aktualizacjami automatycznymi. Włącz ją w Settings > Notifications > Update Available, aby Drydock sam zastosował tę aktualizację.",
       "updateButton": "Aktualizuj teraz",
       "blockedButton": "Aktualizacja zablokowana",
       "notificationsOnlyButton": "Tylko powiadomienia",
@@ -520,6 +523,7 @@
         "no-update-trigger-configured": "Nie skonfigurowano wyzwalacza aktualizacji",
         "self-update-unavailable": "Samoaktualizacja niedostępna",
         "maintenance-window-closed": "Okno konserwacji zamknięte",
+        "update-available-rule-disabled": "Reguła Update Available jest wyłączona",
         "group-notify-only": "Grupa zezwala tylko na powiadomienia",
         "group-manual-only": "Grupa wymaga ręcznych aktualizacji",
         "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run",
@@ -536,6 +540,7 @@
         "configureThreshold": "Skonfiguruj próg wyzwalacza",
         "configureSelfUpdate": "Skonfiguruj samoaktualizację",
         "configureMaintenance": "Skonfiguruj okno konserwacji",
+        "configureNotificationRule": "Otwórz reguły powiadomień",
         "editGroupPolicy": "Edytuj zasady grupy"
       },
       "releaseMaturityCount": "Oczekiwanie na stabilne wydania w rodzinie {family}: dostępnych wcześniejszych wydań: {count} z {required}.",
@@ -653,6 +658,7 @@
         "snoozed": "Aktualizacje odłożone",
         "maturityBlockedSingular": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dzień",
         "maturityBlockedPlural": "Polityka „tylko dojrzałe” blokuje aktualizacje młodsze niż {days} dni",
+        "maturityCountdown": "{message}. Odblokuje się za {countdown} ({date})",
         "maturityActiveSingular": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dzień)",
         "maturityActivePlural": "Polityka „tylko dojrzałe” aktywna (minimalny wiek {days} dni)",
         "maturityAllowAll": "Polityka dojrzałości zezwala na wszystkie aktualizacje",

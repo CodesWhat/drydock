@@ -13,7 +13,11 @@ function makeOperation(
   };
 }
 
-function makeContainer(overrides: Partial<Container> = {}): Container {
+// Test-only: fixture rows carry an operation so the stand-in store lookups below
+// have something to read. The real Container type has no such field.
+type FixtureContainer = Container & { updateOperation?: ContainerUpdateOperation };
+
+function makeContainer(overrides: Partial<FixtureContainer> = {}): FixtureContainer {
   return {
     id: 'container-1',
     identityKey: 'container-1',
@@ -41,7 +45,7 @@ async function loadComposable() {
 
 // Stand-in for the operations store lookup the views inject: a container is
 // active while its fixture row carries a queued or in-progress operation.
-const isRowOperationActive = (container: Partial<Container>) =>
+const isRowOperationActive = (container: Partial<FixtureContainer>) =>
   container.updateOperation?.status === 'queued' ||
   container.updateOperation?.status === 'in-progress';
 
@@ -52,7 +56,7 @@ function reconcileByRowOperation(
   onTerminalResolved?: Parameters<typeof hold.reconcileHoldsAgainstContainers>[2],
 ) {
   hold.reconcileHoldsAgainstContainers(containers, now, onTerminalResolved, (container) =>
-    isRowOperationActive(container as Partial<Container>),
+    isRowOperationActive(container as Partial<FixtureContainer>),
   );
 }
 
@@ -359,12 +363,7 @@ describe('useOperationDisplayHold', () => {
           updateOperation: makeOperation({ id: 'op-fallback' }),
         }),
       ),
-    ).toEqual(
-      expect.objectContaining({
-        name: 'expired',
-        updateOperation: expect.objectContaining({ id: 'op-fallback' }),
-      }),
-    );
+    ).toEqual(expect.objectContaining({ name: 'expired' }));
   });
 
   it('returns the same container reference when no held update or sort snapshot applies', async () => {
@@ -398,10 +397,7 @@ describe('useOperationDisplayHold', () => {
     const projected = hold.projectContainerDisplayState(container);
 
     expect(projected).not.toBe(container);
-    expect(projected).toEqual({
-      ...container,
-      updateOperation: displayOperation,
-    });
+    expect(projected).toEqual(container);
   });
 
   it('does not project an id-keyed hold onto a same-name sibling with a different id', async () => {
@@ -418,7 +414,7 @@ describe('useOperationDisplayHold', () => {
       now: Date.now(),
     });
 
-    expect(hold.projectContainerDisplayState(selected).updateOperation).toStrictEqual(operation);
+    expect(hold.projectContainerDisplayState(selected)).not.toBe(selected);
     expect(hold.projectContainerDisplayState(sibling)).toBe(sibling);
   });
 
@@ -449,7 +445,7 @@ describe('useOperationDisplayHold', () => {
       now: Date.now(),
     });
 
-    expect(hold.projectContainerDisplayState(selected).updateOperation).toStrictEqual(operation);
+    expect(hold.projectContainerDisplayState(selected)).not.toBe(selected);
     expect(hold.projectContainerDisplayState(sibling)).toBe(sibling);
   });
 
@@ -472,7 +468,7 @@ describe('useOperationDisplayHold', () => {
       name: 'pi-hole',
       identityKey,
     });
-    expect(hold.projectContainerDisplayState(recreated).updateOperation).toStrictEqual(operation);
+    expect(hold.projectContainerDisplayState(recreated)).not.toBe(recreated);
   });
 
   it('clears all held operations and cancels scheduled timers', async () => {
@@ -608,7 +604,7 @@ describe('useOperationDisplayHold', () => {
     expect(hold.heldOperations.value.get(operation.id)?.sortSnapshot).toEqual(sortSnapshot);
   });
 
-  it('projects both sort fields and held updateOperation when container fields are volatile', async () => {
+  it('projects sort fields without injecting an operation when container fields are volatile', async () => {
     const hold = await loadComposable();
     const operation = makeOperation({ id: 'op-sort-only' });
     const sortSnapshot = {
@@ -643,8 +639,8 @@ describe('useOperationDisplayHold', () => {
     expect(projected.status).toBe('running');
     expect(projected.updateKind).toBe('minor');
     expect(projected.newTag).toBe('2.0.0');
-    // updateOperation also applied from held operation
-    expect(projected.updateOperation).toStrictEqual(operation);
+    // The hold no longer writes an operation onto the projected row.
+    expect(projected).not.toHaveProperty('updateOperation');
   });
 
   it('stabilises currentTag, image, and imageCreated so version/image/imageAge sorts do not shift mid-update', async () => {
@@ -1573,10 +1569,10 @@ describe('useOperationDisplayHold', () => {
       expect(hold?.operation.phase).toBe('pulling');
     });
 
-    it('invokes onActiveOperationComputed so views can mirror row state', async () => {
+    it('holds the computed operation with its batch and queue fields', async () => {
       const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
       const container = makeContainer({ id: 'c-a', name: 'api' });
-      const onActiveOperationComputed = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
           operationId: 'op-a',
@@ -1589,12 +1585,9 @@ describe('useOperationDisplayHold', () => {
           phase: 'queued',
         },
         resolveContainer: () => container,
-        onActiveOperationComputed,
       });
-      expect(onActiveOperationComputed).toHaveBeenCalledWith({
-        operationId: 'op-a',
-        container,
-        nextOperation: expect.objectContaining({
+      expect(heldOperations.value.get('op-a')?.operation).toEqual(
+        expect.objectContaining({
           id: 'op-a',
           batchId: 'batch-a',
           queuePosition: 2,
@@ -1602,7 +1595,7 @@ describe('useOperationDisplayHold', () => {
           status: 'queued',
           phase: 'queued',
         }),
-      });
+      );
     });
 
     it('builds the held operation from the store operation with the same id', async () => {
@@ -1684,7 +1677,6 @@ describe('useOperationDisplayHold', () => {
     it('short-circuits active-status events when the container cannot be resolved', async () => {
       const mod = await loadModule();
       const { heldOperations } = mod.useOperationDisplayHold();
-      const onActiveOperationComputed = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
           operationId: 'op-gone',
@@ -1693,9 +1685,7 @@ describe('useOperationDisplayHold', () => {
           phase: 'pulling',
         },
         resolveContainer: () => undefined,
-        onActiveOperationComputed,
       });
-      expect(onActiveOperationComputed).not.toHaveBeenCalled();
       expect(heldOperations.value.has('op-gone')).toBe(false);
     });
 
@@ -1703,7 +1693,6 @@ describe('useOperationDisplayHold', () => {
       const mod = await loadModule();
       const { heldOperations } = mod.useOperationDisplayHold();
       const container = makeContainer({ id: 'c-noid', name: 'worker' });
-      const onActiveOperationComputed = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
           containerId: 'c-noid',
@@ -1712,10 +1701,8 @@ describe('useOperationDisplayHold', () => {
           phase: 'queued',
         },
         resolveContainer: () => container,
-        onActiveOperationComputed,
       });
       expect(heldOperations.value.size).toBe(0);
-      expect(onActiveOperationComputed).not.toHaveBeenCalled();
     });
 
     it('falls back to a status-appropriate phase when the payload phase is invalid', async () => {
@@ -1772,8 +1759,8 @@ describe('useOperationDisplayHold', () => {
 
     it('keeps a valid previous container operation id when the payload omits operationId', async () => {
       const mod = await loadModule();
+      const { heldOperations } = mod.useOperationDisplayHold();
       const container = makeContainer({ id: 'c-noid2', name: 'svc3' });
-      const onActiveOperationComputed = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
           containerId: 'c-noid2',
@@ -1783,12 +1770,9 @@ describe('useOperationDisplayHold', () => {
         },
         resolveContainer: () => container,
         resolvePreviousOperation: () => makeOperation({ id: 'op-existing', phase: 'pulling' }),
-        onActiveOperationComputed,
       });
-      // onActiveOperationComputed isn't called because there's no operationId,
-      // but the early return happens AFTER we compute nextOperation — so no hold
-      // is created and no callback fires.
-      expect(onActiveOperationComputed).not.toHaveBeenCalled();
+      // No operationId in the payload, so no hold is created.
+      expect(heldOperations.value.size).toBe(0);
     });
 
     it('fires onTerminalEvent immediately for a tracked hold (state mutations must be synchronous)', async () => {

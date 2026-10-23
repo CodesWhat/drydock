@@ -43,6 +43,7 @@
       "updateAll": "Update all",
       "noUpdates": "No updates available",
       "securityBlocked": "Security blocked",
+      "maturityCountdown": "Unlocks in {countdown} ({date})",
       "updateContainer": "Update container",
       "compactSingle": "{count} update available",
       "compactPlural": "{count} updates available",
@@ -98,7 +99,14 @@
       "updateDetail": "{fresh} new · {mature} mature",
       "securityIssues": "Security Issues",
       "registries": "Registries",
-      "approvals": "Approvals"
+      "approvals": "Approvals",
+      "images": "Images",
+      "imageDetail": "{count} with updates",
+      "triggers": "Triggers",
+      "triggerDetail": "{actions} actions · {notifications} notifications",
+      "watchers": "Watchers",
+      "watcherDetailHealthy": "All connected",
+      "watcherDetailDisconnected": "{healthy} connected · {disconnected} disconnected"
     },
     "updateKind": {
       "major": "Major",
@@ -123,6 +131,14 @@
       "hostStatus": "Host Status",
       "updateBreakdown": "Update Breakdown",
       "statApprovals": "Approvals"
+    },
+    "recentActivity": {
+      "title": "Recent Activity",
+      "viewAudit": "View audit log →",
+      "loading": "Loading activity...",
+      "loadFailed": "Failed to load recent activity",
+      "empty": "No recent activity",
+      "system": "System"
     }
   }
 }

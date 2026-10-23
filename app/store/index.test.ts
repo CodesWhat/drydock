@@ -193,6 +193,7 @@ const {
     resetFsMock(overrides.fs);
     vi.doMock('./db/driver.js', () => createDriverMock(overrides.sqliteOpenDatabase));
     vi.doMock('./db/migrations.js', createMigrationsMock);
+    vi.doMock('./db/pre-migration.js', () => ({ prepareDatabaseForMigration: vi.fn() }));
     vi.doMock('./db/import.js', () => createImportMock(overrides.runFirstStartImport));
     vi.doMock('../configuration', () => ({
       ...createConfigMock(overrides.config ?? STORE_CONFIG),
@@ -255,6 +256,7 @@ const {
 vi.mock('node:fs', () => ({ default: fsMock }));
 vi.mock('./db/driver.js', () => createDriverMock());
 vi.mock('./db/migrations.js', createMigrationsMock);
+vi.mock('./db/pre-migration.js', () => ({ prepareDatabaseForMigration: vi.fn() }));
 vi.mock('./db/import.js', () => createImportMock());
 vi.mock('../configuration', () => ({
   ...createConfigMock(),

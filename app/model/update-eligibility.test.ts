@@ -1683,6 +1683,20 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
     });
 
+    test('reports manual for an auto trigger whose threshold the candidate does not reach', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'all', threshold: 'minor' } });
+      const container = makeContainerWithTagUpdate({
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0', semverDiff: 'major' },
+        result: { tag: '2.0.0' },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.actionPolicy).toStrictEqual({ state: 'manual', triggerId: 'docker.update' });
+      expect(result.blockers.find((b) => b.reason === 'threshold-not-reached')).toBeDefined();
+    });
+
     test('reflects manual state under onauto with no matching auto label', () => {
       const trigger = makeTrigger({ configuration: { auto: 'onauto', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({ actionTriggerInclude: 'docker.update' });
@@ -2064,6 +2078,7 @@ describe('computeUpdateEligibility', () => {
         'agent-mismatch',
         'no-update-trigger-configured',
         'maintenance-window-closed',
+        'update-available-rule-disabled',
       ] as const;
       for (const reason of allReasons) {
         expect(BLOCKER_SEVERITY[reason]).toMatch(/^(hard|soft)$/);
@@ -2383,5 +2398,93 @@ describe('computeUpdateEligibility — maintenance-window-closed', () => {
     expect(result.blockers).toHaveLength(1);
     expect(result.blockers[0].reason).toBe('no-update-available');
     expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// update-available-rule-disabled blocker
+// ---------------------------------------------------------------------------
+
+describe('computeUpdateEligibility — update-available-rule-disabled', () => {
+  const autoContext = (overrides: Partial<UpdateEligibilityContext> = {}) =>
+    makeContext({
+      triggers: { 'docker.update': makeTrigger() as never },
+      updateMode: 'auto',
+      updateAvailableRuleEnabled: false,
+      now: FIXED_NOW,
+      ...overrides,
+    });
+  const find = (result: ReturnType<typeof computeUpdateEligibility>) =>
+    result.blockers.find((b) => b.reason === 'update-available-rule-disabled');
+
+  test('is soft: the rule gates automatic actions only, manual updates stay allowed', () => {
+    expect(BLOCKER_SEVERITY['update-available-rule-disabled']).toBe('soft');
+  });
+
+  test('emits a blocker naming the setting when the rule is off and an action would auto-dispatch', () => {
+    const result = computeUpdateEligibility(makeContainerWithTagUpdate(), autoContext());
+    const blocker = find(result);
+    expect(blocker).toMatchObject({
+      severity: 'soft',
+      actionable: true,
+    });
+    expect(blocker?.message).toContain('Settings > Notifications > Update Available');
+    expect(result.eligible).toBe(false);
+  });
+
+  test('no blocker when the rule is enabled or the caller did not say (manual path)', () => {
+    const container = makeContainerWithTagUpdate();
+    expect(
+      find(computeUpdateEligibility(container, autoContext({ updateAvailableRuleEnabled: true }))),
+    ).toBeUndefined();
+    expect(
+      find(
+        computeUpdateEligibility(container, autoContext({ updateAvailableRuleEnabled: undefined })),
+      ),
+    ).toBeUndefined();
+  });
+
+  test('no blocker when the update mode is not auto, so nothing would have auto-dispatched', () => {
+    const container = makeContainerWithTagUpdate();
+    expect(
+      find(computeUpdateEligibility(container, autoContext({ updateMode: 'manual' }))),
+    ).toBeUndefined();
+    expect(
+      find(computeUpdateEligibility(container, autoContext({ updateMode: undefined }))),
+    ).toBeUndefined();
+  });
+
+  test('no blocker when no action trigger would auto-dispatch the container', () => {
+    const container = makeContainerWithTagUpdate();
+    expect(
+      find(computeUpdateEligibility(container, autoContext({ triggers: undefined }))),
+    ).toBeUndefined();
+    const manualTrigger = makeTrigger({ configuration: { threshold: 'all', auto: false } });
+    expect(
+      find(
+        computeUpdateEligibility(
+          container,
+          autoContext({ triggers: { 'docker.update': manualTrigger as never } }),
+        ),
+      ),
+    ).toBeUndefined();
+  });
+
+  test('a group ceiling below auto suppresses it, the group blocker already explains', () => {
+    const container = makeContainerWithTagUpdate({
+      groupPolicy: {
+        id: 'p',
+        group: 'g',
+        revision: 1,
+        updatePolicy: {},
+        actions: { updateMode: 'manual' },
+      },
+    } as never);
+    expect(find(computeUpdateEligibility(container, autoContext()))).toBeUndefined();
+  });
+
+  test('does not appear when no update exists (short-circuit)', () => {
+    const result = computeUpdateEligibility(makeContainer(), autoContext());
+    expect(find(result)).toBeUndefined();
   });
 });

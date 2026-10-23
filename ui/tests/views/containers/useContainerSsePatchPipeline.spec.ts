@@ -6,7 +6,6 @@ import {
   OPERATION_DISPLAY_HOLD_MS,
   useOperationDisplayHold,
 } from '@/composables/useOperationDisplayHold';
-import { useOperationStore } from '@/stores/operations';
 import type { Container, ContainerUpdateOperation } from '@/types/container';
 import { useContainerSsePatchPipeline } from '@/views/containers/useContainerSsePatchPipeline';
 
@@ -38,7 +37,6 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     currentTag: '1.0.0',
     status: 'running',
     updateKind: 'minor',
-    updateOperation: undefined,
     ...overrides,
   } as Container;
 }
@@ -117,13 +115,9 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     },
   );
 
-  it('releases the display hold and clears the row updateOperation on terminal applied event', async () => {
+  it('releases the display hold on terminal applied event', async () => {
     const activeOperation = makeOperation();
-    const containers = ref([
-      makeContainer({
-        updateOperation: activeOperation,
-      }),
-    ]);
+    const containers = ref([makeContainer({})]);
     const hold = useOperationDisplayHold();
     hold.holdOperationDisplay({
       operationId: activeOperation.id,
@@ -146,7 +140,6 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     );
     await flushPromises();
 
-    expect(containers.value[0]!.updateOperation).toBeUndefined();
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
 
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
@@ -166,11 +159,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     // release and the post-terminal reload must still fire, regardless of how
     // long the gap is.
     const activeOperation = makeOperation({ id: 'op-late-applied' });
-    const containers = ref([
-      makeContainer({
-        updateOperation: activeOperation,
-      }),
-    ]);
+    const containers = ref([makeContainer({})]);
     const hold = useOperationDisplayHold();
     hold.holdOperationDisplay({
       operationId: activeOperation.id,
@@ -212,9 +201,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     );
     await flushPromises();
 
-    // The row's updateOperation clears immediately; the hold releases after
-    // the standard hold window; the post-terminal reload is scheduled.
-    expect(containers.value[0]!.updateOperation).toBeUndefined();
+    // The hold releases after the standard hold window; the post-terminal reload is scheduled.
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
     await flushPromises();
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
@@ -225,11 +212,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
   it('keeps the hold pinned until the settle delay elapses, even after a later terminal operation-change event', async () => {
     const activeOperation = makeOperation({ id: 'op-race' });
-    const containers = ref([
-      makeContainer({
-        updateOperation: activeOperation,
-      }),
-    ]);
+    const containers = ref([makeContainer({})]);
     const hold = useOperationDisplayHold();
     hold.holdOperationDisplay({
       operationId: activeOperation.id,
@@ -306,12 +289,10 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       makeContainer({
         id: 'old-c1',
         name: 'nginx-old',
-        updateOperation: oldOperation,
       }),
       makeContainer({
         id: 'new-c1',
         name: 'nginx-new',
-        updateOperation: newOperation,
       }),
     ]);
     const hold = useOperationDisplayHold();
@@ -477,7 +458,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
   it('does not index a mapped container with an empty id', async () => {
     const containers = ref<Container[]>([]);
-    const { wrapper, pipeline } = mountPipeline({ containers });
+    const { wrapper } = mountPipeline({ containers });
     mockMapApiContainer.mockReturnValueOnce(makeContainer({ id: '', name: 'idless' }));
 
     globalThis.dispatchEvent(
@@ -489,53 +470,59 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     expect(containers.value).toHaveLength(1);
     expect(containers.value[0]!.id).toBe('');
-    expect(pipeline.hasPendingOperationWatcher('')).toBe(true);
 
     wrapper.unmount();
   });
 
-  it('cleans up an empty-id deferred watcher when no index can be resolved', async () => {
-    const containers = ref<Container[]>([]);
-    const operationStore = useOperationStore();
-    const { wrapper, pipeline } = mountPipeline({ containers });
+  it('re-indexes a row whose canonical id changes in an update patch', async () => {
+    const containers = ref([
+      makeContainer({ id: 'c1', name: 'nginx' }),
+      makeContainer({ id: 'c2', name: 'redis' }),
+    ]);
+    const { wrapper } = mountPipeline({ containers });
+
     mockMapApiContainer.mockReturnValueOnce(
-      makeContainer({ id: '', name: undefined, updateOperation: undefined }),
+      makeContainer({ id: 'c1-new', name: 'nginx', currentTag: '2.0.0' }),
     );
-
     globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'raw-empty-id', name: 'raw-empty-name' },
-      }),
+      new CustomEvent('dd:sse-container-updated', { detail: { id: 'c1', name: 'nginx' } }),
     );
     await flushPromises();
 
-    expect(pipeline.hasPendingOperationWatcher('')).toBe(true);
+    expect(containers.value.map((container) => container.id)).toEqual(['c1-new', 'c2']);
 
-    const getOperationByContainerId = operationStore.getOperationByContainerId.bind(operationStore);
-    const getOperationSpy = vi
-      .spyOn(operationStore, 'getOperationByContainerId')
-      .mockImplementation((containerId: string) =>
-        containerId === ''
-          ? {
-              operationId: 'op-empty-id',
-              containerId: '',
-              status: 'in-progress',
-              phase: 'pulling',
-            }
-          : getOperationByContainerId(containerId),
-      );
-
-    operationStore.applyOperationChanged({
-      operationId: 'op-trigger',
-      containerId: 'trigger-c1',
-      containerName: 'trigger',
-      status: 'in-progress',
-      phase: 'pulling',
-    });
+    mockMapApiContainer.mockReturnValueOnce(
+      makeContainer({ id: 'c1-new', name: 'nginx', currentTag: '2.1.0' }),
+    );
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-updated', { detail: { id: 'c1-new', name: 'nginx' } }),
+    );
     await flushPromises();
 
-    expect(pipeline.hasPendingOperationWatcher('')).toBe(false);
-    getOperationSpy.mockRestore();
+    expect(containers.value).toHaveLength(2);
+    expect(containers.value[0]!.currentTag).toBe('2.1.0');
+
+    wrapper.unmount();
+  });
+
+  it('drops the stale index entry when an update patch moves a row onto another row id', async () => {
+    const containers = ref([
+      makeContainer({ id: 'c1', name: 'nginx' }),
+      makeContainer({ id: 'c2', name: 'redis' }),
+    ]);
+    const { wrapper } = mountPipeline({ containers });
+
+    mockMapApiContainer.mockReturnValueOnce(
+      makeContainer({ id: 'c2', name: 'nginx', currentTag: '3.0.0' }),
+    );
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-updated', { detail: { id: 'c1', name: 'nginx' } }),
+    );
+    await flushPromises();
+
+    expect(containers.value.map((container) => container.id)).toEqual(['c2', 'c2']);
+    expect(containers.value[0]!.currentTag).toBe('3.0.0');
+
     wrapper.unmount();
   });
 
@@ -562,139 +549,6 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     expect(containerIdMap.value['Display Name']).toBe('display-c1');
     expect(containerIdMap.value['fallback-name']).toBe('fallback-c1');
-
-    wrapper.unmount();
-  });
-
-  it('replaces an existing deferred watcher and clears its timer', async () => {
-    const containers = ref<Container[]>([]);
-    const { wrapper, pipeline } = mountPipeline({ containers });
-    mockMapApiContainer
-      .mockReturnValueOnce(makeContainer({ id: 'canonical-pending-c2', name: 'pending' }))
-      .mockReturnValueOnce(makeContainer({ id: 'canonical-pending-c2', name: 'pending' }));
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'runtime-pending-c2', name: 'pending' },
-      }),
-    );
-    await flushPromises();
-
-    expect(pipeline.hasPendingOperationWatcher('canonical-pending-c2')).toBe(true);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'runtime-pending-c2', name: 'pending' },
-      }),
-    );
-    await flushPromises();
-
-    expect(containers.value).toHaveLength(2);
-    expect(pipeline.hasPendingOperationWatcher('canonical-pending-c2')).toBe(true);
-
-    wrapper.unmount();
-  });
-
-  it('replaces an existing deferred watcher when its timer entry is absent', async () => {
-    const containers = ref<Container[]>([]);
-    const { wrapper } = mountPipeline({ containers });
-    mockMapApiContainer
-      .mockReturnValueOnce(makeContainer({ id: 'canonical-pending-c1', name: 'pending' }))
-      .mockReturnValueOnce(makeContainer({ id: 'canonical-pending-c1', name: 'pending' }));
-    const setTimeoutSpy = vi
-      .spyOn(globalThis, 'setTimeout')
-      .mockImplementation(() => undefined as any);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'runtime-pending-c1', name: 'pending' },
-      }),
-    );
-    setTimeoutSpy.mockRestore();
-    await flushPromises();
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'runtime-pending-c1', name: 'pending' },
-      }),
-    );
-    await flushPromises();
-
-    expect(containers.value).toHaveLength(2);
-
-    wrapper.unmount();
-  });
-
-  it('attaches a delayed operation and clears the deferred watcher timer', async () => {
-    const containers = ref<Container[]>([]);
-    const operationStore = useOperationStore();
-    const { wrapper, pipeline } = mountPipeline({ containers });
-    mockMapApiContainer.mockReturnValueOnce(
-      makeContainer({ id: 'pending-delayed-op', name: 'pending-delayed' }),
-    );
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: { id: 'pending-delayed-op', name: 'pending-delayed' },
-      }),
-    );
-    await flushPromises();
-
-    expect(pipeline.hasPendingOperationWatcher('pending-delayed-op')).toBe(true);
-
-    operationStore.applyOperationChanged({
-      operationId: 'op-delayed',
-      containerId: 'pending-delayed-op',
-      containerName: 'pending-delayed',
-      batchId: 'batch-delayed',
-      queuePosition: 2,
-      queueTotal: 5,
-      status: 'in-progress',
-      phase: 'pulling',
-    });
-    await flushPromises();
-
-    expect(containers.value[0]!.updateOperation).toMatchObject({
-      id: 'op-delayed',
-      batchId: 'batch-delayed',
-      queuePosition: 2,
-      queueTotal: 5,
-      status: 'in-progress',
-      phase: 'pulling',
-    });
-    expect(pipeline.hasPendingOperationWatcher('pending-delayed-op')).toBe(false);
-
-    wrapper.unmount();
-  });
-
-  it('cleans up a timerless deferred watcher without replacing an existing row operation', async () => {
-    const containers = ref<Container[]>([]);
-    const operationStore = useOperationStore();
-    const { wrapper } = mountPipeline({ containers });
-    const setTimeoutSpy = vi
-      .spyOn(globalThis, 'setTimeout')
-      .mockImplementation(() => undefined as any);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-container-added', {
-        detail: makeContainer({ id: 'pending-existing-op', name: 'pending-existing' }),
-      }),
-    );
-    setTimeoutSpy.mockRestore();
-    await flushPromises();
-
-    const existingOperation = makeOperation({ id: 'op-existing-row' });
-    containers.value[0]!.updateOperation = existingOperation;
-    operationStore.applyOperationChanged({
-      operationId: 'op-delayed',
-      containerId: 'pending-existing-op',
-      containerName: 'pending-existing',
-      status: 'in-progress',
-      phase: 'pulling',
-    });
-    await flushPromises();
-
-    expect(containers.value[0]!.updateOperation).toStrictEqual(existingOperation);
 
     wrapper.unmount();
   });
@@ -915,16 +769,15 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     wrapper.unmount();
   });
 
-  it('expired terminal SSE clears container.updateOperation but does NOT set lastUpdateFailureReason', async () => {
+  it('expired terminal SSE does NOT set lastUpdateFailureReason', async () => {
     // Mirrors the failed/succeeded pipeline tests but for the expired status.
     // expired is a non-notifying terminal: the "Updating" badge must clear
-    // (updateOperation → undefined) with no red failure banner and no toast.
+    // with no red failure banner and no toast.
     const activeOperation = makeOperation({ id: 'op-exp-pipeline' });
     const containers = ref([
       makeContainer({
         id: 'c1',
         name: 'nginx',
-        updateOperation: activeOperation,
         lastUpdateFailureReason: undefined,
         lastUpdateFailureAt: undefined,
       } as Partial<Container>),
@@ -949,9 +802,6 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       }),
     );
     await flushPromises();
-
-    // updateOperation cleared immediately on the terminal event.
-    expect(containers.value[0]!.updateOperation).toBeUndefined();
 
     // No failure reason — expired is non-notifying.
     expect((containers.value[0] as Container).lastUpdateFailureReason).toBeUndefined();

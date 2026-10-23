@@ -6,8 +6,10 @@ import whaleLogo from '@/assets/whale-logo.png';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import InstallBanner from '@/components/InstallBanner.vue';
+import OfflineBanner from '@/components/OfflineBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useConnectivity } from '@/composables/useConnectivity';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
 import { useKeyboardShortcuts } from '@/composables/useKeyboardShortcuts';
@@ -213,7 +215,7 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
     group.items.map((item) => ({
       id: `page:${item.route}`,
       title: item.label,
-      subtitle: `Page · ${item.route}`,
+      subtitle: t('appShell.layout.search.pageSubtitle', { route: item.route }),
       icon: item.icon,
       route: item.route,
       kind: 'page',
@@ -1124,6 +1126,7 @@ watch(showSearch, async (val) => {
 
 // Server connectivity monitor
 const connectionLost = ref(false);
+const connectivity = useConnectivity();
 const selfUpdateInProgress = ref(false);
 const selfUpdateOperationId = ref<string | undefined>(undefined);
 const CONNECTIVITY_POLL_INTERVAL_MS = 5_000;
@@ -1206,23 +1209,15 @@ async function checkConnectivity() {
   }
 }
 
-const connectionOverlayTitle = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.applyingUpdateTitle')
-    : t('appShell.layout.connection.lostTitle'),
-);
+// The overlay only shows during a self-update; ordinary outages use the
+// offline banner and read-only views instead.
+const connectionOverlayTitle = computed(() => t('appShell.layout.connection.applyingUpdateTitle'));
 const connectionOverlayMessage = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.restartingMessage', {
-        opId: selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : '',
-      })
-    : t('appShell.layout.connection.lostMessage'),
+  t('appShell.layout.connection.restartingMessage', {
+    opId: selfUpdateOperationId.value ? ` (${selfUpdateOperationId.value.slice(0, 8)})` : '',
+  }),
 );
-const connectionOverlayStatus = computed(() =>
-  selfUpdateInProgress.value
-    ? t('appShell.layout.connection.restartingService')
-    : t('appShell.layout.connection.reconnecting'),
-);
+const connectionOverlayStatus = computed(() => t('appShell.layout.connection.restartingService'));
 
 function asSidebarRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -1340,6 +1335,7 @@ function emitUiSseEvent(name: string, detail?: unknown) {
 
 function handleSseEvent(event: string, payload?: unknown) {
   if (event === 'sse:connected') {
+    connectivity.markServerReachable();
     connectionLost.value = false;
     stopConnectivityPolling();
     selfUpdateInProgress.value = false;
@@ -1428,6 +1424,7 @@ function handleSseEvent(event: string, payload?: unknown) {
     return;
   }
   if (event === 'connection-lost') {
+    connectivity.markServerUnreachable();
     connectionLost.value = true;
     startConnectivityPolling();
   }
@@ -1516,8 +1513,8 @@ onUnmounted(() => {
     <aside
       :class="[
         'sidebar-transition flex flex-col z-50 h-full',
-        isMobile ? 'fixed top-0 left-0' : 'relative',
-        isMobile && !isMobileMenuOpen ? '-translate-x-full' : 'translate-x-0',
+        isMobile ? 'fixed top-0 start-0' : 'relative',
+        isMobile && !isMobileMenuOpen ? '-translate-x-full rtl:translate-x-full' : 'translate-x-0',
         isCollapsed ? 'sidebar-collapsed' : '',
       ]"
       :style="{
@@ -1571,7 +1568,7 @@ onUnmounted(() => {
               <AppIcon :name="item.icon" :size="16" class="shrink-0" style="width:20px; text-align:center;" />
               <span class="sidebar-label text-xs-plus font-medium">{{ item.label }}</span>
               <span v-if="item.badge && !isCollapsed"
-                    class="sidebar-label ml-auto badge text-2xs"
+                    class="sidebar-label ms-auto badge text-2xs"
                     :style="{
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
@@ -1603,7 +1600,7 @@ onUnmounted(() => {
           <AppIcon name="search" :size="12" class="shrink-0" />
           <template v-if="!isCollapsed">
             <span class="sidebar-label">{{ t('appShell.layout.sidebar.searchButton') }}</span>
-            <span class="sidebar-label ml-auto flex items-center gap-1">
+            <span class="sidebar-label ms-auto flex items-center gap-1">
               <kbd class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-text-secondary" style="background: var(--dd-border);">
                 <span class="text-3xs">&#8984;</span>K
               </kbd>
@@ -1697,12 +1694,12 @@ onUnmounted(() => {
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || currentUser?.displayName || t('appShell.layout.topbar.userFallback') }}
                 </div>
-                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-start flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   {{ t('appShell.layout.topbar.profile') }}
                 </AppButton>
                 <div class="my-0.5" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-                <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" style="color: var(--dd-danger);"
+                <AppButton size="md" variant="plain" weight="medium" class="w-full text-start flex items-center gap-2" style="color: var(--dd-danger);"
                         @click="handleSignOut">
                   <AppIcon name="sign-out" :size="11" />
                   {{ t('appShell.layout.topbar.signOut') }}
@@ -1716,6 +1713,8 @@ onUnmounted(() => {
       <div
         class="fixed top-3 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-4xl flex flex-col gap-2"
       >
+        <OfflineBanner />
+
         <InstallBanner />
 
         <AnnouncementBanner
@@ -1792,7 +1791,7 @@ onUnmounted(() => {
       </div>
 
       <!-- MAIN CONTENT -->
-      <main class="flex-1 min-h-0 overflow-clip flex flex-col pl-4 pr-2 py-4 sm:pl-6 sm:pr-[9px] sm:py-6"
+      <main class="flex-1 min-h-0 overflow-clip flex flex-col ps-4 pe-2 py-4 sm:ps-6 sm:pe-[9px] sm:py-6"
             :data-route-name="String(route.name ?? '')"
             :style="{ backgroundColor: 'var(--dd-bg)', borderTopLeftRadius: 'var(--dd-radius-lg)' }">
         <router-view />
@@ -1818,7 +1817,7 @@ onUnmounted(() => {
                     variant="muted"
                     :tooltip="t('appShell.layout.about.close')"
                     :aria-label="t('appShell.layout.about.close')"
-                    class="absolute top-3 right-3 z-10"
+                    class="absolute top-3 end-3 z-10"
                     @click="showAbout = false"
             />
             <div class="flex flex-col items-center pt-6 pb-4 px-6">
@@ -1896,7 +1895,7 @@ onUnmounted(() => {
                 {{ scopeOption.label }}
                 <span class="text-3xs opacity-80">{{ searchScopeCounts[scopeOption.id] }}</span>
               </AppButton>
-              <span class="ml-auto text-2xs dd-text-muted">
+              <span class="ms-auto text-2xs dd-text-muted">
                 {{ t('appShell.layout.search.shown', { count: searchResults.length }) }}
               </span>
             </div>
@@ -1909,7 +1908,7 @@ onUnmounted(() => {
                 <AppButton size="none" variant="plain" weight="none"
                   v-for="result in group.items"
                   :key="result.id"
-                  class="w-full px-4 py-2.5 text-left flex items-center gap-3 transition-colors"
+                  class="w-full px-4 py-2.5 text-start flex items-center gap-3 transition-colors"
                   :class="isSearchResultActive(result.id) ? 'dd-bg-elevated' : 'hover:dd-bg-elevated'"
                   @mouseenter="setActiveSearchResult(result.id)"
                   @click="selectSearchResult(result)">
@@ -1925,7 +1924,7 @@ onUnmounted(() => {
                     <div class="text-xs font-semibold truncate dd-text">{{ result.title }}</div>
                     <div class="text-2xs truncate dd-text-muted">{{ result.subtitle }}</div>
                   </div>
-                  <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0" />
+                  <AppIcon name="chevron-right" :size="11" class="dd-text-muted shrink-0 rtl:-scale-x-100" />
                 </AppButton>
               </template>
               <div v-if="searchResults.length === 0"
@@ -1962,7 +1961,7 @@ onUnmounted(() => {
     <!-- Connection Lost Overlay -->
     <Teleport to="body">
       <Transition name="menu-fade">
-        <div v-if="connectionLost"
+        <div v-if="connectionLost && selfUpdateInProgress"
              class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center"
              style="z-index: var(--z-modal, 200)">
           <div class="w-full max-w-[var(--dd-layout-overlay-max-width)] mx-4 dd-rounded-lg overflow-hidden shadow-2xl text-center"

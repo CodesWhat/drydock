@@ -12,7 +12,7 @@ import {
 import { getNotificationRules } from '../../store/notification.js';
 import { withContainerUpdateLocks } from '../../updates/update-locks.js';
 import { getErrorMessage } from '../../util/error.js';
-import { applyConfigurationReload } from '../index.js';
+import { applyConfigurationReload, configFileSecretPaths } from '../index.js';
 import { resolveCandidateEnvAndDiff } from './candidate.js';
 import {
   type ConfigurationValidationDiff,
@@ -22,7 +22,7 @@ import {
 } from './diff.js';
 import { type ConfigFileInfo, setConfigFileLayer } from './layer.js';
 import { loadConfigFile } from './loader.js';
-import type { ConfigValueSource } from './sources.js';
+import { type ConfigValueSource, toSettingKey } from './sources.js';
 import { type ConfigurationValidationResult, validateConfiguration } from './validate.js';
 
 /**
@@ -123,6 +123,40 @@ function buildApplyDeltas(
   return { envDelta, sourcesDelta };
 }
 
+/**
+ * The secret-file path (`DD_X__FILE`) each reloadable-section setting is
+ * supplied from after this reload, `undefined` for one the file stops
+ * supplying. Includes settings whose resolved contents didn't change, since
+ * the path can move on its own; excludes restart-required settings entirely.
+ */
+function buildSecretPathsDelta(
+  newFileLayer: Record<string, string>,
+  candidateSources: Record<string, ConfigValueSource>,
+  interpolatedKeys: ReadonlySet<string>,
+): Record<string, string | undefined> {
+  const delta: Record<string, string | undefined> = {};
+  const settings = new Set(
+    [...Object.keys(configFileSecretPaths), ...Object.keys(newFileLayer)]
+      .filter((key) => key.endsWith('__FILE') || key in configFileSecretPaths)
+      .map(toSettingKey),
+  );
+  for (const key of settings) {
+    const section = ddEnvKeyToSection(key);
+    if (!section || !RELOADABLE_SECTIONS.has(section)) {
+      continue;
+    }
+    // An interpolated entry attributes as `env` too, so the real environment is
+    // checked directly: when it names the setting in either form the file's
+    // entry was dropped at merge time and no path of it is live.
+    const environmentOwned =
+      process.env[key] !== undefined || process.env[`${key}__FILE`] !== undefined;
+    const supplied =
+      !environmentOwned && (candidateSources[key] !== 'env' || interpolatedKeys.has(key));
+    delta[key] = supplied ? newFileLayer[`${key}__FILE`] : undefined;
+  }
+  return delta;
+}
+
 async function runReload(): Promise<ConfigurationReloadResult> {
   const interpolatedKeys = new Set<string>();
   const fileInfo: { current?: ConfigFileInfo } = {};
@@ -149,7 +183,12 @@ async function runReload(): Promise<ConfigurationReloadResult> {
   }
 
   const { envDelta, sourcesDelta } = buildApplyDeltas(applyKeys, candidateEnv, candidateSources);
-  applyConfigurationReload(envDelta, sourcesDelta, resolvedInterpolatedKeys);
+  applyConfigurationReload(
+    envDelta,
+    sourcesDelta,
+    resolvedInterpolatedKeys,
+    buildSecretPathsDelta(newFileLayer, candidateSources, resolvedInterpolatedKeys),
+  );
   // Published only now that validation passed and the delta is applied —
   // GET /api/v1/config's `file` field reflects "when was this file last
   // successfully read", independent of whether every key in it reached

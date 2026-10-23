@@ -166,6 +166,13 @@ async function rollbackContainer(req: Request, res: Response) {
 
     // Recreate with backup image
     await trigger.recreateContainer(dockerApi, currentContainerSpec, backupImage, container, log);
+    await trigger.recreateSharedNamespaceDependents?.(
+      dockerApi,
+      currentContainerSpec.Id,
+      container.name,
+      log,
+      container,
+    );
 
     recordAuditEvent({
       action: 'rollback',

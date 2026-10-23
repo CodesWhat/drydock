@@ -1,8 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { vi } from 'vitest';
+import { createScannerAssetManager } from './assets.js';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 
 const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
+const mockNoteBundledTrivyRemoval = vi.hoisted(() => vi.fn());
 const mockWarmTrivyDatabase = vi.hoisted(() => vi.fn(async () => 'ready'));
 const mockDockerRuntime = vi.hoisted(() => ({
   run: vi.fn(),
@@ -40,6 +45,15 @@ vi.mock('../configuration/index.js', async () => {
 vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }));
+
+vi.mock('./backend-resolution.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('./backend-resolution.js')>('./backend-resolution.js');
+  return {
+    ...actual,
+    noteBundledTrivyRemoval: (...args: unknown[]) => mockNoteBundledTrivyRemoval(...args),
+  };
+});
 
 vi.mock('./runtime.js', () => ({
   hasValidCommandPath: (...args: unknown[]) => mockHasValidCommandPath(...args),
@@ -98,6 +112,7 @@ function createEnabledConfiguration() {
     trivy: {
       server: '',
       command: 'trivy',
+      commandExplicit: true,
       timeout: 120000,
       maxOutputBytes: 64 * 1024 * 1024,
       imageSrc: '',
@@ -105,6 +120,7 @@ function createEnabledConfiguration() {
     },
     grype: {
       command: 'grype',
+      commandExplicit: true,
       timeout: 120000,
       workerImage: 'anchore/grype@sha256:test',
     },
@@ -112,6 +128,8 @@ function createEnabledConfiguration() {
       verify: true,
       cosign: {
         command: 'cosign',
+        commandExplicit: true,
+        workerImage: 'ghcr.io/sigstore/cosign/cosign@sha256:test',
         timeout: 60000,
         key: '',
         identity: '',
@@ -125,14 +143,35 @@ function createEnabledConfiguration() {
     },
     syft: {
       command: 'syft',
+      commandExplicit: true,
       timeout: 120000,
       workerImage: 'anchore/syft@sha256:test',
     },
   };
 }
 
+// Fixtures model an image where the scanner binaries resolve on PATH, so these tests behave the
+// same on machines with or without Trivy, Grype, Syft or Cosign installed.
+let fakeBinDirectory: string;
+
+beforeAll(() => {
+  fakeBinDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-scan-bin-'));
+  for (const name of ['trivy', 'grype', 'syft', 'cosign']) {
+    fs.writeFileSync(path.join(fakeBinDirectory, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  }
+});
+
+afterAll(() => {
+  fs.rmSync(fakeBinDirectory, { recursive: true, force: true });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.stubEnv('PATH', fakeBinDirectory);
   childProcessControl.execFileImpl = null;
   _resetTrivyQueueForTesting();
   clearDigestScanCache();
@@ -477,6 +516,16 @@ test('Trivy warm-up adapter should serialize and run the database command with p
   const adapter = warmupFactoryControl.options;
   expect(adapter).toBeDefined();
   expect(adapter?.getConfiguration()).toEqual(createEnabledConfiguration());
+  vi.stubEnv('PATH', '');
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    backend: 'auto',
+    trivy: { ...createEnabledConfiguration().trivy, commandExplicit: false },
+  });
+  expect(adapter?.getConfiguration()).toMatchObject({ enabled: false, scanner: 'trivy' });
+  vi.unstubAllEnvs();
+  vi.stubEnv('PATH', fakeBinDirectory);
+  mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
 
   await adapter?.execute(() =>
     adapter.run({
@@ -2944,5 +2993,413 @@ describe('updateDigestScanCache', () => {
     expect(fromCache).toBe(true);
     expect(scanResult).toEqual({ ...cachedResult, imageDigest: 'sha256:manual' });
     expect(execFileMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('backend resolution per provider', () => {
+  const deniedError = Object.assign(new Error('(HTTP code 403) unexpected - Forbidden'), {
+    statusCode: 403,
+  });
+
+  function stubNoScannerBinaries() {
+    vi.stubEnv('PATH', '');
+  }
+
+  function autoConfiguration(overrides: Record<string, unknown> = {}) {
+    const base = createEnabledConfiguration();
+    return {
+      ...base,
+      backend: 'auto',
+      trivy: { ...base.trivy, commandExplicit: false },
+      grype: { ...base.grype, commandExplicit: false },
+      syft: { ...base.syft, commandExplicit: false },
+      signature: {
+        ...base.signature,
+        cosign: { ...base.signature.cosign, commandExplicit: false },
+      },
+      ...overrides,
+    };
+  }
+
+  test('auto runs Grype through the worker when no binary resolves', async () => {
+    stubNoScannerBinaries();
+    mockGetSecurityConfiguration.mockReturnValue(autoConfiguration({ scanner: 'grype' }));
+    mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ matches: [] }));
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('passed');
+    expect(childProcessControl.execFileImpl).toBeNull();
+    expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'grype' }),
+    );
+    expect(mockNoteBundledTrivyRemoval).not.toHaveBeenCalled();
+  });
+
+  test('auto runs Grype as a local command when the binary resolves', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(autoConfiguration({ scanner: 'grype' }));
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      callback(null, JSON.stringify({ matches: [] }), '');
+      return { exitCode: 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('passed');
+    expect(execFileMock).toHaveBeenCalledWith(
+      'grype',
+      expect.any(Array),
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mockDockerRuntime.run).not.toHaveBeenCalled();
+  });
+
+  test('auto generates a Syft SBOM through the worker when no binary resolves', async () => {
+    stubNoScannerBinaries();
+    mockGetSecurityConfiguration.mockReturnValue(
+      autoConfiguration({
+        scanner: 'grype',
+        sbom: { enabled: true, formats: ['spdx-json'], generator: 'auto' },
+      }),
+    );
+    mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ spdxVersion: 'SPDX-2.3' }));
+
+    const result = await generateImageSbom({ image: 'registry.example/app:1' });
+
+    expect(result).toMatchObject({ generator: 'syft', status: 'generated' });
+    expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'syft' }),
+    );
+  });
+
+  test('explicit command backend routes Trivy to the worker when no binary resolves and notes the migration', async () => {
+    stubNoScannerBinaries();
+    mockGetSecurityConfiguration.mockReturnValue(
+      autoConfiguration({ backend: 'command', scanner: 'trivy' }),
+    );
+    mockDockerRuntime.assets.get.mockReturnValue({ state: 'missing' });
+    mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ Results: [] }));
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('passed');
+    expect(mockWarmTrivyDatabase).not.toHaveBeenCalled();
+    expect(mockDockerRuntime.assets.warm).toHaveBeenCalledWith('trivy');
+    expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'trivy' }),
+    );
+    expect(mockNoteBundledTrivyRemoval).toHaveBeenCalled();
+  });
+
+  test('Trivy SBOM falls back to the worker with the migration note', async () => {
+    stubNoScannerBinaries();
+    mockGetSecurityConfiguration.mockReturnValue(
+      autoConfiguration({
+        backend: 'command',
+        sbom: { enabled: true, formats: ['spdx-json'], generator: 'trivy' },
+      }),
+    );
+    mockDockerRuntime.run.mockResolvedValueOnce(JSON.stringify({ spdxVersion: 'SPDX-2.3' }));
+
+    const result = await generateImageSbom({ image: 'registry.example/app:1' });
+
+    expect(result).toMatchObject({ generator: 'trivy', status: 'generated' });
+    expect(mockNoteBundledTrivyRemoval).toHaveBeenCalled();
+  });
+
+  test('a user-mounted Trivy command keeps running locally', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(
+      autoConfiguration({
+        backend: 'command',
+        trivy: { ...createEnabledConfiguration().trivy, commandExplicit: true },
+      }),
+    );
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      (callback as (...a: unknown[]) => void)(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('passed');
+    expect(mockDockerRuntime.run).not.toHaveBeenCalled();
+    expect(mockNoteBundledTrivyRemoval).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['worker run', 'run'],
+    ['worker asset warm', 'warm'],
+  ])(
+    'a denied Docker %s names the three working Trivy setups during migration',
+    async (_label, phase) => {
+      stubNoScannerBinaries();
+      mockGetSecurityConfiguration.mockReturnValue(autoConfiguration({ scanner: 'trivy' }));
+      if (phase === 'warm') {
+        mockDockerRuntime.assets.get.mockReturnValue({ state: 'missing' });
+        mockDockerRuntime.assets.warm.mockRejectedValueOnce(deniedError);
+      } else {
+        mockDockerRuntime.run.mockRejectedValue(deniedError);
+      }
+
+      const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('DD_SECURITY_SCANNER=grype');
+      expect(result.error).toContain('DD_SECURITY_BACKEND=remote');
+      expect(result.error).toContain('DD_SECURITY_TRIVY_SERVER');
+      expect(result.error).toContain('DD_SECURITY_TRIVY_COMMAND');
+    },
+  );
+
+  test('non-denial worker failures during migration are reported unchanged', async () => {
+    stubNoScannerBinaries();
+    mockGetSecurityConfiguration.mockReturnValue(autoConfiguration({ scanner: 'trivy' }));
+    mockDockerRuntime.run.mockRejectedValue(new Error('registry unreachable'));
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('registry unreachable');
+    expect(result.error).not.toContain('DD_SECURITY_BACKEND=remote');
+  });
+
+  test('an explicit docker backend does not rewrite a denied worker error', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(
+      autoConfiguration({ backend: 'docker', scanner: 'trivy' }),
+    );
+    mockDockerRuntime.run.mockRejectedValue(deniedError);
+
+    const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('Forbidden');
+    expect(result.error).not.toContain('DD_SECURITY_BACKEND=remote');
+    expect(mockNoteBundledTrivyRemoval).not.toHaveBeenCalled();
+  });
+});
+
+describe('cosign worker verification', () => {
+  let keyDirectory: string;
+
+  beforeEach(() => {
+    keyDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-cosign-key-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(keyDirectory, { recursive: true, force: true });
+  });
+
+  function cosignConfiguration(backend: string, cosign: Record<string, unknown> = {}) {
+    const base = createEnabledConfiguration();
+    return {
+      ...base,
+      backend,
+      signature: {
+        verify: true,
+        cosign: {
+          ...base.signature.cosign,
+          commandExplicit: false,
+          identity: 'maintainer@example.com',
+          issuer: 'https://token.actions.githubusercontent.com',
+          ...cosign,
+        },
+      },
+    };
+  }
+
+  test('runs cosign verify in the worker with registry auth and identity flags', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker'));
+    mockDockerRuntime.assets.get.mockReturnValue({ state: 'missing' });
+    mockDockerRuntime.run.mockResolvedValueOnce('{"critical":{}}');
+
+    const result = await verifyImageSignature({
+      image: 'registry.example.com/app:1.2.3',
+      auth: { username: 'user', password: 'secret' },
+    });
+
+    expect(result.status).toBe('verified');
+    expect(result.keyless).toBe(true);
+    expect(childProcessControl.execFileImpl).toBeNull();
+    expect(mockDockerRuntime.assets.warm).toHaveBeenCalledWith('cosign');
+    expect(mockDockerRuntime.run).toHaveBeenCalledWith({
+      provider: 'cosign',
+      args: [
+        'verify',
+        '--output',
+        'json',
+        '--certificate-identity',
+        'maintainer@example.com',
+        '--certificate-oidc-issuer',
+        'https://token.actions.githubusercontent.com',
+        'registry.example.com/app:1.2.3',
+      ],
+      env: expect.objectContaining({
+        COSIGN_REGISTRY_USERNAME: 'user',
+        COSIGN_REGISTRY_PASSWORD: 'secret',
+      }),
+      timeoutMs: 60000,
+      maxOutputBytes: 2 * 1024 * 1024,
+      signal: undefined,
+    });
+  });
+
+  test('does not forward ambient registry credentials to the cosign worker', async () => {
+    vi.stubEnv('COSIGN_REGISTRY_USERNAME', 'ambient-user');
+    vi.stubEnv('COSIGN_REGISTRY_PASSWORD', 'ambient-secret');
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker'));
+    mockDockerRuntime.run.mockResolvedValueOnce('{}');
+
+    await verifyImageSignature({ image: 'public.example.com/app:1' });
+
+    expect(mockDockerRuntime.run.mock.calls[0][0].env).toEqual({});
+  });
+
+  test('forwards only the target image credentials and the public key to the worker', async () => {
+    const keyFile = path.join(keyDirectory, 'cosign.pub');
+    fs.writeFileSync(keyFile, 'PEM');
+    vi.stubEnv('COSIGN_REGISTRY_PASSWORD', 'ambient-secret');
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker', { key: keyFile }));
+    mockDockerRuntime.run.mockResolvedValueOnce('{}');
+
+    await verifyImageSignature({
+      image: 'registry.example.com/app:1',
+      auth: { username: 'user', password: 'secret' },
+    });
+
+    expect(mockDockerRuntime.run.mock.calls[0][0].env).toEqual({
+      COSIGN_REGISTRY_USERNAME: 'user',
+      COSIGN_REGISTRY_PASSWORD: 'secret',
+      COSIGN_PUBLIC_KEY: 'PEM',
+    });
+  });
+
+  test('skips the asset warm when the cosign worker image is ready', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker'));
+    mockDockerRuntime.run.mockResolvedValueOnce('{}');
+
+    await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(mockDockerRuntime.assets.warm).not.toHaveBeenCalled();
+  });
+
+  test('auto picks the cosign worker when no binary resolves', async () => {
+    vi.stubEnv('PATH', '');
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('auto'));
+    mockDockerRuntime.run.mockResolvedValueOnce('{}');
+
+    const result = await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(result.status).toBe('verified');
+    expect(mockDockerRuntime.run).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'cosign' }),
+    );
+  });
+
+  test('auto keeps cosign local when DD_SECURITY_COSIGN_COMMAND is set', async () => {
+    vi.stubEnv('PATH', '');
+    mockGetSecurityConfiguration.mockReturnValue(
+      cosignConfiguration('auto', { command: '/opt/cosign', commandExplicit: true }),
+    );
+    const execFileMock = vi.fn((_command, _args, _options, callback) => {
+      callback(null, '{}', '');
+      return { exitCode: 0 };
+    });
+    childProcessControl.execFileImpl = execFileMock;
+
+    const result = await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(result.status).toBe('verified');
+    expect(execFileMock).toHaveBeenCalledWith(
+      '/opt/cosign',
+      expect.any(Array),
+      expect.any(Object),
+      expect.any(Function),
+    );
+    expect(mockDockerRuntime.run).not.toHaveBeenCalled();
+  });
+
+  test('passes a key file to the worker by value through an env reference', async () => {
+    const keyFile = path.join(keyDirectory, 'cosign.pub');
+    fs.writeFileSync(keyFile, '-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n');
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker', { key: keyFile }));
+    mockDockerRuntime.run.mockResolvedValueOnce('{}');
+
+    const result = await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(result.status).toBe('verified');
+    expect(result.keyless).toBe(false);
+    const invocation = mockDockerRuntime.run.mock.calls[0][0] as {
+      args: string[];
+      env: Record<string, string>;
+    };
+    expect(invocation.args).toEqual(expect.arrayContaining(['--key', 'env://COSIGN_PUBLIC_KEY']));
+    expect(invocation.args).not.toContain(keyFile);
+    expect(invocation.env.COSIGN_PUBLIC_KEY).toContain('BEGIN PUBLIC KEY');
+  });
+
+  test.each([
+    ['empty', ''],
+    ['oversized', 'k'.repeat(64 * 1024 + 1)],
+  ])('rejects an %s key file before starting the worker', async (_label, content) => {
+    const keyFile = path.join(keyDirectory, 'cosign.pub');
+    fs.writeFileSync(keyFile, content);
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker', { key: keyFile }));
+
+    const result = await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('DD_SECURITY_COSIGN_KEY');
+    expect(mockDockerRuntime.run).not.toHaveBeenCalled();
+  });
+
+  test('classifies a worker signature failure as unverified', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(cosignConfiguration('docker'));
+    mockDockerRuntime.run.mockRejectedValueOnce(new Error('no matching signatures'));
+
+    const result = await verifyImageSignature({ image: 'registry.example.com/app:1' });
+
+    expect(result.status).toBe('unverified');
+  });
+});
+
+describe('Docker denial through the real asset manager', () => {
+  test('a 403 from the worker warm reaches the Trivy migration guidance', async () => {
+    vi.stubEnv('PATH', '');
+    const base = createEnabledConfiguration();
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...base,
+      scanner: 'trivy',
+      backend: 'auto',
+      trivy: { ...base.trivy, commandExplicit: false },
+    });
+    const denied = Object.assign(new Error('(HTTP code 403) unexpected'), {
+      statusCode: 403,
+    });
+    const realManager = createScannerAssetManager({
+      providers: [
+        {
+          id: 'trivy',
+          backend: 'docker',
+          configuredImage: 'ghcr.io/aquasecurity/trivy@sha256:test',
+          inspect: async () => undefined,
+          pull: async () => undefined,
+          warm: async () => Promise.reject(denied),
+        },
+      ],
+    });
+    await realManager.status();
+    const originalAssets = mockDockerRuntime.assets;
+    mockDockerRuntime.assets = realManager as unknown as typeof originalAssets;
+    try {
+      const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+      expect(result.status).toBe('error');
+      expect(result.error).toContain('DD_SECURITY_SCANNER=grype');
+      expect(result.error).toContain('DD_SECURITY_BACKEND=remote');
+    } finally {
+      mockDockerRuntime.assets = originalAssets;
+    }
   });
 });

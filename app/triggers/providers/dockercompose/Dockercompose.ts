@@ -34,6 +34,7 @@ import ComposeFileParser, {
   updateComposeServiceImagesInText,
   YAML_MAX_ALIAS_COUNT,
 } from './ComposeFileParser.js';
+import { expandComposeFilesWithIncludes } from './ComposeIncludes.js';
 import {
   getSelfContainerIdentifier as getRuntimeSelfContainerIdentifier,
   getSelfContainerBindMounts,
@@ -586,6 +587,41 @@ function resolveComposeInterpolation(
 }
 
 const COMPOSE_ESCAPED_DOLLAR = '\u0000';
+
+/**
+ * Names of the variables a compose `image:` value interpolates. An escaped
+ * `$$` is a literal dollar sign, not an interpolation, so it is dropped first.
+ * Covers `$VAR`, `${VAR}`, `${VAR:-default}` and `${VAR?err}`.
+ */
+function getComposeImageInterpolationVariables(image: unknown): string[] {
+  if (typeof image !== 'string') {
+    return [];
+  }
+  const names = new Set<string>();
+  const withoutEscapes = image.replaceAll('$$', '');
+  for (const match of withoutEscapes.matchAll(
+    /\$(?:\{([_a-zA-Z][_a-zA-Z0-9]*)[^}]*\}|([_a-zA-Z][_a-zA-Z0-9]*))/g,
+  )) {
+    names.add((match[1] ?? match[2]) as string);
+  }
+  return [...names];
+}
+
+function buildComposeInterpolatedImageError(
+  service: string,
+  composeFileSummary: string,
+  image: string,
+  variables: string[],
+): Error {
+  return new Error(
+    `Compose service ${service} in ${composeFileSummary} sets its image through ` +
+      `${variables.length > 1 ? 'variables' : 'a variable'} (${variables.join(', ')}) in "${image}"; ` +
+      'refusing to rewrite the compose file and flatten it to a literal tag. ' +
+      `Update ${variables.length > 1 ? 'those variables' : 'the variable'} yourself ` +
+      '(for example in the .env file) and recreate the service. ' +
+      'Updating the environment file automatically is planned for a later release.',
+  );
+}
 
 function resolveComposeImageForContinuity(
   value: unknown,
@@ -1507,6 +1543,23 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
   }
 
   /**
+   * Append the files the chain includes with compose `include:`, which the
+   * `config_files` label never lists. See ComposeIncludes.ts.
+   */
+  async expandComposeFilesWithIncludes(composeFiles: string[]): Promise<string[]> {
+    const allowedRoots = this.getAllowedComposeLabelPathRoots();
+    return expandComposeFilesWithIncludes({
+      composeFiles,
+      readCompose: (composeFile) => this.getComposeFileAsObject(composeFile),
+      mapPath: (composeFilePath) => this.mapComposePathToContainerBindMount(composeFilePath),
+      isAllowed: (composeFilePath) =>
+        allowedRoots.length === 0 ||
+        allowedRoots.some((allowedRoot) => isPathWithinAllowedRoot(composeFilePath, allowedRoot)),
+      warn: (message) => this.log.warn(message),
+    });
+  }
+
+  /**
    * @param container the container
    * @param runtimeDefaultComposeFilePath the already-resolved default compose
    * file when the caller has one (triggerBatch resolves it once per batch);
@@ -1534,12 +1587,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       context,
     });
     if (composeFilesFromConfiguration.length > 0) {
-      return composeFilesFromConfiguration;
+      return this.expandComposeFilesWithIncludes(composeFilesFromConfiguration);
     }
 
     const composeFilesFromInspect = await this.getComposeFilesFromInspect(container, context);
     if (composeFilesFromInspect.length > 0) {
-      return composeFilesFromInspect;
+      return this.expandComposeFilesWithIncludes(composeFilesFromInspect);
     }
 
     // See getConfiguredComposeFilesForContainer(): a contained-out label leaves
@@ -1553,7 +1606,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     if (!composeFileFromDefault) {
       return [];
     }
-    return [composeFileFromDefault];
+    return this.expandComposeFilesWithIncludes([composeFileFromDefault]);
   }
 
   async resolveComposeFilePathFromDirectory(composePath: string): Promise<string | null> {
@@ -1660,6 +1713,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @param composeFileChainSummary
    * @param versionMappings
    */
+  assertComposeImageNotInterpolated(composeFileChainSummary, versionMappings) {
+    for (const mapping of versionMappings) {
+      const variables = getComposeImageInterpolationVariables(mapping.current);
+      if (variables.length > 0) {
+        throw buildComposeInterpolatedImageError(
+          mapping.service,
+          composeFileChainSummary,
+          mapping.current,
+          variables,
+        );
+      }
+    }
+  }
+
   assertComposeRepositoryContinuity(composeFileChainSummary, versionMappings) {
     for (const mapping of versionMappings) {
       const currentImage =
@@ -3563,9 +3630,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       compose,
       resolvedComposeImages,
     );
-    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
     const { mappingsNeedingComposeUpdate, mappingsNeedingRuntimeUpdate } =
       this.splitComposeAndRuntimeMappings(versionMappings);
+    // Refuse before reconciliation, any lock, write or container change
+    // (dry-run included): the variable's value is not ours to flatten.
+    this.assertComposeImageNotInterpolated(composeFileChainSummary, mappingsNeedingRuntimeUpdate);
+    this.reconcileComposeMappings(composeFileChainSummary, versionMappings);
 
     if (mappingsNeedingRuntimeUpdate.length === 0) {
       this.logAllComposeContainersUpToDate(composeFileChainSummary, versionMappings);
@@ -3658,6 +3728,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       );
     }
 
+    this.assertComposeImageNotInterpolated(composeFiles.join(', '), [
+      { service, current: (compose as ComposeFileWithServices).services?.[service]?.image },
+    ]);
     this.assertComposeRepositoryContinuity(composeFiles.join(', '), [
       {
         container,
@@ -4377,6 +4450,17 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         expectedImageId,
         preflightedServiceIdentity,
       );
+      if (serviceShouldStart) {
+        // Never throws: the replacement is already running, so a dependent that
+        // cannot follow it is logged rather than rolled back.
+        await this.recreateSharedNamespaceDependents(
+          dockerApi,
+          currentContainerSpec.Id,
+          container.name,
+          logContainer,
+          container,
+        );
+      }
       if (keptMovedTagAudit) {
         // Recorded only now that the recreate above has actually succeeded:
         // recording it earlier, inside the assert, would leave a

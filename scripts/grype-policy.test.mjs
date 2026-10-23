@@ -8,14 +8,18 @@ const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 const dockerfile = readFileSync(path.join(repositoryRoot, 'Dockerfile'), 'utf8');
 const grypeConfig = readFileSync(path.join(repositoryRoot, '.grype.yaml'), 'utf8');
 
-test('Grype policy follows the bundled Trivy binary destination', () => {
-  const copyMatch = dockerfile.match(
-    /^COPY --from=trivy-bin \/usr\/local\/bin\/trivy (?<destination>\S+)$/mu,
-  );
+test('image does not bundle Trivy or cosign binaries', () => {
+  assert.doesNotMatch(dockerfile, /AS trivy-bin/u);
+  assert.doesNotMatch(dockerfile, /COPY --from=trivy-bin/u);
+  assert.doesNotMatch(dockerfile, /apk add[^\n]*(trivy|cosign)/u);
+  assert.doesNotMatch(dockerfile, /^\s+cosign=/mu);
+});
 
-  assert.ok(copyMatch?.groups?.destination, 'Dockerfile must copy the pinned Trivy binary');
-  assert.match(
-    grypeConfig,
-    new RegExp(`^\\s+location: "${copyMatch.groups.destination.replaceAll('/', '\\/')}"$`, 'mu'),
-  );
+test('Grype policy has no ignore rules scoped to vendored binary locations', () => {
+  const activeLines = grypeConfig
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('#') && line.trim() !== '');
+
+  assert.doesNotMatch(activeLines.join('\n'), /location:/u);
+  assert.doesNotMatch(activeLines.join('\n'), /^ignore:/mu);
 });

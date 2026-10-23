@@ -314,7 +314,11 @@
       "scannerTooltipServer": "Trivy: {message} · server: {server}",
       "cosignTooltip": "Cosign: {message}",
       "sbomEnabled": "SBOM generation enabled ({formats})",
-      "sbomDisabled": "SBOM generation disabled"
+      "sbomDisabled": "SBOM generation disabled",
+      "assetVersion": "Version {version}",
+      "assetDigest": "Image {digest}",
+      "assetDatabaseUpdated": "Database updated {updatedAt}",
+      "assetCacheUpdated": "Cache updated {updatedAt}"
     },
     "emptyState": {
       "noDataTitle": "No vulnerability data yet",
@@ -426,6 +430,14 @@
       "status": "Status",
       "refreshing": "Refreshing trigger details...",
       "noConfig": "No configuration properties"
+    },
+    "skips": {
+      "title": "Recent skips",
+      "description": "Containers this trigger skipped recently and why. Kept in memory, so it resets when Drydock restarts.",
+      "loading": "Loading skips...",
+      "loadError": "Unable to load recent skips",
+      "empty": "No recent skips",
+      "showMore": "Show more"
     }
   },
   "watchersView": {

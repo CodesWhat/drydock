@@ -31,7 +31,8 @@ describe.each(['fr', 'ar'] as const)('trigger test response in %s', (locale) => 
     i18n.global.locale.value = locale;
     const fetchMock = vi.fn(async (_url: unknown, init?: RequestInit) => {
       if (init?.method === 'POST') return Response.json(null, { status: 502 });
-      return Response.json(String(_url) === '/api/v1/triggers' ? [trigger] : trigger);
+      if (String(_url) === '/api/v1/actions') return Response.json([]);
+      return Response.json(String(_url) === '/api/v1/notification-triggers' ? [trigger] : trigger);
     });
     vi.stubGlobal('fetch', fetchMock);
     wrapper = mountWithPlugins(TriggersView, { global: { stubs: dataViewStubs } });
@@ -56,7 +57,7 @@ describe.each(['fr', 'ar'] as const)('trigger test response in %s', (locale) => 
     const posts = fetchMock.mock.calls.filter(([, init]) => init?.method === 'POST');
     expect(posts).toHaveLength(2);
     expect(posts[0]).toEqual(posts[1]);
-    expect(posts[0][0]).toBe('/api/v1/triggers/http/alerts/edge%20east');
+    expect(posts[0][0]).toBe('/api/v1/notification-triggers/http/alerts/edge%20east');
     expect(button.find('[data-icon="check"]').exists()).toBe(true);
   });
 });
