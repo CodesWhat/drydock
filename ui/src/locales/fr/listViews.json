@@ -430,6 +430,14 @@
       "status": "État",
       "refreshing": "Actualisation des détails du trigger...",
       "noConfig": "Aucune propriété de configuration"
+    },
+    "skips": {
+      "title": "Éléments ignorés récemment",
+      "description": "Conteneurs que ce trigger a ignorés récemment, et pourquoi. Conservé en mémoire, donc réinitialisé au redémarrage de Drydock.",
+      "loading": "Chargement des éléments ignorés...",
+      "loadError": "Impossible de charger les éléments ignorés récemment",
+      "empty": "Aucun élément ignoré récemment",
+      "showMore": "Afficher plus"
     }
   },
   "watchersView": {

@@ -210,6 +210,27 @@ describe('openApiPaths', () => {
       });
     });
 
+    test('provider-scoped registry webhook paths declare static secret and HMAC auth', () => {
+      const bare = openApiPaths['/api/v1/webhooks/registry/{provider}'].post;
+      const withSecret = openApiPaths['/api/v1/webhooks/registry/{provider}/{secret}'].post;
+      expect(bare.operationId).toBe('processRegistryWebhookForProvider');
+      expect(bare.parameters.map((parameter) => parameter.name)).toEqual(['provider']);
+      expect(withSecret.operationId).toBe('processRegistryWebhookWithPathSecret');
+      expect(withSecret.parameters.map((parameter) => parameter.name)).toEqual([
+        'provider',
+        'secret',
+      ]);
+      for (const operation of [bare, withSecret]) {
+        expect(operation.security).toEqual([
+          { registryWebhookStaticSecret: [] },
+          { registryWebhookSignature: [] },
+        ]);
+        expect(Object.keys(operation.responses)).toEqual(
+          expect.arrayContaining(['202', '400', '401', '403', '404', '429']),
+        );
+      }
+    });
+
     test('/api/v1/events/ui/self-update/{operationId}/ack path is fully specified', () => {
       expect(openApiPaths['/api/v1/events/ui/self-update/{operationId}/ack']).toStrictEqual({
         post: {

@@ -495,15 +495,15 @@ describe('AppLayout', () => {
       expect(navItem?.find('.app-icon-stub').attributes('data-icon')).toBe('outbox');
     });
 
-    it('applies asymmetric horizontal padding on main: pl-6 left, pr-[9px] right', async () => {
+    it('applies asymmetric horizontal padding on main: ps-6 start, pe-[9px] end', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);
       await flushPromises();
 
       const main = wrapper.find('main');
       expect(main.exists()).toBe(true);
-      expect(main.classes()).toContain('sm:pl-6');
-      expect(main.classes()).toContain('sm:pr-[9px]');
+      expect(main.classes()).toContain('sm:ps-6');
+      expect(main.classes()).toContain('sm:pe-[9px]');
     });
 
     it('exposes the matched route name on the main content landmark', async () => {

@@ -104,6 +104,49 @@ function createWebhookContainerActionPost({
   };
 }
 
+const registryWebhookProviderPathParam = {
+  name: 'provider',
+  in: 'path',
+  required: true,
+  description: 'Registry provider: dockerhub, ghcr, harbor, quay, acr or ecr.',
+  schema: { type: 'string', enum: ['dockerhub', 'ghcr', 'harbor', 'quay', 'acr', 'ecr'] },
+} as const;
+
+const registryWebhookSecretPathParam = {
+  name: 'secret',
+  in: 'path',
+  required: true,
+  description:
+    'Static registry webhook secret (DD_SERVER_WEBHOOK_STATICSECRET or the provider secret). It appears in registry-side logs, so use a dedicated, rotatable value.',
+  schema: { type: 'string' },
+} as const;
+
+function createRegistryWebhookProviderPost({ withPathSecret }: { withPathSecret: boolean }) {
+  return {
+    tags: ['Webhook', 'Actions'],
+    summary: withPathSecret
+      ? 'Process a registry webhook authenticated by a secret in the URL path'
+      : 'Process a registry webhook authenticated by Bearer, ?secret= or HMAC',
+    operationId: withPathSecret
+      ? 'processRegistryWebhookWithPathSecret'
+      : 'processRegistryWebhookForProvider',
+    parameters: withPathSecret
+      ? [registryWebhookProviderPathParam, registryWebhookSecretPathParam]
+      : [registryWebhookProviderPathParam],
+    security: [{ registryWebhookStaticSecret: [] }, { registryWebhookSignature: [] }],
+    responses: {
+      202: jsonResponse('Registry webhook processed', {
+        $ref: '#/components/schemas/RegistryWebhookResponse',
+      }),
+      400: errorResponse('Unsupported registry webhook payload or provider mismatch'),
+      401: errorResponse('Missing or invalid registry webhook credentials'),
+      403: errorResponse('Registry webhooks are disabled'),
+      404: errorResponse('Unknown registry webhook provider'),
+      429: errorResponse('Too many registry webhook requests'),
+    },
+  } as const;
+}
+
 export const openApiPaths = {
   '/health': {
     get: {
@@ -194,6 +237,12 @@ export const openApiPaths = {
         500: errorResponse('Registry webhook secret is not configured'),
       },
     },
+  },
+  '/api/v1/webhooks/registry/{provider}': {
+    post: createRegistryWebhookProviderPost({ withPathSecret: false }),
+  },
+  '/api/v1/webhooks/registry/{provider}/{secret}': {
+    post: createRegistryWebhookProviderPost({ withPathSecret: true }),
   },
   ...apiKeyPaths,
   ...authPaths,

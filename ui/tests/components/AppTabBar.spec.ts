@@ -188,20 +188,20 @@ describe('AppTabBar', () => {
     expect(buttons[0].attributes('aria-label')).toBeUndefined();
   });
 
-  it('icon has mr-1.5 class when not in iconOnly mode', () => {
+  it('icon has me-1.5 class when not in iconOnly mode', () => {
     const wrapper = factory({ iconOnly: false });
     const overviewButton = wrapper.findAll('button')[0];
     const iconEl = overviewButton.find('iconify-icon');
 
-    expect(iconEl.classes()).toContain('mr-1.5');
+    expect(iconEl.classes()).toContain('me-1.5');
   });
 
-  it('icon does NOT have mr-1.5 class in iconOnly mode', () => {
+  it('icon does NOT have me-1.5 class in iconOnly mode', () => {
     const wrapper = factory({ iconOnly: true });
     const overviewButton = wrapper.findAll('button')[0];
     const iconEl = overviewButton.find('iconify-icon');
 
-    expect(iconEl.classes()).not.toContain('mr-1.5');
+    expect(iconEl.classes()).not.toContain('me-1.5');
   });
 
   it('compact size uses smaller icon size', () => {

@@ -430,6 +430,14 @@
       "status": "狀態",
       "refreshing": "正在重新整理觸發器詳情……",
       "noConfig": "無配置屬性"
+    },
+    "skips": {
+      "title": "最近的略過記錄",
+      "description": "此觸發器最近略過的容器及原因。記錄保存在記憶體中，Drydock 重新啟動後會清空。",
+      "loading": "正在載入略過記錄...",
+      "loadError": "無法載入最近的略過記錄",
+      "empty": "最近沒有略過記錄",
+      "showMore": "顯示更多"
     }
   },
   "watchersView": {

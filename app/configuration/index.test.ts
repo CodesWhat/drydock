@@ -4130,3 +4130,88 @@ describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
     expect(actual).toStrictEqual([...UNSUPPORTED_FILE_KEYS]);
   });
 });
+
+describe('getRegistryWebhookAuthConfiguration', () => {
+  const keys = () =>
+    Object.keys(configuration.ddEnvVars).filter((key) => key.startsWith('DD_SERVER_WEBHOOK_'));
+
+  beforeEach(() => {
+    for (const key of keys()) {
+      delete configuration.ddEnvVars[key];
+    }
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET = 'hmac-secret';
+  });
+
+  afterEach(() => {
+    for (const key of keys()) {
+      delete configuration.ddEnvVars[key];
+    }
+  });
+
+  test('defaults every provider to hmac only with no static secret', () => {
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    for (const provider of configuration.REGISTRY_WEBHOOK_PROVIDERS) {
+      expect(auth[provider]).toStrictEqual({ modes: ['hmac'], staticSecret: '' });
+    }
+  });
+
+  test('parses a comma list of modes, de-duplicating and ignoring case and spacing', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_DOCKERHUB_MODES = ' Path, query ,path,,';
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    expect(auth.dockerhub).toStrictEqual({
+      modes: ['path', 'query'],
+      staticSecret: 'shared-static-secret-1',
+    });
+    expect(auth.ghcr.modes).toStrictEqual(['hmac']);
+  });
+
+  test('a provider secret overrides the shared static secret', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_MODES = 'bearer,hmac';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_SECRET = 'harbor-only-secret-1';
+    const auth = configuration.getRegistryWebhookAuthConfiguration();
+    expect(auth.harbor).toStrictEqual({
+      modes: ['bearer', 'hmac'],
+      staticSecret: 'harbor-only-secret-1',
+    });
+  });
+
+  test('rejects an unknown mode', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_QUAY_MODES = 'basic';
+    expect(() => configuration.getRegistryWebhookAuthConfiguration()).toThrow(
+      'Invalid registry webhook auth mode "basic" for quay',
+    );
+  });
+
+  test('rejects a static-secret mode with no secret when enabled', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_ACR_MODES = 'bearer';
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'Registry webhook acr allows static-secret auth but no secret is configured',
+    );
+  });
+
+  test('does not validate static secrets while webhooks are disabled', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'false';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_ACR_MODES = 'bearer';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('a static secret alone satisfies the "some auth mechanism" requirement', () => {
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'shared-static-secret-1';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('a per-provider secret alone satisfies the "some auth mechanism" requirement', () => {
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_REGISTRIES_QUAY_SECRET = 'quay-only-secret-0001';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('rejects static secrets shorter than 16 characters', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_STATICSECRET = 'short';
+    expect(() => configuration.getWebhookConfiguration()).toThrow();
+  });
+});

@@ -19,9 +19,12 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
 | `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch/:containerName`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
 | `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/update/:containerName`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
-| `DD_SERVER_WEBHOOK_SECRET` | ⚪ | HMAC signing secret for verifying registry webhook signatures. Required when receiving push notifications from container registries. | Any string | — |
+| `DD_SERVER_WEBHOOK_SECRET` | ⚪ | HMAC signing secret for verifying registry webhook signatures (the `hmac` mode). | Any string | — |
+| `DD_SERVER_WEBHOOK_STATICSECRET` | ⚪ | Static secret for registries that cannot sign webhooks. Used by the `path`, `query` and `bearer` modes of every provider that doesn't set its own. Supports `DD_SERVER_WEBHOOK_STATICSECRET__FILE`. | String of 16 or more characters | — |
+| `DD_SERVER_WEBHOOK_REGISTRIES_<PROVIDER>_MODES` | ⚪ | Comma-separated auth modes accepted for one provider. `<PROVIDER>` is `DOCKERHUB`, `GHCR`, `HARBOR`, `QUAY`, `ACR` or `ECR`. | `hmac`, `path`, `query`, `bearer` | `hmac` |
+| `DD_SERVER_WEBHOOK_REGISTRIES_<PROVIDER>_SECRET` | ⚪ | Static secret for that provider only, overriding `DD_SERVER_WEBHOOK_STATICSECRET`. Supports `__FILE`. | String of 16 or more characters | — |
 
-<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true`. The three `/api/v1/webhook/*` action endpoints require either `DD_SERVER_WEBHOOK_TOKEN` or all three endpoint-specific tokens; partial endpoint-token sets are rejected at startup. `/api/v1/webhooks/registry` separately requires `DD_SERVER_WEBHOOK_SECRET`. Configure both token auth and the secret when using both endpoint groups.</Callout>
+<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true`. The three `/api/v1/webhook/*` action endpoints require either `DD_SERVER_WEBHOOK_TOKEN` or all three endpoint-specific tokens; partial endpoint-token sets are rejected at startup. `/api/v1/webhooks/registry` separately requires `DD_SERVER_WEBHOOK_SECRET` (HMAC) or a static secret for each provider that uses one. Configure both token auth and the secret when using both endpoint groups.</Callout>
 
 ## Endpoints
 
@@ -30,7 +33,9 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | `POST` | `/api/v1/webhook/watch` | Trigger a watch cycle on all watchers |
 | `POST` | `/api/v1/webhook/watch/:containerName` | Watch a specific container by name |
 | `POST` | `/api/v1/webhook/update/:containerName` | Trigger an update on a specific container |
-| `POST` | `/api/v1/webhooks/registry` | Receive signed registry push events and trigger targeted checks |
+| `POST` | `/api/v1/webhooks/registry` | Receive HMAC-signed registry push events and trigger targeted checks |
+| `POST` | `/api/v1/webhooks/registry/:provider` | Registry push events authenticated by `Authorization: Bearer`, `?secret=` or HMAC, per provider config |
+| `POST` | `/api/v1/webhooks/registry/:provider/:secret` | Registry push events authenticated by a secret in the URL path |
 
 `POST /api/v1/webhook/watch` runs through the same single-flight scan orchestration as the scheduled cron scan, rather than starting an independent scan of its own: a call that lands while a scan is already running for a watcher is folded into that scan's follow-up instead, and the JSON response's `result.coalesced` field is `true` when that happened for at least one watcher.
 
@@ -65,9 +70,20 @@ Token selection rules:
 - If endpoint-specific tokens are configured, the matching token for that endpoint is required.
 - Otherwise, drydock falls back to `DD_SERVER_WEBHOOK_TOKEN`.
 
-### Registry webhooks: HMAC signatures
+### Registry webhooks
 
-`POST /api/v1/webhooks/registry` does not use Bearer authentication. Configure `DD_SERVER_WEBHOOK_SECRET=your-registry-webhook-secret`, then sign the exact raw request body with HMAC-SHA256. Signature values may be the 64-character hex digest or use the `sha256=` prefix.
+Registry webhooks accept four auth modes, chosen per provider with `DD_SERVER_WEBHOOK_REGISTRIES_<PROVIDER>_MODES`:
+
+| Mode | Credential | Endpoint |
+| --- | --- | --- |
+| `hmac` (default) | HMAC-SHA256 of the raw body in a signature header | `/api/v1/webhooks/registry` or `/api/v1/webhooks/registry/:provider` |
+| `path` | Static secret as the last URL segment | `/api/v1/webhooks/registry/:provider/:secret` |
+| `query` | Static secret in `?secret=` | `/api/v1/webhooks/registry/:provider?secret=...` |
+| `bearer` | Static secret in `Authorization: Bearer <secret>` | `/api/v1/webhooks/registry/:provider` |
+
+`:provider` is `dockerhub`, `ghcr`, `harbor`, `quay`, `acr` or `ecr`. A provider that sets no modes accepts `hmac` only, exactly as before. A credential for a mode the provider doesn't allow is treated as if it weren't sent. The payload must also parse as that provider's format, or the request gets a `400`.
+
+`POST /api/v1/webhooks/registry` does not use Bearer authentication and stays HMAC-only. Bearer applies only to `/api/v1/webhooks/registry/:provider` when that provider allows the `bearer` mode. For HMAC, configure `DD_SERVER_WEBHOOK_SECRET=your-registry-webhook-secret`, then sign the exact raw request body with HMAC-SHA256. Signature values may be the 64-character hex digest or use the `sha256=` prefix, and the supported headers are `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature` and `x-drydock-signature`.
 
 ```bash
 payload='{"repository":{"repo_name":"library/nginx"},"push_data":{"tag":"latest"}}'
@@ -79,7 +95,57 @@ curl -X POST https://drydock.example.com/api/v1/webhooks/registry \
   --data-binary "$payload"
 ```
 
-<Callout type="info">`/api/v1/webhooks/registry` uses HMAC signature validation (not Bearer token auth). Supported signature headers include `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature`, and `x-drydock-signature`.</Callout>
+Static secrets are compared in constant time. They are never logged: failed attempts log the provider and a path with the secret segment masked, and the query string is dropped. Failed attempts also count against a tighter rate limit (20 per 15 minutes per client IP) than successful ones.
+
+<Callout type="warn">A secret in the URL (`path` or `query`) is stored in the registry's own webhook configuration and can show up in its delivery logs, and in any proxy or load balancer access log in front of Drydock. Use a dedicated secret for registry webhooks that you can rotate, never one shared with another system, and prefer `bearer` where the registry supports custom headers.</Callout>
+
+#### Configure each registry
+
+Set a secret first. It must be at least 16 characters:
+
+```bash
+DD_SERVER_WEBHOOK_ENABLED=true
+DD_SERVER_WEBHOOK_STATICSECRET__FILE=/run/secrets/registry_webhook_secret
+```
+
+| Registry | Why | Mode | Where the secret goes |
+| --- | --- | --- | --- |
+| Docker Hub | Can't sign requests or set headers | `path` or `query` | Webhook URL |
+| Quay | Can't sign requests or set headers | `path` or `query` | Notification URL |
+| Harbor | Custom auth header, no HMAC | `bearer` | Webhook "Auth Header" |
+| Azure Container Registry | Custom headers, no HMAC | `bearer` | Webhook custom header |
+| GHCR (GitHub) | Signs with `X-Hub-Signature-256` | `hmac` | GitHub webhook secret |
+| Amazon ECR | EventBridge relay | `hmac` | As before |
+
+**Docker Hub.** Repository, then Webhooks. Set the webhook URL to `https://drydock.example.com/api/v1/webhooks/registry/dockerhub/<secret>`.
+
+```bash
+DD_SERVER_WEBHOOK_REGISTRIES_DOCKERHUB_MODES=path
+```
+
+**Quay.** Repository, then Settings, then Create Notification, event "Push to Repository", method "Webhook POST". Set the URL to `https://drydock.example.com/api/v1/webhooks/registry/quay/<secret>`.
+
+```bash
+DD_SERVER_WEBHOOK_REGISTRIES_QUAY_MODES=path
+```
+
+**Harbor.** Project, then Webhooks, then New Webhook, event "Artifact pushed". Endpoint URL `https://drydock.example.com/api/v1/webhooks/registry/harbor`, and set "Auth Header" to `Bearer <secret>`.
+
+```bash
+DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_MODES=bearer
+```
+
+**Azure Container Registry.** Registry, then Webhooks, then Add. Service URI `https://drydock.example.com/api/v1/webhooks/registry/acr`, action "push", and add the custom header `Authorization` with the value `Bearer <secret>`.
+
+```bash
+DD_SERVER_WEBHOOK_REGISTRIES_ACR_MODES=bearer
+```
+
+**GHCR.** Unchanged. Create a repository or organization webhook, set the payload URL to `https://drydock.example.com/api/v1/webhooks/registry`, content type `application/json`, and use `DD_SERVER_WEBHOOK_SECRET` as the webhook secret.
+
+**Amazon ECR.** Unchanged. Forward the EventBridge event with an HMAC signature using `DD_SERVER_WEBHOOK_SECRET`, as described above.
+
+To give one provider its own secret instead of the shared one, set `DD_SERVER_WEBHOOK_REGISTRIES_<PROVIDER>_SECRET`. To allow more than one mode, list them: `DD_SERVER_WEBHOOK_REGISTRIES_HARBOR_MODES=bearer,hmac`.
 
 ## Rate limiting
 
@@ -144,13 +210,21 @@ Successful update requests return **202 Accepted** with the queued operation id:
 }
 ```
 
-### Registry push webhook (signed)
+### Registry push webhook (HMAC)
 
 ```bash
 curl -X POST https://drydock.example.com/api/v1/webhooks/registry \
   -H "Content-Type: application/json" \
   -H "x-registry-signature: sha256=<hmac-of-raw-body>" \
   -d '{"events":[{"action":"push"}]}'
+```
+
+### Registry push webhook (static secret)
+
+```bash
+curl -X POST https://drydock.example.com/api/v1/webhooks/registry/dockerhub/$REGISTRY_WEBHOOK_SECRET \
+  -H "Content-Type: application/json" \
+  -d '{"repository":{"repo_name":"library/nginx"},"push_data":{"tag":"latest"}}'
 ```
 
 ## CI/CD integration

@@ -3,6 +3,7 @@ import {
   getTrigger,
   getTriggerProviderColor,
   getTriggerProviderIcon,
+  getTriggerSkips,
   runTrigger,
 } from '@/services/trigger';
 
@@ -220,6 +221,43 @@ describe('Trigger Service', () => {
         body: JSON.stringify(container),
       });
       expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('getTriggerSkips', () => {
+    const page = { data: [], total: 0, limit: 20, offset: 0, hasMore: false };
+
+    it('fetches a local trigger skip page with pagination params', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => page } as any);
+
+      const result = await getTriggerSkips({ type: 'slack', name: 'a b', limit: 20, offset: 40 });
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/slack/a%20b/skips?limit=20&offset=40', {
+        credentials: 'include',
+      });
+      expect(result).toEqual(page);
+    });
+
+    it('fetches an agent trigger without a query string by default', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({ ok: true, json: async () => page } as any);
+
+      await getTriggerSkips({ type: 'slack', name: 'alerts', agent: 'edge' });
+
+      expect(fetch).toHaveBeenCalledWith('/api/v1/triggers/slack/alerts/edge/skips', {
+        credentials: 'include',
+      });
+    });
+
+    it('throws when the request fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        statusText: 'Not Found',
+        json: async () => ({}),
+      } as any);
+
+      await expect(getTriggerSkips({ type: 'slack', name: 'alerts' })).rejects.toThrow(
+        'Failed to get trigger skips: Not Found',
+      );
     });
   });
 

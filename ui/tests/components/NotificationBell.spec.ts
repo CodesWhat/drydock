@@ -53,7 +53,7 @@ function findEntryRows(wrapper: ReturnType<typeof mount>) {
 }
 
 function findEntryBodyButtons(wrapper: ReturnType<typeof mount>) {
-  return wrapper.findAll('[data-test="notification-row"] button.text-left');
+  return wrapper.findAll('[data-test="notification-row"] button.text-start');
 }
 
 function publishSseEvent(event: SseBusEvent) {

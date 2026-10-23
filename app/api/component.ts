@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express, { type Request, type Response, type Router } from 'express';
 import nocache from 'nocache';
 import { byString, byValues } from 'sort-es';
 import type { RegistryState } from '../registry/index.js';
@@ -152,9 +152,12 @@ export function getById(req: Request<ComponentRouteParams>, res: Response, kind:
  * @param kind
  * @returns {*|Router}
  */
-export function init(kind: ComponentKind) {
+export function init(kind: ComponentKind, registerBeforeById?: (router: Router) => void) {
   const router = express.Router();
   router.use(nocache());
+  // Routes with a literal tail (e.g. `/:type/:name/skips`) must register before the
+  // `/:type/:name/:agent` catch-all below or that route swallows them.
+  registerBeforeById?.(router);
   router.get(
     '/',
     scoped('read', (req: Request, res: Response) => getAll(req, res, kind)),

@@ -1,5 +1,5 @@
 import { i18n } from '../boot/i18n';
-import type { ApiComponentResponse } from '../types/api';
+import type { ApiComponentResponse, ApiTriggerSkipsPage } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface TriggerDetailPathOptions {
@@ -138,6 +138,25 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   return readJsonResponse<ApiComponentResponse>(response);
 }
 
+interface TriggerSkipsOptions extends TriggerDetailPathOptions {
+  limit?: number;
+  offset?: number;
+}
+
+async function getTriggerSkips({ type, name, agent, limit, offset }: TriggerSkipsOptions) {
+  const query = new URLSearchParams();
+  if (limit !== undefined) query.set('limit', String(limit));
+  if (offset !== undefined) query.set('offset', String(offset));
+  const suffix = query.size > 0 ? `?${query.toString()}` : '';
+  const response = await fetch(`${buildTriggerDetailPath({ type, name, agent })}/skips${suffix}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Failed to get trigger skips: ${response.statusText}`);
+  }
+  return readJsonResponse<ApiTriggerSkipsPage>(response);
+}
+
 async function runTrigger({
   triggerType,
   triggerName,
@@ -165,4 +184,11 @@ async function runTrigger({
   return json;
 }
 
-export { getAllTriggers, getTrigger, getTriggerProviderColor, getTriggerProviderIcon, runTrigger };
+export {
+  getAllTriggers,
+  getTrigger,
+  getTriggerProviderColor,
+  getTriggerProviderIcon,
+  getTriggerSkips,
+  runTrigger,
+};

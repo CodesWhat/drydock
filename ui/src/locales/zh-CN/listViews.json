@@ -430,6 +430,14 @@
       "status": "状态",
       "refreshing": "正在刷新触发器详情...",
       "noConfig": "无配置属性"
+    },
+    "skips": {
+      "title": "最近的跳过记录",
+      "description": "此触发器最近跳过的容器及原因。记录保存在内存中，Drydock 重启后会清空。",
+      "loading": "正在加载跳过记录...",
+      "loadError": "无法加载最近的跳过记录",
+      "empty": "最近没有跳过记录",
+      "showMore": "显示更多"
     }
   },
   "watchersView": {

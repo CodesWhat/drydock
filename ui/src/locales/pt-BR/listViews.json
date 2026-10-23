@@ -430,6 +430,14 @@
       "status": "Status",
       "refreshing": "Atualizando detalhes do trigger...",
       "noConfig": "Nenhuma propriedade de configuração"
+    },
+    "skips": {
+      "title": "Omissões recentes",
+      "description": "Contêineres que este trigger ignorou recentemente e por quê. Mantido na memória, então é zerado quando o Drydock reinicia.",
+      "loading": "Carregando omissões...",
+      "loadError": "Não foi possível carregar as omissões recentes",
+      "empty": "Nenhuma omissão recente",
+      "showMore": "Mostrar mais"
     }
   },
   "watchersView": {

@@ -1683,6 +1683,20 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
     });
 
+    test('reports manual for an auto trigger whose threshold the candidate does not reach', () => {
+      const trigger = makeTrigger({ configuration: { auto: 'all', threshold: 'minor' } });
+      const container = makeContainerWithTagUpdate({
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0', semverDiff: 'major' },
+        result: { tag: '2.0.0' },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.actionPolicy).toStrictEqual({ state: 'manual', triggerId: 'docker.update' });
+      expect(result.blockers.find((b) => b.reason === 'threshold-not-reached')).toBeDefined();
+    });
+
     test('reflects manual state under onauto with no matching auto label', () => {
       const trigger = makeTrigger({ configuration: { auto: 'onauto', threshold: 'all' } });
       const container = makeContainerWithTagUpdate({ actionTriggerInclude: 'docker.update' });

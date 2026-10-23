@@ -62,6 +62,40 @@ export const triggerPaths = {
       },
     },
   },
+  '/api/v1/triggers/{type}/{name}/skips': {
+    get: {
+      tags: ['Triggers'],
+      summary: 'List recent notification skips for a trigger',
+      operationId: 'getTriggerSkips',
+      description:
+        'The most recent skip per container for one notification trigger, newest first (DR-85). ' +
+        'Held in memory, so it is cleared when a notification is sent and lost on restart.',
+      parameters: [componentTypePathParam, componentNamePathParam, ...paginationQueryParams],
+      responses: {
+        200: jsonResponse('Trigger skips', { $ref: '#/components/schemas/TriggerSkipsResult' }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Trigger not found'),
+      },
+    },
+  },
+  '/api/v1/triggers/{type}/{name}/{agent}/skips': {
+    get: {
+      tags: ['Triggers'],
+      summary: 'List recent notification skips for a remote trigger',
+      operationId: 'getRemoteTriggerSkips',
+      parameters: [
+        componentTypePathParam,
+        componentNamePathParam,
+        componentAgentPathParam,
+        ...paginationQueryParams,
+      ],
+      responses: {
+        200: jsonResponse('Trigger skips', { $ref: '#/components/schemas/TriggerSkipsResult' }),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Trigger not found'),
+      },
+    },
+  },
   '/api/v1/triggers/{type}/{name}/{agent}': {
     get: {
       tags: ['Triggers'],

@@ -60,11 +60,12 @@ vi.mock('../log/index.js', () => ({
 function createTrigger(
   auto: 'all' | 'none' | 'onauto' = 'none',
   id = 'docker.local',
+  threshold?: string,
 ): Record<string, ActionPolicyTrigger> {
   return {
     [id]: {
       type: 'docker',
-      configuration: { auto },
+      configuration: { auto, ...(threshold !== undefined ? { threshold } : {}) },
       getId: () => id,
     } as unknown as ActionPolicyTrigger,
   };
@@ -448,6 +449,53 @@ describe('container removal', () => {
 });
 
 // Spec edge cases 6 and 7 — the mode-flip pair that falsifies the predicate cheaply.
+describe('trigger threshold under auto mode', () => {
+  const majorCandidate = () =>
+    createContainer({
+      result: { tag: '2.0.0' },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '2.0.0', semverDiff: 'major' },
+    });
+
+  beforeEach(() => {
+    getUpdateModeMock.mockReturnValue('auto');
+  });
+
+  test('keeps a major candidate pending when the auto action threshold is minor', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'minor') });
+
+    await emitContainerReport({ container: majorCandidate(), changed: true });
+
+    expect(allRows()).toMatchObject([{ candidateRef: '2.0.0', decision: 'pending' }]);
+    expect(allRows()[0].resolution).toBeUndefined();
+  });
+
+  test('resolves a minor candidate as auto-applied under the same threshold', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'minor') });
+    const container = createContainer({
+      result: { tag: '1.3.0' },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.3.0', semverDiff: 'minor' },
+    });
+    await emitContainerReport({ container, changed: true });
+    expect(allRows()).toHaveLength(0);
+
+    // A row that was queued earlier is resolved once the trigger will apply it itself.
+    getUpdateModeMock.mockReturnValue('manual');
+    await emitContainerReport({ container, changed: false });
+    getUpdateModeMock.mockReturnValue('auto');
+    await emitContainerReport({ container, changed: false });
+
+    expect(allRows()).toMatchObject([{ resolution: 'auto-applied', decidedBy: 'system' }]);
+  });
+
+  test('resolves a major candidate as auto-applied when the threshold is all', async () => {
+    getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'all') });
+
+    await emitContainerReport({ container: majorCandidate(), changed: true });
+
+    expect(allRows()).toHaveLength(0);
+  });
+});
+
 describe('update-mode flips', () => {
   test('auto to manual queues the previously auto-dispatched candidate, without duplicating', async () => {
     getUpdateModeMock.mockReturnValue('auto');

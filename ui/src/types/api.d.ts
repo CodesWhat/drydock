@@ -104,6 +104,22 @@ export interface ApiNotificationSkip {
   at: string;
 }
 
+/** One container a notification trigger skipped (from GET /api/v1/triggers/{type}/{name}/skips). */
+export interface ApiTriggerSkip {
+  containerId: string;
+  containerName: string | null;
+  reason: ApiNotificationSkip['reason'];
+  at: string;
+}
+
+export interface ApiTriggerSkipsPage {
+  data: ApiTriggerSkip[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 /** Trigger that does not apply to a container (from GET /api/containers/:id/triggers). */
 export interface ApiUnassociatedContainerTrigger {
   id: string;
