@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow the Portainer action to register with an HTTP URL when `DD_ACTION_PORTAINER_<name>_ALLOWHTTP=true` is set through the environment. Validate the opt-in before selecting the permitted URL schemes; HTTP remains rejected when the opt-in is absent or false. ([#1473](https://github.com/CodesWhat/drydock/issues/1473))
+
 ## [1.8.0-rc.6] - 2026-10-23
 
 > [!WARNING]
