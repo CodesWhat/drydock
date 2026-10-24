@@ -17,6 +17,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Allow the Portainer action to register with an HTTP URL when `DD_ACTION_PORTAINER_<name>_ALLOWHTTP=true` is set through the environment. Validate the opt-in before selecting the permitted URL schemes; HTTP remains rejected when the opt-in is absent or false. ([#1473](https://github.com/CodesWhat/drydock/issues/1473))
 - Keep automatic actions independent of notification rules. Disabling Update Available notifications no longer prevents simple or batch actions, and list/SSE eligibility no longer shows a notification-rule blocker. Update mode and update policy gates still apply ([#1281](https://github.com/CodesWhat/drydock/issues/1281)).
 
+### Security
+
+- Update body-parser to 2.4.0, fast-uri to 4.2.3, Nodemailer to 10.1.4 and Undici to 8.12.2 (7.30.1 in UI tooling). Patch Zod to 4.6.6 in backend/UI tooling and the docs site, serialize-javascript to 7.1.3 in UI tooling, and MSAL Node to 7.1.0 in the E2E load-test tooling. These updates clear the October 24 advisory scan without changing its severity gate.
+
 ## [1.8.0-rc.6] - 2026-10-23
 
 > [!WARNING]
