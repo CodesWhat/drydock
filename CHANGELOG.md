@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore Home Assistant discovery for Compose containers by encoding unsupported discovery object-id characters with a stable hash suffix. Preserve state topics and unique IDs, and clear the invalid retained discovery configuration ([#1472](https://github.com/CodesWhat/drydock/issues/1472)).
+
 ## [1.8.0-rc.6] - 2026-10-23
 
 > [!WARNING]

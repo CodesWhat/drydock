@@ -139,7 +139,12 @@ interface HassLogger {
  * @return {*}
  */
 function getHassEntityId(topic) {
-  return topic.replaceAll('/', '_');
+  const entityId = topic.replaceAll('/', '_');
+  if (/^[a-zA-Z0-9_-]+$/.test(entityId)) {
+    return entityId;
+  }
+  const suffix = createHash('sha256').update(topic).digest('hex').slice(0, 12);
+  return `${entityId.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${suffix}`;
 }
 
 /**
@@ -937,6 +942,14 @@ class Hass {
       : undefined;
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
+      const legacyEntityId = containerStateSensor.topic.replaceAll('/', '_');
+      if (legacyEntityId !== getHassEntityId(containerStateSensor.topic)) {
+        await this.client.publish(
+          `${this.configuration.hass.prefix}/${containerStateSensor.kind}/${legacyEntityId}/config`,
+          '',
+          { retain: true },
+        );
+      }
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
         stateTopics: staleStateTopics,
