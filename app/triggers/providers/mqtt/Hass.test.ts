@@ -291,6 +291,40 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
   );
 });
 
+test('Compose discovery uses a valid distinct object id and clears the invalid retained topic', async () => {
+  const container = {
+    id: 'compose-id',
+    name: 'media_calibre_1',
+    watcher: 'local',
+    labels: { 'com.docker.compose.project': 'media', 'com.docker.compose.service': 'calibre' },
+  };
+  await hass.addContainerSensor(container);
+  const discovery = mqttClientMock.publish.mock.calls.find(
+    ([topic, payload]) => topic.startsWith('homeassistant/update/') && payload !== '',
+  );
+  expect(discovery).toBeDefined();
+  expect(discovery![0].split('/')[2]).toMatch(/^[a-zA-Z0-9_-]+$/);
+  expect(discovery![0]).not.toBe(
+    hass.getDiscoveryTopic({ kind: 'update', topic: 'topic/local/media_calibre' }),
+  );
+  const payload = JSON.parse(discovery![1]);
+  expect(payload.state_topic).toBe('topic/local/media.calibre');
+  expect(payload.default_entity_id).toMatch(/^update\.[a-zA-Z0-9_-]+$/);
+  expect(mqttClientMock.publish).toHaveBeenCalledWith(
+    'homeassistant/update/topic_local_media.calibre/config',
+    '',
+    { retain: true },
+  );
+});
+
+test.each(['a.b', 'a b', 'a:b', 'café'])(
+  'discovery encodes unsupported characters in %s',
+  (name) => {
+    const topic = hass.getDiscoveryTopic({ kind: 'update', topic: `topic/local/${name}` });
+    expect(topic.split('/')[2]).toMatch(/^[a-zA-Z0-9_-]+$/);
+  },
+);
+
 test('unique_id stays the same across a rename and a recreate for a compose-identified container', async () => {
   const beforeRename = {
     id: 'container-id-before',
@@ -318,7 +352,10 @@ test('unique_id stays the same across a rename and a recreate for a compose-iden
   await hass.addContainerSensor(afterRecreate);
 
   const uniqueIds = mqttClientMock.publish.mock.calls
-    .filter(([topic]) => topic === 'homeassistant/update/topic_watcher-name_myapp.web/config')
+    .filter(
+      ([topic]) =>
+        topic === 'homeassistant/update/topic_watcher-name_myapp_web_a659fb394464/config',
+    )
     .map(([, payload]) => JSON.parse(payload).unique_id);
 
   expect(uniqueIds).toHaveLength(3);
@@ -844,6 +881,34 @@ test.each(containerData)(
     expect(mqttClientMock.publish).toHaveBeenCalledWith(data.discoveryTopic, '', {
       retain: true,
     });
+  },
+);
+
+test.each(['identity', 'cleanup'])(
+  'migrates aggregate and watcher discovery %s with unsupported characters',
+  async (check) => {
+    hass.configuration.topic = 'dd.test';
+    await hass.updateContainerSensors({ name: 'app', watcher: 'local.watch' });
+    await hass.updateWatcherSensors({ watcher: { name: 'local.watch' }, isRunning: true });
+    const configs = mqttClientMock.publish.mock.calls.filter(
+      ([topic, payload]) =>
+        topic.startsWith('homeassistant/') && topic.endsWith('/config') && payload !== '',
+    );
+    expect(configs).toHaveLength(7);
+    for (const [topic, body] of configs) {
+      const payload = JSON.parse(body);
+      const legacyId = payload.state_topic.replaceAll('/', '_');
+      expect(topic.split('/')[2]).toMatch(/^[a-zA-Z0-9_-]+$/);
+      if (check === 'identity') {
+        expect(payload.unique_id).toBe(legacyId);
+      } else {
+        expect(mqttClientMock.publish).toHaveBeenCalledWith(
+          `homeassistant/${topic.split('/')[1]}/${legacyId}/config`,
+          '',
+          { retain: true },
+        );
+      }
+    }
   },
 );
 
@@ -1923,7 +1988,7 @@ describe('hass discovery startup resync (#708)', () => {
     );
     // The new identity-based entity is published (not retired).
     expect(cleanupClient.publish).not.toHaveBeenCalledWith(
-      'homeassistant/update/topic_local_myapp.web/config',
+      'homeassistant/update/topic_local_myapp_web_121fd9cc4af1/config',
       '',
       { retain: true },
     );

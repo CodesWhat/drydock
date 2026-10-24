@@ -169,6 +169,37 @@ test('Portainer defaults to HTTPS and normalizes the allowHttp alias', () => {
   ).toThrow();
 });
 
+test.each(['allowHttp', 'allowhttp'])('%s accepts environment-style HTTP opt-in', (key) => {
+  const trigger = new Portainer();
+  const configuration = trigger.validateConfiguration({
+    url: 'http://portainer.lan:9000',
+    apikey: 'secret',
+    [key]: 'true',
+  });
+  expect(configuration.allowHttp).toBe(true);
+  trigger.configuration = configuration;
+  expect(trigger.getPortainerUrl()).toBe('http://portainer.lan:9000');
+});
+
+test.each(['allowHttp', 'allowhttp'])('%s keeps HTTP opt-in explicit', (key) => {
+  const trigger = new Portainer();
+  for (const value of [false, 'false', undefined, '', 'invalid']) {
+    expect(() =>
+      trigger.validateConfiguration({
+        url: 'http://portainer.lan:9000',
+        apikey: 'secret',
+        [key]: value,
+      }),
+    ).toThrow();
+  }
+  const secure = trigger.validateConfiguration({
+    url: 'https://portainer.lan:9443',
+    apikey: 'secret',
+    [key]: 'false',
+  });
+  expect(secure.allowHttp).toBe(false);
+});
+
 test('Portainer rejects malformed endpoint labels and direct HTTP use', async () => {
   const trigger = makeTrigger();
   await expect(

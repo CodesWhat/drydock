@@ -4075,6 +4075,7 @@ describe('bug #623: update-available allow-list routing for action triggers', ()
         agent,
         watcher: 'local',
         name: 'container1',
+        labels: { 'com.docker.compose.project': 'stack', 'com.docker.compose.service': 'app' },
         updateAvailable: true,
         updateKind: { kind: 'tag', semverDiff: 'major' },
       },
@@ -4090,11 +4091,7 @@ describe('bug #623: update-available allow-list routing for action triggers', ()
     await trigger.handleContainerReport(updateAvailableReport('issue-623-docker'));
 
     expect(triggerSpy).toHaveBeenCalled();
-    expect(notificationStore.getTriggerDispatchDecisionForRule).toHaveBeenCalledWith(
-      'update-available',
-      'docker.update',
-      expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
-    );
+    expect(notificationStore.getTriggerDispatchDecisionForRule).not.toHaveBeenCalled();
   });
 
   test('command action dispatches when absent from a notification-only allow-list', async () => {
@@ -4106,11 +4103,7 @@ describe('bug #623: update-available allow-list routing for action triggers', ()
     await trigger.handleContainerReport(updateAvailableReport('issue-623-command'));
 
     expect(triggerSpy).toHaveBeenCalled();
-    expect(notificationStore.getTriggerDispatchDecisionForRule).toHaveBeenCalledWith(
-      'update-available',
-      'command.update',
-      expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
-    );
+    expect(notificationStore.getTriggerDispatchDecisionForRule).not.toHaveBeenCalled();
   });
 
   test('agent-prefixed docker action dispatches based on category, not trigger id shape', async () => {
@@ -4125,26 +4118,54 @@ describe('bug #623: update-available allow-list routing for action triggers', ()
     );
 
     expect(triggerSpy).toHaveBeenCalled();
-    expect(notificationStore.getTriggerDispatchDecisionForRule).toHaveBeenCalledWith(
-      'update-available',
-      'agentname.docker.update',
-      expect.objectContaining({ allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true }),
-    );
+    expect(notificationStore.getTriggerDispatchDecisionForRule).not.toHaveBeenCalled();
   });
 
-  test('disabled update-available rule still blocks an action trigger', async () => {
+  test.each(['docker', 'dockercompose', 'portainer', 'command'])(
+    'disabled notification rule does not stop a %s action',
+    async (type) => {
+      mockUpdateAvailableRule(false);
+      trigger.type = type;
+      trigger.name = 'update';
+      const run = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      await trigger.handleContainerReport(updateAvailableReport(`issue-1281-${type}`));
+      expect(run).toHaveBeenCalled();
+    },
+  );
+
+  test('disabled notification rule does not stop batch actions', async () => {
     mockUpdateAvailableRule(false);
-    trigger.type = 'docker';
+    trigger.type = 'dockercompose';
     trigger.name = 'update';
-    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
-    const debugSpy = vi.spyOn(log, 'debug');
+    trigger.configuration.mode = 'batch';
+    const run = vi.spyOn(trigger as any, 'runAcceptedUpdateBatch');
+    await trigger.handleContainerReports([updateAvailableReport('issue-1281-batch')]);
+    expect(run).toHaveBeenCalled();
+  });
 
-    await trigger.handleContainerReport(updateAvailableReport('issue-623-disabled'));
+  test.each(['manual', 'notify'] as const)(
+    'notification opt-out does not bypass global %s mode',
+    async (mode) => {
+      mockUpdateAvailableRule(false);
+      mockGetUpdateMode.mockReturnValue(mode as any);
+      trigger.type = 'docker';
+      trigger.name = 'update';
+      const run = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      const batch = vi.spyOn(trigger as any, 'runAcceptedUpdateBatch');
+      await trigger.handleContainerReport(updateAvailableReport(`mode-${mode}`));
+      await trigger.handleContainerReports([updateAvailableReport(`batch-mode-${mode}`)]);
+      expect(run).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+    },
+  );
 
-    expect(triggerSpy).not.toHaveBeenCalled();
-    expect(debugSpy).toHaveBeenCalledWith(
-      'Skipping update-available notification for local_container1 (rule-disabled)',
-    );
+  test('disabled rule still silences update-available notifications', async () => {
+    mockUpdateAvailableRule(false);
+    trigger.type = 'slack';
+    trigger.name = 'ops';
+    const run = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerReport(updateAvailableReport('issue-1281-notification'));
+    expect(run).not.toHaveBeenCalled();
   });
 
   test('notification trigger absent from a non-empty allow-list remains excluded', async () => {
