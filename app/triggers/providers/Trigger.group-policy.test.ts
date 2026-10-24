@@ -392,7 +392,7 @@ describe('batch mode', () => {
     );
   });
 
-  test('a disabled update-available rule is logged for every pending container in the batch', async () => {
+  test('a disabled notification rule allows batch actions and ignores settled containers', async () => {
     vi.mocked(notificationStore.getTriggerDispatchDecisionForRule).mockReturnValue({
       enabled: false,
       reason: 'rule-disabled',
@@ -406,8 +406,8 @@ describe('batch mode', () => {
 
     await action.handleContainerReports([report(pending), report(settled)]);
 
-    expect(run).not.toHaveBeenCalled();
-    expect(debug).toHaveBeenCalledWith(
+    expect(run).toHaveBeenCalledWith([pending], []);
+    expect(debug).not.toHaveBeenCalledWith(
       `Skipping update-available notification for ${pending.watcher}_${pending.name} (rule-disabled)`,
     );
     expect(debug).not.toHaveBeenCalledWith(expect.stringContaining(settled.name));

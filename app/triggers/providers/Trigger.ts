@@ -1080,30 +1080,14 @@ class Trigger<
   }
 
   private getUpdateAvailableAutoTriggerDispatchDecision() {
+    if (getTriggerCategoryForType(this.type) === 'action') {
+      return { enabled: true, reason: 'action-trigger-exempt-from-notification-rule' };
+    }
     const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
       'update-available',
       this.getId(),
-      {
-        // Keep backward compatibility: if update-available has no explicit trigger
-        // allow-list yet, legacy auto trigger behavior remains enabled.
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-      },
+      { allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true },
     );
-    if (
-      !dispatchDecision.enabled &&
-      dispatchDecision.reason === 'excluded-from-allow-list' &&
-      getTriggerCategoryForType(this.type) === 'action'
-    ) {
-      // #623: the update-available rule's trigger allow-list can only ever contain
-      // notification triggers (the API validator and the UI picker both bar action
-      // types), so membership can never be granted to an action trigger. Treat
-      // non-membership as exempt; rule.enabled stays authoritative as the kill switch.
-      return {
-        enabled: true,
-        reason: 'action-trigger-exempt-from-allow-list',
-      };
-    }
     this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
     return dispatchDecision;
   }
