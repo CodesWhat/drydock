@@ -11,6 +11,23 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.7] - 2026-10-24
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.6 changes and upgrade warnings. It restores Home Assistant discovery for Compose containers, accepts Portainer's explicit HTTP opt-in from environment variables, and separates automatic actions from Update Available notification preferences. If you used that notification rule as an action kill switch, set the global or group update mode to manual instead. Update mode, group policy, action selection, maintenance windows, maturity and approvals still apply. It also patches newly reported dependency advisories. v1.7.0 is the latest stable release. RC7 starts its own publication-based soak.
+
+### Fixed
+
+- Restore Home Assistant discovery for Compose containers by encoding unsupported discovery object-id characters with a stable hash suffix. Preserve state topics and unique IDs, and clear the invalid retained discovery configuration ([#1472](https://github.com/CodesWhat/drydock/issues/1472)).
+- Allow the Portainer action to register with an HTTP URL when `DD_ACTION_PORTAINER_<name>_ALLOWHTTP=true` is set through the environment. Validate the opt-in before selecting the permitted URL schemes; HTTP remains rejected when the opt-in is absent or false. ([#1473](https://github.com/CodesWhat/drydock/issues/1473))
+- Keep automatic actions independent of notification rules. Disabling Update Available notifications no longer prevents simple or batch actions, and list/SSE eligibility no longer shows a notification-rule blocker. Update mode and update policy gates still apply ([#1281](https://github.com/CodesWhat/drydock/issues/1281)).
+
+### Security
+
+- Update body-parser to 2.4.0, fast-uri to 4.2.3, Nodemailer to 10.1.4 and Undici to 8.12.2 (7.30.1 in UI tooling). Patch Zod to 4.6.6 in backend/UI tooling and the docs site, serialize-javascript to 7.1.3 in UI tooling, and MSAL Node to 7.1.0 in the E2E load-test tooling. These updates clear the October 24 advisory scan without changing its severity gate.
+
 ## [1.8.0-rc.6] - 2026-10-23
 
 > [!WARNING]
@@ -3598,7 +3615,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...HEAD
+[1.8.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...v1.8.0-rc.7
 [1.8.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...v1.8.0-rc.6
 [1.8.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.4...v1.8.0-rc.5
 [1.8.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...v1.8.0-rc.4

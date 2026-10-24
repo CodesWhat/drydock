@@ -316,7 +316,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.8.0-rc.6",
+    version: "v1.8.0-rc.7",
     title: "Fleet Management & SQLite (RC, testing only)",
     emoji: "\u{2699}️",
     status: "next",

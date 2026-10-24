@@ -14,12 +14,12 @@ var {
   };
 });
 
-const { mockIsUpdateAvailableRuleEnabled } = vi.hoisted(() => ({
-  mockIsUpdateAvailableRuleEnabled: vi.fn(() => true),
+const { mockGetNotificationRule } = vi.hoisted(() => ({
+  mockGetNotificationRule: vi.fn(() => ({ enabled: true })),
 }));
 
 vi.mock('../store/notification.js', () => ({
-  isUpdateAvailableRuleEnabled: mockIsUpdateAvailableRuleEnabled,
+  getNotificationRule: mockGetNotificationRule,
 }));
 
 vi.mock('../store/settings.js', () => ({
@@ -53,7 +53,7 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
     mockGetActiveOperationByContainerIdentity.mockReturnValue(undefined);
     mockGetAgent.mockReturnValue(undefined);
     mockGetUpdateMode.mockReturnValue('auto');
-    mockIsUpdateAvailableRuleEnabled.mockReturnValue(true);
+    mockGetNotificationRule.mockReturnValue({ enabled: true });
   });
 
   describe('update mode reflection', () => {
@@ -107,18 +107,16 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       getId: () => 'docker.update',
     };
 
-    test('adds the soft rule-disabled blocker when the rule is off and an action would auto-dispatch', () => {
+    test('notification preferences do not block automatic actions in SSE', () => {
       mockGetState.mockReturnValue({
         trigger: { 'docker.update': autoTrigger },
         watcher: {},
       } as any);
-      mockIsUpdateAvailableRuleEnabled.mockReturnValue(false);
+      mockGetNotificationRule.mockReturnValue({ enabled: false });
 
       const result = enrichContainerLifecyclePayloadWithEligibility(payload) as any;
 
-      expect(result.updateEligibility.blockers).toEqual([
-        expect.objectContaining({ reason: 'update-available-rule-disabled', severity: 'soft' }),
-      ]);
+      expect(result.updateEligibility.blockers).toEqual([]);
     });
 
     test('adds nothing while the rule is on', () => {
