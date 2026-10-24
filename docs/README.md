@@ -17,7 +17,7 @@ The site/docs app lives in `/apps/web` and uses `npm run sync:docs` to copy each
 
 | Line | Status | Maps to |
 |---|---|---|
-| v1.8 | v1.8.0-rc.6, opt-in testing; GA pending | `content/docs/current`, served as v1.8 |
+| v1.8 | v1.8.0-rc.7, opt-in testing; GA pending | `content/docs/current`, served as v1.8 |
 | v1.7 | v1.7.0 released 2026-10-19 (GA) | `content/docs/v1.7` |
 | v1.6 | final release is v1.6.1; no further 1.6 releases | `content/docs/v1.6`, with version-compatible errata |
 | v1.5 and earlier | archived | `content/docs/v1.5`, `v1.4`, `v1.3` |

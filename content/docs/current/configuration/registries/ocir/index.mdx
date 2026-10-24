@@ -27,7 +27,7 @@ Drydock automatically detects the bare `ocir.io` hostname and subdomains such as
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.6
+    image: codeswhat/drydock:1.8.0-rc.7
     ...
     environment:
       - DD_REGISTRY_OCIR_PRIVATE_LOGIN=tenancy/oracleidentitycloudservice/user@example.com
@@ -41,7 +41,7 @@ docker run \
   -e "DD_REGISTRY_OCIR_PRIVATE_LOGIN=tenancy/oracleidentitycloudservice/user@example.com" \
   -e "DD_REGISTRY_OCIR_PRIVATE_PASSWORD=xxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.6
+  codeswhat/drydock:1.8.0-rc.7
 ```
 </Tab>
 </Tabs>
@@ -54,7 +54,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.6
+    image: codeswhat/drydock:1.8.0-rc.7
     ...
     environment:
       - DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH
@@ -66,7 +66,7 @@ services:
 docker run \
   -e "DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
-  codeswhat/drydock:1.8.0-rc.6
+  codeswhat/drydock:1.8.0-rc.7
 ```
 </Tab>
 </Tabs>

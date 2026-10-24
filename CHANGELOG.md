@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.7] - 2026-10-24
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.6 changes and upgrade warnings. It restores Home Assistant discovery for Compose containers, accepts Portainer's explicit HTTP opt-in from environment variables, and separates automatic actions from Update Available notification preferences. If you used that notification rule as an action kill switch, set the global or group update mode to manual instead. Update mode, group policy, action selection, maintenance windows, maturity and approvals still apply. It also patches newly reported dependency advisories. v1.7.0 is the latest stable release. RC7 starts its own publication-based soak.
+
 ### Fixed
 
 - Restore Home Assistant discovery for Compose containers by encoding unsupported discovery object-id characters with a stable hash suffix. Preserve state topics and unique IDs, and clear the invalid retained discovery configuration ([#1472](https://github.com/CodesWhat/drydock/issues/1472)).
@@ -3608,7 +3615,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...HEAD
+[1.8.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...v1.8.0-rc.7
 [1.8.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...v1.8.0-rc.6
 [1.8.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.4...v1.8.0-rc.5
 [1.8.0-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.3...v1.8.0-rc.4

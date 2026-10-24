@@ -5,6 +5,15 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.7 Highlights - October 24, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Home Assistant discovery works for Compose containers again.** Discovery object IDs use valid characters and a stable suffix without changing the state topics or unique IDs. Invalid retained discovery topics are cleared ([#1472](https://github.com/CodesWhat/drydock/issues/1472)).
+- **Portainer accepts the explicit HTTP opt-in from environment variables.** HTTPS remains the default; HTTP still requires `ALLOWHTTP=true` ([#1473](https://github.com/CodesWhat/drydock/issues/1473), thanks to Julian Jarecki in [#1474](https://github.com/CodesWhat/drydock/pull/1474)).
+- **Notification preferences no longer stop automatic actions.** You can silence Update Available notifications while retaining applied/failed notifications and automatic updates. Use global or group update mode `manual` to stop automatic actions; action selection, windows, maturity and approvals still apply ([#1281](https://github.com/CodesWhat/drydock/issues/1281)).
+- RC7 includes the earlier candidate changes below and patched dependency advisories. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.6 Highlights - October 23, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

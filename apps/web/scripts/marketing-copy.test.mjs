@@ -33,7 +33,7 @@ test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
 
 test("roadmap HEAD follows the active RC while retaining older candidates", () => {
   assert.equal(typeof marketing.getRoadmapHead, "function");
-  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.6");
+  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.7");
   assert.equal(marketing.roadmap.find((item) => item.version === "v1.7.0").status, "released");
   assert.equal(
     marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))
