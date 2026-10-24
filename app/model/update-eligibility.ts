@@ -85,7 +85,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'group-notify-only': 'hard',
   // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
   'maintenance-window-closed': 'soft',
-  // soft: the Update Available rule gates automatic actions only; manual updates are unaffected
+  // Retained for compatibility with older eligibility payloads; current dispatch ignores notification rules.
   'update-available-rule-disabled': 'soft',
 };
 
