@@ -139,7 +139,12 @@ interface HassLogger {
  * @return {*}
  */
 function getHassEntityId(topic) {
-  return topic.replaceAll('/', '_');
+  const entityId = topic.replaceAll('/', '_');
+  if (/^[a-zA-Z0-9_-]+$/.test(entityId)) {
+    return entityId;
+  }
+  const suffix = createHash('sha256').update(topic).digest('hex').slice(0, 12);
+  return `${entityId.replaceAll(/[^a-zA-Z0-9_-]/g, '_')}_${suffix}`;
 }
 
 /**
@@ -1339,10 +1344,18 @@ class Hass {
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
+    const legacyEntityId = stateTopic.replaceAll('/', '_');
+    if (legacyEntityId !== entityId) {
+      await this.client.publish(
+        `${this.configuration.hass.prefix}/${kind}/${legacyEntityId}/config`,
+        '',
+        { retain: true },
+      );
+    }
     return this.client.publish(
       discoveryTopic,
       JSON.stringify({
-        unique_id: uniqueId ?? entityId,
+        unique_id: uniqueId ?? legacyEntityId,
         default_entity_id: `${kind}.${entityId}`,
         name: name === null ? null : name || entityId,
         device: device ?? getHaDevice(),

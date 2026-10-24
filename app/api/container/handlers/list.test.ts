@@ -9,14 +9,14 @@ import {
   createGetContainersHandler,
 } from './list.js';
 
-const { mockIsUpdateAvailableRuleEnabled } = vi.hoisted(() => ({
-  mockIsUpdateAvailableRuleEnabled: vi.fn(() => true),
+const { mockGetNotificationRule } = vi.hoisted(() => ({
+  mockGetNotificationRule: vi.fn(() => ({ enabled: true })),
 }));
 
 vi.mock('../../../store/settings.js', () => ({ getUpdateMode: vi.fn(() => 'auto') }));
 vi.mock('../../../store/notification.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../store/notification.js')>()),
-  isUpdateAvailableRuleEnabled: mockIsUpdateAvailableRuleEnabled,
+  getNotificationRule: mockGetNotificationRule,
 }));
 
 function createMockContext(operation?: unknown): CrudHandlerContext {
@@ -1487,7 +1487,7 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     );
   });
 
-  test('flags a pending update the disabled Update Available rule keeps from auto-dispatching', () => {
+  test('notification preferences do not block an otherwise eligible update', () => {
     const autoTrigger = {
       type: 'docker',
       agent: undefined,
@@ -1506,8 +1506,8 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
 
     expect(reasonsFor()).toEqual([]);
 
-    mockIsUpdateAvailableRuleEnabled.mockReturnValueOnce(false);
-    expect(reasonsFor()).toEqual(['update-available-rule-disabled']);
+    mockGetNotificationRule.mockReturnValueOnce({ enabled: false });
+    expect(reasonsFor()).toEqual([]);
   });
 
   test('calls getTriggers when it is defined on the context', () => {

@@ -708,15 +708,10 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
       .append({
         url: this.joi
           .string()
-          .uri({
-            scheme: ['http', 'https'],
-          })
-          .custom((value, helpers) => {
-            const configuration = helpers.state.ancestors[0] as { allowHttp?: boolean };
-            if (value.startsWith('http://') && configuration.allowHttp !== true) {
-              return helpers.error('any.invalid');
-            }
-            return value;
+          .when('allowHttp', {
+            is: true,
+            then: this.joi.string().uri({ scheme: ['http', 'https'] }),
+            otherwise: this.joi.string().uri({ scheme: ['https'] }),
           })
           .required(),
         apikey: this.joi.string().required(),

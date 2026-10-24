@@ -267,11 +267,15 @@ const septemberSecurityFloors = {
   axios: { 1: '1.20.0' },
   'brace-expansion': { 5: '5.0.12' },
   next: { 16: '16.3.8' },
-  nodemailer: { 10: '10.0.9' },
-  undici: { 7: '7.29.1', 8: '8.10.2' },
+  nodemailer: { 10: '10.1.4' },
+  undici: { 7: '7.30.1', 8: '8.12.2' },
   '@grpc/grpc-js': { 1: '1.14.5' },
   moment: { 2: '2.31.0' },
-  'fast-uri': { 4: '4.1.5' },
+  'fast-uri': { 4: '4.2.3' },
+  'body-parser': { 2: '2.4.0' },
+  zod: { 4: '4.6.6' },
+  'serialize-javascript': { 7: '7.1.3' },
+  '@azure/msal-node': { 7: '7.1.0' },
   'ip-address': { 10: '10.7.1' },
 };
 
