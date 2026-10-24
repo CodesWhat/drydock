@@ -942,14 +942,6 @@ class Hass {
       : undefined;
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
-      const legacyEntityId = containerStateSensor.topic.replaceAll('/', '_');
-      if (legacyEntityId !== getHassEntityId(containerStateSensor.topic)) {
-        await this.client.publish(
-          `${this.configuration.hass.prefix}/${containerStateSensor.kind}/${legacyEntityId}/config`,
-          '',
-          { retain: true },
-        );
-      }
       await this.removeDiscoveryTopics({
         kind: containerStateSensor.kind,
         stateTopics: staleStateTopics,
@@ -1352,10 +1344,18 @@ class Hass {
     options?: Record<string, unknown>;
   }) {
     const entityId = getHassEntityId(stateTopic);
+    const legacyEntityId = stateTopic.replaceAll('/', '_');
+    if (legacyEntityId !== entityId) {
+      await this.client.publish(
+        `${this.configuration.hass.prefix}/${kind}/${legacyEntityId}/config`,
+        '',
+        { retain: true },
+      );
+    }
     return this.client.publish(
       discoveryTopic,
       JSON.stringify({
-        unique_id: uniqueId ?? entityId,
+        unique_id: uniqueId ?? legacyEntityId,
         default_entity_id: `${kind}.${entityId}`,
         name: name === null ? null : name || entityId,
         device: device ?? getHaDevice(),

@@ -884,6 +884,34 @@ test.each(containerData)(
   },
 );
 
+test.each(['identity', 'cleanup'])(
+  'migrates aggregate and watcher discovery %s with unsupported characters',
+  async (check) => {
+    hass.configuration.topic = 'dd.test';
+    await hass.updateContainerSensors({ name: 'app', watcher: 'local.watch' });
+    await hass.updateWatcherSensors({ watcher: { name: 'local.watch' }, isRunning: true });
+    const configs = mqttClientMock.publish.mock.calls.filter(
+      ([topic, payload]) =>
+        topic.startsWith('homeassistant/') && topic.endsWith('/config') && payload !== '',
+    );
+    expect(configs).toHaveLength(7);
+    for (const [topic, body] of configs) {
+      const payload = JSON.parse(body);
+      const legacyId = payload.state_topic.replaceAll('/', '_');
+      expect(topic.split('/')[2]).toMatch(/^[a-zA-Z0-9_-]+$/);
+      if (check === 'identity') {
+        expect(payload.unique_id).toBe(legacyId);
+      } else {
+        expect(mqttClientMock.publish).toHaveBeenCalledWith(
+          `homeassistant/${topic.split('/')[1]}/${legacyId}/config`,
+          '',
+          { retain: true },
+        );
+      }
+    }
+  },
+);
+
 test('updateWatcherSensors must publish all watcher sensor messages expected by HA', async () => {
   await hass.updateWatcherSensors({
     watcher: {
