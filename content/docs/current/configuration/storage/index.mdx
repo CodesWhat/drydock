@@ -29,7 +29,7 @@ Before applying a pending schema migration to an existing database, Drydock writ
 
 A database that a newer Drydock build already migrated is not opened by an older one. The older build logs one error naming both schema versions and exits with status 1, so a downgrade (or a self-update rollback to the previous image) can't corrupt it. To go back, either run a build at least as new as the one that last ran, or stop Drydock, copy the `dd.sqlite.pre-migration-*` snapshot taken before that migration over `dd.sqlite`, delete any `dd.sqlite-wal` and `dd.sqlite-shm` files beside it, and start the older build. Anything written after the snapshot is not in it.
 
-Builds up to v1.8.0-rc.7 have neither the snapshot nor the check, so a guarded build protects against downgrades only to builds that also include it.
+The snapshot and downgrade check first shipped in v1.8.0-rc.6. Builds up to v1.8.0-rc.5 have neither safeguard, so a guarded build protects against downgrades only to builds that also include the check.
 
 ## Variables
 
