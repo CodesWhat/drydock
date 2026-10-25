@@ -12,6 +12,7 @@ import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
 import { getState } from '../../registry/index.js';
 import { hashToken } from '../../util/crypto.js';
+import { parseLogQueryInteger } from '../../util/parse.js';
 import * as containerApi from './container.js';
 import * as eventApi from './event.js';
 import * as triggerApi from './trigger.js';
@@ -21,15 +22,6 @@ import { refreshWatcherInventory } from './watcher-inventory.js';
 const log = logger.child({ component: 'agent-server' });
 const ALLOWED_LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
 const SAFE_LOG_COMPONENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
-// Requires the entire string to be an optional minus sign followed by one or more digits, so a
-// numeric-prefix string like '25logs' or '1000ms' is rejected rather than silently truncated
-// by Number.parseInt. Negative values are intentionally still accepted here — see
-// getValidatedLogInteger below. A leading `+` is deliberately not accepted: it's
-// form-encoding for a space in a query string, so `?tail=+5` arrives as `" 5"` and only the
-// `%2B5` spelling would ever reach the validator as `"+5"`; accepting `[+-]?` would make
-// acceptance depend on how the client encoded the sign, and restoring both spellings would
-// need a trim, which is the exact thing this pattern exists to stop (`?tail=%205`).
-const SAFE_LOG_INTEGER_PATTERN = /^-?\d+$/;
 
 let cachedSecret: string | undefined;
 
@@ -74,25 +66,6 @@ function getValidatedLogComponent(component: unknown): string | undefined | null
     return null;
   }
   return component;
-}
-
-function getValidatedLogInteger(value: unknown): number | undefined | null {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-  // The whole string must be a complete integer literal — no leading/trailing whitespace,
-  // no decimal point, no exponent, no hex/octal prefix, no partial-numeric-prefix garbage
-  // (e.g. '25logs', '1000ms'). Number.parseInt would silently truncate those to a valid
-  // number instead of rejecting them, which is exactly the hole this closes.
-  // Negative values (e.g. '-5') are deliberately still accepted: app/log/buffer.ts's
-  // applyTail() treats a negative tail as "return no entries" rather than erroring or
-  // reading out of bounds, so there's no unsafe behavior downstream to guard against, and
-  // rejecting sign is a separate behavior change from the reported bug.
-  if (typeof value !== 'string' || !SAFE_LOG_INTEGER_PATTERN.test(value)) {
-    return null;
-  }
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 /**
@@ -205,13 +178,13 @@ export async function init() {
       return;
     }
 
-    const tail = getValidatedLogInteger(req.query.tail);
+    const tail = parseLogQueryInteger(req.query.tail);
     if (tail === null) {
       sendErrorResponse(res, 400, 'Invalid tail query parameter');
       return;
     }
 
-    const since = getValidatedLogInteger(req.query.since);
+    const since = parseLogQueryInteger(req.query.since);
     if (since === null) {
       sendErrorResponse(res, 400, 'Invalid since query parameter');
       return;
