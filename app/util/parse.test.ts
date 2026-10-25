@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseEnvNonNegativeInteger, toPositiveInteger } from './parse.js';
+import { parseEnvNonNegativeInteger, parseLogQueryInteger, toPositiveInteger } from './parse.js';
 
 describe('toPositiveInteger', () => {
   test('returns parsed positive integer values', () => {
@@ -26,5 +26,57 @@ describe('parseEnvNonNegativeInteger', () => {
     expect(() => parseEnvNonNegativeInteger('-1', 'DD_TEST')).toThrow(
       'DD_TEST must be a non-negative integer (got "-1")',
     );
+  });
+});
+
+describe('parseLogQueryInteger', () => {
+  test.each([undefined, null])('preserves an absent query value: %s', (value) => {
+    expect(parseLogQueryInteger(value)).toBeUndefined();
+  });
+
+  test.each([
+    ['0', 0],
+    ['-0', -0],
+    ['42', 42],
+    ['-5', -5],
+    ['0012', 12],
+    ['-0012', -12],
+    ['9007199254740991', Number.MAX_SAFE_INTEGER],
+    ['-9007199254740991', Number.MIN_SAFE_INTEGER],
+  ])('parses the complete safe integer %j', (value, expected) => {
+    expect(parseLogQueryInteger(value)).toBe(expected);
+  });
+
+  test.each(
+    [
+      '',
+      ' ',
+      ' 5',
+      '5 ',
+      '+5',
+      '5.0',
+      '1e3',
+      '0x10',
+      '25logs',
+      '1000ms',
+      '-',
+      '5\n',
+      '5\r',
+      '5\r\n',
+      '5\u2028',
+      '5\u2029',
+      '5\n6',
+      '9007199254740992',
+      '-9007199254740992',
+      5,
+      0,
+      false,
+      true,
+      [],
+      ['5'],
+      { value: '5' },
+    ].map((value) => [value]),
+  )('rejects invalid or unsafe query value %j', (value) => {
+    expect(parseLogQueryInteger(value)).toBeNull();
   });
 });

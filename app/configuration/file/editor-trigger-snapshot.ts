@@ -1,15 +1,7 @@
-import { isMap, isScalar } from 'yaml';
 import { getState } from '../../registry/index.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
-import { resolveActionConcurrency } from '../../updates/action-concurrency.js';
-import { configFileSources, getTriggerConfigurations } from '../index.js';
-import {
-  type ConfigurationEditFieldDescriptor,
-  matchingKeys,
-  type readEditorDocument,
-  referencedPath,
-  scalar,
-} from './editor-snapshot.js';
+import { matchingKeys, type readEditorDocument } from './editor-snapshot.js';
+import { triggerFieldDescriptor } from './editor-trigger-field.js';
 
 const NOTIFICATION_POLICY_FIELDS = [
   'threshold',
@@ -21,32 +13,6 @@ const NOTIFICATION_POLICY_FIELDS = [
   'securitydigesttitle',
   'securitydigestbody',
 ] as const;
-
-function inheritedOrderIsReferenced(
-  document: Awaited<ReturnType<typeof readEditorDocument>>,
-  name: string,
-) {
-  const liveProviders = [
-    ...Object.values(getState().trigger).map((trigger) => trigger.type),
-    ...Object.keys(getTriggerConfigurations()),
-  ];
-  return ['action', 'notification'].some((category) => {
-    if (referencedPath(document, [category, name, 'order'])) return true;
-    const sections = matchingKeys(document?.doc.contents, category);
-    const section = sections[0] ? document?.doc.get(sections[0], true) : undefined;
-    const providers = new Set(liveProviders);
-    if (isMap(section)) {
-      for (const pair of section.items) {
-        if (isScalar(pair.key) && typeof pair.key.value === 'string') providers.add(pair.key.value);
-      }
-    }
-    return [...providers].some(
-      (provider) =>
-        referencedPath(document, [category, provider, 'order']) ||
-        referencedPath(document, [category, provider, name, 'order']),
-    );
-  });
-}
 
 function triggerPolicySnapshot(
   document: Awaited<ReturnType<typeof readEditorDocument>>,
@@ -73,67 +39,14 @@ function triggerPolicySnapshot(
       const node = prefix ? document?.doc.getIn(prefix, true) : undefined;
       const fields = Object.fromEntries(
         policyFields.map((field) => {
-          const digestTemplate = field === 'securitydigesttitle' || field === 'securitydigestbody';
-          const keys = matchingKeys(node, field);
-          const exactPath = prefix ? [...prefix, keys[0] ?? field] : undefined;
-          const rawNode = exactPath ? document?.doc.getIn(exactPath, true) : undefined;
-          const envKey = `DD_${category.toUpperCase()}_${trigger.type.toUpperCase()}_${trigger.name.toUpperCase()}_${field.toUpperCase()}`;
-          // A real environment literal owns the setting outright: the file's
-          // entry for it, a `_file` node included, is ignored at merge time, so
-          // it reads as `env` rather than as a reference the file never resolves.
-          const reference =
-            process.env[envKey] === undefined &&
-            referencedPath(document, [category, trigger.type, trigger.name, field], digestTemplate);
-          const environmentOwned =
-            configFileSources[envKey] === 'env' || process.env[envKey] !== undefined;
-          const readOnlyReason = !document
-            ? 'configuration-file-unavailable'
-            : trigger.agent
-              ? 'agent-trigger'
-              : !isMap(node)
-                ? 'trigger-not-in-file'
-                : keys.length > 1
-                  ? 'ambiguous-field-alias'
-                  : reference
-                    ? 'referenced-field'
-                    : environmentOwned
-                      ? 'environment-owned'
-                      : trigger.type === 'mqtt'
-                        ? digestTemplate
-                          ? 'provider-unsupported'
-                          : field === 'mode'
-                            ? 'provider-forced'
-                            : undefined
-                        : undefined;
-          const descriptor: ConfigurationEditFieldDescriptor = {
-            present: rawNode !== undefined,
-            source: reference
-              ? 'reference'
-              : environmentOwned
-                ? 'env'
-                : rawNode !== undefined
-                  ? 'file'
-                  : 'default',
-          };
-          if (readOnlyReason) descriptor.readOnlyReason = readOnlyReason;
-          else descriptor.path = exactPath;
-          if (!reference && !trigger.agent && keys.length < 2) {
-            if (isScalar(rawNode) && scalar(rawNode.value)) descriptor.value = rawNode.value;
-            const effective =
-              category === 'action' && field === 'concurrency'
-                ? trigger.configuration.concurrency === undefined &&
-                  referencedPath(document, ['update', 'concurrency'])
-                  ? undefined
-                  : resolveActionConcurrency(trigger.configuration)
-                : category === 'action' &&
-                    field === 'order' &&
-                    rawNode === undefined &&
-                    !environmentOwned &&
-                    inheritedOrderIsReferenced(document, trigger.name)
-                  ? undefined
-                  : (trigger.configuration as Record<string, unknown>)[field];
-            if (scalar(effective)) descriptor.effectiveValue = effective;
-          }
+          const descriptor = triggerFieldDescriptor({
+            document,
+            category,
+            trigger,
+            field,
+            node,
+            prefix,
+          });
           return [field, descriptor] as const;
         }),
       );
