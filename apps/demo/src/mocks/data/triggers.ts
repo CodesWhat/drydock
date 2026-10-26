@@ -1,5 +1,24 @@
 export const triggers = [
   {
+    id: 'docker.local',
+    type: 'docker',
+    name: 'local',
+    configuration: {
+      prune: false,
+      dryrun: false,
+      autoremovetimeout: 10000,
+    },
+  },
+  {
+    id: 'dockercompose.stacks',
+    type: 'dockercompose',
+    name: 'stacks',
+    configuration: {
+      file: '/opt/stacks/compose.yaml',
+      backup: true,
+    },
+  },
+  {
     id: 'slack.homelab',
     type: 'slack',
     name: 'homelab',
