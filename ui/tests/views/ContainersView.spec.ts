@@ -1,5 +1,5 @@
 import { DOMWrapper, flushPromises } from '@vue/test-utils';
-import { computed, defineComponent, reactive, ref } from 'vue';
+import { type ComponentOptions, computed, defineComponent, reactive, ref } from 'vue';
 import { setI18nLocale } from '@/boot/i18n';
 import AppSplitButton from '@/components/AppSplitButton.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
@@ -1924,7 +1924,7 @@ describe('ContainersView', () => {
     it('keeps DataTable actions enabled in compact mode', async () => {
       mockWindowNarrow.value = true;
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as ComponentOptions<any>);
       expect(dataTable.props('showActions')).toBe(true);
     });
 
@@ -1966,7 +1966,7 @@ describe('ContainersView', () => {
 
     it('uses native page scrolling for the containers table so it stretches to viewport bottom', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = wrapper.findComponent(childStubs.DataTable as ComponentOptions<any>);
       expect(dataTable.props('virtualScroll')).toBe(false);
       expect(dataTable.props('maxHeight')).toBeUndefined();
       expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
@@ -1979,7 +1979,7 @@ describe('ContainersView', () => {
 
     it('provides containerViewMode to the list content and forwards it to DataTable preferCards', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as ComponentOptions<any>);
 
       expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
       expect((wrapper.vm as any).containerViewMode).toBe('table');
@@ -2002,7 +2002,7 @@ describe('ContainersView', () => {
 
     it('wires measured card reflow from DataTable into the toolbar and hoisted card sorting', async () => {
       const wrapper = await mountContainersView([makeContainer()]);
-      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as ComponentOptions<any>);
 
       expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('false');
       expect(dataTable().props('hoistCardSort')).toBe(false);
@@ -2582,7 +2582,7 @@ describe('ContainersView', () => {
         const wrapper = await mountContainersView([makeContainer()]);
         const vm = wrapper.vm as any;
 
-        const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+        const layout = wrapper.findComponent(childStubs.DataViewLayout as ComponentOptions<any>);
         layout.vm.$emit('content-width', 905);
         await flushPromises();
 
@@ -2602,7 +2602,7 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
       expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
 
-      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      const layout = wrapper.findComponent(childStubs.DataViewLayout as ComponentOptions<any>);
       layout.vm.$emit('content-width', 1111);
       await flushPromises();
 

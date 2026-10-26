@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { computed, defineComponent, nextTick, ref } from 'vue';
+import { type ComponentOptions, computed, defineComponent, nextTick, ref } from 'vue';
 import { i18n } from '@/boot/i18n';
 import { useEventStreamStore } from '@/stores/eventStream';
 
@@ -604,7 +604,7 @@ describe('SecurityView', () => {
           stream.publish('resync-required', { reason: 'buffer-evicted' });
           await flushPromises();
           expect(button.attributes('disabled')).toBeDefined();
-          const emptyState = w.findComponent(stubs.SecurityEmptyState);
+          const emptyState = w.findComponent(stubs.SecurityEmptyState as ComponentOptions<any>);
           expect(emptyState.props('scannerReady')).toBe(false);
           emptyState.vm.$emit('scan-now');
           await flushPromises();
