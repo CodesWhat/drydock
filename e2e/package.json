@@ -58,6 +58,7 @@
     "@grpc/grpc-js": "1.14.6",
     "moment": "2.31.0",
     "http-cache-semantics": "4.3.0",
-    "argparse": "2.0.1"
+    "argparse": "2.0.1",
+    "@azure/msal-node": "7.1.1"
   }
 }

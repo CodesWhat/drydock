@@ -255,6 +255,7 @@ const septemberSecurityFloors = {
   'body-parser': { 2: '2.4.0' },
   zod: { 4: '4.6.6' },
   'serialize-javascript': { 7: '7.1.3' },
+  '@azure/msal-node': { 7: '7.1.0' },
   'ip-address': { 10: '10.7.1' },
 };
 
