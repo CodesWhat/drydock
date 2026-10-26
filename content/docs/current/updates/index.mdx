@@ -5,6 +5,13 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.8 Highlights - October 26, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **libcurl is pinned to 8.23.0-r0.** The 8.22.0-r0 that `git` pulled into the image carries CVE-2026-92392 (high). v1.8.0-rc.7, v1.7.1-rc.1 and v1.7.0 shipped with it.
+- RC8 includes every rc.7 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.7 Highlights - October 24, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
