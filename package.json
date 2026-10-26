@@ -9,15 +9,15 @@
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
+    "@biomejs/biome": "2.6.2",
     "@types/node": "25.9.9",
     "lefthook": "2.2.2",
     "vitest": "4.1.12",
     "yaml": "2.9.1"
   },
   "overrides": {
-    "vite": "8.3.4",
-    "postcss": "8.5.30",
+    "vite": "8.3.5",
+    "postcss": "8.5.31",
     "nanoid": "6.0.2",
     "source-map-js": "1.2.2"
   }
