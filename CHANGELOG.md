@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.7.0 and v1.7.1-rc.1 shipped with it.
+- Update body-parser to 2.4.0, fast-uri to 4.2.3, Nodemailer to 10.1.4 and Undici to 8.12.2 (7.30.1 in UI and E2E tooling). Patch Zod to 4.6.6 in backend/UI tooling and the docs site and serialize-javascript to 7.1.3 in UI tooling. These updates clear the October 24 advisory scan without changing its severity gate.
 
 ## [1.7.1-rc.1] — 2026-10-23
 
