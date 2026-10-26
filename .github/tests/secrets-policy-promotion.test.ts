@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { loadWorkflow } from './workflow-test-utils';
 
@@ -20,8 +20,27 @@ function gitEnv() {
   // Hooks export repository paths that override cwd. Every fixture subprocess
   // must discard them before it can initialize or operate on a temporary repo.
   for (const name of repositoryEnvNames) delete env[name];
+  for (const name of Object.keys(env)) {
+    if (/^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(name)) delete env[name];
+  }
+  // Automatic gc/maintenance (including the detached run a push can start in
+  // the bare remote) rewrites objects while a local clone is copying them.
+  const housekeeping = [
+    ['gc.auto', '0'],
+    ['gc.autoDetach', 'false'],
+    ['maintenance.auto', 'false'],
+    ['receive.autogc', 'false'],
+    ['fetch.writeCommitGraph', 'false'],
+  ];
   return {
     ...env,
+    GIT_CONFIG_COUNT: String(housekeeping.length),
+    ...Object.fromEntries(
+      housekeeping.flatMap(([key, value], index) => [
+        [`GIT_CONFIG_KEY_${index}`, key],
+        [`GIT_CONFIG_VALUE_${index}`, value],
+      ]),
+    ),
     GIT_CONFIG_NOSYSTEM: '1',
     GIT_CONFIG_GLOBAL: '/dev/null',
     GIT_AUTHOR_NAME: 'Release Fixture',
@@ -72,7 +91,7 @@ function withRepository(
     writePolicy(seed, 'development');
     commit(seed, 'reviewed development policy');
     git(seed, 'push', 'origin', 'main', 'dev/v1.8', '--tags');
-    git(root, 'clone', '--quiet', '--no-hardlinks', remote, work);
+    git(root, 'clone', '--quiet', pathToFileURL(remote).href, work);
     git(work, 'switch', '-c', 'promotion', 'origin/dev/v1.8');
     run({ seed, work });
   } finally {
