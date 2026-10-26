@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.7.0 and v1.7.1-rc.1 shipped with it.
+
 ## [1.7.1-rc.1] — 2026-10-23
 
 This is a release candidate for the maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. 1.7.1 fixes data loss and breakage when Drydock recreates a container (anonymous volumes are kept, and containers sharing a network namespace with an updated container are recreated against it), updates services defined in compose `include:` files, and finishes the dependency work 1.7.0 described with a dependency view and update guards in the UI. It also adds an offline indicator that shows last-known data, a `scan` or `install` scope for the maintenance window (`scan` stays the default), maturity countdowns wherever a held update is listed, one pinned Trivy version with scanner versions shown in the Security view, the `/api/v1/actions` and `/api/v1/notification-triggers` routes (with `/api/v1/triggers` deprecated), optional dashboard widgets, translations for the remaining hard-coded UI strings, and a `musl-dev` pin so the image builds again.
