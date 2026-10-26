@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.8.0-rc.7, v1.7.1-rc.1 and v1.7.0 all shipped with it.
+
 ## [1.8.0-rc.7] - 2026-10-24
 
 > [!WARNING]
