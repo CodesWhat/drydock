@@ -98,7 +98,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -220,7 +220,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -270,7 +270,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -280,16 +280,16 @@ jobs:
           persist-credentials: false
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           languages: ${{ matrix.language }}
           config-file: ./.github/codeql/codeql-config.yml
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/autobuild@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           category: /language:${{ matrix.language }}
 
@@ -305,7 +305,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -369,7 +369,7 @@ jobs:
 
       - name: Upload fuzz log artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: fuzz-log-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/fuzz/fuzz-test.log
@@ -470,7 +470,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           # api.deps.dev: dependency-review-action fetches changed-package
@@ -503,7 +503,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -556,7 +556,7 @@ jobs:
         working-directory: ui
 
       - name: Setup Qlty
-        uses: qltysh/qlty-action/install@08a0a862c159eae9b9003081da6663d96efef637  # v2.3.0
+        uses: qltysh/qlty-action/install@c9b09987143d1e4ac955f4803c7bea742102feb5  # v2.4.0
 
       - name: Qlty check (all plugins, enforced)
         run: ./scripts/qlty-check-gate.sh all
@@ -571,7 +571,7 @@ jobs:
 
       - name: Upload Qlty smells report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: qlty-smells-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/qlty
@@ -587,7 +587,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -657,7 +657,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -706,7 +706,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coverage-shard-app
           path: app/coverage/lcov.info
@@ -726,7 +726,7 @@ jobs:
 
       - name: Upload coverage gap report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coverage-gaps-app
           path: .coverage-gaps.app.json
@@ -743,7 +743,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -813,7 +813,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coverage-shard-ui
           path: ui/coverage/lcov.info
@@ -833,7 +833,7 @@ jobs:
 
       - name: Upload coverage gap report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coverage-gaps-ui
           path: .coverage-gaps.ui.json
@@ -859,7 +859,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           allowed-endpoints: >
@@ -887,14 +887,14 @@ jobs:
 
       - name: Download app coverage report
         if: needs.test-app.result == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: coverage-shard-app
           path: app/coverage
 
       - name: Download ui coverage report
         if: needs.test-ui.result == 'success'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: coverage-shard-ui
           path: ui/coverage
@@ -902,7 +902,7 @@ jobs:
       - name: Download shard coverage gap reports
         if: always()
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           pattern: coverage-gaps-*
           merge-multiple: true
@@ -914,7 +914,7 @@ jobs:
 
       - name: Upload coverage gap report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: coverage-gaps
           path: .coverage-gaps.json
@@ -992,7 +992,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           # fonts.googleapis.com + fonts.gstatic.com: next/font/google in
@@ -1050,7 +1050,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -1093,7 +1093,7 @@ jobs:
         working-directory: apps/demo
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # The multi-arch smoke build below cannot catch a base image pinned to a
       # per-platform manifest digest: buildx resolves a digest identically for
@@ -1108,7 +1108,7 @@ jobs:
           command: scripts/check-dockerfile-base-indexes.sh Dockerfile linux/amd64,linux/arm64
 
       - name: Docker build (QA image + smoke test)
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
           push: false
@@ -1123,7 +1123,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Set up QEMU (multi-arch smoke build)
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
 
       # moby/buildkit#7089 (open, fix unmerged in #7092): ExecOp mutates its own
       # Meta.Args in place to prepend the QEMU emulator path, so when the solver
@@ -1181,7 +1181,7 @@ jobs:
           docker save drydock:dev | gzip > artifacts/qa/drydock-dev-image.tar.gz
 
       - name: Upload QA image artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: qa-image-${{ github.run_id }}
           path: artifacts/qa/drydock-dev-image.tar.gz
@@ -1206,7 +1206,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: block
           # raw.githubusercontent.com: anchore/scan-action pulls its grype
@@ -1229,7 +1229,7 @@ jobs:
           persist-credentials: false
 
       - name: Download QA image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: qa-image-${{ github.run_id }}
           path: artifacts/qa
@@ -1241,7 +1241,7 @@ jobs:
         # Scans the exact image the PR built (drydock:dev, loaded from the
         # build job's artifact) — the same severity gate as the periodic
         # image scan, applied to what a merge would actually ship.
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        uses: anchore/scan-action@27805bf3b4e84b4a5c980df22ed233c00390a439  # v7.4.2
         id: grype
         env:
           # Load the repo-root .grype.yaml explicitly — see security-grype.yml
@@ -1259,7 +1259,7 @@ jobs:
         # Distinct category from security-grype.yml's `grype-image` so the two
         # scans (PR-built vs. periodic) don't collide in the same ref's results.
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image-pr
@@ -1291,7 +1291,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -1301,7 +1301,7 @@ jobs:
           persist-credentials: false
 
       - name: Download QA image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: qa-image-${{ github.run_id }}
           path: artifacts/qa
@@ -1388,14 +1388,14 @@ jobs:
 
       - name: Upload ZAP SARIF
         if: always() && hashFiles('artifacts/zap/zap-baseline.sarif') != ''
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           sarif_file: artifacts/zap/zap-baseline.sarif
           category: zap-baseline
 
       - name: Upload ZAP HTML report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: zap-baseline-html-${{ github.run_id }}-${{ github.run_attempt }}
           path: report_html.html
@@ -1656,21 +1656,21 @@ jobs:
 
       - name: Upload Nuclei SARIF to code scanning
         if: always() && steps.nuclei_sarif.outputs.upload == 'true'
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           sarif_file: artifacts/dast/nuclei-report.sarif
           category: nuclei
 
       - name: Upload unauthenticated metrics SARIF
         if: always() && steps.nuclei_reports.outcome == 'success' && hashFiles('artifacts/dast/nuclei-exposure-report.sarif') != ''
-        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28  # v4.37.8
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
         with:
           sarif_file: artifacts/dast/nuclei-exposure-report.sarif
           category: nuclei-metrics-unauthenticated
 
       - name: Upload Nuclei reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: dast-nuclei-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -1761,7 +1761,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -1778,7 +1778,7 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
 
       - name: Download QA image
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: qa-image-${{ github.run_id }}
           path: artifacts/qa
@@ -1861,7 +1861,7 @@ jobs:
 
       - name: Upload Cucumber diagnostics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: cucumber-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
@@ -1896,7 +1896,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -1913,7 +1913,7 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -1999,7 +1999,7 @@ jobs:
 
       - name: Upload load test artifact (ci)
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/ci/*.json
@@ -2019,7 +2019,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
@@ -2036,7 +2036,7 @@ jobs:
           cache-dependency-path: e2e/package-lock.json
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
@@ -2108,7 +2108,7 @@ jobs:
 
       - name: Upload load test artifact (behavior)
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/behavior/*.json
@@ -2145,7 +2145,7 @@ jobs:
 
       - name: Upload load test artifact (stress)
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: load-test-stress-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/stress/*.json
@@ -2169,7 +2169,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1  # v2.21.1
+        uses: step-security/harden-runner@ccd8616d44fd3846e67624a50d5aad6d37bf2d25  # v2.22.1
         with:
           egress-policy: audit
 
