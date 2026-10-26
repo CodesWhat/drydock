@@ -5,6 +5,17 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1-rc.2 Highlights — October 26, 2026
+
+The second release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- The image pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high). `v1.7.0` and `v1.7.1-rc.1` shipped 8.22.0-r0. The npm advisory updates (body-parser, fast-uri, Nodemailer, Undici, Zod, serialize-javascript) are included.
+- It includes everything in rc.1, starts its own soak when published, and `v1.7.0` remains the latest stable release.
+
+See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.2/CHANGELOG.md#171-rc2--2026-10-26)
+for the full release notes.
+
 ## v1.7.1-rc.1 Highlights — October 23, 2026
 
 The first release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release. Updates keep anonymous volumes when they recreate a container, and containers that share a network namespace with an updated container are recreated against it. Services defined in compose `include:` files are updated. The UI gets an offline indicator with last-known data, a dependency view, and maturity countdowns wherever a held update is listed. `DD_WATCHER_{name}_MAINTENANCE_WINDOW_SCOPE` can hold back installs only, and `scan` stays the default. The image and scanner worker use one pinned Trivy, the Security view shows scanner versions, `/api/v1/actions` and `/api/v1/notification-triggers` replace `/api/v1/triggers` (deprecated), and the dashboard has optional widgets. See
