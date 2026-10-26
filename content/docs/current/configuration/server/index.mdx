@@ -100,7 +100,7 @@ No additional configuration is required — drydock detects the TLS state and ad
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ...
     environment:
       - DD_SERVER_ENABLED=false
@@ -112,7 +112,7 @@ services:
 docker run \
   -e DD_SERVER_ENABLED=false \
   ...
-  codeswhat/drydock:1.8.0-rc.7
+  codeswhat/drydock:1.8.0-rc.8
 ```
 </Tab>
 </Tabs>
@@ -125,7 +125,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ...
     environment:
       - DD_SERVER_PORT=8080
@@ -137,7 +137,7 @@ services:
 docker run \
   -e DD_SERVER_PORT=8080 \
   ...
-  codeswhat/drydock:1.8.0-rc.7
+  codeswhat/drydock:1.8.0-rc.8
 ```
 </Tab>
 </Tabs>
@@ -150,7 +150,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ...
     environment:
       - DD_SERVER_TLS_ENABLED=true
@@ -166,7 +166,7 @@ docker run \
   -e "DD_SERVER_TLS_KEY=/drydock_certs/server.key" \
   -e "DD_SERVER_TLS_CERT=/drydock_certs/server.crt" \
   ...
-  codeswhat/drydock:1.8.0-rc.7
+  codeswhat/drydock:1.8.0-rc.8
 ```
 </Tab>
 </Tabs>
@@ -188,7 +188,7 @@ Set `DD_SERVER_TRUSTPROXY=1` to trust one proxy hop. Use a higher number if you 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ...
     environment:
       - DD_SERVER_TRUSTPROXY=1
@@ -200,7 +200,7 @@ services:
 docker run \
   -e DD_SERVER_TRUSTPROXY=1 \
   ...
-  codeswhat/drydock:1.8.0-rc.7
+  codeswhat/drydock:1.8.0-rc.8
 ```
 </Tab>
 </Tabs>
@@ -274,7 +274,7 @@ Any `DD_*` environment variable can be loaded from a file by appending `__FILE` 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ...
     environment:
       - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
@@ -299,7 +299,7 @@ docker run \
   -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
   -v ./session_secret.txt:/run/secrets/session_secret:ro \
   ...
-  codeswhat/drydock:1.8.0-rc.7
+  codeswhat/drydock:1.8.0-rc.8
 ```
 </Tab>
 </Tabs>
