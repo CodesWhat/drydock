@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.8] - 2026-10-26
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.7 changes and upgrade warnings. It pins libcurl to the release that fixes CVE-2026-92392 and carries the site and test fixes landed since rc.7.
+
 ### Security
 
 - Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.8.0-rc.7, v1.7.1-rc.1 and v1.7.0 all shipped with it.
@@ -3619,7 +3626,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...HEAD
+[1.8.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...v1.8.0-rc.8
 [1.8.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...v1.8.0-rc.7
 [1.8.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...v1.8.0-rc.6
 [1.8.0-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.4...v1.8.0-rc.5
