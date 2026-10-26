@@ -69,7 +69,7 @@ export const viewport: Viewport = {
 };
 
 const REVEAL_BOOTSTRAP =
-  "(function(){var d=document,de=d.documentElement;de.classList.add('js');var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;function all(){var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)e[i].classList.add('visible');}function arm(){if(reduce||!('IntersectionObserver' in window)){all();return;}var io=new IntersectionObserver(function(en){for(var i=0;i<en.length;i++){if(en[i].isIntersecting){en[i].target.classList.add('visible');io.unobserve(en[i].target);}}},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)io.observe(e[i]);}if(d.readyState==='loading'){d.addEventListener('DOMContentLoaded',arm);}else{arm();}})();";
+  "(function(){var d=document,de=d.documentElement;de.classList.add('js');var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;var io=null;function see(n){if(n.__rv)return;n.__rv=1;if(io)io.observe(n);else n.classList.add('visible');}function scan(r){if(r.nodeType!==1)return;if(r.classList.contains('reveal'))see(r);var e=r.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)see(e[i]);}function drop(r){if(r.nodeType!==1)return;var l=r.classList.contains('reveal')?[r]:[];var e=r.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)l.push(e[i]);for(var k=0;k<l.length;k++){var n=l[k];if(n.__rv&&!n.isConnected){if(io)io.unobserve(n);n.__rv=0;}}}function arm(){if(!reduce&&'IntersectionObserver' in window){io=new IntersectionObserver(function(en){for(var i=0;i<en.length;i++){if(en[i].isIntersecting){en[i].target.classList.add('visible');io.unobserve(en[i].target);}}},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});}scan(d.body);if('MutationObserver' in window){new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var a=ms[i].addedNodes;for(var j=0;j<a.length;j++)scan(a[j]);var x=ms[i].removedNodes;if(x)for(var m=0;m<x.length;m++)drop(x[m]);}}).observe(d.body,{childList:true,subtree:true});}}if(d.readyState==='loading'){d.addEventListener('DOMContentLoaded',arm);}else{arm();}})();";
 
 export default async function RootLayout({
   children,
@@ -86,8 +86,10 @@ export default async function RootLayout({
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
         {/* Fail-open reveal gate: this inline script runs even if the bundled
             JS is blocked (e.g. SRI/CSP), adds `js` to <html> before sections
-            paint, and runs a single IntersectionObserver. If JS never runs, the
-            `.reveal` CSS defaults to visible. See globals.css. */}
+            paint, and runs a single IntersectionObserver. A MutationObserver on
+            <body> reveals `.reveal` nodes mounted later by client-side
+            navigation, since this script doesn't re-run then. If JS never
+            runs, the `.reveal` CSS defaults to visible. See globals.css. */}
         <script nonce={nonce} dangerouslySetInnerHTML={{ __html: REVEAL_BOOTSTRAP }} />
         <RootProvider theme={{ nonce }}>{children}</RootProvider>
         <AnalyticsPageview />
