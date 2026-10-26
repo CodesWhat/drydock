@@ -1,11 +1,13 @@
 import { agentHandlers } from './handlers/agents';
 import { appHandlers } from './handlers/app';
+import { approvalHandlers } from './handlers/approvals';
 import { auditHandlers } from './handlers/audit';
 import { authHandlers } from './handlers/auth';
 import { authenticationHandlers } from './handlers/authentications';
 import { containerHandlers } from './handlers/containers';
 import { fontHandlers } from './handlers/fonts';
 import { iconHandlers } from './handlers/icons';
+import { imageHandlers } from './handlers/images';
 import { logHandlers } from './handlers/log';
 import { notificationHandlers } from './handlers/notifications';
 import { registryHandlers } from './handlers/registries';
@@ -34,4 +36,6 @@ export const handlers = [
   ...authenticationHandlers,
   ...fontHandlers,
   ...iconHandlers,
+  ...approvalHandlers,
+  ...imageHandlers,
 ];

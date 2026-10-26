@@ -113,7 +113,7 @@ The Drydock controller needs the agent's public key registered before it connect
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ports:
       - "3000:3000"
     environment:
@@ -137,7 +137,7 @@ A minimal two-host setup: one agent watching a remote host, one controller aggre
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     command: --agent
     ports:
       - "3000:3000"            # must be reachable from the controller
@@ -153,7 +153,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ports:
       - "3000:3000"
     environment:
@@ -221,7 +221,7 @@ services:
       start_period: 5s
 
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     command: --agent
     depends_on:
       drydock-socket-proxy:
@@ -283,7 +283,7 @@ Fix it by configuring TLS (`DD_AGENT_{name}_CAFILE`/`CERTFILE`), terminating TLS
 ```yaml
 services:
   drydock-controller:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     environment:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_SECRET=mysecretkey
@@ -313,7 +313,7 @@ Use it when the remote agent verifies requests with a registered Ed25519 public 
 ```yaml
 services:
   drydock-controller:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     environment:
       - DD_AGENT_EDGE_HOST=edge.example.com
       - DD_AGENT_EDGE_AUTHMODE=ed25519
@@ -340,7 +340,7 @@ This example shows a controller watching its own containers and connecting to on
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ports:
       - "3000:3000"
     depends_on:
@@ -417,7 +417,7 @@ services:
       start_period: 5s
 
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     command: --agent
     depends_on:
       drydock-socket-proxy:
@@ -453,7 +453,7 @@ In short: for a registry used by an agent's containers, configure the same `DD_R
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     command: --agent
     ports:
       - "3000:3000"
@@ -478,7 +478,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.7
+    image: codeswhat/drydock:1.8.0-rc.8
     ports:
       - "3000:3000"
     volumes:
@@ -545,7 +545,7 @@ Still stuck? Set `DD_LOG_LEVEL=debug` on the controller for the full `agent-clie
 ## Controller-assisted key rotation (Drydock RC, Portwing development) {#controller-assisted-key-rotation-development}
 
 The controller side first ships in Drydock v1.8.0-rc.1 and remains available in
-v1.8.0-rc.7 test builds. It requires a compatible
+v1.8.0-rc.8 test builds. It requires a compatible
 Portwing development build; published Portwing v1.0.0-rc.1 does not include
 the companion feature. No compatible published Portwing version is assigned yet.
 Drydock v1.7 and earlier do not provide this controller API.
