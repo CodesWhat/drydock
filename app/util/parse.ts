@@ -30,3 +30,16 @@ export function parseEnvNonNegativeInteger(
 
   return parsedValue;
 }
+
+// Query spelling is strict: no trimming, numeric prefixes, decimal/exponent syntax or '+'.
+// Negative values and zero retain the log buffer's existing handling.
+export function parseLogQueryInteger(value: unknown): number | undefined | null {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== 'string' || !/^-?\d+$/.test(value)) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
