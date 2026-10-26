@@ -1,6 +1,6 @@
 import { defineComponent } from 'vue';
 
-export const dataViewStubs: Record<string, any> = {
+export const dataViewStubs = {
   // Fetches on mount; view specs that count requests stub it and cover it in TriggerSkipsPanel.spec.ts.
   TriggerSkipsPanel: true,
   RouterLink: defineComponent({
