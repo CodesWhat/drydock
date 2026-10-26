@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.2] — 2026-10-26
+
+This is the second release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.1 changes and pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high), along with the npm advisory updates below.
+
 ### Security
 
 - Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.7.0 and v1.7.1-rc.1 shipped with it.
@@ -2960,7 +2964,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...HEAD
+[1.7.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...v1.7.1-rc.2
 [1.7.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1-rc.1
 [1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0
 [1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24

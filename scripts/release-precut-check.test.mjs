@@ -354,7 +354,7 @@ test('cli exits 1 and reports pending discussion when strict RC check has an unc
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.1-rc.1'],
+    [scriptPath, '--tracker', trackerPath, '--strict', 'v1.7.1-rc.2'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -371,7 +371,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.1-rc.1'],
+    [scriptPath, '--tracker', trackerPath, '--strict', '--force', 'v1.7.1-rc.2'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -386,7 +386,7 @@ test('cli exits 0 with warning when tracker file does not exist', () => {
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.1-rc.1'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.1-rc.2'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
@@ -421,7 +421,7 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
 
   const result = spawnSync(
     process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.1-rc.1'],
+    [scriptPath, '--tracker', trackerPath, 'v1.7.1-rc.2'],
     {
       cwd: process.cwd(),
       encoding: 'utf8',
