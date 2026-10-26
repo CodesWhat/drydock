@@ -17,6 +17,8 @@ class FakeElement {
   constructor(classes = []) {
     this.nodeType = 1;
     this.children = [];
+    this.parent = null;
+    this.isRoot = false;
     this._classes = new Set(classes);
     this.classList = {
       add: (c) => this._classes.add(c),
@@ -24,9 +26,24 @@ class FakeElement {
     };
   }
 
+  get isConnected() {
+    let node = this;
+    while (node) {
+      if (node.isRoot) return true;
+      node = node.parent;
+    }
+    return false;
+  }
+
   append(child) {
+    child.parent = this;
     this.children.push(child);
     return child;
+  }
+
+  detach() {
+    this.parent.children.splice(this.parent.children.indexOf(this), 1);
+    this.parent = null;
   }
 
   querySelectorAll(selector) {
@@ -46,6 +63,7 @@ class FakeElement {
 function run({ reduced = false, readyState = "complete", setup } = {}) {
   const html = new FakeElement();
   const body = new FakeElement();
+  html.isRoot = true;
   html.append(body);
   const listeners = {};
   const ios = [];
@@ -98,6 +116,7 @@ function run({ reduced = false, readyState = "complete", setup } = {}) {
 }
 
 const mutate = (mo, ...nodes) => mo.callback([{ addedNodes: nodes }]);
+const unmount = (mo, ...nodes) => mo.callback([{ addedNodes: [], removedNodes: nodes }]);
 
 test("adds the js class to <html>", () => {
   const { html } = run();
@@ -165,4 +184,45 @@ test("never observes the same node twice", () => {
   mutate(mos[0], section);
   mutate(mos[0], body);
   assert.deepEqual(ios[0].observed, [section]);
+});
+
+test("unobserves a pending .reveal section removed before it intersects", () => {
+  const { body, ios, mos } = run();
+  const section = body.append(new FakeElement(["reveal"]));
+  mutate(mos[0], section);
+  section.detach();
+  unmount(mos[0], section);
+  assert.deepEqual(ios[0].unobserved, [section]);
+});
+
+test("unobserves nested pending .reveal nodes inside a removed container", () => {
+  const { body, ios, mos } = run();
+  const wrapper = body.append(new FakeElement());
+  const nested = wrapper.append(new FakeElement(["reveal"]));
+  mutate(mos[0], wrapper);
+  wrapper.detach();
+  unmount(mos[0], wrapper);
+  assert.deepEqual(ios[0].unobserved, [nested]);
+});
+
+test("does not unobserve a removed node that is still connected (moved)", () => {
+  const { body, ios, mos } = run();
+  const section = body.append(new FakeElement(["reveal"]));
+  mutate(mos[0], section);
+  const holder = body.append(new FakeElement());
+  section.detach();
+  holder.append(section);
+  unmount(mos[0], section);
+  assert.deepEqual(ios[0].unobserved, []);
+});
+
+test("observes a removed section again when it is re-added", () => {
+  const { body, ios, mos } = run();
+  const section = body.append(new FakeElement(["reveal"]));
+  mutate(mos[0], section);
+  section.detach();
+  unmount(mos[0], section);
+  body.append(section);
+  mutate(mos[0], section);
+  assert.deepEqual(ios[0].observed, [section, section]);
 });
