@@ -1,5 +1,6 @@
 import { setupServer } from 'msw/node';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { agents } from './data/agents';
 import { containers } from './data/containers';
 import { handlers } from './handlers';
 
@@ -693,5 +694,190 @@ describe('totp and login challenge contract', () => {
     expect(await done.json()).toMatchObject({ username: 'demo' });
     expect((await send('DELETE', '/auth/login-challenges/abc')).status).toBe(204);
     expect((await send('POST', '/auth/api-key-review/acknowledge')).status).toBe(204);
+  });
+});
+
+describe('agent roster and host counts', () => {
+  test('roster lists every agent by name in the shape the containers page reads', async () => {
+    const roster = await getJson('/api/v1/agents/roster');
+    expect(roster).toEqual({
+      data: agents.map((agent) => ({ name: agent.name })),
+      total: agents.length,
+    });
+    expect(roster.data.length).toBeGreaterThan(0);
+  });
+
+  test('agent container counts match the containers assigned to that agent', async () => {
+    const list = await getJson('/api/v1/agents');
+    for (const agent of list.data) {
+      const owned = containers.filter(
+        (container) => 'agent' in container && container.agent === agent.name,
+      );
+      expect(owned.length, agent.name).toBeGreaterThan(0);
+      expect(agent.containers).toEqual({
+        total: owned.length,
+        running: owned.filter((container) => container.status === 'running').length,
+        stopped: owned.filter((container) => container.status !== 'running').length,
+      });
+    }
+  });
+
+  test('local watcher metadata counts the containers not owned by an agent', async () => {
+    const list = await getJson('/api/v1/watchers');
+    const local = list.data.filter((watcher: { agent?: string }) => !watcher.agent);
+    expect(local.length).toBeGreaterThan(0);
+    const owned = containers.filter((container) => !('agent' in container && container.agent));
+    expect(local[0].metadata.containers).toEqual({
+      total: owned.length,
+      running: owned.filter((container) => container.status === 'running').length,
+      stopped: owned.filter((container) => container.status !== 'running').length,
+    });
+    expect(local[0].metadata.containers.total).toBeGreaterThan(0);
+    expect(local[0].metadata.images).toEqual(expect.any(Number));
+  });
+
+  test('host counts add up to the whole container seed', async () => {
+    const list = await getJson('/api/v1/watchers');
+    const local = list.data.find((watcher: { agent?: string }) => !watcher.agent);
+    const agentList = await getJson('/api/v1/agents');
+    const agentTotal = agentList.data.reduce(
+      (sum: number, agent: { containers: { total: number } }) => sum + agent.containers.total,
+      0,
+    );
+    expect(local.metadata.containers.total + agentTotal).toBe(containers.length);
+  });
+});
+
+describe('container rollback and update history', () => {
+  const seeded = containers.filter((container) => container.updateAvailable).slice(0, 3);
+
+  test('backups carry the fields the rollback panel reads', async () => {
+    let withBackups = 0;
+    for (const container of containers) {
+      const payload = await getJson(`/api/v1/containers/${container.id}/backups`);
+      for (const backup of payload.data) {
+        withBackups += 1;
+        expect(backup).toMatchObject({
+          id: expect.any(String),
+          containerId: container.id,
+          containerName: container.name,
+          imageName: container.image.name,
+          imageTag: expect.any(String),
+          timestamp: expect.any(String),
+          triggerName: expect.any(String),
+        });
+        expect(backup.imageTag).not.toBe(container.image.tag.value);
+        expect(Number.isNaN(Date.parse(backup.timestamp))).toBe(false);
+      }
+    }
+    expect(withBackups).toBeGreaterThanOrEqual(3);
+    for (const container of seeded) {
+      const payload = await getJson(`/api/v1/containers/${container.id}/backups`);
+      expect(payload.data.length, container.name).toBeGreaterThan(0);
+    }
+  });
+
+  test('update operations carry the fields the history panel reads', async () => {
+    const statuses = new Set<string>();
+    for (const container of seeded) {
+      const payload = await getJson(`/api/v1/containers/${container.id}/update-operations`);
+      expect(payload.data.length, container.name).toBeGreaterThan(0);
+      for (const operation of payload.data) {
+        statuses.add(operation.status);
+        expect(operation).toMatchObject({
+          id: expect.any(String),
+          kind: 'container-update',
+          status: expect.stringMatching(/^(succeeded|rolled-back|failed)$/),
+          phase: expect.any(String),
+          containerId: container.id,
+          containerName: container.name,
+          fromVersion: expect.any(String),
+          toVersion: expect.any(String),
+          createdAt: expect.any(String),
+          updatedAt: expect.any(String),
+          completedAt: expect.any(String),
+        });
+      }
+    }
+    expect(statuses.has('succeeded')).toBe(true);
+    expect(statuses.size).toBeGreaterThan(1);
+  });
+});
+
+describe('audit log', () => {
+  const actionLabels = new Set([
+    'update-available',
+    'update-applied',
+    'update-failed',
+    'notification-delivery-failed',
+    'security-alert',
+    'agent-disconnect',
+    'container-added',
+    'container-start',
+    'container-restart',
+    'rollback',
+    'auto-rollback',
+    'auth-login',
+    'config-written',
+    'update-policy-override-set',
+    'update-approved',
+    'api-key-created',
+  ]);
+
+  test('entries have the fields the audit table renders', async () => {
+    const payload = await getJson('/api/v1/audit?limit=200');
+    expect(payload).toMatchObject({
+      data: expect.any(Array),
+      total: payload.data.length,
+      limit: 200,
+      offset: 0,
+      hasMore: false,
+    });
+    expect(payload.data.length).toBeGreaterThanOrEqual(20);
+    for (const entry of payload.data) {
+      expect(entry).toMatchObject({
+        id: expect.any(String),
+        timestamp: expect.any(String),
+        action: expect.any(String),
+        containerName: expect.any(String),
+        status: expect.stringMatching(/^(success|error|info)$/),
+      });
+      expect(actionLabels.has(entry.action), entry.action).toBe(true);
+      expect(Number.isNaN(Date.parse(entry.timestamp))).toBe(false);
+    }
+  });
+
+  test('container, action and actions filters narrow the list', async () => {
+    const all = await getJson('/api/v1/audit?limit=200');
+    const name = all.data.find(
+      (entry: { containerName: string }) => entry.containerName,
+    ).containerName;
+    const byContainer = await getJson(`/api/v1/audit?container=${name}`);
+    expect(byContainer.data.length).toBeGreaterThan(0);
+    expect(
+      byContainer.data.every((entry: { containerName: string }) => entry.containerName === name),
+    ).toBe(true);
+
+    const byAction = await getJson('/api/v1/audit?action=update-available');
+    expect(byAction.data.length).toBeGreaterThan(0);
+    expect(
+      byAction.data.every((entry: { action: string }) => entry.action === 'update-available'),
+    ).toBe(true);
+
+    const byActions = await getJson('/api/v1/audit?actions=update-available,update-applied');
+    expect(byActions.data.length).toBeGreaterThanOrEqual(byAction.data.length);
+    expect(
+      byActions.data.every((entry: { action: string }) =>
+        ['update-available', 'update-applied'].includes(entry.action),
+      ),
+    ).toBe(true);
+  });
+
+  test('pages through the list with offset and limit', async () => {
+    const first = await getJson('/api/v1/audit?limit=10&offset=0');
+    const second = await getJson('/api/v1/audit?limit=10&offset=10');
+    expect(first.data).toHaveLength(10);
+    expect(first.hasMore).toBe(true);
+    expect(second.data[0].id).not.toBe(first.data[0].id);
   });
 });

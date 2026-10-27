@@ -1,5 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { containers } from '../data/containers';
+import { backupsFor, updateOperationsFor } from '../data/history';
+import { containerLogLines } from '../data/logs';
 
 type MockContainer = (typeof containers)[number] & Record<string, unknown>;
 type ContainerStatsSnapshot = {
@@ -220,18 +222,14 @@ export const containerHandlers = [
   // Container logs
   http.get('/api/v1/containers/:id/logs', () =>
     HttpResponse.json({
-      lines: [
-        'Starting container...',
-        'Listening on port 3000',
-        'Health check passed',
-        'Connected to database',
-        'Ready to serve requests',
-      ],
+      lines: containerLogLines,
     }),
   ),
 
   // Update operations
-  http.get('/api/v1/containers/:id/update-operations', () => HttpResponse.json({ data: [] })),
+  http.get('/api/v1/containers/:id/update-operations', ({ params }) =>
+    HttpResponse.json({ data: updateOperationsFor(String(params.id)) }),
+  ),
 
   http.get('/api/v1/containers/:id/stats', ({ params }) => {
     const container = getContainerById(params.id);
@@ -294,7 +292,9 @@ export const containerHandlers = [
   }),
 
   // Backups
-  http.get('/api/v1/containers/:id/backups', () => HttpResponse.json({ data: [] })),
+  http.get('/api/v1/containers/:id/backups', ({ params }) =>
+    HttpResponse.json({ data: backupsFor(String(params.id)) }),
+  ),
 
   http.post('/api/v1/containers/:id/rollback', () => HttpResponse.json({ success: true })),
 ];
