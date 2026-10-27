@@ -13,6 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- Site and demo preview deploys on Vercel now only build when a push touches their inputs, and Renovate branches no longer get previews. Production deploys from main are unchanged.
 - The Secrets job's gitleaks download now caps each attempt at 60 seconds and retries on any error, and the install step times out after 5 minutes. A stalled transfer used to hold Security: Secrets until the 15-minute job timeout.
 
 ### Fixed
