@@ -1,6 +1,12 @@
 {
-  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs demo",
-  "git": { "deploymentEnabled": { "renovate/**": false } },
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "**/*-demo-*": true,
+      "**/*-demo": true
+    }
+  },
   "rewrites": [{ "source": "/((?!mockServiceWorker\\.js).*)", "destination": "/index.html" }],
   "headers": [
     {

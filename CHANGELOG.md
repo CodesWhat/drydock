@@ -13,7 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
-- Site and demo preview deploys on Vercel now only build when a push touches their inputs, and Renovate branches no longer get previews. Production deploys from main are unchanged.
+- Vercel now deploys the site and demo only from main, plus preview deploys for branches whose name opts in: `-web-` for the site and `-demo-` for the demo (for example `fix/v1.8-web-mobile-nav`). Backend, dependency and dev-branch pushes no longer create deployments, which kept the team's Vercel plan under its daily deploy cap.
 - The Secrets job's gitleaks download now caps each attempt at 60 seconds and retries on any error, and the install step times out after 5 minutes. A stalled transfer used to hold Security: Secrets until the 15-minute job timeout.
 
 ### Fixed

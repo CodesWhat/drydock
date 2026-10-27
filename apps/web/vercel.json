@@ -1,7 +1,13 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "**/*-web-*": true,
+      "**/*-web": true
+    }
+  },
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs web",
-  "git": { "deploymentEnabled": { "renovate/**": false } },
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
