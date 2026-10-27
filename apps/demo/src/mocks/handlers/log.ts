@@ -9,6 +9,10 @@ export const logHandlers = [
     }),
   ),
 
+  http.get('/api/v1/log/components', () =>
+    HttpResponse.json([...new Set(logEntries.map((entry) => entry.component))].sort()),
+  ),
+
   http.get('/api/v1/log/entries', ({ request }) => {
     const url = new URL(request.url);
     const level = url.searchParams.get('level');

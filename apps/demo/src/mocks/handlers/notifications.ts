@@ -118,7 +118,9 @@ export const notificationHandlers = [
       );
     }
 
-    return HttpResponse.json(outboxResponse(status ?? 'dead-letter'));
+    return HttpResponse.json(
+      outboxResponse(status === null ? 'dead-letter' : (status as NotificationOutboxEntryStatus)),
+    );
   }),
 
   http.post('/api/v1/notifications/outbox/:id/retry', ({ params }) => {
@@ -170,7 +172,7 @@ export const notificationHandlers = [
     if (body.templates !== undefined && !isTemplateOverride(body.templates)) {
       return HttpResponse.json({ error: 'templates must be a template object' }, { status: 400 });
     }
-    const templates = body.templates ?? {};
+    const templates: NotificationTemplateOverride = body.templates ?? {};
     return HttpResponse.json({
       simpleTitle: renderPreviewTemplate(
         templates.simpleTitle ?? '',

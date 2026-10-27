@@ -64,7 +64,10 @@ function buildStatsSeed(containerId: string): number {
   return seed;
 }
 
-function buildStatsSnapshot(containerId: string, minutesAgo: number): ContainerStatsSnapshot {
+export function buildStatsSnapshot(
+  containerId: string,
+  minutesAgo: number,
+): ContainerStatsSnapshot {
   const seed = buildStatsSeed(containerId);
   const memoryLimitBytes = 2 * 1024 * 1024 * 1024;
   const usageScale = 0.25 + (seed % 60) / 100;

@@ -15,6 +15,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - The Secrets job's gitleaks download now caps each attempt at 60 seconds and retries on any error, and the install step times out after 5 minutes. A stalled transfer used to hold Security: Secrets until the 15-minute job timeout.
 
+### Fixed
+
+- The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
+
 ## [1.8.0-rc.8] - 2026-10-26
 
 > [!WARNING]
