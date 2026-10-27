@@ -16,7 +16,10 @@ const SHARED_INPUTS = [
 // apps/web/scripts/sync-docs.mjs copies content/docs/** and generates the
 // changelog page from CHANGELOG.md. apps/web/scripts/analytics-routes.mjs
 // walks content/docs/** for the route manifest.
-export const WEB_INPUTS = ['apps/web/', 'content/docs/', 'CHANGELOG.md', ...SHARED_INPUTS];
+// CHANGELOG.md also feeds the site (sync-docs builds the changelog page), but
+// it is left out on purpose: nearly every PR adds a line, so it would preview the
+// site on almost every push. Production always builds, so the page still ships.
+export const WEB_INPUTS = ['apps/web/', 'content/docs/', ...SHARED_INPUTS];
 
 // apps/demo/vite.config.ts and tsconfig.json alias "@" to ui/src, and
 // apps/demo/src/demo.css has an @source on ui/src.

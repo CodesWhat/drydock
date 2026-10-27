@@ -51,11 +51,18 @@ test('apps/demo change builds demo and skips web', () => {
   assert.equal(decideBuild({ project: 'web', env: preview, changedFiles }).build, false);
 });
 
-test('docs content and changelog build web only', () => {
-  for (const file of ['content/docs/current/index.mdx', 'CHANGELOG.md']) {
-    assert.equal(decideBuild({ project: 'web', env: preview, changedFiles: [file] }).build, true);
-    assert.equal(decideBuild({ project: 'demo', env: preview, changedFiles: [file] }).build, false);
-  }
+test('docs content builds web only', () => {
+  const changedFiles = ['content/docs/current/index.mdx'];
+  assert.equal(decideBuild({ project: 'web', env: preview, changedFiles }).build, true);
+  assert.equal(decideBuild({ project: 'demo', env: preview, changedFiles }).build, false);
+});
+
+// Nearly every PR adds a CHANGELOG line, so counting it would preview the site on
+// almost every push. The changelog page still ships with each production build.
+test('a CHANGELOG-only change skips both previews', () => {
+  const changedFiles = ['CHANGELOG.md', 'app/api/container.ts'];
+  assert.equal(decideBuild({ project: 'web', env: preview, changedFiles }).build, false);
+  assert.equal(decideBuild({ project: 'demo', env: preview, changedFiles }).build, false);
 });
 
 test('script or vercel.json changes build both projects', () => {
