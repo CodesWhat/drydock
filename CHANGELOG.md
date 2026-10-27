@@ -18,6 +18,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
+- The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.
 
 ## [1.8.0-rc.8] - 2026-10-26
 

@@ -8,10 +8,15 @@
 
 import { DEFAULTS } from '@/preferences/schema';
 import { FakeEventSource } from './mocks/sse';
+import { installFakeWebSocket } from './mocks/ws';
 
 // Patch EventSource BEFORE any UI code loads — the SSE service
 // creates an EventSource in AppLayout, so this must happen first.
 (globalThis as unknown as { EventSource: typeof FakeEventSource }).EventSource = FakeEventSource;
+
+// The log views stream over WebSocket, which MSW can't intercept. Fake the
+// /api sockets and leave every other socket (dev-server HMR) native.
+installFakeWebSocket();
 
 function getParentOrigin(): string | null {
   if (!document.referrer) {
