@@ -14,11 +14,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Changed
 
 - Vercel now deploys the site and demo only from main, plus preview deploys for branches whose name opts in: `-web-` for the site and `-demo-` for the demo (for example `fix/v1.8-web-mobile-nav`). Backend, dependency and dev-branch pushes no longer create deployments, which kept the team's Vercel plan under its daily deploy cap.
+- **Security:** `qs` in the app is now 6.16.1, which fixes CVE-2026-110816. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release yet. It only runs at UI build time through the PWA plugin, so it is triaged with a recheck date rather than shipped.
 - The Secrets job's gitleaks download now caps each attempt at 60 seconds and retries on any error, and the install step times out after 5 minutes. A stalled transfer used to hold Security: Secrets until the 15-minute job timeout.
 
 ### Fixed
 
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
+- The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.
 
 ## [1.8.0-rc.8] - 2026-10-26
 

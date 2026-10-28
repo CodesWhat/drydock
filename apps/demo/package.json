@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run src/mocks/handlers.contract.test.ts src/mocks/pages.contract.test.ts --config vite.config.ts --maxWorkers=1 --fileParallelism=false && npm run test:security",
+    "test": "vitest run src/mocks/handlers.contract.test.ts src/mocks/pages.contract.test.ts src/mocks/ws.contract.test.ts --config vite.config.ts --maxWorkers=1 --fileParallelism=false && npm run test:security",
     "test:security": "node --test tests/security/*.test.js"
   },
   "dependencies": {

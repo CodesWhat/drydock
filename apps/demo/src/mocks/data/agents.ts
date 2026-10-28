@@ -1,3 +1,13 @@
+import { containers } from './containers';
+
+function countContainers(agentName: string) {
+  const owned = containers.filter(
+    (container) => 'agent' in container && container.agent === agentName,
+  );
+  const running = owned.filter((container) => container.status === 'running').length;
+  return { total: owned.length, running, stopped: owned.length - running };
+}
+
 export const agents = [
   {
     name: 'nas-agent',
@@ -13,7 +23,7 @@ export const agents = [
     lastSeen: new Date().toISOString(),
     logLevel: 'info',
     pollInterval: '*/30 * * * *',
-    containers: { total: 3, running: 3, stopped: 0 },
+    containers: countContainers('nas-agent'),
     images: 3,
   },
 ];
