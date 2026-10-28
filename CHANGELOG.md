@@ -13,6 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- **Security:** `re2js` is now 2.8.7, which fixes CVE-2026-116795, a quadratic-time slowdown in lookbehind matching. drydock never enables re2js lookbehinds, so user-supplied tag patterns could not reach it.
 - **Security:** `qs` in the app is now 6.16.1, which fixes CVE-2026-110816. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release yet. It only runs at UI build time through the PWA plugin, so it is triaged with a recheck date rather than shipped.
 - The Secrets job's gitleaks download now caps each attempt at 60 seconds and retries on any error, and the install step times out after 5 minutes. A stalled transfer used to hold Security: Secrets until the 15-minute job timeout.
 
