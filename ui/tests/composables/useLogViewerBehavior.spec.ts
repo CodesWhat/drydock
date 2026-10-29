@@ -144,6 +144,7 @@ describe('useAutoFetchLogs', () => {
         scrollToBottom: vi.fn(),
         scrollBlocked: ref(false),
       });
+      // biome-ignore lint/correctness/noVueRefAsOperand: the test keeps the ref itself and writes .value on the next line
       interval = result.autoFetchInterval;
       interval.value = 2000;
     });
@@ -214,6 +215,7 @@ describe('useAutoFetchLogs', () => {
         scrollToBottom: vi.fn(),
         scrollBlocked: ref(false),
       });
+      // biome-ignore lint/correctness/noVueRefAsOperand: the test keeps the ref itself and writes .value on the next line
       interval = result.autoFetchInterval;
       interval.value = 2000;
     });

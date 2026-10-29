@@ -887,6 +887,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
+        workerMemoryBytes: 1073741824,
       },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
@@ -904,6 +905,7 @@ describe('getSecurityConfiguration', () => {
         command: 'grype',
         commandExplicit: false,
         timeout: 600000,
+        maxOutputBytes: 134217728,
         extraArgs: [],
         workerImage:
           'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
@@ -983,6 +985,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
+        workerMemoryBytes: 1073741824,
       },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
@@ -1000,6 +1003,7 @@ describe('getSecurityConfiguration', () => {
         command: 'grype',
         commandExplicit: false,
         timeout: 600000,
+        maxOutputBytes: 134217728,
         extraArgs: [],
         workerImage:
           'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
@@ -1152,6 +1156,40 @@ describe('getSecurityConfiguration', () => {
   });
 
   test.each([
+    ['plain bytes', '1073741824', 1073741824],
+    ['bytes suffix', '8388608b', 8388608],
+    ['kilobytes', '8192k', 8388608],
+    ['megabytes', '1536m', 1610612736],
+    ['gigabytes', '1g', 1073741824],
+    ['uppercase and padding', ' 2G ', 2147483648],
+    ['the 6 MiB minimum', '6m', 6291456],
+  ])('should accept a worker memory of %s', (_label, value, expected) => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = value;
+    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(expected);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
+  });
+
+  test('should use the 1 GiB default when worker memory is empty', () => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = '';
+    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(1073741824);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
+  });
+
+  test.each([
+    ['garbage', 'lots'],
+    ['zero', '0'],
+    ['negative', '-1g'],
+    ['decimal', '1.5g'],
+    ['unknown unit', '1t'],
+    ['below the Docker minimum', '5m'],
+    ['too large to represent', '99999999999999999999'],
+  ])('should throw when worker memory is %s', (_label, value) => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = value;
+    expect(() => configuration.getSecurityConfiguration()).toThrow(/DD_SECURITY_WORKER_MEMORY/);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
+  });
+
+  test.each([
     ['below the 1 MB floor', '1048575'],
     ['above the 1 GB ceiling', '1073741825'],
     ['not an integer', '1048576.5'],
@@ -1177,6 +1215,34 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES;
+  });
+
+  test.each([
+    ['below the 1 MB floor', '1048575'],
+    ['above the 1 GB ceiling', '1073741825'],
+    ['not an integer', '1048576.5'],
+    ['not a number', 'lots'],
+  ])('should throw when grype max output bytes is %s', (_label, value) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'grype';
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES = value;
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow();
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES;
+  });
+
+  test.each([
+    ['1 MB floor', '1048576', 1048576],
+    ['1 GB ceiling', '1073741824', 1073741824],
+  ])('should accept the grype max output bytes %s', (_label, value, expected) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'grype';
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES = value;
+
+    expect(configuration.getSecurityConfiguration().grype.maxOutputBytes).toBe(expected);
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES;
   });
 
   test('should throw when trivy timeout is invalid', () => {

@@ -1923,6 +1923,115 @@ describe('docker image details orchestration module', () => {
     });
   });
 
+  describe('image store inspect shapes (#1506)', () => {
+    const descriptor = { mediaType: 'application/vnd.oci.image.index.v1+json', digest: 'sha256:t' };
+    const cases: Array<[string, string, Record<string, any>, string | undefined, boolean]> = [
+      [
+        'classic store local build (empty RepoDigests)',
+        'myapp:local',
+        { RepoDigests: [] },
+        undefined,
+        true,
+      ],
+      [
+        'classic store pulled image',
+        'nginx:1.27',
+        { RepoDigests: ['nginx@sha256:aaa'] },
+        undefined,
+        false,
+      ],
+      [
+        'containerd local build (Identity.Build only, RepoDigests present)',
+        'myapp:local',
+        {
+          RepoDigests: ['myapp@sha256:bbb'],
+          Descriptor: descriptor,
+          Identity: { Build: [{ Ref: 'buildkit/ref', CreatedAt: '2026-02-01T00:00:00Z' }] },
+        },
+        '1.53',
+        true,
+      ],
+      [
+        'containerd pulled image (Identity.Pull present)',
+        'nginx:1.27',
+        {
+          RepoDigests: ['nginx@sha256:ccc'],
+          Descriptor: descriptor,
+          Identity: { Pull: [{ Repository: 'docker.io/library/nginx' }] },
+        },
+        '1.53',
+        false,
+      ],
+      [
+        'containerd docker load (no Identity, Descriptor present, API 1.53)',
+        'myapp:loaded',
+        { RepoDigests: ['myapp@sha256:ddd'], Descriptor: descriptor },
+        '1.53',
+        true,
+      ],
+      [
+        'containerd on API 1.52 (no Identity, old RepoDigests rule)',
+        'myapp:local',
+        { RepoDigests: ['myapp@sha256:eee'], Descriptor: descriptor },
+        '1.52',
+        false,
+      ],
+    ];
+
+    test.each(cases)('%s', async (_name, image, inspect, apiVersion, expectedLocal) => {
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+      const { watcher, inspectImage } = createWatcher();
+      (watcher.dockerApi as any).modem = apiVersion ? { version: `v${apiVersion}` } : undefined;
+      inspectImage.mockResolvedValue({
+        Id: 'image-x',
+        Architecture: 'amd64',
+        Os: 'linux',
+        Created: '2026-02-01T00:00:00.000Z',
+        ...inspect,
+      });
+
+      const result = await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Image: image }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(result?.image.isLocalImage).toBe(expectedLocal);
+    });
+
+    test('refresh re-derives isLocalImage from Identity every cycle', async () => {
+      const { watcher, inspectImage } = createWatcher();
+      inspectImage.mockResolvedValue({
+        Id: 'image-x',
+        RepoDigests: ['myapp@sha256:bbb'],
+        Identity: { Build: [{ Ref: 'r' }] },
+      });
+      const containerInStore: any = {
+        id: 'container-1',
+        name: 'service',
+        image: {
+          id: 'image-x',
+          registry: { url: 'docker.io' },
+          name: 'myapp',
+          tag: { value: 'local', semver: false },
+          digest: { watch: false },
+          isLocalImage: false,
+        },
+      };
+      vi.spyOn(storeContainer, 'getContainer').mockReturnValue(containerInStore);
+
+      await addImageDetailsToContainerOrchestration(
+        watcher as any,
+        createDockerSummaryContainer({ Image: 'myapp:local' }),
+        {},
+        createHelpers() as any,
+      );
+
+      expect(containerInStore.image.isLocalImage).toBe(true);
+    });
+  });
+
   describe('repo-aware digest anchor selection (#669)', () => {
     test('discovery: selects the matching-repo entry as digest anchor and populates repoDigests when a foreign-repo entry comes first', async () => {
       vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);

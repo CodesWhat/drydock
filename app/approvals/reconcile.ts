@@ -53,6 +53,7 @@ import {
   findApprovalByOperationId,
   findApprovalsByContainerId,
   insertApproval,
+  reopenApproval,
   updateApproval,
 } from '../store/approval.js';
 import { withCurrentGroupPolicy } from '../store/group-policy.js';
@@ -82,6 +83,22 @@ function isOpen(record: ApprovalRecord): boolean {
     return false;
   }
   return record.decision === 'pending' || record.decision === 'deferred';
+}
+
+/**
+ * Whether a stored row is the candidate the container reports now. The ref is digest-first,
+ * so the same tag update reads as a different ref on any cycle where the digest lookup
+ * failed (a registry 429). For a tag update the target tag is the identity: it survives the
+ * digest coming and going. A digest update has nothing else to go on, so its ref must match.
+ */
+function isSameCandidate(
+  row: ApprovalRecord,
+  input: { candidateRef: string; toRef: string; updateKind: ApprovalRecord['updateKind'] },
+): boolean {
+  if (row.candidateRef === input.candidateRef) {
+    return true;
+  }
+  return row.updateKind === 'tag' && input.updateKind === 'tag' && row.toRef === input.toRef;
 }
 
 function resolveRows(
@@ -141,10 +158,10 @@ function reconcileContainer(reported: Container | undefined): void {
   // fate is — the operator would otherwise be asked to approve a version that is no
   // longer the one on offer.
   resolveRows(
-    openRows.filter((row) => row.candidateRef !== input.candidateRef),
+    openRows.filter((row) => !isSameCandidate(row, input)),
     'superseded',
   );
-  const currentRows = openRows.filter((row) => row.candidateRef === input.candidateRef);
+  const currentRows = openRows.filter((row) => isSameCandidate(row, input));
 
   if (verdict === 'auto-dispatch') {
     // The normal trigger path owns this candidate now, so the row would sit pending
@@ -159,10 +176,15 @@ function reconcileContainer(reported: Container | undefined): void {
     return;
   }
 
-  if (findApprovalByContainerAndCandidate(input.containerId, input.candidateRef) === undefined) {
-    const inserted = insertApproval(input);
-    announceApprovalEvent('created', inserted);
-    notifyApprovalPending(container, inserted);
+  // Only an operator's answer (approved or rejected) keeps a candidate out of the queue. A
+  // row the system resolved (superseded, withdrawn, auto-applied, container removed) must
+  // not: the store allows one row per container and ref, so such a candidate returns by
+  // reopening its row instead of being refused for good (#1500).
+  const existing = findApprovalByContainerAndCandidate(input.containerId, input.candidateRef);
+  const queued = existing === undefined ? insertApproval(input) : reopenApproval(existing.id);
+  if (queued !== undefined) {
+    announceApprovalEvent('created', queued);
+    notifyApprovalPending(container, queued);
   }
 }
 

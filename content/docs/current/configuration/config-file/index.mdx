@@ -193,7 +193,7 @@ Every route below is under `/api/v1/config`, mounted after authentication.
 
 All `GET` routes are `SESSION_ONLY`, unreachable with an API key, even one holding `admin`. The diagnostic debug dump and container env-reveal endpoint carry the same restriction because these routes expose configuration rather than ordinary inventory. Every route in this table is rate-limited to 5 requests per 60 seconds.
 
-The editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.8 builds. They edit existing, local file-owned fields only; they do not create providers, override environment or reference ownership, edit container labels, or change database-owned settings. A save reports file persistence separately from live reload and does not execute an action or send a notification.
+The editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.9 builds. They edit existing, local file-owned fields only; they do not create providers, override environment or reference ownership, edit container labels, or change database-owned settings. A save reports file persistence separately from live reload and does not execute an action or send a notification.
 
 `GET /api/v1/config` returns:
 

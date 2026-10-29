@@ -1,4 +1,12 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "main": true,
+      "**/*-demo-*": true,
+      "**/*-demo": true
+    }
+  },
   "rewrites": [{ "source": "/((?!mockServiceWorker\\.js).*)", "destination": "/index.html" }],
   "headers": [
     {

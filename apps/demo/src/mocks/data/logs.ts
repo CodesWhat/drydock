@@ -154,3 +154,11 @@ export const logEntries = [
     message: 'Server started on port 3000',
   },
 ];
+
+export const containerLogLines = [
+  'Starting container...',
+  'Listening on port 3000',
+  'Health check passed',
+  'Connected to database',
+  'Ready to serve requests',
+];

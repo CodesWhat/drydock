@@ -251,6 +251,14 @@ test('secret scanning gates full history and the tracked working tree', () => {
       GITLEAKS_LINUX_X64_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb',
     },
   });
+  // A stalled download must fail fast and retry. With --retry alone curl waits
+  // forever on a hung transfer, so Secrets sat until the 15-minute job timeout
+  // (twice on #1486, 2026-10-26).
+  const installGitleaks = getWorkflowStep('secrets', 'Install Gitleaks');
+  expect(installGitleaks?.['timeout-minutes']).toBe(5);
+  expect(installGitleaks?.run).toMatch(/--connect-timeout \d+/);
+  expect(installGitleaks?.run).toMatch(/--max-time \d+/);
+  expect(installGitleaks?.run).toContain('--retry-all-errors');
   expect(getWorkflowStep('secrets', 'Scan secrets')?.run).toContain('scripts/scan-secrets.sh');
 
   const scanScript = readFileSync(secretScanScriptPath, 'utf8');

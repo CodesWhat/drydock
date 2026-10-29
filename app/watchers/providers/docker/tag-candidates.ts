@@ -73,7 +73,7 @@ function applyIncludeExcludeFilters(
       filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
       if (container.image.tag.semver && !includeTagsRegex.test(container.image.tag.value)) {
         logContainer.warn(
-          `Current tag "${container.image.tag.value}" does not match includeTags regex "${container.includeTags}". Trying best-effort semver upgrade within filtered tags.`,
+          `Current tag "${container.image.tag.value}" does not match includeTags regex "${container.includeTags}". Looking for a newer tag within the filtered tags.`,
         );
         allowIncludeFilterRecovery = true;
       }
@@ -210,7 +210,6 @@ interface SemverCandidateFilterStats {
   output: number;
   crossFamilyGreaterDropped: number;
   prefixSkipped: boolean;
-  greaterSkipped: boolean;
 }
 
 interface TagInsight {
@@ -396,11 +395,22 @@ function isGreaterCandidateTag(
   currentTransformedTag: string,
   allowIncludeFilterRecovery: boolean,
 ): boolean {
-  if (allowIncludeFilterRecovery) {
-    return true;
-  }
   if (transformedTag === currentTransformedTag) {
     return false;
+  }
+
+  // #1499: recovery lets a current tag outside dd.tag.include move into the
+  // include family, but never backwards. Compare the numeric core only (the
+  // suffix that put the current tag outside the filter is ignored); a tie or
+  // a missing numeric shape means no safe "newer" claim, so it is not offered.
+  if (allowIncludeFilterRecovery) {
+    const currentShape = getNumericTagShapeFromTransformedTag(currentTransformedTag);
+    const candidateShape = getNumericTagShapeFromTransformedTag(transformedTag);
+    return (
+      currentShape !== null &&
+      candidateShape !== null &&
+      compareNumericSegmentsDescending(currentShape, candidateShape) > 0
+    );
   }
 
   // #918: prefer the numeric-shape-aware comparison whenever a safe ordering
@@ -433,10 +443,9 @@ function isGreaterCandidateTag(
 
 function trackCrossFamilyGreaterDrop(
   stats: SemverCandidateFilterStats,
-  allowIncludeFilterRecovery: boolean,
   greaterThanCurrent: boolean,
 ): void {
-  if (!allowIncludeFilterRecovery && greaterThanCurrent) {
+  if (greaterThanCurrent) {
     stats.crossFamilyGreaterDropped += 1;
   }
 }
@@ -485,7 +494,7 @@ function shouldIncludeSemverCandidate(
   );
 
   if (!familyMatch) {
-    trackCrossFamilyGreaterDrop(stats, context.allowIncludeFilterRecovery, greaterThanCurrent);
+    trackCrossFamilyGreaterDrop(stats, greaterThanCurrent);
     return false;
   }
   stats.afterFamily += 1;
@@ -532,7 +541,6 @@ function filterSemverCandidatesOnePass(
     output: 0,
     crossFamilyGreaterDropped: 0,
     prefixSkipped: !applyPrefixFilter,
-    greaterSkipped: allowIncludeFilterRecovery,
   };
 
   const filteredTags = tags.filter((tag) => shouldIncludeSemverCandidate(tag, context, stats));
@@ -553,12 +561,11 @@ function logSemverCandidateFilterStats(
   const prefixDropped = stats.prefixSkipped ? 0 : stats.input - stats.afterPrefix;
   const semverDropped = stats.afterPrefix - stats.afterSemver;
   const familyDropped = stats.afterSemver - stats.afterFamily;
-  const greaterDropped = stats.greaterSkipped ? 0 : stats.afterFamily - stats.afterGreater;
+  const greaterDropped = stats.afterFamily - stats.afterGreater;
   const prefixCounter = stats.prefixSkipped ? 'skipped' : `${stats.afterPrefix}`;
-  const greaterCounter = stats.greaterSkipped ? 'skipped' : `${stats.afterGreater}`;
 
   logContainer.debug(
-    `Tag candidate filter counters (${tagFamilyPolicy}): input=${stats.input}, prefix=${prefixCounter}, semver=${stats.afterSemver}, family=${stats.afterFamily}, greater=${greaterCounter}, output=${stats.output}; dropped(prefix=${prefixDropped}, semver=${semverDropped}, family=${familyDropped}, greater=${greaterDropped})`,
+    `Tag candidate filter counters (${tagFamilyPolicy}): input=${stats.input}, prefix=${prefixCounter}, semver=${stats.afterSemver}, family=${stats.afterFamily}, greater=${stats.afterGreater}, output=${stats.output}; dropped(prefix=${prefixDropped}, semver=${semverDropped}, family=${familyDropped}, greater=${greaterDropped})`,
   );
 }
 
@@ -1062,6 +1069,12 @@ export function getTagCandidates(
     allowIncludeFilterRecovery,
   );
   filteredTags = semverTagCandidates;
+
+  if (allowIncludeFilterRecovery && filteredTags.length === 0) {
+    logContainer.warn(
+      `Current tag "${container.image.tag.value}" is outside dd.tag.include "${container.includeTags}" and no newer tag matching it was found.`,
+    );
+  }
 
   if (!container.includeTags && stats.afterPrefix === 0) {
     logContainer.warn(getPrefixFilterWarning(currentPrefix));

@@ -779,18 +779,44 @@ function getTerminalOperationError(operation: UpdateOperation): string {
 }
 
 function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string): void {
+  // The process that starts a self-update does not survive it, so it must not
+  // announce the outcome. The finalizing process does, via
+  // emitSelfUpdateTerminalLifecycleEvent() (#1501).
   if (operation.kind === 'self-update') {
     return;
   }
+  dispatchTerminalLifecycleEvent(operation, batchId, {});
+}
 
+/**
+ * Emit update-applied / update-failed for a self-update. Called only by the
+ * process that actually finalizes the operation (the /internal/self-update/finalize
+ * route), once, on the transition into a terminal status (#1501).
+ */
+export function emitSelfUpdateTerminalLifecycleEvent(operation: UpdateOperation): void {
+  if (operation.kind !== 'self-update') {
+    return;
+  }
+  dispatchTerminalLifecycleEvent(operation, undefined, { selfUpdate: true });
+}
+
+function dispatchTerminalLifecycleEvent(
+  operation: UpdateOperation,
+  batchId: string | undefined,
+  extra: { selfUpdate?: true },
+): void {
   switch (operation.status) {
     case 'succeeded':
-      void emitContainerUpdateApplied(buildTerminalLifecycleEventBase(operation, batchId));
+      void emitContainerUpdateApplied({
+        ...buildTerminalLifecycleEventBase(operation, batchId),
+        ...extra,
+      });
       return;
     case 'failed':
     case 'rolled-back':
       void emitContainerUpdateFailed({
         ...buildTerminalLifecycleEventBase(operation, batchId),
+        ...extra,
         error: getTerminalOperationError(operation),
         phase: operation.phase,
         ...(typeof operation.rollbackReason === 'string' && operation.rollbackReason.trim() !== ''

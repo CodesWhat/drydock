@@ -114,6 +114,8 @@ export interface ContainerUpdateFailedEventPayload {
   batchId?: string | null;
   phase?: string;
   rollbackReason?: string;
+  /** True when the operation was a drydock self-update (#1501). */
+  selfUpdate?: boolean;
 }
 
 export interface UpdateOperationChangedEventPayload {
@@ -149,6 +151,8 @@ export interface ContainerUpdateAppliedEventPayload {
   batchId?: string | null;
   /** `dryrun` means the image was pulled but the container was intentionally not replaced. */
   phase?: 'dryrun';
+  /** True when the operation was a drydock self-update (#1501). */
+  selfUpdate?: boolean;
 }
 
 export type ContainerUpdateAppliedEvent = string | ContainerUpdateAppliedEventPayload;
