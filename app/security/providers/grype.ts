@@ -1,8 +1,11 @@
 import { hasValidCommandPath } from '../runtime.js';
 import type { ContainerVulnerability } from '../scan.js';
 
-const MAX_GRYPE_OUTPUT_BYTES = 50 * 1024 * 1024;
-const MAX_GRYPE_PARSE_BYTES = 20 * 1024 * 1024;
+const GRYPE_MAX_OUTPUT_ENV_VAR = 'DD_SECURITY_GRYPE_MAXOUTPUTBYTES';
+
+export function buildGrypeOutputLimitMessage(maxOutputBytes: number): string {
+  return `Grype output exceeded ${maxOutputBytes} bytes; raise ${GRYPE_MAX_OUTPUT_ENV_VAR} to scan this image`;
+}
 
 export interface GrypeInvocationOptions {
   image: string;
@@ -15,6 +18,7 @@ export interface GrypeInvocationOptions {
 export interface GrypeInvocationConfiguration {
   command?: string;
   timeout: number;
+  maxOutputBytes: number;
   extraArgs?: unknown;
 }
 
@@ -24,6 +28,7 @@ export interface GrypeInvocation {
   env: NodeJS.ProcessEnv;
   timeout: number;
   maxBuffer: number;
+  maxBufferExceededMessage: string;
   commandName: string;
 }
 
@@ -89,11 +94,11 @@ function getPrimaryUrl(vulnerability: JsonRecord): string | undefined {
   return toSortedUniqueStrings(vulnerability.urls)[0];
 }
 
-export function parseGrypeOutput(output: string): ContainerVulnerability[] {
+export function parseGrypeOutput(output: string, maxOutputBytes: number): ContainerVulnerability[] {
   const outputBytes = Buffer.byteLength(output, 'utf8');
-  if (outputBytes > MAX_GRYPE_PARSE_BYTES) {
+  if (outputBytes > maxOutputBytes) {
     throw new Error(
-      `Grype output is too large to parse (${outputBytes} bytes); max supported is ${MAX_GRYPE_PARSE_BYTES} bytes`,
+      `Grype output is too large to parse (${outputBytes} bytes); max supported is ${maxOutputBytes} bytes; raise ${GRYPE_MAX_OUTPUT_ENV_VAR} to scan this image`,
     );
   }
 
@@ -180,7 +185,8 @@ export function buildGrypeInvocation(
     ],
     env,
     timeout: configuration.timeout,
-    maxBuffer: MAX_GRYPE_OUTPUT_BYTES,
+    maxBuffer: configuration.maxOutputBytes,
+    maxBufferExceededMessage: buildGrypeOutputLimitMessage(configuration.maxOutputBytes),
     commandName: 'Grype',
   };
 }
