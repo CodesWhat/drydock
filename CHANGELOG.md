@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.21.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).
+
 ## [1.7.1-rc.3] — 2026-10-29
 
 This is the third release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.2 changes, the vue-i18n fix for CVE-2026-118257 (high), and backports of the #1499 and #1506 fixes.
