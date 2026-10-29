@@ -16,6 +16,7 @@ This is the third release candidate for the 1.7.1 maintenance release on the 1.7
 
 ### Security
 
+- The image base is now Node.js 24.22.2 (from 24.20.0), which fixes the Node.js advisories Grype flagged in the bundled `node` binary, including the critical CVE-2026-111497.
 - `vue-i18n` is now 11.4.16, which fixes CVE-2026-118257 (high) and CVE-2026-118256 in `vue-i18n` and `@intlify`. `qs` is now 6.16.1 for CVE-2026-110816 and `re2js` 2.8.7 for CVE-2026-116795, which drydock could not reach because it never enables lookbehinds. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release and only runs at UI build time, so it is triaged with a recheck date.
 
 ### Fixed
