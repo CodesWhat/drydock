@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
 - The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.
+- A pending update no longer drops out of the approval queue when its candidate ref flips between digest and tag, for example when a registry 429 hides the digest for one watch cycle. The same tag update stays one open row, and a row the system resolved earlier is reopened instead of blocking the candidate forever ([#1500](https://github.com/CodesWhat/drydock/issues/1500)).
 
 ## [1.8.0-rc.8] - 2026-10-26
 

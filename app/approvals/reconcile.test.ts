@@ -392,6 +392,129 @@ describe('supersession', () => {
   });
 });
 
+describe('a candidate whose ref flips between digest and tag (#1500)', () => {
+  const withDigest = () =>
+    createContainer({
+      result: { tag: '1.2.4', digest: 'sha256:aaa' },
+    });
+  const withoutDigest = () => createContainer({ result: { tag: '1.2.4' } });
+
+  test('keeps one open row through digest, tag, digest', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+    await emitContainerReport({ container: withoutDigest(), changed: true });
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    const rows = allRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ candidateRef: 'sha256:aaa', decision: 'pending' });
+    expect(rows[0].resolution).toBeUndefined();
+    expect(approvalStore.listApprovals({ status: 'pending' }).records).toHaveLength(1);
+    expect(approvalStore.countApprovals().pending).toBe(1);
+  });
+
+  test('keeps one open row through tag, digest, tag', async () => {
+    await emitContainerReport({ container: withoutDigest(), changed: true });
+    await emitContainerReport({ container: withDigest(), changed: true });
+    await emitContainerReport({ container: withoutDigest(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(approvalStore.countApprovals().pending).toBe(1);
+  });
+
+  test('still supersedes when the tag itself changes', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    await emitContainerReport({
+      container: createContainer({
+        result: { tag: '1.2.5', digest: 'sha256:bbb' },
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '1.2.5' },
+      }),
+      changed: true,
+    });
+
+    const rows = allRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.candidateRef === 'sha256:aaa')).toMatchObject({
+      resolution: 'superseded',
+    });
+    expect(rows.find((row) => row.candidateRef === 'sha256:bbb')).toMatchObject({
+      decision: 'pending',
+    });
+  });
+
+  test('does not treat two different digest updates as one candidate', async () => {
+    const digestUpdate = (digest: string) =>
+      createContainer({
+        image: {
+          ...createContainer().image,
+          digest: { watch: true, value: 'sha256:old' },
+        },
+        result: { tag: '1.2.3', digest },
+        updateKind: { kind: 'digest', localValue: 'sha256:old', remoteValue: digest },
+      });
+    await emitContainerReport({ container: digestUpdate('sha256:aaa'), changed: true });
+    await emitContainerReport({ container: digestUpdate('sha256:bbb'), changed: true });
+
+    expect(allRows().find((row) => row.candidateRef === 'sha256:aaa')).toMatchObject({
+      resolution: 'superseded',
+    });
+    expect(approvalStore.countApprovals().pending).toBe(1);
+  });
+
+  test('a superseded row for the same ref does not block a still-pending candidate', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+    const [stale] = allRows();
+    approvalStore.updateApproval(stale.id, {
+      resolution: 'superseded',
+      resolvedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    const rows = allRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: stale.id, decision: 'pending' });
+    expect(rows[0].resolution).toBeUndefined();
+    expect(rows[0].resolvedAt).toBeUndefined();
+    expect(approvalStore.listApprovals({ status: 'pending' }).records).toHaveLength(1);
+  });
+
+  test('a withdrawn deferred row comes back as a plain pending row', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+    const [stale] = allRows();
+    approvalStore.updateApproval(stale.id, {
+      decision: 'deferred',
+      deferredUntil: '2999-01-01T00:00:00.000Z',
+      decisionNote: 'later',
+      resolution: 'candidate-withdrawn',
+      resolvedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    const [row] = allRows();
+    expect(row).toMatchObject({ id: stale.id, decision: 'pending' });
+    expect(row.deferredUntil).toBeUndefined();
+    expect(row.decisionNote).toBeUndefined();
+    expect(row.resolution).toBeUndefined();
+  });
+
+  test('an operator-rejected row for the same candidate keeps blocking a requeue', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+    const [row] = allRows();
+    approvalStore.updateApproval(row.id, {
+      decision: 'rejected',
+      decidedAt: '2026-01-01T00:00:00.000Z',
+      decidedBy: 'scott',
+    });
+
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(approvalStore.countApprovals().pending).toBe(0);
+  });
+});
+
 describe('candidate withdrawal', () => {
   test('marks a pending row withdrawn once the candidate disappears', async () => {
     await emitContainerReport({ container: createContainer(), changed: true });
