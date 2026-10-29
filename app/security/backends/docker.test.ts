@@ -245,7 +245,7 @@ describe('createDockerScannerBackend', () => {
         CapDrop: ['ALL'],
         SecurityOpt: ['no-new-privileges:true'],
         PidsLimit: 64,
-        Memory: 512 * 1024 * 1024,
+        Memory: 1024 * 1024 * 1024,
         NetworkMode: 'none',
         Tmpfs: { '/tmp': 'rw,noexec,nosuid,nodev,size=64m' },
         Mounts: [
@@ -765,7 +765,7 @@ describe('createDockerScannerBackend', () => {
       });
 
       await expect(run(backend)).rejects.toThrow(
-        'Scanner worker was killed by the kernel for running out of memory (exit 137, OOMKilled) at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
+        'Scanner worker was killed by the kernel for running out of memory (exit 137, OOMKilled) at the 1 GiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
       );
       expect(container.inspect.mock.invocationCallOrder[0]).toBeLessThan(
         container.remove.mock.invocationCallOrder[0],
@@ -776,7 +776,7 @@ describe('createDockerScannerBackend', () => {
       const { backend } = createHarness({ exitCode: 137 });
 
       await expect(run(backend)).rejects.toThrow(
-        'Scanner worker was killed (exit 137), most likely out of memory at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
+        'Scanner worker was killed (exit 137), most likely out of memory at the 1 GiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
       );
     });
 
@@ -796,7 +796,7 @@ describe('createDockerScannerBackend', () => {
       });
 
       await expect(run(backend)).rejects.toThrow(
-        /most likely out of memory at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY: Killed$/,
+        /most likely out of memory at the 1 GiB worker limit; raise DD_SECURITY_WORKER_MEMORY: Killed$/,
       );
     });
 

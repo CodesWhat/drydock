@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { Writable } from 'node:stream';
 import { getAbortReason } from '../abort.js';
 
-const DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024;
+const DEFAULT_MEMORY_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_PIDS_LIMIT = 64;
 const DEFAULT_TMPFS_SIZE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_CACHE_TARGET = '/cache';

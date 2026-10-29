@@ -887,7 +887,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
-        workerMemoryBytes: 536870912,
+        workerMemoryBytes: 1073741824,
       },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
@@ -984,7 +984,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
-        workerMemoryBytes: 536870912,
+        workerMemoryBytes: 1073741824,
       },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
@@ -1167,9 +1167,9 @@ describe('getSecurityConfiguration', () => {
     delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
   });
 
-  test('should use the 512 MiB default when worker memory is empty', () => {
+  test('should use the 1 GiB default when worker memory is empty', () => {
     configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = '';
-    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(536870912);
+    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(1073741824);
     delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
   });
 

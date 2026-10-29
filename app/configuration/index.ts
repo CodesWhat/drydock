@@ -20,7 +20,7 @@ export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as co
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
-const DEFAULT_SECURITY_WORKER_MEMORY_BYTES = 512 * 1024 * 1024;
+const DEFAULT_SECURITY_WORKER_MEMORY_BYTES = 1024 * 1024 * 1024;
 // Docker rejects container memory limits below 6 MiB.
 const MIN_SECURITY_WORKER_MEMORY_BYTES = 6 * 1024 * 1024;
 const SECURITY_WORKER_MEMORY_UNITS = { b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 } as const;

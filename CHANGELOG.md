@@ -13,7 +13,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
-- `DD_SECURITY_WORKER_MEMORY` now sets the memory limit of the scanner worker containers (default still 512m), and a worker killed with exit 137 now says it was most likely out of memory and names the setting instead of just reporting the status. Large images could run Grype out of memory with no hint (#1281).
+- `DD_SECURITY_WORKER_MEMORY` now sets the memory limit of the scanner worker containers (default raised from 512m to 1g: profiling Grype on rc.8 needed about 768 MiB for node:22 and 900 MiB for nextcloud:30), and a worker killed with exit 137 now says it was most likely out of memory and names the setting instead of just reporting the status. Large images could run Grype out of memory with no hint (#1281).
 - Vercel now deploys the site and demo only from main, plus preview deploys for branches whose name opts in: `-web-` for the site and `-demo-` for the demo (for example `fix/v1.8-web-mobile-nav`). Backend, dependency and dev-branch pushes no longer create deployments, which kept the team's Vercel plan under its daily deploy cap.
 - **Security:** `re2js` is now 2.8.7, which fixes CVE-2026-116795, a quadratic-time slowdown in lookbehind matching. drydock never enables re2js lookbehinds, so user-supplied tag patterns could not reach it.
 - **Security:** `qs` in the app is now 6.16.1, which fixes CVE-2026-110816. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release yet. It only runs at UI build time through the PWA plugin, so it is triaged with a recheck date rather than shipped.
