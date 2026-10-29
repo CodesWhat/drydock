@@ -159,6 +159,17 @@ set.ignored = true
 match.rules = ["osv-scanner:CVE-2026-97058"]
 set.ignored = true
 
+# deepmerge@4.3.1 (CVE-2026-93753 / GHSA-gcqx-w48m-w2h4, prototype poisoning in
+# mergeObject). The advisory lists everything through 4.3.1, the latest release, and
+# no fixed version exists as of 2026-10-27. It arrives in ui/ only through
+# vite-plugin-pwa > workbox-build > @rollup/plugin-node-resolve, which runs at build
+# time to merge the resolver's own options from in-repo config. Nothing from it is
+# bundled into the UI or the image, and no request data reaches it. Recheck on
+# 2026-11-27 or as soon as deepmerge publishes a fix, and drop this entry then.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-93753"]
+set.ignored = true
+
 # checkov CKV_GHA_7 asserts "workflow_dispatch inputs MUST be empty" and fires on
 # the mere presence of any input — confirmed against a controlled probe, where all
 # four of required/optional x with/without-default trip it identically. Its premise

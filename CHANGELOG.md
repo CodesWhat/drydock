@@ -10,8 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `vue-i18n` is now 11.4.16, which fixes CVE-2026-118257 (high) and CVE-2026-118256 in `vue-i18n` and `@intlify`. `qs` is now 6.16.1 for CVE-2026-110816 and `re2js` 2.8.7 for CVE-2026-116795, which drydock could not reach because it never enables lookbehinds. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release and only runs at UI build time, so it is triaged with a recheck date.
+
 ### Fixed
 
+- A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
 - Locally built images are now recognised as local under Docker's containerd image store, using the image identity Docker reports from API 1.53, so they skip registry lookups and stay in the UI (#1506).
 
 ## [1.7.1-rc.2] — 2026-10-26
