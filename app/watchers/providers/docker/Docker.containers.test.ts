@@ -1663,7 +1663,7 @@ describe('Docker Watcher', () => {
         includeTags: '^1\\.',
         image: {
           registry: { name: 'hub' },
-          tag: { value: '2.0.0', semver: true },
+          tag: { value: '0.9.0', semver: true },
           digest: { watch: false },
         },
       };
@@ -1676,6 +1676,7 @@ describe('Docker Watcher', () => {
       });
 
       const rank = {
+        '0.9.0': 90,
         '1.8.0': 180,
         '1.9.0': 190,
         '2.0.0': 200,
@@ -1708,7 +1709,7 @@ describe('Docker Watcher', () => {
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('does not match includeTags regex'),
       );
-      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('greater=skipped'));
+      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('greater=2'));
     });
 
     test('should advise best semver tag when current tag is non-semver and includeTags filter is set', async () => {
