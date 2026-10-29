@@ -305,6 +305,10 @@ export function createFinalizeSelfUpdateHandler() {
     }
     releaseFinalizedHelperLifecycle(operation, body.status, body.operationId);
     operationFinalizeSecrets.delete(body.operationId);
+    // Reached only when this call moved the operation into its terminal state
+    // (already-terminal replays returned above), so the outcome is announced
+    // at most once (#1501).
+    updateOperationStore.emitSelfUpdateTerminalLifecycleEvent(finalizedOperation);
 
     res.status(202).json({
       status: 'accepted',

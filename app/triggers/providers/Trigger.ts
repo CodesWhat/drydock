@@ -195,11 +195,13 @@ type ContainerUpdateAppliedEventPayload = event.ContainerUpdateAppliedEvent;
 
 interface UpdateAppliedNotificationEvent {
   kind: 'update-applied';
+  selfUpdate?: true;
 }
 
 interface UpdateFailedNotificationEvent {
   kind: 'update-failed';
   error?: string;
+  selfUpdate?: true;
 }
 
 interface SecurityAlertNotificationEvent {
@@ -595,6 +597,7 @@ function getUpdateFailedNotificationEvent(
   return {
     kind: 'update-failed',
     error: getNonEmptyString(notificationEvent, 'error'),
+    ...(safeGet(notificationEvent, 'selfUpdate') === true ? { selfUpdate: true as const } : {}),
   };
 }
 
@@ -676,7 +679,10 @@ export function getNotificationEvent(
 
   const kind = safeGet(notificationEvent, 'kind');
   if (kind === 'update-applied') {
-    return { kind };
+    return {
+      kind,
+      ...(safeGet(notificationEvent, 'selfUpdate') === true ? { selfUpdate: true as const } : {}),
+    };
   }
 
   if (kind === 'update-failed') {
@@ -1472,6 +1478,8 @@ class Trigger<
       typeof payload === 'object' && payload !== null
         ? (payload as event.ContainerUpdateAppliedEventPayload).container
         : undefined;
+    const payloadSelfUpdate =
+      typeof payload === 'object' && payload !== null && payload.selfUpdate === true;
     const container = payloadContainer || this.findContainerByBusinessId(containerName);
     const notificationKey = getContainerNotificationKey(container) || containerName;
 
@@ -1537,7 +1545,10 @@ class Trigger<
     }
 
     const notificationContainer = container
-      ? withNotificationEvent(container, { kind: 'update-applied' })
+      ? withNotificationEvent(container, {
+          kind: 'update-applied',
+          ...(payloadSelfUpdate ? { selfUpdate: true as const } : {}),
+        })
       : undefined;
 
     // Lifecycle dispatch defaults to permissive (allowAllWhenNoTriggers / defaultWhenRuleMissing
@@ -1568,6 +1579,7 @@ class Trigger<
       ? withNotificationEvent(container, {
           kind: 'update-failed',
           error: payload.error,
+          ...(payload.selfUpdate === true ? { selfUpdate: true as const } : {}),
         })
       : undefined;
 

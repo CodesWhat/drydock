@@ -15,12 +15,15 @@ import {
 
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
+const mockEmitSelfUpdateLifecycle = vi.hoisted(() => vi.fn());
 const mockReleaseRetainedSelfUpdateLifecycle = vi.hoisted(() => vi.fn());
 const mockSaveStore = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: (...args: unknown[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: unknown[]) => mockMarkOperationTerminal(...args),
+  emitSelfUpdateTerminalLifecycleEvent: (...args: unknown[]) =>
+    mockEmitSelfUpdateLifecycle(...args),
 }));
 
 vi.mock('../updates/update-locks.js', () => ({
@@ -289,6 +292,59 @@ describe('internal-self-update', () => {
     });
     expect(mockReleaseRetainedSelfUpdateLifecycle).toHaveBeenCalledWith('op-123');
     expect(res.status).toHaveBeenCalledWith(202);
+  });
+
+  describe('lifecycle notifications (#1501)', () => {
+    test.each(['succeeded', 'rolled-back', 'failed'] as const)(
+      'emits the self-update lifecycle event once for a %s finalize',
+      async (status) => {
+        mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
+        const res = createMockResponse();
+
+        await createFinalizeSelfUpdateHandler()(
+          createFinalizeRequest({ body: { operationId: 'op-123', status, phase: status } }),
+          res,
+        );
+
+        expect(mockEmitSelfUpdateLifecycle).toHaveBeenCalledTimes(1);
+        expect(mockEmitSelfUpdateLifecycle).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'op-123', status }),
+        );
+      },
+    );
+
+    test('emits nothing when the operation is already terminal (repeat finalize or replay)', async () => {
+      mockGetOperationById.mockReturnValue({
+        id: 'op-123',
+        kind: 'self-update',
+        status: 'succeeded',
+      });
+      const res = createMockResponse();
+
+      await createFinalizeSelfUpdateHandler()(
+        createFinalizeRequest({
+          body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+        }),
+        res,
+      );
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+      expect(mockEmitSelfUpdateLifecycle).not.toHaveBeenCalled();
+    });
+
+    test('emits nothing when the terminal state was not durably saved', async () => {
+      mockSaveStore.mockRejectedValueOnce(new Error('disk unavailable'));
+      mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
+
+      await createFinalizeSelfUpdateHandler()(
+        createFinalizeRequest({
+          body: { operationId: 'op-123', status: 'succeeded', phase: 'succeeded' },
+        }),
+        createMockResponse(),
+      );
+
+      expect(mockEmitSelfUpdateLifecycle).not.toHaveBeenCalled();
+    });
   });
 
   test('marks an active self-update operation as expired', async () => {

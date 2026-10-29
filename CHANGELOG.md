@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Self-updates of Drydock now send `update-applied` and `update-failed` notifications ([#1501](https://github.com/CodesWhat/drydock/issues/1501)). The instance that finalizes the update announces it once, through the normal notification rules and templates, with `event.selfUpdate` set to `true`.
 - Locally built and `docker load`ed images are no longer looked up in a registry under Docker's containerd image store (#1506). That store reports a repository digest for every named image, so Drydock now reads the image `Identity` from Docker Engine API 1.53 and newer: an image with no recorded pull is treated as local and stays in the UI without the Docker Hub 401 on every scan. Older APIs and the classic store keep the empty repository digest rule.
 - A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.

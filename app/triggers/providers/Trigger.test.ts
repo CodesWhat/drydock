@@ -5197,6 +5197,61 @@ test('handleContainerUpdateAppliedEvent should run trigger when rule allows and 
   );
 });
 
+test('handleContainerUpdateAppliedEvent flags self-update notifications (#1501)', async () => {
+  const container = { watcher: 'local', name: 'drydock', updateAvailable: false };
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent({
+    containerName: 'local_drydock',
+    selfUpdate: true,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'drydock',
+      notificationEvent: { kind: 'update-applied', selfUpdate: true },
+    }),
+  );
+});
+
+test('handleContainerUpdateFailedEvent flags self-update notifications (#1501)', async () => {
+  const container = { watcher: 'local', name: 'drydock', updateAvailable: false };
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_drydock',
+    error: 'rolled back',
+    selfUpdate: true,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'drydock',
+      notificationEvent: { kind: 'update-failed', error: 'rolled back', selfUpdate: true },
+    }),
+  );
+});
+
+test('getNotificationEvent preserves the selfUpdate flag on lifecycle events (#1501)', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: { kind: 'update-applied', selfUpdate: true },
+    } as any),
+  ).toEqual({ kind: 'update-applied', selfUpdate: true });
+  expect(
+    getNotificationEvent({
+      notificationEvent: { kind: 'update-failed', error: 'x', selfUpdate: true },
+    } as any),
+  ).toEqual({ kind: 'update-failed', error: 'x', selfUpdate: true });
+  expect(
+    getNotificationEvent({
+      notificationEvent: { kind: 'update-applied', selfUpdate: 'yes' },
+    } as any),
+  ).toEqual({ kind: 'update-applied' });
+});
+
 test('handleContainerUpdateAppliedEvent should resolve containers from raw store data', async () => {
   const container = {
     watcher: 'local',
