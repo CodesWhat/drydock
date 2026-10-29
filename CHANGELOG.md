@@ -13,6 +13,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- `DD_SECURITY_WORKER_MEMORY` now sets the memory limit of the scanner worker containers (default raised from 512m to 1g: profiling Grype on rc.8 needed about 768 MiB for node:22 and 900 MiB for nextcloud:30), and a worker killed with exit 137 now says it was most likely out of memory and names the setting instead of just reporting the status. Large images could run Grype out of memory with no hint (#1281).
+- The Grype output cap is now configurable with `DD_SECURITY_GRYPE_MAXOUTPUTBYTES` (default 128 MB, up from a fixed 50 MB capture and 20 MB parse limit). A large image's JSON, about 60 MB for nextcloud:30, hit the old limits even after it fit in the worker's memory, and the error now names the variable to raise (#1281).
 - Vercel now deploys the site and demo only from main, plus preview deploys for branches whose name opts in: `-web-` for the site and `-demo-` for the demo (for example `fix/v1.8-web-mobile-nav`). Backend, dependency and dev-branch pushes no longer create deployments, which kept the team's Vercel plan under its daily deploy cap.
 - **Security:** `re2js` is now 2.8.7, which fixes CVE-2026-116795, a quadratic-time slowdown in lookbehind matching. drydock never enables re2js lookbehinds, so user-supplied tag patterns could not reach it.
 - **Security:** `qs` in the app is now 6.16.1, which fixes CVE-2026-110816. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release yet. It only runs at UI build time through the PWA plugin, so it is triaged with a recheck date rather than shipped.
@@ -21,6 +23,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - Self-updates of Drydock now send `update-applied` and `update-failed` notifications ([#1501](https://github.com/CodesWhat/drydock/issues/1501)). The instance that finalizes the update announces it once, through the normal notification rules and templates, with `event.selfUpdate` set to `true`.
+- Locally built and `docker load`ed images are no longer looked up in a registry under Docker's containerd image store (#1506). That store reports a repository digest for every named image, so Drydock now reads the image `Identity` from Docker Engine API 1.53 and newer: an image with no recorded pull is treated as local and stays in the UI without the Docker Hub 401 on every scan. Older APIs and the classic store keep the empty repository digest rule.
 - A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
 - The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.

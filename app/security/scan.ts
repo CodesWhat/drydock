@@ -19,7 +19,11 @@ import {
   noteBundledTrivyRemoval,
   resolveProviderExecution,
 } from './backend-resolution.js';
-import { buildGrypeInvocation, parseGrypeOutput } from './providers/grype.js';
+import {
+  buildGrypeInvocation,
+  buildGrypeOutputLimitMessage,
+  parseGrypeOutput,
+} from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
 import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
@@ -655,14 +659,21 @@ function runGrypeVulnerabilityCommand(
   if (usesLocalCommand('grype', configuration)) {
     return runCommand({ ...invocation, signal: options.signal });
   }
-  return getDefaultScannerRuntime().run({
-    provider: 'grype',
-    args: invocation.args,
-    env: invocation.env,
-    timeoutMs: invocation.timeout,
-    maxOutputBytes: invocation.maxBuffer,
-    signal: options.signal,
-  });
+  return getDefaultScannerRuntime()
+    .run({
+      provider: 'grype',
+      args: invocation.args,
+      env: invocation.env,
+      timeoutMs: invocation.timeout,
+      maxOutputBytes: invocation.maxBuffer,
+      signal: options.signal,
+    })
+    .catch((error: unknown) => {
+      if (DOCKER_WORKER_OUTPUT_LIMIT_PATTERN.test(getScanErrorMessage(error, ''))) {
+        throw new Error(buildGrypeOutputLimitMessage(invocation.maxBuffer));
+      }
+      throw error;
+    });
 }
 
 async function runGrypeVulnerabilityCommandWithRetry(
@@ -909,7 +920,10 @@ async function scanWithProvider(
     }
     throwIfAborted(options.signal);
     const output = await runGrypeVulnerabilityCommandWithRetry(options, configuration);
-    return { provider, vulnerabilities: parseGrypeOutput(output) };
+    return {
+      provider,
+      vulnerabilities: parseGrypeOutput(output, configuration.grype.maxOutputBytes),
+    };
   } catch (error: unknown) {
     if (options.signal?.aborted) {
       throw getAbortReason(options.signal, 'Security scan aborted');

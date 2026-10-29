@@ -50,6 +50,7 @@ type ScannerRuntimeConfiguration = BackendResolutionConfiguration & {
     protocol: 'http' | 'https';
     network: string;
     cacheVolumePrefix: string;
+    workerMemoryBytes?: number;
   };
 };
 
@@ -308,6 +309,7 @@ export function getDefaultScannerRuntime(): ReturnType<typeof createScannerRunti
           cacheDir,
           hardening: {
             networkMode: configuration.docker.network,
+            memoryBytes: configuration.docker.workerMemoryBytes,
             ...(provider === 'cosign' ? {} : { scratchTarget: '/scratch' }),
           },
         }),

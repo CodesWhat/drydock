@@ -140,10 +140,17 @@ describe('parseGrypeOutput', () => {
     expect(result[0]?.primaryUrl).toBe('https://provider.example/CVE-1');
   });
 
-  test('rejects Grype JSON larger than the 20 MiB parse limit', () => {
-    const output = JSON.stringify({ matches: [], padding: 'x'.repeat(20 * MIB) });
+  test('rejects Grype JSON larger than the configured limit and names the variable to raise', () => {
+    const output = JSON.stringify({ matches: [], padding: 'x'.repeat(2 * MIB) });
 
-    expect(() => parseGrypeOutput(output)).toThrow('Grype output is too large to parse');
+    expect(() => parseGrypeOutput(output, MIB)).toThrow('Grype output is too large to parse');
+    expect(() => parseGrypeOutput(output, MIB)).toThrow('DD_SECURITY_GRYPE_MAXOUTPUTBYTES');
+  });
+
+  test('parses Grype JSON between 20 and 50 MiB under the default limit', () => {
+    const output = JSON.stringify({ matches: [], padding: 'x'.repeat(30 * MIB) });
+
+    expect(parseGrypeOutput(output, 128 * MIB)).toEqual([]);
   });
 });
 
@@ -154,6 +161,7 @@ describe('buildGrypeInvocation', () => {
       {
         command: '/usr/local/bin/grype',
         timeout: 180_000,
+        maxOutputBytes: 96 * MIB,
         extraArgs: ['--only-fixed', '--platform', 'linux/amd64'],
       },
     );
@@ -169,7 +177,8 @@ describe('buildGrypeInvocation', () => {
         'registry:registry.example.com/team/app:1.2.3',
       ],
       timeout: 180_000,
-      maxBuffer: 50 * MIB,
+      maxBuffer: 96 * MIB,
+      maxBufferExceededMessage: `Grype output exceeded ${96 * MIB} bytes; raise DD_SECURITY_GRYPE_MAXOUTPUTBYTES to scan this image`,
       commandName: 'Grype',
     });
   });
@@ -177,7 +186,7 @@ describe('buildGrypeInvocation', () => {
   test('falls back to the grype command and preserves the inherited environment', () => {
     const invocation = buildGrypeInvocation(
       { image: 'alpine:3.22' },
-      { command: '  ', timeout: 60_000 },
+      { command: '  ', timeout: 60_000, maxOutputBytes: 128 * MIB },
     );
 
     expect(invocation.command).toBe('grype');
@@ -186,7 +195,10 @@ describe('buildGrypeInvocation', () => {
   });
 
   test('uses the default command when no command is configured', () => {
-    const invocation = buildGrypeInvocation({ image: 'alpine:3.22' }, { timeout: 60_000 });
+    const invocation = buildGrypeInvocation(
+      { image: 'alpine:3.22' },
+      { timeout: 60_000, maxOutputBytes: 128 * MIB },
+    );
 
     expect(invocation.command).toBe('grype');
   });
