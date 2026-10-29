@@ -20,7 +20,7 @@
         "status": "Status",
         "containers": "Container",
         "docker": "Docker",
-        "os": "OS",
+        "os": "Betriebssystem",
         "version": "Version",
         "lastSeen": "Zuletzt gesehen"
       },
@@ -33,7 +33,7 @@
       "tabs": {
         "overview": "Übersicht",
         "logs": "Logs",
-        "config": "Config"
+        "config": "Konfiguration"
       },
       "overview": {
         "resources": "Ressourcen",
@@ -65,7 +65,7 @@
         "emptyMessage": "Keine Logeinträge für die aktuellen Filter gefunden.",
         "lastFetched": "Zuletzt abgerufen: {time}",
         "entries": "{count} Einträge",
-        "statusLive": "Live",
+        "statusLive": "Aktiv",
         "statusOffline": "Offline",
         "loadError": "Agent-Logs konnten nicht geladen werden"
       },
@@ -75,10 +75,10 @@
         "images": "Images",
         "uptime": "Laufzeit",
         "docker": "Docker",
-        "os": "OS",
+        "os": "Betriebssystem",
         "architecture": "Architektur",
         "agent": "Agent",
-        "host": "Host",
+        "host": "Gastgeber",
         "agentVersion": "Agent-Version",
         "agentBuild": "Agent-Build",
         "logLevel": "Log-Level",
