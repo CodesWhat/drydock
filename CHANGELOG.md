@@ -11,6 +11,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.9] - 2026-10-29
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.8 changes and upgrade warnings. It fixes five reported bugs (#1499, #1500, #1501, #1506, #1281) and picks up the qs and re2js advisory fixes.
+
 ### Changed
 
 - `DD_SECURITY_WORKER_MEMORY` now sets the memory limit of the scanner worker containers (default raised from 512m to 1g: profiling Grype on rc.8 needed about 768 MiB for node:22 and 900 MiB for nextcloud:30), and a worker killed with exit 137 now says it was most likely out of memory and names the setting instead of just reporting the status. Large images could run Grype out of memory with no hint (#1281).
@@ -3644,7 +3651,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...HEAD
+[1.8.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...v1.8.0-rc.9
 [1.8.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...v1.8.0-rc.8
 [1.8.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...v1.8.0-rc.7
 [1.8.0-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.5...v1.8.0-rc.6
