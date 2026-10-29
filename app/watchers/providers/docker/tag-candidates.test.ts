@@ -194,7 +194,7 @@ describe('docker tag candidates module', () => {
     const container = createContainer({
       image: {
         tag: {
-          value: '2.0.0',
+          value: '0.9.0',
           semver: true,
         },
       },
@@ -899,7 +899,7 @@ describe('docker tag candidates module', () => {
   });
 
   // Coverage for pre-existing branch: isSemverFamilyMatch with null referenceShape
-  test('accepts any candidate when current tag has no parseable numeric shape', () => {
+  test('skips family matching but offers nothing when current tag has no parseable numeric shape', () => {
     // Tag 'latest' has no numeric segments → referenceShape is null → isSemverFamilyMatch returns true
     const container = createContainer({
       image: {
@@ -915,8 +915,9 @@ describe('docker tag candidates module', () => {
 
     const result = getTagCandidates(container, ['1.0.0', '2.0.0'], log);
 
-    // With no referenceShape, family matching is skipped — any semver candidate passes
-    expect(result.tags.length).toBeGreaterThan(0);
+    // With no referenceShape, family matching is skipped, but recovery has no
+    // numeric core to compare against (#1499), so nothing is offered.
+    expect(result.tags).toEqual([]);
   });
 
   // Coverage for pre-existing branch: invalid tagFamily warns and falls back to strict
@@ -2193,5 +2194,106 @@ describe('isPrereleaseSuffix (#498)', () => {
     ['', false],
   ])('isPrereleaseSuffix(%s) → %s', (suffix, expected) => {
     expect(isPrereleaseSuffix(suffix)).toBe(expected);
+  });
+});
+
+describe('include-filter recovery never offers downgrades (#1499)', () => {
+  const makeLog = () => ({ warn: vi.fn(), debug: vi.fn() });
+
+  test('does not offer older matching tags when the current tag is newer than the whole include family', () => {
+    const container = createContainer({
+      image: { tag: { value: '30.0.17', semver: true } },
+      includeTags: '^27\\.\\d+\\.\\d+$',
+    });
+    const log = makeLog();
+
+    const result = getTagCandidates(
+      container,
+      ['27.1.11', '27.1.10', '28.0.14', '30.0.17', '31.0.0'],
+      log,
+    );
+
+    expect(result.tags).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('no newer tag matching it was found'),
+    );
+  });
+
+  test('still moves a container into the include family when a newer matching tag exists', () => {
+    const container = createContainer({
+      image: { tag: { value: 'v1.2.3', semver: true } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+
+    const result = getTagCandidates(container, ['1.2.2', '1.2.3', '1.2.4', '1.3.0'], log);
+
+    expect(result.tags[0]).toBe('1.3.0');
+    expect(result.tags).toEqual(['1.3.0', '1.2.4']);
+  });
+
+  test('does not offer a tag with the same numeric core as the current tag', () => {
+    const container = createContainer({
+      image: { tag: { value: 'v1.2.3', semver: true } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+
+    const result = getTagCandidates(container, ['1.2.3', '1.2.2'], log);
+
+    expect(result.tags).toEqual([]);
+  });
+
+  test('compares transformed values in recovery mode', () => {
+    const container = createContainer({
+      image: { tag: { value: 'v30.0.17', semver: true } },
+      includeTags: '^release-27\\.\\d+\\.\\d+$',
+      transformTags: '^(?:v|release-)(\\d+\\.\\d+\\.\\d+)$ => $1',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+
+    expect(getTagCandidates(container, ['release-27.1.11', 'release-29.0.0'], log).tags).toEqual(
+      [],
+    );
+    expect(getTagCandidates(container, ['release-27.1.11', 'release-31.0.0'], log).tags).toEqual(
+      [],
+    );
+
+    const upgradeContainer = createContainer({
+      image: { tag: { value: 'v30.0.17', semver: true } },
+      includeTags: '^release-\\d+\\.\\d+\\.\\d+$',
+      transformTags: '^(?:v|release-)(\\d+\\.\\d+\\.\\d+)$ => $1',
+      tagFamily: 'loose',
+    });
+    expect(
+      getTagCandidates(upgradeContainer, ['release-29.0.0', 'release-31.0.0'], log).tags,
+    ).toEqual(['release-31.0.0']);
+  });
+
+  test('offers nothing when the current tag has no numeric shape to compare', () => {
+    const container = createContainer({
+      image: { tag: { value: 'latest', semver: true } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+
+    expect(getTagCandidates(container, ['1.2.3'], log).tags).toEqual([]);
+  });
+
+  test('reports the greater counter as applied in recovery mode', () => {
+    const container = createContainer({
+      image: { tag: { value: 'v1.2.3', semver: true } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+
+    getTagCandidates(container, ['1.2.2', '1.2.4'], log);
+
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('greater=1'));
   });
 });
