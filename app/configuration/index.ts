@@ -13,6 +13,9 @@ const VAR_FILE_SUFFIX = '__FILE';
 const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
 const MAX_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
 const DEFAULT_TRIVY_MAX_OUTPUT_BYTES = 64 * 1024 * 1024; // 64 MB
+const MIN_GRYPE_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const MAX_GRYPE_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
+const DEFAULT_GRYPE_MAX_OUTPUT_BYTES = 128 * 1024 * 1024; // 128 MB
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
 const SECRET_FILE_READ_CHUNK_BYTES = 64 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -1262,6 +1265,12 @@ export function getSecurityConfiguration() {
       .object({
         command: joi.string().default('grype'),
         timeout: joi.number().integer().min(1000).default(600000),
+        maxoutputbytes: joi
+          .number()
+          .integer()
+          .min(MIN_GRYPE_MAX_OUTPUT_BYTES)
+          .max(MAX_GRYPE_MAX_OUTPUT_BYTES)
+          .default(DEFAULT_GRYPE_MAX_OUTPUT_BYTES),
         args: joi.string().allow('').default('[]'),
         worker: joi
           .object({
@@ -1405,6 +1414,7 @@ export function getSecurityConfiguration() {
       command: configuration.grype?.command || 'grype',
       commandExplicit: isCommandExplicit('grype'),
       timeout: configuration.grype?.timeout || 600000,
+      maxOutputBytes: configuration.grype?.maxoutputbytes || DEFAULT_GRYPE_MAX_OUTPUT_BYTES,
       extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
       workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
     },

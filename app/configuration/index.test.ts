@@ -905,6 +905,7 @@ describe('getSecurityConfiguration', () => {
         command: 'grype',
         commandExplicit: false,
         timeout: 600000,
+        maxOutputBytes: 134217728,
         extraArgs: [],
         workerImage:
           'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
@@ -1002,6 +1003,7 @@ describe('getSecurityConfiguration', () => {
         command: 'grype',
         commandExplicit: false,
         timeout: 600000,
+        maxOutputBytes: 134217728,
         extraArgs: [],
         workerImage:
           'ghcr.io/anchore/grype:v0.121.0@sha256:621d56d1d68106b787022c81546f7e0a36202a25d1239f0c20195fab8c16f7ea',
@@ -1213,6 +1215,34 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_MAXOUTPUTBYTES;
+  });
+
+  test.each([
+    ['below the 1 MB floor', '1048575'],
+    ['above the 1 GB ceiling', '1073741825'],
+    ['not an integer', '1048576.5'],
+    ['not a number', 'lots'],
+  ])('should throw when grype max output bytes is %s', (_label, value) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'grype';
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES = value;
+
+    expect(() => configuration.getSecurityConfiguration()).toThrow();
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES;
+  });
+
+  test.each([
+    ['1 MB floor', '1048576', 1048576],
+    ['1 GB ceiling', '1073741824', 1073741824],
+  ])('should accept the grype max output bytes %s', (_label, value, expected) => {
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = 'grype';
+    configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES = value;
+
+    expect(configuration.getSecurityConfiguration().grype.maxOutputBytes).toBe(expected);
+
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    delete configuration.ddEnvVars.DD_SECURITY_GRYPE_MAXOUTPUTBYTES;
   });
 
   test('should throw when trivy timeout is invalid', () => {

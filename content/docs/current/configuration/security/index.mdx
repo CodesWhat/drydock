@@ -51,6 +51,7 @@ services:
 | `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated). Set to `NONE` for advisory-only mode (scan without blocking updates) | `NONE`, or any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_GRYPE_COMMAND` | ⚪ | Grype command. Setting it makes `auto` run Grype locally even if the path does not resolve. | executable path | `grype` |
 | `DD_SECURITY_GRYPE_TIMEOUT` | ⚪ | Grype scan timeout in milliseconds | integer (`>=1000`) | `600000` |
+| `DD_SECURITY_GRYPE_MAXOUTPUTBYTES` | ⚪ | Largest Grype JSON output drydock will capture and parse, in bytes. Raise it if a scan fails with `Grype output exceeded N bytes` or `Grype output is too large to parse`; very large images produce tens of MB of JSON (`nextcloud:30` is about 60 MB). | integer (`1048576` to `1073741824`) | `134217728` |
 | `DD_SECURITY_GRYPE_ARGS` | ⚪ | Additional Grype arguments as a JSON string array. JSON/file output flags cannot be overridden. | JSON string array | `[]` |
 | `DD_SECURITY_GRYPE_WORKER_IMAGE` | ⚪ | Digest-pinned Grype worker used when Grype runs in a worker | OCI image pinned with `@sha256:` | release-pinned Grype image |
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode). Use with `DD_SECURITY_BACKEND=remote`. | URL | empty |
