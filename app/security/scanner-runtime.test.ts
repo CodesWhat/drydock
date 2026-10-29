@@ -588,3 +588,20 @@ test('default runtime gives scanner workers (not cosign) a scratch mount', () =>
   }
   expect(hardeningByCacheDir['volume:drydock-scanner-cosign']).toEqual({ networkMode: 'bridge' });
 });
+
+test('default runtime passes the configured worker memory limit to every worker backend', () => {
+  clearDefaultScannerRuntime();
+  mockGetSecurityConfiguration.mockReturnValue(
+    createConfiguration({
+      docker: { ...createConfiguration().docker, workerMemoryBytes: 1536 * 1024 * 1024 },
+    }),
+  );
+  mockCreateDockerScannerBackend.mockImplementation(() => createBackend());
+
+  getDefaultScannerRuntime();
+
+  expect(mockCreateDockerScannerBackend).toHaveBeenCalled();
+  for (const [options] of mockCreateDockerScannerBackend.mock.calls) {
+    expect(options.hardening.memoryBytes).toBe(1536 * 1024 * 1024);
+  }
+});

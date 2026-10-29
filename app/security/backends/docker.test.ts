@@ -10,6 +10,7 @@ type HarnessOptions = {
   stdout?: string;
   stderr?: string;
   wait?: () => Promise<{ StatusCode: number }>;
+  containerInspect?: () => Promise<unknown>;
 };
 
 function createHarness(options: HarnessOptions = {}) {
@@ -21,6 +22,7 @@ function createHarness(options: HarnessOptions = {}) {
     stop: vi.fn(async () => undefined),
     kill: vi.fn(async () => undefined),
     remove: vi.fn(async () => undefined),
+    inspect: vi.fn(options.containerInspect || (async () => ({ State: { OOMKilled: false } }))),
   };
   const createContainer = vi.fn(async () => container);
   const inspect = vi.fn(async () =>
@@ -750,6 +752,70 @@ describe('createDockerScannerBackend', () => {
     ).rejects.toThrow('exited with status 7: database unavailable');
 
     expect(container.remove).toHaveBeenCalledWith({ force: true, v: true });
+  });
+
+  describe('exit status 137', () => {
+    const run = (backend: ReturnType<typeof createHarness>['backend']) =>
+      backend.run({ image: PINNED_IMAGE, args: ['scan'], timeoutMs: 1_000, maxOutputBytes: 1_024 });
+
+    test('names an OOM kill and the setting when Docker confirms OOMKilled', async () => {
+      const { backend, container } = createHarness({
+        exitCode: 137,
+        containerInspect: async () => ({ State: { OOMKilled: true } }),
+      });
+
+      await expect(run(backend)).rejects.toThrow(
+        'Scanner worker was killed by the kernel for running out of memory (exit 137, OOMKilled) at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
+      );
+      expect(container.inspect.mock.invocationCallOrder[0]).toBeLessThan(
+        container.remove.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('says most likely when OOMKilled is false', async () => {
+      const { backend } = createHarness({ exitCode: 137 });
+
+      await expect(run(backend)).rejects.toThrow(
+        'Scanner worker was killed (exit 137), most likely out of memory at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY',
+      );
+    });
+
+    test('says most likely when inspect returns no state', async () => {
+      const { backend } = createHarness({ exitCode: 137, containerInspect: async () => ({}) });
+
+      await expect(run(backend)).rejects.toThrow('most likely out of memory');
+    });
+
+    test('says most likely when inspect fails and keeps stderr', async () => {
+      const { backend } = createHarness({
+        exitCode: 137,
+        stderr: 'Killed',
+        containerInspect: async () => {
+          throw new Error('no such container');
+        },
+      });
+
+      await expect(run(backend)).rejects.toThrow(
+        /most likely out of memory at the 512 MiB worker limit; raise DD_SECURITY_WORKER_MEMORY: Killed$/,
+      );
+    });
+
+    test('formats the configured limit readably', async () => {
+      const harness = createHarness({ exitCode: 137 });
+      const gib = createDockerScannerBackend({
+        client: harness.client,
+        cacheDir: '/var/lib/drydock/scanner-cache/trivy',
+        hardening: { memoryBytes: 2 * 1024 * 1024 * 1024 },
+      });
+      await expect(run(gib)).rejects.toThrow('at the 2 GiB worker limit');
+
+      const odd = createDockerScannerBackend({
+        client: harness.client,
+        cacheDir: '/var/lib/drydock/scanner-cache/trivy',
+        hardening: { memoryBytes: 10_000_001 },
+      });
+      await expect(run(odd)).rejects.toThrow('at the 10000001 B worker limit');
+    });
   });
 
   test('reports a nonzero exit without appending an empty stderr suffix', async () => {

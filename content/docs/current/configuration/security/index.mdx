@@ -47,6 +47,7 @@ services:
 | `DD_SECURITY_DOCKER_PROTOCOL` | ⚪ | Docker API protocol | `http`, `https` | `http` |
 | `DD_SECURITY_DOCKER_NETWORK` | ⚪ | Docker network joined by workers. Set this to the Compose network when a `remote` worker must resolve a Trivy service name. | Docker network name | `bridge` |
 | `DD_SECURITY_DOCKER_CACHE_VOLUME` | ⚪ | Named-volume prefix for daemon-side provider caches | safe Docker volume prefix | `drydock-scanner-cache` |
+| `DD_SECURITY_WORKER_MEMORY` | ⚪ | Memory limit for each scanner worker container. Raise it if scans fail with `Scanner worker was killed (exit 137)`, which usually means a large image ran Grype out of memory. | integer with optional `b`, `k`, `m` or `g` suffix (`512m`, `1g`, `1536m`), at least `6m` | `512m` |
 | `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated). Set to `NONE` for advisory-only mode (scan without blocking updates) | `NONE`, or any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_GRYPE_COMMAND` | ⚪ | Grype command. Setting it makes `auto` run Grype locally even if the path does not resolve. | executable path | `grype` |
 | `DD_SECURITY_GRYPE_TIMEOUT` | ⚪ | Grype scan timeout in milliseconds | integer (`>=1000`) | `600000` |
@@ -155,7 +156,7 @@ services:
 
 ## Advisory-Only Mode
 
-Set `DD_SECURITY_BLOCK_SEVERITY=NONE` to run vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log, but no update is ever rejected due to detected vulnerabilities.
+Set `DD_SECURITY_BLOCK_SEVERITY=NONE` to run vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log, but no update is ever rejected due to detected vulnerabilities. This setting only covers findings. A scan that errors instead of finishing follows `DD_SECURITY_AVAILABILITY_POLICY`, which defaults to `block`; set it to `warn` to let the update proceed.
 
 ```yaml
 services:

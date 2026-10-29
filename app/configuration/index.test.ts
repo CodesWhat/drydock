@@ -887,6 +887,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
+        workerMemoryBytes: 536870912,
       },
       blockSeverities: ['CRITICAL', 'HIGH'],
       trivy: {
@@ -983,6 +984,7 @@ describe('getSecurityConfiguration', () => {
         protocol: 'http',
         network: 'bridge',
         cacheVolumePrefix: 'drydock-scanner-cache',
+        workerMemoryBytes: 536870912,
       },
       blockSeverities: ['CRITICAL', 'MEDIUM'],
       trivy: {
@@ -1149,6 +1151,40 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test.each([
+    ['plain bytes', '1073741824', 1073741824],
+    ['bytes suffix', '8388608b', 8388608],
+    ['kilobytes', '8192k', 8388608],
+    ['megabytes', '1536m', 1610612736],
+    ['gigabytes', '1g', 1073741824],
+    ['uppercase and padding', ' 2G ', 2147483648],
+    ['the 6 MiB minimum', '6m', 6291456],
+  ])('should accept a worker memory of %s', (_label, value, expected) => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = value;
+    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(expected);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
+  });
+
+  test('should use the 512 MiB default when worker memory is empty', () => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = '';
+    expect(configuration.getSecurityConfiguration().docker.workerMemoryBytes).toBe(536870912);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
+  });
+
+  test.each([
+    ['garbage', 'lots'],
+    ['zero', '0'],
+    ['negative', '-1g'],
+    ['decimal', '1.5g'],
+    ['unknown unit', '1t'],
+    ['below the Docker minimum', '5m'],
+    ['too large to represent', '99999999999999999999'],
+  ])('should throw when worker memory is %s', (_label, value) => {
+    configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY = value;
+    expect(() => configuration.getSecurityConfiguration()).toThrow(/DD_SECURITY_WORKER_MEMORY/);
+    delete configuration.ddEnvVars.DD_SECURITY_WORKER_MEMORY;
   });
 
   test.each([
