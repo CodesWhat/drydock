@@ -815,6 +815,13 @@ describe('createDockerScannerBackend', () => {
         hardening: { memoryBytes: 10_000_001 },
       });
       await expect(run(odd)).rejects.toThrow('at the 10000001 B worker limit');
+
+      const mib = createDockerScannerBackend({
+        client: harness.client,
+        cacheDir: '/var/lib/drydock/scanner-cache/trivy',
+        hardening: { memoryBytes: 768 * 1024 * 1024 },
+      });
+      await expect(run(mib)).rejects.toThrow('at the 768 MiB worker limit');
     });
   });
 
