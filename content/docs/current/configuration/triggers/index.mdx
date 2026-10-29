@@ -281,7 +281,7 @@ Overrides are keyed by canonical trigger ID, so the same event can use different
 Beyond the classic `update-available` event, triggers can fire on additional events:
 
 - **`update-applied`** -- fires after a container is successfully updated by a Docker or Docker Compose trigger. Useful for audit or confirmation notifications.
-- **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message.
+- **`update-failed`** -- fires when an update fails or is rolled back. Carries the container name and error message. Drydock's own self-updates send `update-applied` and `update-failed` too: the new instance announces the result once it finalizes the update, and `event.selfUpdate` is `true` so templates can word it differently.
 - **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
 - **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
 - **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
@@ -433,6 +433,7 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `isDigestUpdate` | Whether this update is digest-only rather than a tag change | `false` |
 | `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `update-pending-approval`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
 | `event.error` | Error message (`event.kind` = `update-failed`) | `Pull failed: 401 Unauthorized` |
+| `event.selfUpdate` | `true` when an `update-applied` or `update-failed` event reports an update of Drydock itself; unset otherwise | `true` |
 | `event.details`, `event.status`, `event.blockingCount` | Alert details, status, and blocking-finding count (`event.kind` = `security-alert`) | `12` |
 | `event.previousHealth` | Health status before the container went unhealthy (`event.kind` = `container-unhealthy`) | `healthy` |
 | `event.minAgeDays`, `event.pendingSince` | Configured maturity window and when the gate started waiting (`event.kind` = `maturity-cleared`) | `7` |

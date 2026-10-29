@@ -20,6 +20,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Self-updates of Drydock now send `update-applied` and `update-failed` notifications ([#1501](https://github.com/CodesWhat/drydock/issues/1501)). The instance that finalizes the update announces it once, through the normal notification rules and templates, with `event.selfUpdate` set to `true`.
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
 - The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.
 
