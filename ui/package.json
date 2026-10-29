@@ -33,7 +33,7 @@
     "tailwindcss": "4.3.3",
     "vue": "3.5.43",
     "vue-draggable-plus": "0.6.1",
-    "vue-i18n": "11.4.12",
+    "vue-i18n": "11.4.16",
     "vue-router": "5.3.1"
   },
   "devDependencies": {
@@ -72,7 +72,7 @@
     "minimatch": "10.2.6",
     "picomatch": "4.0.7",
     "postcss": "8.5.28",
-    "qs": "6.16.0",
+    "qs": "6.16.1",
     "yaml": "2.9.1",
     "@babel/core": "7.29.7",
     "undici": "7.30.1",

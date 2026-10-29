@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- `vue-i18n` is now 11.4.16, which fixes CVE-2026-118257 (high) and CVE-2026-118256 in `vue-i18n` and `@intlify`. `qs` is now 6.16.1 for CVE-2026-110816 and `re2js` 2.8.7 for CVE-2026-116795, which drydock could not reach because it never enables lookbehinds. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release and only runs at UI build time, so it is triaged with a recheck date.
+
 ## [1.7.1-rc.2] — 2026-10-26
 
 This is the second release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.1 changes and pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high), along with the npm advisory updates below.
