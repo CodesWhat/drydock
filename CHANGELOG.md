@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
+
 ## [1.7.1-rc.2] — 2026-10-26
 
 This is the second release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.1 changes and pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high), along with the npm advisory updates below.
