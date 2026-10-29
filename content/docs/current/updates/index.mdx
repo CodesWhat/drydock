@@ -5,6 +5,17 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.9 Highlights - October 29, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Include filters no longer offer downgrades.** A container whose tag sits outside `dd.tag.include` only gets newer matching tags (#1499).
+- **Pending approvals stay queued** when a registry hiccup flips the candidate between digest and tag (#1500).
+- **Self-updates send update-applied and update-failed notifications** (#1501).
+- **Locally built images are recognised under the containerd image store** and skip registry lookups (#1506).
+- **Grype scans get 1 GiB by default**, configurable with `DD_SECURITY_WORKER_MEMORY`, and an out-of-memory kill now says so (#1281).
+- RC9 includes every rc.8 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.8 Highlights - October 26, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

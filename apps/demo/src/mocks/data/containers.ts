@@ -36,6 +36,7 @@ function c(opts: {
   updateScanSummary?: Record<string, number>;
   updateDetectedAt?: string;
   group: string;
+  agent?: string;
   ports?: string[];
   volumes?: string[];
   env?: { key: string; value: string; sensitive?: boolean }[];
@@ -47,7 +48,8 @@ function c(opts: {
     displayName: opts.displayName,
     displayIcon: opts.displayIcon,
     status: opts.status ?? 'running',
-    watcher: 'local',
+    watcher: opts.agent ? 'remote' : 'local',
+    ...(opts.agent ? { agent: opts.agent } : {}),
     image: {
       name: opts.image,
       registry: { name: opts.registryType, url: opts.registryUrl ?? '' },
@@ -183,6 +185,7 @@ export const containers = [
   c({
     id: 'e5f6a7b8c9d0',
     name: 'node-exporter',
+    agent: 'nas-agent',
     displayName: 'Node Exporter',
     displayIcon: 'sh-prometheus',
     image: 'prom/node-exporter',
@@ -313,6 +316,7 @@ export const containers = [
   c({
     id: 'a3b4c5d6e7f8',
     name: 'adguard',
+    agent: 'nas-agent',
     displayName: 'AdGuard Home',
     displayIcon: 'sh-adguard-home',
     image: 'adguardteam/adguardhome',
@@ -330,7 +334,7 @@ export const containers = [
     displayName: 'Drydock',
     displayIcon: 'sh-drydock',
     image: 'codeswhat/drydock',
-    tag: '1.8.0-rc.8',
+    tag: '1.8.0-rc.9',
     registryType: 'ghcr',
     registryUrl: 'https://ghcr.io',
     scanStatus: 'scanned',
@@ -348,6 +352,7 @@ export const containers = [
     ...c({
       id: 'c5d6e7f8a9b0',
       name: 'portainer',
+      agent: 'nas-agent',
       displayName: 'Portainer',
       displayIcon: 'sh-portainer',
       image: 'portainer/portainer-ce',

@@ -149,6 +149,7 @@ vi.mock('../../../store/update-operation.js', () => ({
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
   getOperationById: (...args: any[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
+  emitSelfUpdateTerminalLifecycleEvent: vi.fn(),
   getInProgressOperationByContainerIdentity: (...args: any[]) =>
     mockGetInProgressOperationByContainerIdentity(...args),
   getInProgressOperationByContainerId: (...args: any[]) =>

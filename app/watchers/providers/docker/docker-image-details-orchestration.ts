@@ -37,6 +37,7 @@ import {
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
+import { isLocallyBuiltImage } from './docker-image-origin.js';
 import { normalizeContainer } from './image-comparison.js';
 import {
   areRuntimeDetailsEqual,
@@ -200,6 +201,8 @@ interface DockerImageDetailsWatcher {
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
     getImage: (imageId: string) => { inspect: () => Promise<DockerImageInspectPayload> };
+    version?: () => Promise<unknown>;
+    modem?: { version?: string };
   };
   log: {
     warn: (message: string) => void;
@@ -386,7 +389,11 @@ async function refreshStoredContainerImageFields(
     // Keep isLocalImage in sync with the live Docker image inspect every
     // cycle — independent of shouldRepairStoredImageReference below, and
     // spread forward by the repair branch's `...containerInStore.image`.
-    containerInStore.image.isLocalImage = freshDigestRepo === undefined;
+    containerInStore.image.isLocalImage = await isLocallyBuiltImage(
+      watcher.dockerApi,
+      currentImage,
+      freshDigestRepo !== undefined,
+    );
     // Re-derive the full ordered candidate list every cycle (not just when
     // digest.repo/image id changed) so a store poisoned with a stale/wrong
     // digest.repo self-heals: handleDigestWatch (image-comparison.ts) anchors
@@ -1056,6 +1063,11 @@ export async function buildDiscoveredContainer(
   );
   warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
   warnTriggerCategoryScopeChangeIfNeeded(dockerContainerName, resolvedConfig);
+  const isLocalImage = await isLocallyBuiltImage(
+    watcher.dockerApi,
+    image,
+    repoDigest !== undefined,
+  );
 
   const containerToReturn = helpers.normalizeContainer({
     id: containerId,
@@ -1106,10 +1118,11 @@ export async function buildDiscoveredContainer(
         repoDigests,
         value: repoDigest,
       },
-      // True when the live image inspect had no RepoDigests (built locally or
-      // `docker load`ed) — lets findNewVersion skip a registry lookup that
-      // would otherwise 401/404 and get counted as a watch error.
-      isLocalImage: repoDigest === undefined,
+      // True when the image was built or `docker load`ed locally (no
+      // RepoDigests, or no pull Identity under the containerd store) — lets
+      // findNewVersion skip a registry lookup that would otherwise 401/404
+      // and get counted as a watch error.
+      isLocalImage,
       architecture: image.Architecture,
       os: image.Os,
       variant: image.Variant,

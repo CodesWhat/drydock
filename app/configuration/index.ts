@@ -13,6 +13,9 @@ const VAR_FILE_SUFFIX = '__FILE';
 const MIN_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
 const MAX_TRIVY_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
 const DEFAULT_TRIVY_MAX_OUTPUT_BYTES = 64 * 1024 * 1024; // 64 MB
+const MIN_GRYPE_MAX_OUTPUT_BYTES = 1024 * 1024; // 1 MB
+const MAX_GRYPE_MAX_OUTPUT_BYTES = 1024 * 1024 * 1024; // 1 GB
+const DEFAULT_GRYPE_MAX_OUTPUT_BYTES = 128 * 1024 * 1024; // 128 MB
 const MAX_SECRET_FILE_SIZE_BYTES = 1024 * 1024;
 const SECRET_FILE_READ_CHUNK_BYTES = 64 * 1024;
 export const SECURITY_SEVERITY_VALUES = ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
@@ -20,6 +23,10 @@ export const SECURITY_SBOM_FORMAT_VALUES = ['spdx-json', 'cyclonedx-json'] as co
 const SERVER_COOKIE_SAMESITE_VALUES = ['strict', 'lax', 'none'] as const;
 const DEFAULT_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
 const DEFAULT_SECURITY_SBOM_FORMATS = 'spdx-json';
+const DEFAULT_SECURITY_WORKER_MEMORY_BYTES = 1024 * 1024 * 1024;
+// Docker rejects container memory limits below 6 MiB.
+const MIN_SECURITY_WORKER_MEMORY_BYTES = 6 * 1024 * 1024;
+const SECURITY_WORKER_MEMORY_UNITS = { b: 1, k: 1024, m: 1024 ** 2, g: 1024 ** 3 } as const;
 // Scanner worker pins (tag plus index digest). Renovate bumps these constants through the
 // regex manager in renovate.json, so keep the `const DEFAULT_<NAME>_WORKER_IMAGE = '<image>:<tag>@sha256:<digest>'` shape.
 const DEFAULT_TRIVY_WORKER_IMAGE =
@@ -1174,6 +1181,28 @@ function validateCosignKeyPath(rawKeyPath: string): string {
   return resolvedKeyPath;
 }
 
+/**
+ * Parse DD_SECURITY_WORKER_MEMORY: an integer with an optional b/k/m/g suffix (case-insensitive).
+ * Empty means the default.
+ */
+function parseSecurityWorkerMemory(value: string): number {
+  const trimmed = value.trim().toLowerCase();
+  if (trimmed === '') {
+    return DEFAULT_SECURITY_WORKER_MEMORY_BYTES;
+  }
+  const match = /^(\d+)([bkmg]?)$/.exec(trimmed);
+  const bytes = match
+    ? Number(match[1]) *
+      SECURITY_WORKER_MEMORY_UNITS[(match[2] || 'b') as keyof typeof SECURITY_WORKER_MEMORY_UNITS]
+    : Number.NaN;
+  if (!Number.isSafeInteger(bytes) || bytes < MIN_SECURITY_WORKER_MEMORY_BYTES) {
+    throw new Error(
+      `Invalid DD_SECURITY_WORKER_MEMORY value: ${trimmed}. Use an integer with an optional b, k, m or g suffix (for example 1g or 1536m) of at least 6m.`,
+    );
+  }
+  return bytes;
+}
+
 export function getSecurityConfiguration() {
   const configurationFromEnv = get('dd.security', ddEnvVars);
   const configurationSchema = joi.object().keys({
@@ -1196,6 +1225,11 @@ export function getSecurityConfiguration() {
         protocol: joi.string().valid('http', 'https').default('http'),
         network: joi.string().default('bridge'),
         cache: joi.object({ volume: joi.string().default('drydock-scanner-cache') }).default({}),
+      })
+      .default({}),
+    worker: joi
+      .object({
+        memory: joi.string().allow('').default(''),
       })
       .default({}),
     block: joi
@@ -1231,6 +1265,12 @@ export function getSecurityConfiguration() {
       .object({
         command: joi.string().default('grype'),
         timeout: joi.number().integer().min(1000).default(600000),
+        maxoutputbytes: joi
+          .number()
+          .integer()
+          .min(MIN_GRYPE_MAX_OUTPUT_BYTES)
+          .max(MAX_GRYPE_MAX_OUTPUT_BYTES)
+          .default(DEFAULT_GRYPE_MAX_OUTPUT_BYTES),
         args: joi.string().allow('').default('[]'),
         worker: joi
           .object({
@@ -1328,6 +1368,7 @@ export function getSecurityConfiguration() {
   }
   const blockSeverities = parseSecuritySeverityList(configuration.block?.severity);
   const sbomFormats = parseSecuritySbomFormatList(configuration.sbom?.formats);
+  const workerMemoryBytes = parseSecurityWorkerMemory(configuration.worker?.memory ?? '');
   const cosignKey = validateCosignKeyPath(configuration.cosign?.key || '');
   // `auto` backend treats an explicitly set DD_SECURITY_<PROVIDER>_COMMAND as a request for the
   // local command even when it does not resolve, so a typo fails loudly instead of silently
@@ -1356,6 +1397,7 @@ export function getSecurityConfiguration() {
       protocol: (configuration.docker?.protocol || 'http') as 'http' | 'https',
       network: configuration.docker?.network || 'bridge',
       cacheVolumePrefix: configuration.docker?.cache?.volume || 'drydock-scanner-cache',
+      workerMemoryBytes,
     },
     blockSeverities,
     trivy: {
@@ -1372,6 +1414,7 @@ export function getSecurityConfiguration() {
       command: configuration.grype?.command || 'grype',
       commandExplicit: isCommandExplicit('grype'),
       timeout: configuration.grype?.timeout || 600000,
+      maxOutputBytes: configuration.grype?.maxoutputbytes || DEFAULT_GRYPE_MAX_OUTPUT_BYTES,
       extraArgs: parseSecurityExtraArgs(configuration.grype?.args, 'DD_SECURITY_GRYPE_ARGS'),
       workerImage: configuration.grype?.worker?.image || DEFAULT_GRYPE_WORKER_IMAGE,
     },

@@ -231,6 +231,100 @@ describe('update operation lifecycle events', () => {
     expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
   });
 
+  describe('emitSelfUpdateTerminalLifecycleEvent (#1501)', () => {
+    function insertSelfUpdate(id: string) {
+      return updateOperation.insertOperation({
+        id,
+        kind: 'self-update',
+        containerId: 'drydock-id',
+        containerName: 'drydock',
+        status: 'in-progress',
+        phase: 'prepare',
+        fromVersion: '1.8.0-rc.7',
+        toVersion: '1.8.0-rc.8',
+      });
+    }
+
+    test('emits update-applied flagged as a self-update for a succeeded operation', async () => {
+      const inserted = insertSelfUpdate('self-ok');
+      const terminal = updateOperation.markOperationTerminal(inserted.id, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      await flushAsyncLifecycleEvents();
+      expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+
+      updateOperation.emitSelfUpdateTerminalLifecycleEvent(terminal!);
+      await flushAsyncLifecycleEvents();
+
+      expect(mockEmitContainerUpdateApplied).toHaveBeenCalledTimes(1);
+      expect(mockEmitContainerUpdateApplied).toHaveBeenCalledWith({
+        operationId: 'self-ok',
+        containerId: 'drydock-id',
+        containerName: 'drydock',
+        selfUpdate: true,
+      });
+      expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
+    });
+
+    test.each(['failed', 'rolled-back'] as const)(
+      'emits update-failed flagged as a self-update for a %s operation',
+      async (status) => {
+        const inserted = insertSelfUpdate(`self-${status}`);
+        const terminal = updateOperation.markOperationTerminal(inserted.id, {
+          status,
+          phase: status,
+          lastError: 'health gate failed',
+        });
+
+        updateOperation.emitSelfUpdateTerminalLifecycleEvent(terminal!);
+        await flushAsyncLifecycleEvents();
+
+        expect(mockEmitContainerUpdateFailed).toHaveBeenCalledTimes(1);
+        expect(mockEmitContainerUpdateFailed).toHaveBeenCalledWith(
+          expect.objectContaining({
+            operationId: `self-${status}`,
+            containerName: 'drydock',
+            error: 'health gate failed',
+            phase: status,
+            selfUpdate: true,
+          }),
+        );
+        expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+      },
+    );
+
+    test('emits nothing for an expired self-update', async () => {
+      const inserted = insertSelfUpdate('self-expired');
+      const terminal = updateOperation.markOperationTerminal(inserted.id, { status: 'expired' });
+
+      updateOperation.emitSelfUpdateTerminalLifecycleEvent(terminal!);
+      await flushAsyncLifecycleEvents();
+
+      expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+      expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
+    });
+
+    test('ignores operations that are not self-updates', async () => {
+      const inserted = updateOperation.insertOperation({
+        id: 'regular-op',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      const terminal = updateOperation.markOperationTerminal(inserted.id, {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      mockEmitContainerUpdateApplied.mockClear();
+
+      updateOperation.emitSelfUpdateTerminalLifecycleEvent(terminal!);
+      await flushAsyncLifecycleEvents();
+
+      expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+    });
+  });
+
   test('markOperationTerminal emits no lifecycle events when terminalised as expired (issue #410)', async () => {
     // The TTL-sweep and startup-orphan paths set status:'expired'. This must
     // never emit update-applied or update-failed — emitting update-failed would

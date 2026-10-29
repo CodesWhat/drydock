@@ -2,7 +2,7 @@ import { isAbsolute } from 'node:path';
 import { Writable } from 'node:stream';
 import { getAbortReason } from '../abort.js';
 
-const DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024;
+const DEFAULT_MEMORY_BYTES = 1024 * 1024 * 1024;
 const DEFAULT_PIDS_LIMIT = 64;
 const DEFAULT_TMPFS_SIZE_BYTES = 64 * 1024 * 1024;
 const DEFAULT_CACHE_TARGET = '/cache';
@@ -77,6 +77,7 @@ interface DockerScannerContainer {
   stop: (options: { t: number }) => Promise<unknown>;
   kill: () => Promise<unknown>;
   remove: (options: { force: boolean; v?: boolean }) => Promise<unknown>;
+  inspect: () => Promise<{ State?: { OOMKilled?: boolean } }>;
 }
 
 interface DockerScannerClient {
@@ -124,6 +125,43 @@ function assertPositiveInteger(value: number, name: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`${name} must be a positive integer`);
   }
+}
+
+function formatMemoryLimit(bytes: number): string {
+  const gib = 1024 * 1024 * 1024;
+  const mib = 1024 * 1024;
+  if (bytes % gib === 0) {
+    return `${bytes / gib} GiB`;
+  }
+  if (bytes % mib === 0) {
+    return `${bytes / mib} MiB`;
+  }
+  return `${bytes} B`;
+}
+
+async function wasOomKilled(container: DockerScannerContainer): Promise<boolean> {
+  try {
+    return (await container.inspect()).State?.OOMKilled === true;
+  } catch {
+    return false;
+  }
+}
+
+function buildNonZeroExitMessage(
+  exitCode: number,
+  stderr: string,
+  oomKilled: boolean,
+  memoryBytes: number,
+): string {
+  const suffix = stderr ? `: ${stderr.trim()}` : '';
+  const limit = formatMemoryLimit(memoryBytes);
+  if (exitCode === 137) {
+    const cause = oomKilled
+      ? `was killed by the kernel for running out of memory (exit 137, OOMKilled) at the ${limit} worker limit`
+      : `was killed (exit 137), most likely out of memory at the ${limit} worker limit`;
+    return `Scanner worker ${cause}; raise DD_SECURITY_WORKER_MEMORY${suffix}`;
+  }
+  return `Scanner worker exited with status ${exitCode}${suffix}`;
 }
 
 function assertAbsoluteContainerPath(value: string, name: string): void {
@@ -585,8 +623,10 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       const stdout = collectors.stdoutText();
       const stderr = collectors.stderrText();
       if (exitCode !== 0) {
+        // Inspect before the finally block removes the container, so OOMKilled is still readable.
+        const oomKilled = exitCode === 137 && (await wasOomKilled(container));
         throw new Error(
-          `Scanner worker exited with status ${exitCode}${stderr ? `: ${stderr.trim()}` : ''}`,
+          buildNonZeroExitMessage(exitCode, stderr, oomKilled, hardening.memoryBytes),
         );
       }
       return { exitCode, stdout, stderr } as DockerScannerRunResult;

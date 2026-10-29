@@ -327,6 +327,37 @@ export function findApprovalByContainerAndCandidate(
 }
 
 /**
+ * Return a system-resolved row to the queue as a fresh pending row. The `(containerId,
+ * candidateRef)` pair is unique, so a candidate whose earlier row was resolved by the
+ * system (superseded, withdrawn, auto-applied, container removed) can only come back by
+ * reopening that row. A row an operator decided on (approved or rejected) is never
+ * reopened: that answer stands for the exact candidate.
+ *
+ * Every decision field is cleared, and `createdAt` restarts so time-in-queue is real.
+ * @param id
+ * @param options
+ */
+export function reopenApproval(
+  id: string,
+  options: { now?: number } = {},
+): ApprovalRecord | undefined {
+  if (!db) {
+    return undefined;
+  }
+  const createdAtMs = options.now ?? Date.now();
+  const result = db
+    .prepare(
+      `UPDATE approvals
+          SET decision = 'pending', decided_at = NULL, decided_by = NULL, decision_note = NULL,
+              deferred_until = NULL, operation_id = NULL, outcome = NULL,
+              resolved_at = NULL, resolution = NULL, created_at = ?, created_at_ms = ?
+        WHERE id = ? AND resolved_at IS NOT NULL AND decision IN ('pending', 'deferred')`,
+    )
+    .run(new Date(createdAtMs).toISOString(), createdAtMs, id);
+  return result.changes > 0 ? getApprovalById(id) : undefined;
+}
+
+/**
  * Look a row up by the update operation an approval was dispatched as. Used by the
  * reconciler to stamp the operation's outcome back onto the row that started it.
  * @param operationId

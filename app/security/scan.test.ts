@@ -122,6 +122,7 @@ function createEnabledConfiguration() {
       command: 'grype',
       commandExplicit: true,
       timeout: 120000,
+      maxOutputBytes: 128 * 1024 * 1024,
       workerImage: 'anchore/grype@sha256:test',
     },
     signature: {
@@ -1311,7 +1312,7 @@ test('Trivy command max-buffer overflow should name the variable to raise', asyn
   expect(result.error).toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
 });
 
-test('Grype max-buffer overflow should keep the generic command error', async () => {
+test('Grype max-buffer overflow should name the variable to raise', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
     scanner: 'grype',
@@ -1326,8 +1327,42 @@ test('Grype max-buffer overflow should keep the generic command error', async ()
   const result = await scanImageForVulnerabilities({ image: 'img:test' });
 
   expect(result.status).toBe('error');
-  expect(result.error).toContain('stdout maxBuffer length exceeded');
-  expect(result.error).not.toContain('DD_SECURITY_TRIVY_MAXOUTPUTBYTES');
+  expect(result.error).toContain('Grype output exceeded 134217728 bytes');
+  expect(result.error).toContain('DD_SECURITY_GRYPE_MAXOUTPUTBYTES');
+});
+
+test('Grype docker worker output overflow should name the variable to raise', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+  });
+  mockDockerRuntime.assets.get.mockReturnValue({ state: 'ready' });
+  mockDockerRuntime.run.mockRejectedValueOnce(
+    new Error('Scanner worker output exceeded 134217728 bytes'),
+  );
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Grype output exceeded 134217728 bytes');
+  expect(result.error).toContain('DD_SECURITY_GRYPE_MAXOUTPUTBYTES');
+});
+
+test('Grype docker worker errors other than output overflow should pass through', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'grype',
+    backend: 'docker',
+  });
+  mockDockerRuntime.assets.get.mockReturnValue({ state: 'ready' });
+  mockDockerRuntime.run.mockRejectedValueOnce(new Error('worker exploded'));
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('worker exploded');
+  expect(result.error).not.toContain('DD_SECURITY_GRYPE_MAXOUTPUTBYTES');
 });
 
 test('Trivy docker worker output overflow should name the variable to raise', async () => {
@@ -1941,6 +1976,7 @@ test('Docker backend warms missing Grype assets and runs Grype without a local c
   expect(mockDockerRuntime.run).toHaveBeenCalledWith(
     expect.objectContaining({
       provider: 'grype',
+      maxOutputBytes: 128 * 1024 * 1024,
       args: expect.arrayContaining(['registry:registry.example/app:1']),
     }),
   );

@@ -6,7 +6,7 @@ description: "Deploy Drydock with Docker using a socket proxy or direct mount."
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-<Callout type="warn">**v1.8.0-rc.8 is an opt-in test build.** These versioned examples pin that RC. For production, use the latest stable release (v1.7.0) and its [v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
+<Callout type="warn">**v1.8.0-rc.9 is an opt-in test build.** These versioned examples pin that RC. For production, use the latest stable release (v1.7.0) and its [v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
 
 ## Run the Docker image
 
@@ -21,7 +21,7 @@ Using a socket proxy is the most secure way to expose the Docker API. The proxy 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.8
+    image: codeswhat/drydock:1.8.0-rc.9
     container_name: drydock
     depends_on:
       socket-proxy:
@@ -72,7 +72,7 @@ The simplest setup — mount the Docker socket directly. Works out of the box on
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.8
+    image: codeswhat/drydock:1.8.0-rc.9
     container_name: drydock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
@@ -98,7 +98,7 @@ docker run -d --name drydock \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
   -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \
   -p 3000:3000 \
-  codeswhat/drydock:1.8.0-rc.8
+  codeswhat/drydock:1.8.0-rc.9
 ```
 
 </Tab>
@@ -110,7 +110,7 @@ Release tags use the same channel names in every registry:
 
 | Tag | Behavior |
 | --- | --- |
-| `1.8.0-rc.8` | Immutable release candidate; best for reproducible testing |
+| `1.8.0-rc.9` | Immutable release candidate; best for reproducible testing |
 | `1.8-rc` | Rolling release-candidate channel; moves to the newest `1.8.0-rc.N` |
 | `1.7.0-rc.24` | Final 1.7 candidate, promoted to the 1.7.0 GA on 2026-10-19 |
 | `1.7-rc` | Separate rolling 1.7 candidate channel |
