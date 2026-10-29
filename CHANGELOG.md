@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.3] — 2026-10-29
+
+This is the third release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.2 changes, the vue-i18n fix for CVE-2026-118257 (high), and backports of the #1499 and #1506 fixes.
+
 ### Security
 
 - `vue-i18n` is now 11.4.16, which fixes CVE-2026-118257 (high) and CVE-2026-118256 in `vue-i18n` and `@intlify`. `qs` is now 6.16.1 for CVE-2026-110816 and `re2js` 2.8.7 for CVE-2026-116795, which drydock could not reach because it never enables lookbehinds. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release and only runs at UI build time, so it is triaged with a recheck date.
@@ -2973,7 +2977,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...HEAD
+[1.7.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...v1.7.1-rc.3
 [1.7.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...v1.7.1-rc.2
 [1.7.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1-rc.1
 [1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0

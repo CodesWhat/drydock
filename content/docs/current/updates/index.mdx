@@ -5,6 +5,19 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1-rc.3 Highlights — October 29, 2026
+
+The third release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- `vue-i18n` 11.4.16 fixes CVE-2026-118257 (high) and CVE-2026-118256. `v1.7.0` and the earlier 1.7.1 candidates ship 11.4.12. `qs` and `re2js` advisory updates are included.
+- A container whose tag sits outside `dd.tag.include` is no longer offered older matching tags as updates (#1499).
+- Locally built images are recognised as local under Docker's containerd image store and skip registry lookups (#1506).
+- It includes everything in rc.2, starts its own soak when published, and `v1.7.0` remains the latest stable release.
+
+See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.3/CHANGELOG.md#171-rc3--2026-10-29)
+for the full release notes.
+
 ## v1.7.1-rc.2 Highlights — October 26, 2026
 
 The second release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
