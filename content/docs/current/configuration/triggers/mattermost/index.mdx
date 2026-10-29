@@ -31,7 +31,7 @@ The `mattermost` trigger posts container update notifications to a Mattermost in
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.8
+    image: codeswhat/drydock:1.8.0-rc.9
     ...
     environment:
       - DD_NOTIFICATION_MATTERMOST_LOCAL_URL=https://mattermost.example.com/hooks/abc123
@@ -47,7 +47,7 @@ docker run \
   -e DD_NOTIFICATION_MATTERMOST_LOCAL_CHANNEL="town-square" \
   -e DD_NOTIFICATION_MATTERMOST_LOCAL_USERNAME="drydock" \
   ...
-  codeswhat/drydock:1.8.0-rc.8
+  codeswhat/drydock:1.8.0-rc.9
 ```
 </Tab>
 </Tabs>
