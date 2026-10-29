@@ -1,7 +1,7 @@
 import { hasValidCommandPath } from '../runtime.js';
 import type { ContainerVulnerability } from '../scan.js';
 
-export const GRYPE_MAX_OUTPUT_ENV_VAR = 'DD_SECURITY_GRYPE_MAXOUTPUTBYTES';
+const GRYPE_MAX_OUTPUT_ENV_VAR = 'DD_SECURITY_GRYPE_MAXOUTPUTBYTES';
 
 export function buildGrypeOutputLimitMessage(maxOutputBytes: number): string {
   return `Grype output exceeded ${maxOutputBytes} bytes; raise ${GRYPE_MAX_OUTPUT_ENV_VAR} to scan this image`;
