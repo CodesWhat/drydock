@@ -21,8 +21,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - Self-updates of Drydock now send `update-applied` and `update-failed` notifications ([#1501](https://github.com/CodesWhat/drydock/issues/1501)). The instance that finalizes the update announces it once, through the normal notification rules and templates, with `event.selfUpdate` set to `true`.
+- A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
 - The demo site now serves the remaining settings, container action, preferences, API key and TOTP routes, so those pages load instead of erroring on unmocked requests.
 - The demo site's agent roster, host container counts, rollback and update history panels and audit page now show their sample data, and the log pages no longer fail their WebSocket connection.
+- A pending update no longer drops out of the approval queue when its candidate ref flips between digest and tag, for example when a registry 429 hides the digest for one watch cycle. The same tag update stays one open row, and a row the system resolved earlier is reopened instead of blocking the candidate forever ([#1500](https://github.com/CodesWhat/drydock/issues/1500)).
 
 ## [1.8.0-rc.8] - 2026-10-26
 

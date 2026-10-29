@@ -197,6 +197,62 @@ describe('findApprovalByContainerAndCandidate', () => {
   });
 });
 
+describe('reopenApproval', () => {
+  test('returns a system-resolved row to a fresh pending state', () => {
+    const inserted = approvalStore.insertApproval(createInput(), { now: 1000 });
+    approvalStore.updateApproval(inserted.id, {
+      decision: 'deferred',
+      deferredUntil: '2999-01-01T00:00:00.000Z',
+      decisionNote: 'later',
+      resolution: 'superseded',
+      resolvedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const reopened = approvalStore.reopenApproval(inserted.id, { now: 5000 });
+
+    expect(reopened).toMatchObject({ id: inserted.id, decision: 'pending', createdAtMs: 5000 });
+    expect(reopened?.resolution).toBeUndefined();
+    expect(reopened?.resolvedAt).toBeUndefined();
+    expect(reopened?.deferredUntil).toBeUndefined();
+    expect(reopened?.decisionNote).toBeUndefined();
+  });
+
+  test('defaults the queue time to now', () => {
+    const inserted = approvalStore.insertApproval(createInput(), { now: 1000 });
+    approvalStore.updateApproval(inserted.id, {
+      resolution: 'superseded',
+      resolvedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(approvalStore.reopenApproval(inserted.id)?.createdAtMs).toBeGreaterThan(1000);
+  });
+
+  test('leaves an unresolved row alone', () => {
+    const inserted = approvalStore.insertApproval(createInput(), { now: 1000 });
+
+    expect(approvalStore.reopenApproval(inserted.id, { now: 5000 })).toBeUndefined();
+    expect(approvalStore.getApprovalById(inserted.id)?.createdAtMs).toBe(1000);
+  });
+
+  test('leaves an operator decision alone even when it was also resolved', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, {
+      decision: 'rejected',
+      resolution: 'superseded',
+      resolvedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(approvalStore.reopenApproval(inserted.id)).toBeUndefined();
+    expect(approvalStore.getApprovalById(inserted.id)?.decision).toBe('rejected');
+  });
+
+  test('returns undefined for an unknown id and for an uncreated store', () => {
+    expect(approvalStore.reopenApproval('missing')).toBeUndefined();
+    approvalStore.resetApprovalStoreForTests();
+    expect(approvalStore.reopenApproval('missing')).toBeUndefined();
+  });
+});
+
 describe('findApprovalByOperationId', () => {
   test('returns the row carrying that operation id', () => {
     const inserted = approvalStore.insertApproval(createInput());
