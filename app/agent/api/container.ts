@@ -125,7 +125,7 @@ export async function getContainerEnv(req: Request, res: Response) {
   }
 
   try {
-    const inspect = await watcher.dockerApi.getContainer(container.name).inspect();
+    const inspect = await watcher.dockerApi.getContainer(container.id).inspect();
     res.status(200).json({ env: formatContainerEnv(inspect?.Config?.Env) });
   } catch (error: unknown) {
     if (getErrorStatusCode(error) === 404) {

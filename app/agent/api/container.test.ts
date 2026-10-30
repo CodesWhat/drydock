@@ -409,6 +409,32 @@ describe('agent API container', () => {
       expect(res.json).toHaveBeenCalledWith({ env: [] });
     });
 
+    test('inspects by container id so a reused name cannot leak another env', async () => {
+      const getContainer = vi.fn((target: string) => ({
+        inspect: vi.fn(async () => {
+          if (target === 'c1') {
+            throw { statusCode: 404, message: 'no such container' };
+          }
+          return { Config: { Env: ['OTHER_SECRET=from-the-new-container'] } };
+        }),
+      }));
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': { dockerApi: { getContainer } } },
+        trigger: {},
+      });
+      req.params.id = 'c1';
+      await containerApi.getContainerEnv(req, res);
+      expect(getContainer).toHaveBeenCalledTimes(1);
+      expect(getContainer).toHaveBeenCalledWith('c1');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
     test('returns 404 when docker no longer has the container', async () => {
       useWatcher(vi.fn().mockRejectedValue({ statusCode: 404, message: 'no such container' }));
       await containerApi.getContainerEnv(req, res);

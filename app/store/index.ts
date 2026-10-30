@@ -6,7 +6,7 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runti
 import { migrateInlineSboms } from '../security/sbom-migration.js';
 import { createSbomStorage } from '../security/sbom-storage.js';
 import { type Database, MEMORY_DATABASE_LOCATION, openDatabase, type Row } from './db/driver.js';
-import { runFirstStartImport } from './db/import.js';
+import { readStoreMetadata, runFirstStartImport, writeStoreMetadata } from './db/import.js';
 import { COLLECTION_IMPORTERS } from './db/importers/index.js';
 import { migrate } from './db/migrations.js';
 import { prepareDatabaseForMigration } from './db/pre-migration.js';
@@ -147,8 +147,69 @@ function enforceSqliteFilePermissions(databasePath: string): void {
  * so this runs everywhere `save()` runs, which is every call site that used
  * to await LokiJS's `saveDatabase` before v1.8.
  */
-function checkpointSqliteDatabase(): void {
-  sqliteDb?.pragma('wal_checkpoint', 'TRUNCATE');
+function checkpointSqliteDatabase(): boolean {
+  // TRUNCATE answers (busy, log, checkpointed) and the driver hands back the first
+  // column. An open reader makes it answer busy = 1 instead of throwing, and the
+  // WAL contents stay where they are.
+  const busy = (sqliteDb as Database).pragma('wal_checkpoint', 'TRUNCATE');
+  return Number(busy ?? 0) === 0;
+}
+
+/** Marker in `store_metadata`: the #1523 compaction finished, so it never runs again. */
+const ENV_REDACTION_MARKER_KEY = 'env_redaction_at_rest_completed';
+const REDACTION_CHECKPOINT_ATTEMPTS = 3;
+const REDACTION_CHECKPOINT_RETRY_DELAY_MS = 100;
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/** Checkpoint until the WAL is truncated, retrying a busy answer a bounded number of times. */
+function checkpointUntilNotBusy(): boolean {
+  for (let attempt = 1; attempt <= REDACTION_CHECKPOINT_ATTEMPTS; attempt += 1) {
+    if (checkpointSqliteDatabase()) {
+      return true;
+    }
+    if (attempt < REDACTION_CHECKPOINT_ATTEMPTS) {
+      sleepSync(REDACTION_CHECKPOINT_RETRY_DELAY_MS);
+    }
+  }
+  return false;
+}
+
+/**
+ * #1523: rows written before env redaction at rest still hold raw values. Rewrite
+ * them, then compact so freed pages and the WAL stop holding them. The marker is
+ * set only once VACUUM and a non-busy checkpoint both succeeded, so any failure
+ * retries on the next start instead of leaving plaintext in freed pages.
+ */
+function redactStoredEnvAtRest(): void {
+  const db = sqliteDb as Database;
+  if (!isMemoryMode && readStoreMetadata(db, ENV_REDACTION_MARKER_KEY) !== undefined) {
+    return;
+  }
+  try {
+    const redactedRows =
+      container.redactStoredRuntimeEnv() + updateOperation.redactStoredContainerSnapshots();
+    if (isMemoryMode) {
+      return;
+    }
+    if (redactedRows > 0) {
+      log.info(`Redacted sensitive env values in ${redactedRows} stored record(s)`);
+    }
+    db.exec('VACUUM');
+    if (!checkpointUntilNotBusy()) {
+      log.warn(
+        'Could not truncate the store WAL after redacting env values (database busy); will retry on the next start',
+      );
+      return;
+    }
+    writeStoreMetadata(db, ENV_REDACTION_MARKER_KEY, new Date().toISOString());
+  } catch (error: unknown) {
+    log.warn(
+      `Could not finish env redaction cleanup (${String(error)}); will retry on the next start`,
+    );
+  }
 }
 
 function createCollections(): void {
@@ -189,15 +250,7 @@ function createCollections(): void {
   // Spec 7.3: after every collection and any first-start import, heal group-policy
   // snapshots a crash or a downgrade left stale. A no-op with zero policies.
   container.reconcileGroupPolicySnapshots();
-  // #1523: rows written before env redaction at rest still hold raw values.
-  // Rewrite them once, then compact so freed pages and the WAL stop holding them.
-  const redactedRows =
-    container.redactStoredRuntimeEnv() + updateOperation.redactStoredContainerSnapshots();
-  if (redactedRows > 0 && !isMemoryMode) {
-    log.info(`Redacted sensitive env values in ${redactedRows} stored record(s)`);
-    (sqliteDb as Database).exec('VACUUM');
-    checkpointSqliteDatabase();
-  }
+  redactStoredEnvAtRest();
 }
 
 async function migrateSbomsOffHeap(): Promise<void> {

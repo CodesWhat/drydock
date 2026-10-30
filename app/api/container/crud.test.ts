@@ -3189,7 +3189,7 @@ describe('api/container/crud', () => {
 
       const res = await callRevealContainerEnv(harness.handlers);
 
-      expect(getContainer).toHaveBeenCalledWith('edge-api');
+      expect(getContainer).toHaveBeenCalledWith('c1');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         env: [
@@ -3251,6 +3251,28 @@ describe('api/container/crud', () => {
         vi.fn().mockRejectedValue({ response: { status: 404 }, message: 'no such container' }),
       );
       const res = await callRevealContainerEnv(harness.handlers);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('inspects the exact container by id so a reused name cannot leak another env', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'old-id', name: 'edge-api', watcher: 'local' })],
+      });
+      const getContainer = vi.fn((target: string) => ({
+        inspect: vi.fn(async () => {
+          if (target === 'old-id') {
+            throw { response: { status: 404 }, message: 'no such container' };
+          }
+          return { Config: { Env: ['OTHER_SECRET=from-the-new-container'] } };
+        }),
+      }));
+      harness.deps.getWatchers.mockReturnValue({ 'docker.local': { dockerApi: { getContainer } } });
+
+      const res = await callRevealContainerEnv(harness.handlers, 'old-id');
+
+      expect(getContainer).toHaveBeenCalledTimes(1);
+      expect(getContainer).toHaveBeenCalledWith('old-id');
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
     });

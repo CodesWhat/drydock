@@ -117,7 +117,7 @@ function classifyRevealedEnv(env: Array<{ key: string; value: string }>) {
 
 interface LiveInspectWatcher {
   dockerApi?: {
-    getContainer: (name: string) => { inspect: () => Promise<{ Config?: { Env?: unknown } }> };
+    getContainer: (id: string) => { inspect: () => Promise<{ Config?: { Env?: unknown } }> };
   };
 }
 
@@ -145,7 +145,7 @@ async function readLiveContainerEnv(context: CrudHandlerContext, container: Cont
     throw new RevealWatcherMissingError(`No watcher found for container ${container.id}`);
   }
   try {
-    const inspect = await watcher.dockerApi.getContainer(container.name).inspect();
+    const inspect = await watcher.dockerApi.getContainer(container.id).inspect();
     return formatContainerEnv(inspect?.Config?.Env);
   } catch (error: unknown) {
     if (context.getErrorStatusCode(error) === 404) {
