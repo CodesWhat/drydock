@@ -7,6 +7,7 @@ import {
   projectLabelOwnedForApi,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
+  redactRuntimeDetailsForStorage,
   resolveContainerImageFullName,
   toApiContainer,
   toApiContainers,
@@ -161,6 +162,42 @@ describe('api/container/shared', () => {
       expect(isSensitiveKey('HOME')).toBe(false);
       expect(isSensitiveKey('PORT')).toBe(false);
       expect(isSensitiveKey('HOSTNAME')).toBe(false);
+    });
+  });
+
+  describe('redactRuntimeDetailsForStorage', () => {
+    test('returns non-object details and details without an env array unchanged', () => {
+      expect(redactRuntimeDetailsForStorage(undefined)).toBeUndefined();
+      expect(redactRuntimeDetailsForStorage('raw')).toBe('raw');
+      const noEnv = { ports: [] };
+      expect(redactRuntimeDetailsForStorage(noEnv)).toBe(noEnv);
+    });
+
+    test('redacts sensitive entries, drops the sensitive marker and skips keyless entries', () => {
+      expect(
+        redactRuntimeDetailsForStorage({
+          ports: [],
+          env: [
+            { key: 'DB_PASSWORD', value: 'secret', sensitive: true },
+            { key: 'DATABASE_URL', value: 'postgres://u:p@db/app' },
+            { key: 'PATH', value: '/bin', sensitive: false },
+            null,
+            { value: 'no-key' },
+          ],
+        }),
+      ).toEqual({
+        ports: [],
+        env: [
+          { key: 'DB_PASSWORD', value: '[REDACTED]' },
+          { key: 'DATABASE_URL', value: '[REDACTED]' },
+          { key: 'PATH', value: '/bin' },
+        ],
+      });
+    });
+
+    test('is idempotent', () => {
+      const once = redactRuntimeDetailsForStorage({ env: [{ key: 'API_TOKEN', value: 'x' }] });
+      expect(redactRuntimeDetailsForStorage(once)).toEqual(once);
     });
   });
 

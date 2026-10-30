@@ -71,6 +71,36 @@ export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): bo
   return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
 }
 
+export const REDACTED_ENV_VALUE = '[REDACTED]';
+
+/**
+ * Details as they are written to the store (#1523): every env entry that
+ * `isSensitiveEnvEntry` flags keeps its key but loses its value, and the API-only
+ * `sensitive` marker is dropped so the result still passes the container schema.
+ * Idempotent, so a row that is already redacted, or an already-classified payload
+ * from an API response or an agent, comes out the same.
+ */
+export function redactRuntimeDetailsForStorage<T>(details: T): T {
+  if (!details || typeof details !== 'object') {
+    return details;
+  }
+
+  const detailsWithEnv = details as ObjectWithEnv;
+  if (!Array.isArray(detailsWithEnv.env)) {
+    return details;
+  }
+
+  return {
+    ...detailsWithEnv,
+    env: detailsWithEnv.env
+      .filter((entry) => hasEnvKey(entry))
+      .map((entry) => ({
+        key: entry.key,
+        value: isSensitiveEnvEntry(entry) ? REDACTED_ENV_VALUE : entry.value,
+      })),
+  } as T;
+}
+
 function classifyContainerRuntimeDetails<T>(details: T): T {
   if (!details || typeof details !== 'object') {
     return details;
@@ -89,7 +119,7 @@ function classifyContainerRuntimeDetails<T>(details: T): T {
         const sensitive = isSensitiveEnvEntry(entry);
         return {
           key: entry.key,
-          value: sensitive ? '[REDACTED]' : entry.value,
+          value: sensitive ? REDACTED_ENV_VALUE : entry.value,
           sensitive,
         };
       }),

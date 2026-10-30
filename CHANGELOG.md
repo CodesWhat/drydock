@@ -11,6 +11,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- The container store now keeps sensitive runtime env values redacted at rest (anything the API already redacts: password, token and key names, and URLs with credentials), so they no longer sit in plaintext in the SQLite store, backups or volume snapshots. Existing stores are cleaned on first start, including the container snapshots saved with update operations. Revealing env values in the UI now reads them live from Docker when you click, so an agent-backed container needs its agent on this version (an older agent shows "Env reveal needs the agent upgraded to this version"). Because stored values are redacted, a change to the value of a sensitive variable alone no longer counts as a runtime change ([#1523](https://github.com/CodesWhat/drydock/issues/1523)).
+
 ### Changed
 
 - CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.22.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).

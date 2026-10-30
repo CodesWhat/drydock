@@ -189,6 +189,15 @@ function createCollections(): void {
   // Spec 7.3: after every collection and any first-start import, heal group-policy
   // snapshots a crash or a downgrade left stale. A no-op with zero policies.
   container.reconcileGroupPolicySnapshots();
+  // #1523: rows written before env redaction at rest still hold raw values.
+  // Rewrite them once, then compact so freed pages and the WAL stop holding them.
+  const redactedRows =
+    container.redactStoredRuntimeEnv() + updateOperation.redactStoredContainerSnapshots();
+  if (redactedRows > 0 && !isMemoryMode) {
+    log.info(`Redacted sensitive env values in ${redactedRows} stored record(s)`);
+    (sqliteDb as Database).exec('VACUUM');
+    checkpointSqliteDatabase();
+  }
 }
 
 async function migrateSbomsOffHeap(): Promise<void> {

@@ -141,7 +141,11 @@ const {
   }
 
   function createCollectionsMock() {
-    return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
+    return {
+      createCollections: vi.fn(),
+      completeStartupInitialization: vi.fn(),
+      redactStoredContainerSnapshots: vi.fn(() => 0),
+    };
   }
 
   function createContainerMock(overrides = {}) {
@@ -152,6 +156,7 @@ const {
       rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
       rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
       reconcileGroupPolicySnapshots: vi.fn(),
+      redactStoredRuntimeEnv: vi.fn(() => 0),
       ...overrides,
     };
   }
@@ -435,6 +440,49 @@ describe('Store Module', () => {
     await storeMemory.init({ memory: true });
 
     expect(runFirstStartImportMock).not.toHaveBeenCalled();
+  });
+
+  test('should redact stored env, vacuum and checkpoint when rows were rewritten (#1523)', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      container: { redactStoredRuntimeEnv: vi.fn(() => 2) },
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeRedacting = await import('./index.js');
+    await storeRedacting.init();
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+    expect(sqliteInstance.exec).toHaveBeenCalledWith('VACUUM');
+    expect(sqliteInstance.pragma).toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
+  });
+
+  test('should not vacuum when no stored env needed redacting (#1523)', async () => {
+    vi.resetModules();
+    registerCommonMocks({ fs: { renameSync: vi.fn() } });
+
+    const storeClean = await import('./index.js');
+    await storeClean.init();
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+    expect(sqliteInstance.exec).not.toHaveBeenCalledWith('VACUUM');
+  });
+
+  test('should skip the vacuum in memory mode even when rows were rewritten (#1523)', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      container: { redactStoredRuntimeEnv: vi.fn(() => 1) },
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeMemoryRedacting = await import('./index.js');
+    await storeMemoryRedacting.init({ memory: true });
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+    expect(sqliteInstance.exec).not.toHaveBeenCalledWith('VACUUM');
   });
 
   test('should create directory if it does not exist', async () => {

@@ -78,6 +78,7 @@ vi.mock('cors', () => ({
 vi.mock('./container.js', () => ({
   getContainers: vi.fn(),
   getContainerLogs: vi.fn(),
+  getContainerEnv: vi.fn(),
   deleteContainer: vi.fn(),
 }));
 vi.mock('./watcher.js', () => ({
@@ -325,6 +326,13 @@ describe('Agent API index', () => {
       const getCalls = mockApp.get.mock.calls;
       const logsRoute = getCalls.find(([path]) => path === '/api/containers/:id/logs');
       expect(logsRoute).toBeDefined();
+    });
+
+    test('should register container env route', async () => {
+      process.env.DD_AGENT_SECRET = 'secret';
+      await init();
+      const getCalls = mockApp.get.mock.calls;
+      expect(getCalls.find(([path]) => path === '/api/containers/:id/env')).toBeDefined();
     });
 
     test('should reject an excess authenticated event stream with the standard error response', async () => {

@@ -1571,29 +1571,37 @@ describe('Container Router', () => {
   });
 
   describe('revealContainerEnv', () => {
-    function callRevealContainerEnv(id = 'c1') {
+    async function callRevealContainerEnv(id = 'c1') {
       const handler = getHandler('post', '/:id/env/reveal');
       const res = createResponse();
-      handler({ params: { id } }, res);
+      await handler({ params: { id } }, res);
       return res;
     }
 
-    test('should return unredacted env vars for a valid container', () => {
-      storeContainer.getContainerRaw.mockReturnValue({
+    test('should return live env vars read from the docker watcher', async () => {
+      storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test-container',
+        watcher: 'local',
         image: { name: 'nginx' },
-        details: {
-          ports: [],
-          volumes: [],
-          env: [
-            { key: 'DB_PASSWORD', value: 'super-secret' },
-            { key: 'PATH', value: '/usr/local/bin' },
-          ],
-        },
+        details: { ports: [], volumes: [], env: [{ key: 'DB_PASSWORD', value: '[REDACTED]' }] },
       });
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({
+                inspect: async () => ({
+                  Config: { Env: ['DB_PASSWORD=super-secret', 'PATH=/usr/local/bin'] },
+                }),
+              })),
+            },
+          },
+        },
+        trigger: {},
+      } as any);
 
-      const res = callRevealContainerEnv();
+      const res = await callRevealContainerEnv();
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -1604,31 +1612,17 @@ describe('Container Router', () => {
       });
     });
 
-    test('should return 404 when container is not found', () => {
-      storeContainer.getContainerRaw.mockReturnValue(undefined);
+    test('should return 404 when container is not found', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
 
-      const res = callRevealContainerEnv('nonexistent');
+      const res = await callRevealContainerEnv('nonexistent');
 
       expect(res.status).toHaveBeenCalledWith(404);
-    });
-
-    test('should return empty env array when container has no env', () => {
-      storeContainer.getContainerRaw.mockReturnValue({
-        id: 'c1',
-        name: 'test-container',
-        image: { name: 'nginx' },
-        details: { ports: [], volumes: [] },
-      });
-
-      const res = callRevealContainerEnv();
-
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ env: [] });
     });
   });
 
   describe('createCrudHandlers', () => {
-    test('revealContainerEnv should return 501 when raw-env dependencies are unavailable', () => {
+    test('revealContainerEnv should return 501 when raw-env dependencies are unavailable', async () => {
       const handlers = createCrudHandlers({
         storeApi: {
           getContainersFromStore: vi.fn(() => []),
@@ -1662,7 +1656,7 @@ describe('Container Router', () => {
       });
 
       const res = createResponse();
-      handlers.revealContainerEnv({ params: { id: 'c1' } }, res);
+      await handlers.revealContainerEnv({ params: { id: 'c1' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(501);
     });
