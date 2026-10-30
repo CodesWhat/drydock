@@ -720,6 +720,32 @@ describe('Container Service', () => {
         'Failed to reveal value (HTTP 404): Not Found',
       );
     });
+
+    it('surfaces the server error message, such as an agent that needs upgrading', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 501,
+        statusText: 'Not Implemented',
+        json: async () => ({ error: 'Env reveal needs the agent upgraded to this version' }),
+      } as any);
+
+      await expect(revealContainerEnv('c1')).rejects.toThrow(
+        'Env reveal needs the agent upgraded to this version',
+      );
+    });
+
+    it('falls back to the HTTP failure when the error body has no message', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => ({ error: '  ' }),
+      } as any);
+
+      await expect(revealContainerEnv('c1')).rejects.toThrow(
+        'Failed to reveal value (HTTP 500): Internal Server Error',
+      );
+    });
   });
 
   describe('scanContainer', () => {

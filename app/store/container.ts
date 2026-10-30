@@ -3,7 +3,11 @@
  */
 import { createHash } from 'node:crypto';
 import { byString, byValues } from 'sort-es';
-import { redactContainerRuntimeEnv, redactContainersRuntimeEnv } from '../api/container/shared.js';
+import {
+  redactContainerRuntimeEnv,
+  redactContainersRuntimeEnv,
+  redactRuntimeDetailsForStorage,
+} from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import type {
   ContainerLifecycleEventContext,
@@ -532,24 +536,6 @@ function containerMatchesQuery(containerToMatch, queryEntries) {
 
   return queryEntries.every(
     ([queryKey, queryValue]) => getValueByPath(containerToMatch, queryKey) === queryValue,
-  );
-}
-
-function hasClassifiedRuntimeEnvValues(details) {
-  if (!details || typeof details !== 'object' || !Array.isArray(details.env)) {
-    return false;
-  }
-
-  if (details.env.length === 0) {
-    return false;
-  }
-
-  return details.env.every(
-    (entry) =>
-      entry &&
-      typeof entry === 'object' &&
-      typeof entry.key === 'string' &&
-      typeof entry.sensitive === 'boolean',
   );
 }
 
@@ -1188,7 +1174,8 @@ function containerToRow(c: container.Container, securityHash: string): Container
     update_policy_overrides: toStoredJson(c.updatePolicyOverrides),
     update_policy_sources: toStoredJson(c.updatePolicySources),
     update_rollback: toStoredJson(c.updateRollback),
-    details: toStoredJson(c.details),
+    // #1523: sensitive env values never reach disk.
+    details: toStoredJson(redactRuntimeDetailsForStorage(c.details)),
     labels: toStoredJson(c.labels),
     link_config: toStoredJson(linkConfig),
     tag_config: toStoredJson(tagConfig),
@@ -2034,8 +2021,6 @@ export function updateContainer(
   const hasDetails = Object.hasOwn(container, 'details');
   const containerCurrentRow = db.prepare(CONTAINER_SELECT_BY_ID_SQL).get(container.id);
   const containerCurrent = containerCurrentRow ? rowToContainer(containerCurrentRow) : undefined;
-  const shouldRestoreCurrentDetails =
-    hasDetails && hasClassifiedRuntimeEnvValues(container.details) && containerCurrent?.details;
   const containerMerged = {
     ...container,
     updatePolicy: hasUpdatePolicy ? container.updatePolicy : containerCurrent?.updatePolicy,
@@ -2051,11 +2036,11 @@ export function updateContainer(
         : containerCurrent?.updatePolicySources,
     updateRollback: hasUpdateRollback ? container.updateRollback : containerCurrent?.updateRollback,
     security: hasSecurity ? container.security : containerCurrent?.security,
-    details: shouldRestoreCurrentDetails
-      ? containerCurrent.details
-      : hasDetails
-        ? container.details
-        : containerCurrent?.details,
+    // Incoming details may be API-classified (carrying `sensitive`) or raw from the
+    // watcher. Either way the stored copy is the redacted one (#1523).
+    details: hasDetails
+      ? redactRuntimeDetailsForStorage(container.details)
+      : containerCurrent?.details,
   };
   if (hasUpdatePolicyDeclarative && containerMerged.updatePolicyDeclarative) {
     const overrides = hasUpdatePolicyOverrides
@@ -2422,14 +2407,38 @@ export function getContainer(id: string) {
 }
 
 /**
+ * Startup cleanup for rows written before #1523 stored env values raw. Idempotent:
+ * only rows whose details change are rewritten, and no lifecycle event is emitted.
+ * Returns how many rows were rewritten.
+ */
+export function redactStoredRuntimeEnv(): number {
+  const rows = db
+    .prepare('SELECT id, details FROM containers WHERE details LIKE \'%"env"%\'')
+    .all();
+  const update = db.prepare('UPDATE containers SET details = ? WHERE id = ?');
+  let redacted = 0;
+  for (const row of rows) {
+    const next = toStoredJson(
+      redactRuntimeDetailsForStorage(fromStoredJson(row.details as string)),
+    );
+    if (next !== row.details) {
+      update.run(next, row.id);
+      redacted += 1;
+    }
+  }
+  if (redacted > 0) {
+    invalidateContainersCache();
+  }
+  return redacted;
+}
+
+/**
  * Get container by id without redacting sensitive env values.
  *
  * Used by the env reveal endpoint, and by every write-back path that persists
- * a container it fetched earlier (security scans, the scan scheduler). Those
- * callers must NOT use `getContainer`: it masks sensitive env to
- * `'[REDACTED]'`, and while `updateContainer` restores classified details
- * rather than storing the mask, re-fetching raw keeps the write-back honest
- * instead of relying on that guard.
+ * a container it fetched earlier (security scans, the scan scheduler). Sensitive
+ * env values are redacted at rest (#1523), so "raw" now means the stored shape
+ * without the API's `sensitive` markers, not the live values.
  * @param id
  */
 export function getContainerRaw(id: string) {

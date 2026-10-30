@@ -743,7 +743,8 @@ export const containerPaths = {
       401: errorResponse('Authentication required'),
       404: errorResponse('Container not found'),
       429: errorResponse('Too many requests'),
-      501: errorResponse('Endpoint unavailable'),
+      500: errorResponse('Environment could not be read from Docker or the agent'),
+      501: errorResponse('Endpoint unavailable, or the agent needs upgrading'),
     },
   }),
   '/api/v1/containers/{id}/scan': createContainerIdActionPost({

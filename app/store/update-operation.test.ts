@@ -3467,3 +3467,78 @@ describe('toApiUpdateOperation', () => {
     });
   });
 });
+
+describe('container snapshot env redaction (#1523)', () => {
+  const sensitiveContainer = {
+    id: 'c1',
+    name: 'web',
+    watcher: 'local',
+    details: {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'super-secret-password' },
+        { key: 'PATH', value: '/usr/bin' },
+      ],
+    },
+  } as any;
+
+  test('insertOperation stores the container snapshot with sensitive env redacted', () => {
+    const database = createDb();
+    updateOperation.createCollections(database);
+
+    const inserted = insertOp(updateOperation, {
+      containerName: 'web',
+      container: sensitiveContainer,
+    });
+
+    const row = database
+      .prepare('SELECT container_snapshot FROM update_operations WHERE id = ?')
+      .get((inserted as { id: string }).id);
+    expect(String(row?.container_snapshot)).not.toContain('super-secret-password');
+    expect(JSON.parse(String(row?.container_snapshot)).details.env).toEqual([
+      { key: 'DB_PASSWORD', value: '[REDACTED]' },
+      { key: 'PATH', value: '/usr/bin' },
+    ]);
+  });
+
+  test('insertOperation keeps a snapshot without details unchanged', () => {
+    const database = createDb();
+    updateOperation.createCollections(database);
+
+    const inserted = insertOp(updateOperation, {
+      containerName: 'web',
+      container: { id: 'c1', name: 'web', watcher: 'local' } as any,
+    });
+
+    const row = database
+      .prepare('SELECT container_snapshot FROM update_operations WHERE id = ?')
+      .get((inserted as { id: string }).id);
+    expect(JSON.parse(String(row?.container_snapshot))).not.toHaveProperty('details');
+  });
+
+  test('redactStoredContainerSnapshots cleans rows written before the fix and is idempotent', () => {
+    const database = createDb();
+    updateOperation.createCollections(database);
+    const dirty = insertOp(updateOperation, {
+      containerName: 'web',
+      container: sensitiveContainer,
+    }) as { id: string };
+    const clean = insertOp(updateOperation, {
+      containerName: 'api',
+      container: { id: 'c2', name: 'api', watcher: 'local' } as any,
+    }) as { id: string };
+    database
+      .prepare('UPDATE update_operations SET container_snapshot = ? WHERE id = ?')
+      .run(JSON.stringify(sensitiveContainer), dirty.id);
+
+    expect(updateOperation.redactStoredContainerSnapshots()).toBe(1);
+    expect(updateOperation.redactStoredContainerSnapshots()).toBe(0);
+
+    const snapshots = JSON.stringify(
+      database.prepare('SELECT container_snapshot FROM update_operations').all(),
+    );
+    expect(snapshots).not.toContain('super-secret-password');
+    expect(clean.id).toBeDefined();
+  });
+});
