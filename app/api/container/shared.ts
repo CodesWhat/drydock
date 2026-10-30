@@ -71,7 +71,7 @@ export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): bo
   return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
 }
 
-export const REDACTED_ENV_VALUE = '[REDACTED]';
+const REDACTED_ENV_VALUE = '[REDACTED]';
 
 /**
  * Details as they are written to the store (#1523): every env entry that
