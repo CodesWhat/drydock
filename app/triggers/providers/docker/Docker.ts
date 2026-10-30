@@ -1418,6 +1418,11 @@ class Docker<
     if (!legacyContainerMacAddress) {
       delete containerClone.MacAddress;
     }
+    // Docker's default hostname is the first 12 chars of the container ID.
+    // Copying it would pin the old ID onto the replacement container.
+    if (containerClone.Hostname === currentContainer.Id.slice(0, 12)) {
+      delete containerClone.Hostname;
+    }
     // Handle situation when container is using network_mode: service:other_service
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;

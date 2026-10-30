@@ -67,7 +67,14 @@ export async function resolveSelfContainerIdentity(
       (summary): summary is DockerContainerSummary & { Id: string } =>
         typeof summary.Id === 'string' && summary.Id.startsWith(runtimeHostname),
     );
-    return idMatches.length === 1 ? getSummaryIdentity(idMatches[0]) : null;
+    if (idMatches.length === 1) {
+      return getSummaryIdentity(idMatches[0]);
+    }
+    if (idMatches.length > 1) {
+      return null;
+    }
+    // No ID prefix match: a recreated container can carry its predecessor's
+    // ID as a stale hostname, so fall through to the inspected hostname match.
   }
 
   const inspected = await Promise.allSettled(

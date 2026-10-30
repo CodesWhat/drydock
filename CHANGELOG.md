@@ -15,6 +15,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.22.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).
 
+### Fixed
+
+- Self-updates no longer get refused as "identity indeterminate" on every second update when the Drydock service had no `hostname:` set. A recreated container kept its predecessor's ID as its hostname, so Drydock couldn't find itself afterward. Recreated containers now drop Docker's default hostname instead of inheriting the old container's ID, and an ID-shaped hostname that matches no container falls back to matching by the configured hostname ([#1525](https://github.com/CodesWhat/drydock/issues/1525)).
+
 ## [1.8.0-rc.9] - 2026-10-29
 
 > [!WARNING]
