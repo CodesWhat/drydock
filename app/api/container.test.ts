@@ -1712,10 +1712,17 @@ describe('Container Router', () => {
         vulnerabilities: [],
       });
 
+      // Write-back re-reads the current store record before persisting the result.
+      storeContainer.getContainerRaw.mockImplementation(() => storeContainer.getContainer());
+
       const { res } = await callScanAll({ containerIds: ['c1'] });
       await waitForBulkScanCycleComplete();
 
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        undefined,
+      );
       expect(storeContainer.getContainers).not.toHaveBeenCalled();
       expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
         expect.objectContaining({
