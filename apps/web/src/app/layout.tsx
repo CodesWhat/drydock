@@ -1,21 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { AnalyticsPageview } from "@/components/analytics-pageview";
 import { RootProvider } from "@/components/root-provider";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
-
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-mono",
-});
+import "./website-skin.css";
+import "./website.css";
 
 // Bump this whenever the favicon/app icons change so browsers re-fetch them
 // instead of serving a stale cached icon (favicons cache aggressively).
@@ -79,11 +69,25 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-product="drydock" data-family="one-dark" suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-title" content={SITE_CONFIG.name} />
+        <link
+          rel="preload"
+          href="/fonts/ibm-plex-mono-latin-400-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/instrument-serif-latin-400-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
       </head>
-      <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
+      <body>
         {/* Fail-open reveal gate: this inline script runs even if the bundled
             JS is blocked (e.g. SRI/CSP), adds `js` to <html> before sections
             paint, and runs a single IntersectionObserver. A MutationObserver on

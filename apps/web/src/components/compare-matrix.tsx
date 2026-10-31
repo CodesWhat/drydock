@@ -201,18 +201,19 @@ const TOOLS: Tool[] = [
 
 export function CompareMatrix() {
   return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
-      <div className="overflow-x-auto">
+    <div className="overflow-hidden rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The labelled overflow region needs keyboard focus for horizontal scrolling. */}
+      <section className="overflow-x-auto" aria-label="Feature comparison" tabIndex={0}>
         <table className="w-full min-w-[860px] text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 dark:border-neutral-800">
-              <th className="px-4 py-3 text-left font-medium text-neutral-500 dark:text-neutral-400">
+            <tr className="border-b border-[var(--dd-border-strong)]">
+              <th className="px-4 py-3 text-left font-medium text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 Tool
               </th>
               {FEATURES.map((f) => (
                 <th
                   key={f.key}
-                  className="whitespace-nowrap px-3 py-3 text-center text-xs font-medium text-neutral-500 dark:text-neutral-400"
+                  className="whitespace-nowrap px-3 py-3 text-center text-xs font-medium text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
                 >
                   {f.label}
                 </th>
@@ -224,7 +225,7 @@ export function CompareMatrix() {
               <tr
                 key={tool.name}
                 className={[
-                  "border-b border-neutral-100 last:border-0 dark:border-neutral-800/60",
+                  "border-b border-[var(--dd-border-strong)] last:border-0 border-[var(--dd-border-strong)]",
                   tool.highlight ? "bg-emerald-500/5" : "",
                 ].join(" ")}
               >
@@ -232,10 +233,10 @@ export function CompareMatrix() {
                   {tool.slug ? (
                     <Link
                       href={`/compare/${tool.slug}`}
-                      className="group inline-flex items-center gap-1.5 font-medium text-neutral-700 transition-colors hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+                      className="group inline-flex items-center gap-1.5 font-medium text-[var(--dd-text)] transition-colors hover:text-[var(--dd-text)] dark:text-[var(--tx-sec)] dark:hover:text-[var(--tx-sec)]"
                     >
                       {tool.name}
-                      <ArrowUpRight className="h-3.5 w-3.5 text-neutral-400 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                      <ArrowUpRight className="h-3.5 w-3.5 text-[var(--tx-sec)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                     </Link>
                   ) : (
                     <span className="font-semibold text-emerald-600 dark:text-emerald-400">
@@ -252,9 +253,9 @@ export function CompareMatrix() {
             ))}
           </tbody>
         </table>
-      </div>
+      </section>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-neutral-200 px-4 py-3 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-500">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[var(--dd-border-strong)] px-4 py-3 text-xs text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
         <span className="inline-flex items-center gap-1.5">
           <Check className="h-3 w-3 text-emerald-500" /> Yes
         </span>
@@ -262,9 +263,9 @@ export function CompareMatrix() {
           <Minus className="h-3 w-3 text-amber-400" /> Partial
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <X className="h-3 w-3 text-neutral-300 dark:text-neutral-600" /> No
+          <X className="h-3 w-3 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]" /> No
         </span>
-        <span className="text-neutral-400 dark:text-neutral-600">
+        <span className="text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
           · Click a tool for the full breakdown
         </span>
       </div>

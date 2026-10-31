@@ -44,7 +44,7 @@ function VerdictIcon({ verdict }: { verdict: ComparisonRow["verdict"] }) {
   if (verdict === "self" || verdict === "competitor") {
     return <Check className="h-4 w-4 text-emerald-500" />;
   }
-  return <Minus className="h-4 w-4 text-neutral-400" />;
+  return <Minus className="h-4 w-4 text-[var(--tx-sec)]" />;
 }
 
 export function ComparisonPage({
@@ -66,11 +66,11 @@ export function ComparisonPage({
         {/* Hero */}
         <section className="px-4 pt-16 pb-16">
           <div className="mx-auto max-w-4xl text-center">
-            <h1 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-5xl lg:text-6xl">
+            <h1 className="mb-6 text-4xl font-bold tracking-tight text-[var(--dd-text)] dark:text-[var(--dd-text)] sm:text-5xl lg:text-6xl">
               {heroTitle}
             </h1>
 
-            <div className="mx-auto mb-8 max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
+            <div className="mx-auto mb-8 max-w-2xl text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
               {heroDescription}
             </div>
 
@@ -91,25 +91,30 @@ export function ComparisonPage({
         <section className="px-4 py-16">
           <div className="mx-auto max-w-5xl">
             <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-[var(--dd-text)] sm:text-4xl dark:text-[var(--dd-text)]">
                 Feature Comparison
               </h2>
-              <p className="mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
+              <p className="mx-auto max-w-2xl text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 Here's how we compare on the features that matter most.
               </p>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
+            <section
+              aria-label="Detailed feature comparison"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: This overflow region needs focus for keyboard scrolling.
+              tabIndex={0}
+              className="overflow-x-auto rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]"
+            >
               <table className="w-full min-w-[600px] text-sm">
                 <thead>
-                  <tr className="border-b border-neutral-200 dark:border-neutral-800">
-                    <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
+                  <tr className="border-b border-[var(--dd-border-strong)]">
+                    <th className="px-4 py-3 text-left font-semibold text-[var(--dd-text)] sm:px-6 dark:text-[var(--dd-text)]">
                       Feature
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-neutral-500 sm:px-6 dark:text-neutral-400">
+                    <th className="px-4 py-3 text-left font-semibold text-[var(--tx-sec)] sm:px-6 dark:text-[var(--tx-sec)]">
                       {competitorName}
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
+                    <th className="px-4 py-3 text-left font-semibold text-[var(--dd-text)] sm:px-6 dark:text-[var(--dd-text)]">
                       Drydock
                     </th>
                   </tr>
@@ -120,17 +125,17 @@ export function ComparisonPage({
                       key={row.feature}
                       className={
                         i < comparisonData.length - 1
-                          ? "border-b border-neutral-100 dark:border-neutral-800/50"
+                          ? "border-b border-[var(--dd-border-strong)] border-[var(--dd-border-strong)]"
                           : ""
                       }
                     >
-                      <td className="px-4 py-3 font-medium text-neutral-900 sm:px-6 dark:text-neutral-100">
+                      <td className="px-4 py-3 font-medium text-[var(--dd-text)] sm:px-6 dark:text-[var(--dd-text)]">
                         {row.feature}
                       </td>
-                      <td className="px-4 py-3 text-neutral-500 sm:px-6 dark:text-neutral-400">
+                      <td className="px-4 py-3 text-[var(--tx-sec)] sm:px-6 dark:text-[var(--tx-sec)]">
                         <span className="flex items-center gap-2">
                           {row.competitor === "No" || row.competitor === "None" ? (
-                            <X className="h-4 w-4 shrink-0 text-neutral-300 dark:text-neutral-600" />
+                            <X className="h-4 w-4 shrink-0 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]" />
                           ) : row.verdict === "self" ? (
                             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
                           ) : row.verdict === "competitor" ? (
@@ -142,7 +147,7 @@ export function ComparisonPage({
                         </span>
                       </td>
                       <td className="px-4 py-3 sm:px-6">
-                        <span className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
+                        <span className="flex items-center gap-2 text-[var(--dd-text)] dark:text-[var(--dd-text)]">
                           {row.verdict === "self" ? (
                             <Check className="h-4 w-4 shrink-0 text-emerald-500" />
                           ) : row.verdict === "competitor" ? (
@@ -157,7 +162,7 @@ export function ComparisonPage({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </section>
           </div>
         </section>
 
@@ -165,10 +170,10 @@ export function ComparisonPage({
         <section className="px-4 py-16">
           <div className="mx-auto max-w-5xl">
             <div className="mb-12 text-center">
-              <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-[var(--dd-text)] sm:text-4xl dark:text-[var(--dd-text)]">
                 Key Differentiators
               </h2>
-              <p className="mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
+              <p className="mx-auto max-w-2xl text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 What we built that {competitorName} doesn't cover.
               </p>
             </div>
@@ -177,18 +182,18 @@ export function ComparisonPage({
               {highlights.map((item) => (
                 <Card
                   key={item.title}
-                  className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50"
+                  className="border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]"
                 >
                   <CardContent className="pt-6">
                     <div className="mb-4 flex items-center gap-3">
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
                         <item.icon className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
                       </div>
-                      <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">
+                      <h3 className="font-semibold text-[var(--dd-text)] dark:text-[var(--dd-text)]">
                         {item.title}
                       </h3>
                     </div>
-                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    <p className="text-sm text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                       {item.description}
                     </p>
                   </CardContent>
@@ -201,23 +206,23 @@ export function ComparisonPage({
         {/* Migration note */}
         <section className="px-4 py-16">
           <div className="mx-auto max-w-3xl">
-            <Card className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
+            <Card className="border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
               <CardContent className="pt-6">
                 <div className="flex items-start gap-4">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
                     <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h3 className="mb-2 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                    <h3 className="mb-2 text-lg font-semibold text-[var(--dd-text)] dark:text-[var(--dd-text)]">
                       {migrationTitle}
                     </h3>
-                    <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+                    <p className="mb-4 text-sm text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                       {migrationDescription}
                     </p>
                     <DockerRunSnippet
                       contentClassName="pt-4 pb-4"
                       iconClassName="h-3.5 w-3.5"
-                      headerClassName="mb-2 flex items-center gap-2 text-neutral-500"
+                      headerClassName="mb-2 flex items-center gap-2 text-[var(--tx-sec)]"
                       label="Quick start"
                     />
                   </div>
@@ -230,10 +235,10 @@ export function ComparisonPage({
         {/* CTA */}
         <section className="px-4 py-16">
           <div className="mx-auto max-w-3xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight text-[var(--dd-text)] sm:text-4xl dark:text-[var(--dd-text)]">
               {`Ready to try ${SITE_CONFIG.name}?`}
             </h2>
-            <p className="mb-8 text-neutral-600 dark:text-neutral-400">
+            <p className="mb-8 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
               No SaaS subscription, no data sent off your host, and we ship updates fast.
             </p>
 

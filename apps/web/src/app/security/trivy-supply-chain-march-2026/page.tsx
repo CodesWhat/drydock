@@ -86,8 +86,8 @@ export default function TrivyAdvisoryPage() {
     <>
       <JsonLd data={jsonLd} />
       <MarketingShell>
-        <article className="mx-auto max-w-4xl px-6 py-16">
-          <div className="rounded-xl border border-neutral-200 bg-white/70 p-8 shadow-sm backdrop-blur-sm sm:p-12 dark:border-neutral-800 dark:bg-neutral-950/70">
+        <article className="website-advisory">
+          <div className="website-advisory-body">
             {/* Title block */}
             <div className="mb-12">
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -97,10 +97,10 @@ export default function TrivyAdvisoryPage() {
                 <Badge variant="outline">GHSA-69fq-xp46-6x23</Badge>
                 <Badge variant="outline">CWE-506</Badge>
               </div>
-              <h1 className="mb-3 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-100">
+              <h1 className="mb-3 text-3xl font-bold tracking-tight text-[var(--dd-text)] sm:text-4xl dark:text-[var(--dd-text)]">
                 Trivy Supply Chain Compromise
               </h1>
-              <p className="text-lg text-neutral-600 dark:text-neutral-400">
+              <p className="text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 Security advisory &middot; March 22, 2026
               </p>
             </div>

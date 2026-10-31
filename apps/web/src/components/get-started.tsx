@@ -18,9 +18,9 @@ const PRESETS: { id: Preset; label: string; icon: typeof Zap }[] = [
 /** Shared dark code-card chrome, matching DockerRunSnippet. */
 function CodeCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-950 shadow-2xl ring-1 ring-black/5 dark:ring-white/10">
+    <div className="rounded-[4px] border border-[var(--dd-border-strong)] website-install-code">
       <div className="px-6 pt-5">
-        <div className="mb-3 flex items-center gap-2 text-neutral-500">
+        <div className="mb-3 flex items-center gap-2 text-[var(--tx-sec)]">
           <Terminal className="h-4 w-4" />
           <span className="font-mono text-xs font-medium uppercase tracking-wider">{label}</span>
         </div>
@@ -33,9 +33,9 @@ function CodeCard({ label, children }: { label: string; children: React.ReactNod
 function QuickSnippet() {
   return (
     <CodeCard label="Quick start · docker run">
-      <code className="text-neutral-300">
-        <span className="text-neutral-500">$</span>{" "}
-        <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
+      <code className="text-[#abb2bf]">
+        <span className="text-[#8f97a8]">$</span> <span className="text-[#98c379]">docker run</span>{" "}
+        -d \{"\n"}
         {"  "}--name drydock \{"\n"}
         {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
         {"  "}-v drydock-store:/store \{"\n"}
@@ -51,11 +51,11 @@ function QuickSnippet() {
 function SecureSnippet() {
   // Light YAML coloring: keys in sky, image/string values in lime, comments muted.
   const key = "text-sky-300";
-  const val = "text-[#C4FF00]";
-  const com = "text-neutral-600";
+  const val = "text-[#98c379]";
+  const com = "text-[#8f97a8]";
   return (
     <CodeCard label="Hardened · compose.yml">
-      <code className="text-neutral-300">
+      <code className="text-[#abb2bf]">
         <span className={com}>
           # sockguard owns the real socket — Drydock only sees a scoped one
         </span>
@@ -127,12 +127,13 @@ export function GetStarted() {
 
   const activatePreset = (id: Preset) => {
     setPreset(id);
+    document.getElementById(`tab-${id}`)?.focus();
     captureCta(pathname, `install_${id}`, "get_started");
   };
 
   return (
-    <section className="border-t border-border/60 px-4 py-20">
-      <div className="mx-auto max-w-3xl">
+    <section id="get-started" className="website-section website-section--compact">
+      <div className="website-wrap">
         <SectionHeading
           eyebrow="Get running"
           title="Get started in seconds"
@@ -145,7 +146,7 @@ export function GetStarted() {
           <div
             role="tablist"
             aria-label="Install preset"
-            className="inline-flex gap-1 rounded-xl border border-neutral-200 bg-white/60 p-1 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/60"
+            className="inline-flex gap-1 rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)] p-1"
             onKeyDown={(e) => {
               const currentIndex = PRESETS.findIndex((p) => p.id === preset);
               if (e.key === "ArrowRight") {
@@ -178,8 +179,8 @@ export function GetStarted() {
                   className={[
                     "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900"
-                      : "text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100",
+                      ? "bg-[var(--dd-primary)] text-[var(--dd-primary-fg)]"
+                      : "text-[var(--tx-sec)] hover:text-[var(--dd-text)] dark:text-[var(--tx-sec)] dark:hover:text-[var(--tx-sec)]",
                   ].join(" ")}
                 >
                   <Icon className="h-3.5 w-3.5" />
@@ -196,19 +197,19 @@ export function GetStarted() {
           {/* Contextual note under the snippet */}
           <div className="mt-4 flex items-start justify-center gap-2 px-2 text-center text-sm">
             {preset === "quick" ? (
-              <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+              <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
                 Mounts the Docker socket directly — fine for a local try, not for production.
               </p>
             ) : (
-              <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+              <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
                 Drydock never touches the raw socket.{" "}
                 <TrackedLink
                   href="/docs/guides/security"
                   ctaId="docs_security"
                   placement="get_started"
-                  className="font-medium text-neutral-900 underline-offset-4 hover:underline dark:text-neutral-100"
+                  className="font-medium text-[var(--dd-text)] underline-offset-4 hover:underline dark:text-[var(--dd-text)]"
                 >
                   Hardening guide
                 </TrackedLink>

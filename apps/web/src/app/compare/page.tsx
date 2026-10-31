@@ -109,10 +109,10 @@ export default function ComparePage() {
         {/* Hero */}
         <section className="px-4 pt-16 pb-12">
           <div className="mx-auto max-w-4xl text-center">
-            <h1 className="mb-4 text-4xl font-bold tracking-tight text-neutral-900 sm:text-5xl dark:text-neutral-100">
+            <h1 className="mb-4 text-4xl font-bold tracking-tight text-[var(--dd-text)] sm:text-5xl dark:text-[var(--dd-text)]">
               Drydock vs Alternatives
             </h1>
-            <p className="mx-auto max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
+            <p className="mx-auto max-w-2xl text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
               We built Drydock to go further than any existing container update tool. Click any tool
               to see exactly how we compare.
             </p>

@@ -34,9 +34,9 @@ export const SITE_CONFIG = {
   /** Discord community invite. */
   discordUrl: "https://discord.gg/mWHCPJRzSx",
   /** Logo asset in /public. */
-  logo: "/whale-logo.png",
+  logo: "/whale.webp",
   /** Whether the logo inverts in dark mode (adds `dark:invert`). */
-  logoInvertOnDark: true,
+  logoInvertOnDark: false,
   /** Default OpenGraph / Twitter share image in /public. */
   ogImage: "/og-image.png",
   /** OpenGraph locale. */
