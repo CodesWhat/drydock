@@ -43,8 +43,8 @@
     "fflate": "0.8.3",
     "js-yaml": "3.15.2",
     "fast-xml-parser": "5.11.2",
-    "joi": "18.2.9",
-    "minimatch": "10.2.6",
+    "joi": "18.3.1",
+    "minimatch": "^11.0.1",
     "picomatch": "4.0.7",
     "postcss": "8.5.29",
     "uuid": "14.0.2",
@@ -59,6 +59,7 @@
     "moment": "2.31.0",
     "http-cache-semantics": "4.3.0",
     "argparse": "2.0.1",
-    "@azure/msal-node": "7.1.1"
+    "@azure/msal-node": "7.1.1",
+    "glob": "^14.0.2"
   }
 }

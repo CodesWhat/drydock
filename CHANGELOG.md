@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.4] — 2026-10-31
+
+This is the fourth release candidate for the 1.7.1 maintenance release. It includes all rc.3 changes and fixes four dependency advisories. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
+
+### Security
+
+- Update joi to 18.3.1 and follow-redirects to 1.16.2, and override minimatch and glob to their fixed majors in backend, UI and E2E tooling. This clears GHSA-4528-x5fx-h6hg, GHSA-mrwp-f3q8-3g9p, GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4 on the 1.7 maintenance line.
+
 ### Changed
 
 - CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.21.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).
@@ -2982,7 +2990,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...HEAD
+[1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
 [1.7.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...v1.7.1-rc.3
 [1.7.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...v1.7.1-rc.2
 [1.7.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1-rc.1
