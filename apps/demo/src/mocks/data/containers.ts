@@ -334,7 +334,7 @@ export const containers = [
     displayName: 'Drydock',
     displayIcon: 'sh-drydock',
     image: 'codeswhat/drydock',
-    tag: '1.8.0-rc.9',
+    tag: '1.8.0-rc.10',
     registryType: 'ghcr',
     registryUrl: 'https://ghcr.io',
     scanStatus: 'scanned',

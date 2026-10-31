@@ -353,7 +353,7 @@ environment:
 ```yaml
 services:
   drydock-agent:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     command: --agent
     ports:
       - "3000:3000"  # agent API — the controller connects to this port
@@ -378,7 +378,7 @@ Here's a complete single-host setup with notifications, auto-updates, and safety
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     container_name: drydock
     depends_on:
       socket-proxy:
