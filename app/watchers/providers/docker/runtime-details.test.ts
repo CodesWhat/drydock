@@ -385,4 +385,58 @@ describe('docker runtime details module', () => {
     ).toBeUndefined();
     expect(normalizeRuntimeDetails({ ports: [], volumes: [], env: [] }).startedAt).toBeUndefined();
   });
+  test('equality compares redacted env so a redacted stored copy matches the live values (#1523)', () => {
+    const stored = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: '[REDACTED]' },
+        { key: 'PATH', value: '/bin' },
+      ],
+    };
+    const live = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'real-secret' },
+        { key: 'PATH', value: '/bin' },
+      ],
+    };
+
+    expect(areRuntimeDetailsEqual(stored, live)).toBe(true);
+    // The known trade-off: a changed secret value alone is not a change.
+    expect(
+      areRuntimeDetailsEqual(live, {
+        ...live,
+        env: [{ key: 'DB_PASSWORD', value: 'rotated' }, live.env[1]],
+      }),
+    ).toBe(true);
+    // Non-sensitive values and keys still count.
+    expect(
+      areRuntimeDetailsEqual(stored, {
+        ...live,
+        env: [live.env[0], { key: 'PATH', value: '/usr/bin' }],
+      }),
+    ).toBe(false);
+  });
+
+  test('compares credential URLs against their classified stored value', () => {
+    const stored = {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DATABASE_URL', value: '[REDACTED]', sensitive: true }],
+    };
+    const live = {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'DATABASE_URL', value: 'postgres://user:fixture@database/app' }],
+    };
+    expect(areRuntimeDetailsEqual(stored, live)).toBe(true);
+    expect(
+      areRuntimeDetailsEqual(stored, {
+        ...live,
+        env: [{ key: 'PUBLIC_URL', value: 'https://example.com' }],
+      }),
+    ).toBe(false);
+  });
 });

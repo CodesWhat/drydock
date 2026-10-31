@@ -157,6 +157,7 @@ function classifyContainersRuntimeEnv<T>(containers: T): T {
   return containers.map((container) => classifyContainerRuntimeEnv(container)) as T;
 }
 
+export const redactRuntimeDetailsForStorage = classifyContainerRuntimeDetails;
 export const redactContainerRuntimeEnv = classifyContainerRuntimeEnv;
 export const redactContainersRuntimeEnv = classifyContainersRuntimeEnv;
 

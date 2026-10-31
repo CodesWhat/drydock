@@ -292,6 +292,25 @@ function isContainerUpdateAppliedEventPayload(
   return typeof containerName === 'string' && containerName.length > 0;
 }
 
+export const AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE =
+  'Env reveal needs the agent upgraded to this version';
+
+/** The agent has no env route (older agent, or an edge connection). */
+export class AgentEnvRevealUnsupportedError extends Error {
+  constructor() {
+    super(AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+    this.name = 'AgentEnvRevealUnsupportedError';
+  }
+}
+
+/** The agent answered, and does not know the container. */
+export class AgentContainerNotFoundError extends Error {
+  constructor() {
+    super('Container not found on agent');
+    this.name = 'AgentContainerNotFoundError';
+  }
+}
+
 export class AgentClient {
   public name: string;
   public config: AgentClientConfig;
@@ -2418,6 +2437,35 @@ export class AgentClient {
       return response.data;
     } catch (error: unknown) {
       this.log.error(`Error fetching container logs from agent: ${getErrorMessage(error)}`);
+      throw error;
+    }
+  }
+
+  async getContainerEnv(containerId: string): Promise<Array<{ key: string; value: string }>> {
+    if (this.edgeAdapter) {
+      throw new AgentEnvRevealUnsupportedError();
+    }
+    try {
+      const target = `/api/containers/${encodeURIComponent(containerId)}/env`;
+      const response = await axios.get<{ env?: unknown }>(
+        `${this.baseUrl}${target}`,
+        this.buildRequestConfig('GET', target),
+      );
+      const env = response.data?.env;
+      return Array.isArray(env) ? (env as Array<{ key: string; value: string }>) : [];
+    } catch (error: unknown) {
+      const failure = error as
+        | { response?: { status?: number; data?: { error?: unknown } } }
+        | undefined;
+      if (failure?.response?.status === 404) {
+        // The agent's own "container not found" is a JSON error body. A bare 404 is an
+        // agent that predates this route.
+        if (typeof failure.response.data?.error === 'string') {
+          throw new AgentContainerNotFoundError();
+        }
+        throw new AgentEnvRevealUnsupportedError();
+      }
+      this.log.error('Error fetching container env from agent');
       throw error;
     }
   }

@@ -7,11 +7,14 @@ import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { getErrorMessage } from '../../util/error.js';
 
+import { formatContainerEnv } from '../../watchers/providers/docker/runtime-details.js';
+
 const log = logger.child({ component: 'agent-api-container' });
 
 type AgentDockerWatcher = {
   dockerApi: {
     getContainer: (name: string) => {
+      inspect: () => Promise<{ Config?: { Env?: unknown } }>;
       logs: (options: {
         stdout: boolean;
         stderr: boolean;
@@ -98,6 +101,39 @@ export async function getContainerLogs(req: Request, res: Response) {
       `Error fetching container logs for ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`,
     );
     sendErrorResponse(res, 500, 'Error fetching container logs');
+  }
+}
+
+export async function getContainerEnv(req: Request, res: Response) {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const container = storeContainer.getContainer(id);
+  if (!container) {
+    sendErrorResponse(res, 404, 'Container not found');
+    return;
+  }
+
+  const watcherId = `docker.${container.watcher}`;
+  const watcher = registry.getState().watcher[watcherId] as AgentDockerWatcher | undefined;
+  if (!watcher) {
+    sendErrorResponse(res, 500, `No watcher found for container ${id}`);
+    return;
+  }
+
+  try {
+    const inspect = await watcher.dockerApi.getContainer(container.id).inspect();
+    res.status(200).json({ env: formatContainerEnv(inspect?.Config?.Env) });
+  } catch (error: unknown) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'statusCode' in error &&
+      error.statusCode === 404
+    ) {
+      sendErrorResponse(res, 404, 'Container not found');
+      return;
+    }
+    log.error(`Error fetching container env for ${sanitizeLogParam(id)}`);
+    sendErrorResponse(res, 500, 'Error fetching container env');
   }
 }
 

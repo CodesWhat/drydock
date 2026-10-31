@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  AgentContainerNotFoundError,
+  AgentEnvRevealUnsupportedError,
+} from '../../agent/AgentClient.js';
 import { createMockResponse } from '../../test/helpers.js';
 
 const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
@@ -254,12 +258,12 @@ function callGetContainerUpdateOperations(
   return res;
 }
 
-function callRevealContainerEnv(
+async function callRevealContainerEnv(
   handlers: ReturnType<typeof createCrudHandlers>,
   id: string | string[] | undefined = 'c1',
 ) {
   const res = createMockResponse();
-  handlers.revealContainerEnv({ params: { id } } as any, res as any);
+  await handlers.revealContainerEnv({ params: { id } } as any, res as any);
   return res;
 }
 
@@ -3024,7 +3028,83 @@ describe('api/container/crud', () => {
   });
 
   describe('revealContainerEnv', () => {
-    test('returns 501 when raw env dependencies are not provided', () => {
+    function useLiveInspect(
+      harness: ReturnType<typeof createHarness>,
+      inspect: () => Promise<unknown>,
+    ) {
+      const getContainer = vi.fn(() => ({ inspect }));
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': { dockerApi: { getContainer }, watch: vi.fn(), watchContainer: vi.fn() },
+      });
+      return getContainer;
+    }
+
+    test('reveals the exact container live env', async () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({
+            details: { env: [{ key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true }] },
+          }),
+        ],
+      });
+      const inspect = vi.fn().mockResolvedValue({
+        Config: { Env: ['DB_PASSWORD=live-fixture-value', 'PUBLIC_MODE=live-setting'] },
+      });
+      const getContainer = vi.fn(() => ({ inspect }));
+      harness.deps.getWatchers.mockReturnValue({
+        'docker.local': { dockerApi: { getContainer }, watch: vi.fn(), watchContainer: vi.fn() },
+      });
+      const res = createMockResponse();
+
+      await harness.handlers.revealContainerEnv({ params: { id: 'c1' } } as any, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        env: [
+          { key: 'DB_PASSWORD', value: 'live-fixture-value', sensitive: true },
+          { key: 'PUBLIC_MODE', value: 'live-setting', sensitive: false },
+        ],
+      });
+      expect(getContainer).toHaveBeenCalledWith('c1');
+    });
+
+    test('rejects live reveal when its watcher is unavailable', async () => {
+      const harness = createHarness({ containers: [createContainer()] });
+      const res = createMockResponse();
+
+      await harness.handlers.revealContainerEnv({ params: { id: 'c1' } } as any, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'No watcher found for container c1' });
+      expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
+    });
+
+    test('does not reveal a reused name when the exact Docker container is gone', async () => {
+      const harness = createHarness({ containers: [createContainer()] });
+      const getContainer = useLiveInspect(harness, vi.fn().mockRejectedValue({ statusCode: 404 }));
+      const res = createMockResponse();
+
+      await harness.handlers.revealContainerEnv({ params: { id: 'c1' } } as any, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+      expect(getContainer).toHaveBeenCalledWith('c1');
+      expect(getContainer).not.toHaveBeenCalledWith('nginx');
+      expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
+    });
+
+    test('does not expose Docker error details in a failed reveal', async () => {
+      const harness = createHarness({ containers: [createContainer()] });
+      useLiveInspect(harness, vi.fn().mockRejectedValue(new Error('fixture-private-error-detail')));
+      const res = createMockResponse();
+
+      await harness.handlers.revealContainerEnv({ params: { id: 'c1' } } as any, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error fetching container environment' });
+      expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
+    });
+
+    test('returns 501 when audit dependencies are not provided', async () => {
       const handlers = createCrudHandlers({
         storeApi: {
           getContainersFromStore: vi.fn(() => []),
@@ -3055,13 +3135,13 @@ describe('api/container/crud', () => {
         },
       });
 
-      const res = callRevealContainerEnv(handlers);
+      const res = await callRevealContainerEnv(handlers);
 
       expect(res.status).toHaveBeenCalledWith(501);
       expect(res.json).toHaveBeenCalledWith({ error: 'Environment reveal is not available' });
     });
 
-    test('returns env values with sensitivity flags and writes an audit entry', () => {
+    test('returns env values with sensitivity flags and writes an audit entry', async () => {
       const harness = createHarness({
         containers: [
           createContainer({
@@ -3081,14 +3161,21 @@ describe('api/container/crud', () => {
         ],
       });
 
-      const res = callRevealContainerEnv(harness.handlers);
+      useLiveInspect(
+        harness,
+        vi.fn().mockResolvedValue({
+          Config: { Env: ['DB_PASSWORD=super-secret', 'PORT=8080', null, 42, 'API_TOKEN'] },
+        }),
+      );
+
+      const res = await callRevealContainerEnv(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         env: [
           { key: 'DB_PASSWORD', value: 'super-secret', sensitive: true },
           { key: 'PORT', value: '8080', sensitive: false },
-          { key: 'API_TOKEN', value: undefined, sensitive: true },
+          { key: 'API_TOKEN', value: '', sensitive: true },
         ],
       });
       expect(harness.deps.auditStore.insertAudit).toHaveBeenCalledWith({
@@ -3100,7 +3187,7 @@ describe('api/container/crud', () => {
       });
     });
 
-    test('reveals PAT and URL credentials with the same sensitivity count as redaction', () => {
+    test('reveals PAT and URL credentials with the same sensitivity count as redaction', async () => {
       const credentialUrl = 'postgres://service-user:db-secret@database.internal/app';
       const publicUrl = 'https://example.com/public';
       const harness = createHarness({
@@ -3121,7 +3208,21 @@ describe('api/container/crud', () => {
         ],
       });
 
-      const res = callRevealContainerEnv(harness.handlers);
+      useLiveInspect(
+        harness,
+        vi.fn().mockResolvedValue({
+          Config: {
+            Env: [
+              'GITHUB_PAT=github-pat-value',
+              'PATTERN=weekly',
+              `DATABASE_URL=${credentialUrl}`,
+              `PUBLIC_URL=${publicUrl}`,
+            ],
+          },
+        }),
+      );
+
+      const res = await callRevealContainerEnv(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -3137,7 +3238,7 @@ describe('api/container/crud', () => {
       );
     });
 
-    test('returns empty env payload when details.env is not an array', () => {
+    test('returns empty env payload when Docker Config.Env is not an array', async () => {
       const harness = createHarness({
         containers: [
           createContainer({
@@ -3149,7 +3250,9 @@ describe('api/container/crud', () => {
         ],
       });
 
-      const res = callRevealContainerEnv(harness.handlers);
+      useLiveInspect(harness, vi.fn().mockResolvedValue({ Config: { Env: 'DB_PASSWORD=secret' } }));
+
+      const res = await callRevealContainerEnv(harness.handlers);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ env: [] });
@@ -3160,10 +3263,72 @@ describe('api/container/crud', () => {
       );
     });
 
-    test('returns 404 when raw container is not found', () => {
+    test('asks the owning agent for agent-backed containers', async () => {
+      const getContainerEnv = vi.fn().mockResolvedValue([
+        { key: 'API_TOKEN', value: 'agent-secret' },
+        { key: 'PORT', value: '80' },
+      ]);
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', agent: 'remote-a', watcher: 'local' })],
+      });
+      harness.deps.getAgent.mockReturnValue({ getContainerEnv });
+
+      const res = await callRevealContainerEnv(harness.handlers);
+
+      expect(harness.deps.getAgent).toHaveBeenCalledWith('remote-a');
+      expect(getContainerEnv).toHaveBeenCalledWith('c1');
+      expect(res.json).toHaveBeenCalledWith({
+        env: [
+          { key: 'API_TOKEN', value: 'agent-secret', sensitive: true },
+          { key: 'PORT', value: '80', sensitive: false },
+        ],
+      });
+    });
+
+    test('returns 500 when the owning agent is not registered', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', agent: 'remote-a' })],
+      });
+      harness.deps.getAgent.mockReturnValue(undefined);
+      const res = await callRevealContainerEnv(harness.handlers);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Agent remote-a not found' });
+    });
+
+    test('tells the user to upgrade an agent that has no env route', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', agent: 'remote-a' })],
+      });
+      harness.deps.getAgent.mockReturnValue({
+        getContainerEnv: vi.fn().mockRejectedValue(new AgentEnvRevealUnsupportedError()),
+      });
+      const res = await callRevealContainerEnv(harness.handlers);
+      expect(res.status).toHaveBeenCalledWith(501);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Env reveal needs the agent upgraded to this version',
+      });
+      expect(harness.deps.auditStore.insertAudit).not.toHaveBeenCalled();
+    });
+
+    test('maps an agent container-not-found to 404 and other agent failures to 500', async () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', agent: 'remote-a' })],
+      });
+      const getContainerEnv = vi.fn().mockRejectedValue(new AgentContainerNotFoundError());
+      harness.deps.getAgent.mockReturnValue({ getContainerEnv });
+      let res = await callRevealContainerEnv(harness.handlers);
+      expect(res.status).toHaveBeenCalledWith(404);
+
+      getContainerEnv.mockRejectedValue(new Error('agent down'));
+      res = await callRevealContainerEnv(harness.handlers);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error fetching container environment' });
+    });
+
+    test('returns 404 when the stored container is not found', async () => {
       const harness = createHarness();
 
-      const res = callRevealContainerEnv(harness.handlers, 'missing');
+      const res = await callRevealContainerEnv(harness.handlers, 'missing');
 
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
