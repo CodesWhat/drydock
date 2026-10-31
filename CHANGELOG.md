@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Update joi to 18.3.1 and follow-redirects to 1.16.2, and override minimatch and glob to their fixed majors in backend, UI and E2E tooling. This clears GHSA-4528-x5fx-h6hg, GHSA-mrwp-f3q8-3g9p, GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4 on the 1.7 maintenance line.
+
 ### Changed
 
 - CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.21.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).

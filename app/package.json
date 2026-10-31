@@ -42,7 +42,7 @@
     "flat": "6.0.1",
     "gotify-client": "0.4.2",
     "helmet": "8.3.0",
-    "joi": "18.2.9",
+    "joi": "18.3.1",
     "joi-cron-expression": "1.0.1",
     "just-debounce": "1.1.0",
     "kafkajs": "2.2.4",
@@ -94,7 +94,9 @@
     "fast-copy": "4.1.0",
     "smol-toml": "1.9.0",
     "source-map-js": "1.2.2",
-    "zod": "4.6.6"
+    "zod": "4.6.6",
+    "minimatch": "^11.0.1",
+    "follow-redirects": "1.16.2"
   },
   "devDependencies": {
     "@fast-check/vitest": "0.4.1",
