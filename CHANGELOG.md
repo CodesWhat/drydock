@@ -14,6 +14,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Security
 
 - The container store now keeps sensitive runtime env values redacted at rest (anything the API already redacts: password, token and key names, and URLs with credentials), so they no longer sit in plaintext in the SQLite store, backups or volume snapshots. Existing stores are cleaned on first start, including the container snapshots saved with update operations. If the compaction that clears the freed pages and the write-ahead log can't finish, the cleanup retries on the next start until it does. Revealing env values in the UI now reads them live from Docker when you click, inspecting the exact container by id so a reused name can never return another container's env, so an agent-backed container needs its agent on this version (an older agent shows "Env reveal needs the agent upgraded to this version"). Because stored values are redacted, a change to the value of a sensitive variable alone no longer counts as a runtime change ([#1523](https://github.com/CodesWhat/drydock/issues/1523)).
+- Dependency advisories cleared: joi is now 18.3.1 in app/ and e2e/ (CVE-2026-118772) and follow-redirects is 1.16.2 in app/ (CVE-2026-116689). minimatch (CVE-2026-118764) and glob (CVE-2026-118773) are overridden to the fixed majors, 11 and 14, in the workspaces that pull them in. Their parents are dev and build tooling (stryker, nodemon, cucumber, js-beautify) that does not ship in the image.
 
 ### Changed
 

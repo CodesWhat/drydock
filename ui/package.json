@@ -68,10 +68,11 @@
     "vue-tsc": "3.3.13"
   },
   "overrides": {
+    "glob": "^14.0.2",
     "brace-expansion": "5.0.12",
     "fast-uri": "4.2.3",
     "js-cookie": "3.0.8",
-    "minimatch": "10.2.6",
+    "minimatch": "^11.0.1",
     "picomatch": "4.0.7",
     "postcss": "8.5.31",
     "qs": "6.16.1",
