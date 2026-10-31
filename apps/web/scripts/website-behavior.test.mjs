@@ -98,3 +98,43 @@ test("website and demo deployment configuration permits production only", async 
     assert.deepEqual(config.git.deploymentEnabled, { "**": false, main: true });
   }
 });
+
+test("the nonce bootstrap restores a valid family before paint and fails safely for invalid or blocked storage", async () => {
+  const { runInNewContext } = await import("node:vm");
+  assert.equal(typeof behavior.FAMILY_BOOTSTRAP, "string");
+  for (const family of [
+    "one-dark",
+    "github",
+    "dracula",
+    "catppuccin",
+    "gruvbox",
+    "ayu",
+    "unknown",
+    "__proto__",
+    null,
+  ]) {
+    const document = { documentElement: { dataset: { family: "one-dark" } } };
+    runInNewContext(behavior.FAMILY_BOOTSTRAP, {
+      document,
+      localStorage: {
+        getItem(key) {
+          assert.equal(key, "dd-website-family");
+          return family;
+        },
+      },
+    });
+    assert.equal(document.documentElement.dataset.family, behavior.getThemeFamily(family));
+  }
+  const document = { documentElement: { dataset: { family: "one-dark" } } };
+  assert.doesNotThrow(() =>
+    runInNewContext(behavior.FAMILY_BOOTSTRAP, {
+      document,
+      localStorage: {
+        getItem() {
+          throw new Error("Storage disabled");
+        },
+      },
+    }),
+  );
+  assert.equal(document.documentElement.dataset.family, "one-dark");
+});

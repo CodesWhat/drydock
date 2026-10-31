@@ -7,6 +7,9 @@ export const THEME_FAMILIES = [
   { id: "ayu", label: "Ayu" },
 ];
 
+export const FAMILY_KEY = "dd-website-family";
+export const FAMILY_BOOTSTRAP = `(function(){try{var f=localStorage.getItem(${JSON.stringify(FAMILY_KEY)});if(${JSON.stringify(THEME_FAMILIES.map((family) => family.id))}.includes(f))document.documentElement.dataset.family=f;}catch{}})();`;
+
 export function getThemeFamily(value) {
   return THEME_FAMILIES.some((family) => family.id === value) ? value : "one-dark";
 }

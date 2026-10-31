@@ -24,8 +24,8 @@ export function FAQ() {
                 <div
                   key={item.question}
                   className={[
-                    "border-b border-[var(--dd-border-strong)] last:border-0 border-[var(--dd-border-strong)]",
-                    i % 2 === 1 ? "bg-[var(--dd-bg-card)] bg-[var(--dd-bg-card)]" : "",
+                    "border-b border-[var(--dd-border-strong)] last:border-0",
+                    i % 2 === 1 ? "bg-[var(--dd-bg-sidebar)]" : "",
                   ].join(" ")}
                 >
                   <h2>
@@ -34,7 +34,7 @@ export function FAQ() {
                       aria-expanded={isOpen}
                       aria-controls={answerId}
                       onClick={() => setOpenIndex(isOpen ? null : i)}
-                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-4 text-left text-sm font-medium text-[var(--dd-text)] hover:bg-[var(--dd-bg-card)] dark:text-[var(--dd-text)] dark:hover:bg-[var(--dd-bg-card)]"
+                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-4 text-left text-sm font-medium text-[var(--dd-text)] hover:bg-[var(--dd-hover-overlay)] dark:text-[var(--dd-text)]"
                     >
                       <span>{item.question}</span>
                       <span

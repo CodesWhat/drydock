@@ -119,8 +119,8 @@ export function CompareSection() {
                   <tr
                     key={row.label}
                     className={[
-                      "border-b border-[var(--dd-border-strong)] last:border-0 border-[var(--dd-border-strong)]",
-                      i % 2 === 1 ? "bg-[var(--dd-bg-card)] bg-[var(--dd-bg-card)]" : "",
+                      "border-b border-[var(--dd-border-strong)] last:border-0",
+                      i % 2 === 1 ? "bg-[var(--dd-bg-sidebar)]" : "",
                     ].join(" ")}
                   >
                     <td className="px-5 py-3 text-[var(--dd-text)] dark:text-[var(--tx-sec)]">

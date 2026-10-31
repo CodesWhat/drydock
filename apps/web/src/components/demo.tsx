@@ -13,7 +13,15 @@ const views = [
 
 type Status = "loading" | "ready" | "failed";
 
-function LiveDemoFrame({ url, onStatus }: { url: string; onStatus: (status: Status) => void }) {
+function LiveDemoFrame({
+  url,
+  onStatus,
+  ready,
+}: {
+  url: string;
+  onStatus: (status: Status) => void;
+  ready: boolean;
+}) {
   const iframe = useRef<HTMLIFrameElement>(null);
   useEffect(() => {
     function ready(event: MessageEvent) {
@@ -33,6 +41,9 @@ function LiveDemoFrame({ url, onStatus }: { url: string; onStatus: (status: Stat
     <iframe
       ref={iframe}
       src={url}
+      inert={!ready}
+      aria-hidden={!ready}
+      tabIndex={ready ? 0 : -1}
       title={`${SITE_CONFIG.name} interactive demo`}
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
       allow="clipboard-write; fullscreen"
@@ -137,7 +148,14 @@ export function Demo() {
             ))}
           </fieldset>
           <div className="website-demo-slot">
-            {enabled ? <LiveDemoFrame key={attempt} url={url} onStatus={setStatus} /> : null}
+            {enabled ? (
+              <LiveDemoFrame
+                key={attempt}
+                url={url}
+                onStatus={setStatus}
+                ready={status === "ready"}
+              />
+            ) : null}
             {status !== "ready" ? (
               <div className="website-demo-state">
                 <p>

@@ -3,9 +3,7 @@
 import { Moon, Palette, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
-import { getThemeFamily, THEME_FAMILIES } from "@/lib/website-behavior.mjs";
-
-const FAMILY_KEY = "dd-website-family";
+import { FAMILY_KEY, getThemeFamily, THEME_FAMILIES } from "@/lib/website-behavior.mjs";
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -13,16 +11,8 @@ export function ThemeToggle() {
   const panel = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
-    try {
-      setFamily(getThemeFamily(localStorage.getItem(FAMILY_KEY)));
-    } catch {
-      setFamily("one-dark");
-    }
+    setFamily(getThemeFamily(document.documentElement.dataset.family));
   }, []);
-
-  useEffect(() => {
-    document.documentElement.dataset.family = family;
-  }, [family]);
 
   useEffect(() => {
     function closeOutside(event: PointerEvent) {
@@ -46,6 +36,7 @@ export function ThemeToggle() {
 
   function chooseFamily(value: string) {
     const next = getThemeFamily(value);
+    document.documentElement.dataset.family = next;
     setFamily(next);
     try {
       localStorage.setItem(FAMILY_KEY, next);

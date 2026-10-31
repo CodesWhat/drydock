@@ -11,16 +11,10 @@ import { splitRoadmap } from "@/lib/website-behavior.mjs";
 // HEAD follows the newest active candidate when an older RC train is retained.
 const headRelease = getRoadmapHead() as Milestone;
 
-function GitItem({ item, isReleased }: { item: string; isReleased: boolean }) {
+function GitItem({ item }: { item: string }) {
   return (
-    <p
-      className={`font-mono text-xs leading-relaxed ${
-        isReleased
-          ? "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
-          : "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
-      }`}
-    >
-      <span className="mr-1 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">│</span>
+    <p className="font-mono text-xs leading-relaxed text-[var(--tx-sec)]">
+      <span className="mr-1">│</span>
       {item}
     </p>
   );
@@ -62,7 +56,7 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
   );
 
   return (
-    <div className={`relative flex gap-4 ${isReleased ? "" : "opacity-80"}`}>
+    <div className="relative flex gap-4">
       {/* Graph column */}
       <div className="relative flex w-4 shrink-0 flex-col items-center">
         {/* Node */}
@@ -86,7 +80,7 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
             <details className="group mt-1 [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden">
               <summary className="cursor-pointer space-y-0.5">
                 {preview.map((item) => (
-                  <GitItem key={item} item={item} isReleased={isReleased} />
+                  <GitItem key={item} item={item} />
                 ))}
                 <span className="inline-flex items-center gap-1 font-mono text-xs text-[var(--tx-sec)] transition-colors hover:text-[var(--dd-text)] dark:text-[var(--tx-sec)] dark:hover:text-[var(--tx-sec)]">
                   <span className="text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">│</span>
@@ -97,14 +91,14 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
               </summary>
               <div className="mt-0.5 space-y-0.5">
                 {rest.map((item) => (
-                  <GitItem key={item} item={item} isReleased={isReleased} />
+                  <GitItem key={item} item={item} />
                 ))}
               </div>
             </details>
           ) : (
             <div className="mt-1 space-y-0.5">
               {preview.map((item) => (
-                <GitItem key={item} item={item} isReleased={isReleased} />
+                <GitItem key={item} item={item} />
               ))}
             </div>
           ))}
@@ -158,7 +152,7 @@ export function Roadmap() {
             {/* Graph entries */}
             <div className="relative p-4">
               {/* Vertical line connecting nodes */}
-              <div className="absolute left-[calc(1rem+0.5rem)] top-4 bottom-4 w-px bg-[var(--dd-bg-card)]" />
+              <div className="absolute left-[calc(1rem+0.5rem)] top-4 bottom-4 w-px bg-[var(--dd-border-strong)]" />
 
               <div className="space-y-0">
                 {visible.map((m: Milestone) => (

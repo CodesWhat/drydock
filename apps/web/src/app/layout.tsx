@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { AnalyticsPageview } from "@/components/analytics-pageview";
 import { RootProvider } from "@/components/root-provider";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { FAMILY_BOOTSTRAP } from "@/lib/website-behavior.mjs";
 import "./globals.css";
 import "./website-skin.css";
 import "./website.css";
@@ -72,6 +73,7 @@ export default async function RootLayout({
     <html lang="en" data-product="drydock" data-family="one-dark" suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-title" content={SITE_CONFIG.name} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: FAMILY_BOOTSTRAP }} />
         <link
           rel="preload"
           href="/fonts/ibm-plex-mono-latin-400-normal.woff2"
