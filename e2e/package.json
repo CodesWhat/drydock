@@ -38,13 +38,14 @@
     "lodash": "4.18.1"
   },
   "overrides": {
+    "glob": "^14.0.2",
     "csv-parse": "7.0.3",
     "brace-expansion": "5.0.12",
     "fflate": "0.8.3",
     "js-yaml": "3.15.2",
     "fast-xml-parser": "5.11.2",
-    "joi": "18.3.0",
-    "minimatch": "10.2.6",
+    "joi": "18.3.1",
+    "minimatch": "^11.0.1",
     "picomatch": "4.0.7",
     "postcss": "8.5.31",
     "uuid": "14.0.3",

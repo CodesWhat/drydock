@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-const RC_VERSION = '1.8.0-rc.9';
-const PREV_RC_VERSION = '1.8.0-rc.8';
-const RC_DATE = '2026-10-29';
-const RC_DISPLAY_DATE = 'October 29, 2026';
+const RC_VERSION = '1.8.0-rc.10';
+const PREV_RC_VERSION = '1.8.0-rc.9';
+const RC_DATE = '2026-10-31';
+const RC_DISPLAY_DATE = 'October 31, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
   'content/docs/v1.7',
@@ -45,7 +45,7 @@ test('self-update examples allow manual updates within the candidate train', () 
     const pattern = example.labels.find((label) => label.startsWith('dd.tag.include='));
     assert.ok(pattern, 'self-update must opt into candidate tag discovery');
     const filter = new RegExp(pattern.slice('dd.tag.include='.length).replaceAll('$$', '$'), 'u');
-    assert.ok(filter.test('1.8.0-rc.9'));
+    assert.ok(filter.test('1.8.0-rc.10'));
     assert.ok(!filter.test('1.8.0'));
     assert.ok(!filter.test('1.9.0-rc.1'));
   }
@@ -406,7 +406,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.9|:v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.10|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }

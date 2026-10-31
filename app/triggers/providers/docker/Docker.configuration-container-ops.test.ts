@@ -828,6 +828,35 @@ test('cloneContainer should remove Hostname and ExposedPorts when NetworkMode st
   expect(clone.HostConfig.NetworkMode).toBe('container:mainapp');
 });
 
+test('cloneContainer should drop the default hostname equal to the source container id prefix', () => {
+  const id = 'abcdef0123456789abcdef0123456789';
+  const clone = docker.cloneContainer(
+    {
+      Name: '/web',
+      Id: id,
+      HostConfig: { NetworkMode: 'bridge' },
+      Config: { Hostname: id.slice(0, 12) },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+  );
+  expect(clone.Hostname).toBeUndefined();
+});
+
+test('cloneContainer should keep an explicitly configured hostname', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/web',
+      Id: 'abcdef0123456789abcdef0123456789',
+      HostConfig: { NetworkMode: 'bridge' },
+      Config: { Hostname: 'my-host' },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+  );
+  expect(clone.Hostname).toBe('my-host');
+});
+
 test('cloneContainer should handle missing NetworkSettings by using empty endpoint config', () => {
   const clone = docker.cloneContainer(
     {

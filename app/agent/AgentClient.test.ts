@@ -101,7 +101,13 @@ import {
   _resetControllerLocalContainerIdsForTests,
   recordControllerLocalEnumeration,
 } from '../watchers/controller-local-container-ids.js';
-import { AGENT_SSE_IDLE_TIMEOUT_MS, AgentClient } from './AgentClient.js';
+import {
+  AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE,
+  AGENT_SSE_IDLE_TIMEOUT_MS,
+  AgentClient,
+  AgentContainerNotFoundError,
+  AgentEnvRevealUnsupportedError,
+} from './AgentClient.js';
 import { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { bodySha256Hex, buildCanonicalMessage, EMPTY_BODY_SHA256_HEX } from './ed25519-signer.js';
 
@@ -5450,6 +5456,61 @@ describe('AgentClient', () => {
       await client.getContainerLogs('../../etc/passwd', { tail: 100, since: 0, timestamps: true });
       const url = axios.get.mock.calls[0][0];
       expect(url).toContain(encodeURIComponent('../../etc/passwd'));
+    });
+  });
+
+  describe('getContainerEnv', () => {
+    test('fetches the live env from the agent with an encoded id', async () => {
+      axios.get.mockResolvedValue({ data: { env: [{ key: 'A', value: '1' }] } });
+      const result = await client.getContainerEnv('c/1');
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/containers/c%2F1/env'),
+        expect.any(Object),
+      );
+      expect(result).toEqual([{ key: 'A', value: '1' }]);
+    });
+
+    test('returns an empty list when the agent payload has no env array', async () => {
+      axios.get.mockResolvedValue({ data: {} });
+      await expect(client.getContainerEnv('c1')).resolves.toEqual([]);
+      axios.get.mockResolvedValue({ data: undefined });
+      await expect(client.getContainerEnv('c1')).resolves.toEqual([]);
+    });
+
+    test('maps a bare 404 to the upgrade-needed error', async () => {
+      axios.get.mockRejectedValue({ response: { status: 404, data: '<html>Cannot GET</html>' } });
+      const failure = await client.getContainerEnv('c1').catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(AgentEnvRevealUnsupportedError);
+      expect((failure as Error).message).toBe(AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+    });
+
+    test('maps a 404 with no response body to the upgrade-needed error', async () => {
+      axios.get.mockRejectedValue({ response: { status: 404 } });
+      await expect(client.getContainerEnv('c1')).rejects.toBeInstanceOf(
+        AgentEnvRevealUnsupportedError,
+      );
+    });
+
+    test('maps a JSON 404 to container-not-found', async () => {
+      axios.get.mockRejectedValue({
+        response: { status: 404, data: { error: 'Container not found' } },
+      });
+      await expect(client.getContainerEnv('c1')).rejects.toBeInstanceOf(
+        AgentContainerNotFoundError,
+      );
+    });
+
+    test('rethrows other failures', async () => {
+      axios.get.mockRejectedValue(new Error('env failed'));
+      await expect(client.getContainerEnv('c1')).rejects.toThrow('env failed');
+    });
+
+    test('edge connections cannot reveal env', async () => {
+      client.edgeAdapter = { requestContainerLogs: vi.fn(), deleteContainer: vi.fn() };
+      await expect(client.getContainerEnv('c1')).rejects.toBeInstanceOf(
+        AgentEnvRevealUnsupportedError,
+      );
+      expect(axios.get).not.toHaveBeenCalled();
     });
   });
 

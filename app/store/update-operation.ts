@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { redactRuntimeDetailsForStorage } from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import {
   emitBatchUpdateCompleted,
@@ -436,6 +437,44 @@ function toStoredJson(value: unknown): string | null {
   return value === undefined ? null : JSON.stringify(value);
 }
 
+/**
+ * #1523: the container snapshot an operation carries is written to disk, so its
+ * sensitive runtime env values are redacted first. Nothing reads them back: the
+ * snapshot only feeds terminal lifecycle events, which redact env anyway.
+ */
+function toStoredContainerSnapshot(snapshot: Container | undefined): string | null {
+  if (!snapshot || !Object.hasOwn(snapshot, 'details')) {
+    return toStoredJson(snapshot);
+  }
+  return toStoredJson({ ...snapshot, details: redactRuntimeDetailsForStorage(snapshot.details) });
+}
+
+/**
+ * Startup cleanup for snapshots written before #1523 stored them raw. Idempotent:
+ * only rows whose snapshot changes are rewritten. Returns how many were.
+ */
+export function redactStoredContainerSnapshots(): number {
+  const database = db as Database;
+  const rows = database
+    .prepare(
+      'SELECT id, container_snapshot FROM update_operations WHERE container_snapshot LIKE \'%"env"%\'',
+    )
+    .all();
+  const update = database.prepare(
+    'UPDATE update_operations SET container_snapshot = ? WHERE id = ?',
+  );
+  let redacted = 0;
+  for (const row of rows) {
+    const snapshot = fromStoredJson<Container>(row.container_snapshot as string);
+    const next = toStoredContainerSnapshot(snapshot);
+    if (next !== row.container_snapshot) {
+      update.run(next, row.id);
+      redacted += 1;
+    }
+  }
+  return redacted;
+}
+
 function fromStoredJson<T>(value: string | number | null): T | undefined {
   return value === null || value === undefined ? undefined : (JSON.parse(String(value)) as T);
 }
@@ -498,7 +537,7 @@ function operationToRow(op: UpdateOperation): UpdateOperationRow {
     updated_at: op.updatedAt,
     completed_at: op.completedAt ?? null,
     recovered_at: op.recoveredAt ?? null,
-    container_snapshot: toStoredJson(op.container),
+    container_snapshot: toStoredContainerSnapshot(op.container),
     portainer_recovery: toStoredJson(op.portainerRecovery),
   };
 }

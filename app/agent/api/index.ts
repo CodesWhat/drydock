@@ -196,6 +196,7 @@ export async function init() {
   });
   app.get('/api/containers', containerApi.getContainers);
   app.get('/api/containers/:id/logs', containerApi.getContainerLogs);
+  app.get('/api/containers/:id/env', containerApi.getContainerEnv);
   app.delete('/api/containers/:id', containerApi.deleteContainer);
   app.get('/api/watchers', watcherApi.getWatchers);
   app.get('/api/watchers/:type/:name', watcherApi.getWatcher);
