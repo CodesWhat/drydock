@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.1-rc.3';
-const PREV_RC_VERSION = '1.7.1-rc.2';
-const RC_DATE = '2026-10-29';
-const RC_DISPLAY_DATE = 'October 29, 2026';
+const RC_VERSION = '1.7.1-rc.4';
+const PREV_RC_VERSION = '1.7.1-rc.3';
+const RC_DATE = '2026-10-31';
+const RC_DISPLAY_DATE = 'October 31, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
 const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
@@ -257,19 +257,21 @@ test('rc.16 notes retain MQTT credit and the original soak record', () => {
   assertMarkdownLink(updates, 'https://github.com/CodesWhat/drydock/discussions/1201');
 });
 
-test('security policy names active v1.7 and maintained v1.6 without supporting old candidates', () => {
+test('security policy names maintained v1.7 and active v1.8 without supporting old candidates', () => {
   const security = read('SECURITY.md');
   assert.ok(
     security.includes(
-      '| Latest release candidate on the active train (1.7.x) | :white_check_mark: |',
+      `| Latest v1.7 maintenance release candidate (v${RC_VERSION}, opt-in testing) | :white_check_mark: |`,
     ),
   );
   assert.ok(
     security.includes(
-      '| Latest release candidate on the maintained 1.6.x line | :white_check_mark: |',
+      '| Latest release candidate on the active train (v1.8) | :white_check_mark: |',
     ),
   );
-  assert.ok(security.includes('| Latest stable release | :white_check_mark: |'));
+  assert.ok(
+    security.includes('| Latest stable release (v1.7.0, GA 2026-10-19) | :white_check_mark: |'),
+  );
   assert.ok(security.includes('| Older stable or prerelease versions | :x: |'));
   assert.match(security, /Older release candidates are not patched/u);
 });
