@@ -452,7 +452,34 @@ describe('AgentClient', () => {
       );
     });
 
-    test('should strip sensitive field from env entries before storing', async () => {
+    test('preserves classified masked URLs from an upgraded agent', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
+      await client.processContainer({
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [
+            { key: 'ENDPOINT_URL', value: '[REDACTED]', sensitive: true },
+            { key: 'PUBLIC_MODE', value: 'visible', sensitive: true },
+          ],
+        },
+      } as any);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            env: [
+              { key: 'ENDPOINT_URL', value: '[REDACTED]', sensitive: true },
+              { key: 'PUBLIC_MODE', value: 'visible', sensitive: false },
+            ],
+          }),
+        }),
+      );
+    });
+
+    test('normalizes sensitivity metadata before storing agent env', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
       const container = {
@@ -472,8 +499,8 @@ describe('AgentClient', () => {
         expect.objectContaining({
           details: expect.objectContaining({
             env: [
-              { key: 'NORMAL', value: 'foo' },
-              { key: 'API_KEY', value: '[REDACTED]' },
+              { key: 'NORMAL', value: 'foo', sensitive: false },
+              { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
             ],
           }),
         }),

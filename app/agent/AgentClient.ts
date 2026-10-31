@@ -4,6 +4,7 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import { redactRuntimeDetailsForStorage } from '../api/container/shared.js';
 import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
@@ -862,10 +863,9 @@ export class AgentClient {
     // Traditional agents own registry normalization and results. Controller-owned
     // Docker transport instead applies the controller's configured registry above.
 
-    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
-    // emitter may attach — the controller's Joi schema does not allow it.
+    // Retain classification for already-masked URLs; their credentials are no longer present.
     if (container.details?.env && Array.isArray(container.details.env)) {
-      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+      container.details = redactRuntimeDetailsForStorage(container.details);
     }
 
     if (this.shouldPreserveClearedUpdateAvailable(container)) {
