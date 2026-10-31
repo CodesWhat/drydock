@@ -27,7 +27,7 @@ Public images on dock.mau.dev work without any configuration. Add an empty regis
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_MAU_PUBLIC=
@@ -39,7 +39,7 @@ services:
 docker run \
   -e DD_REGISTRY_MAU_PUBLIC="" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -52,7 +52,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_MAU_PRIVATE_TOKEN=xxxxx
@@ -64,7 +64,7 @@ services:
 docker run \
   -e DD_REGISTRY_MAU_PRIVATE_TOKEN="xxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>

@@ -643,6 +643,20 @@ async function revealContainerEnv(containerId: string) {
     credentials: 'include',
   });
   if (!response.ok) {
+    // Reveal reads the live env from Docker, so the server's own reason (for example
+    // an agent that needs upgrading) is what the user needs to see.
+    let serverMessage: string | undefined;
+    try {
+      const body = await readJsonResponse<{ error?: unknown }>(response, 'Container env API');
+      if (typeof body?.error === 'string' && body.error.trim()) {
+        serverMessage = body.error;
+      }
+    } catch (e: unknown) {
+      console.debug(`Unable to parse env reveal error payload: ${errorMessage(e)}`);
+    }
+    if (serverMessage) {
+      throw new Error(serverMessage);
+    }
     throw new Error(
       actionHttpFailure(response, i18n.global.t('containerComponents.sideTabContent.revealFailed')),
     );

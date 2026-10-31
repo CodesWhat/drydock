@@ -11,6 +11,26 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.10] - 2026-10-31
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.9 changes and upgrade warnings. It fixes sensitive container env values stored in plaintext (#1523), every second self-update being refused (#1525), and the joi, follow-redirects, minimatch and glob advisories.
+
+### Security
+
+- The container store now keeps sensitive runtime env values redacted at rest (anything the API already redacts: password, token and key names, and URLs with credentials), so they no longer sit in plaintext in the SQLite store, backups or volume snapshots. Existing stores are cleaned on first start, including the container snapshots saved with update operations. If the compaction that clears the freed pages and the write-ahead log can't finish, the cleanup retries on the next start until it does. Revealing env values in the UI now reads them live from Docker when you click, inspecting the exact container by id so a reused name can never return another container's env, so an agent-backed container needs its agent on this version (an older agent shows "Env reveal needs the agent upgraded to this version"). Because stored values are redacted, a change to the value of a sensitive variable alone no longer counts as a runtime change ([#1523](https://github.com/CodesWhat/drydock/issues/1523)). Redaction follows the API's recognized sensitive-key patterns and URL-credential detection; unrecognized names can remain plaintext. Retained pre-1.8 JSON files are not scrubbed because they are rollback snapshots, so remove them only when rollback is no longer needed.
+- Dependency advisories cleared: joi is now 18.3.1 in app/ and e2e/ (CVE-2026-118772) and follow-redirects is 1.16.2 in app/ (CVE-2026-116689). minimatch (CVE-2026-118764) and glob (CVE-2026-118773) are overridden to the fixed majors, 11 and 14, in the workspaces that pull them in. Their parents are dev and build tooling (stryker, nodemon, cucumber, js-beautify) that does not ship in the image.
+
+### Changed
+
+- CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.22.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).
+
+### Fixed
+
+- Self-updates no longer get refused as "identity indeterminate" on every second update when the Drydock service had no `hostname:` set. A recreated container kept its predecessor's ID as its hostname, so Drydock couldn't find itself afterward. Recreated containers now drop Docker's default hostname instead of inheriting the old container's ID, and an ID-shaped hostname that matches no container falls back to matching by the configured hostname ([#1525](https://github.com/CodesWhat/drydock/issues/1525)).
+
 ## [1.8.0-rc.9] - 2026-10-29
 
 > [!WARNING]
@@ -3652,7 +3672,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...HEAD
+[1.8.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...v1.8.0-rc.10
 [1.8.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...v1.8.0-rc.9
 [1.8.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...v1.8.0-rc.8
 [1.8.0-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.6...v1.8.0-rc.7

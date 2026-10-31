@@ -17,7 +17,7 @@ If you prefer using a local timezone, you have 2 solutions:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     volumes:
       - /etc/localtime:/etc/localtime:ro
@@ -26,7 +26,7 @@ services:
 </Tab>
 <Tab value="Docker (Host Localtime)">
 ```bash
-docker run -v /etc/localtime:/etc/localtime:ro ... codeswhat/drydock:1.8.0-rc.9
+docker run -v /etc/localtime:/etc/localtime:ro ... codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -39,7 +39,7 @@ docker run -v /etc/localtime:/etc/localtime:ro ... codeswhat/drydock:1.8.0-rc.9
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - TZ=Europe/Paris
@@ -48,7 +48,7 @@ services:
 </Tab>
 <Tab value="Docker (TZ Variable)">
 ```bash
-docker run -e "TZ=Europe/Paris" ... codeswhat/drydock:1.8.0-rc.9
+docker run -e "TZ=Europe/Paris" ... codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>

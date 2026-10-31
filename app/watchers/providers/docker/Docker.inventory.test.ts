@@ -120,7 +120,7 @@ test('forwards inventory recreation and updates separately from ordinary scan li
   expect(frames[0].data.container).toEqual({ id: 'old', replacementExpected: true });
   expect(frames[1].data.container.id).toBe('new');
   expect(frames[1].data.container.details.env).toEqual([
-    { key: 'PASSWORD', value: 'secret' },
+    { key: 'PASSWORD', value: '[REDACTED]' },
     { key: 'PUBLIC', value: 'value' },
   ]);
   expect(frames[2].data.context).toBeUndefined();

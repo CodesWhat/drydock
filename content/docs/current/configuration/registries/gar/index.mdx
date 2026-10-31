@@ -26,7 +26,7 @@ Docker and Docker Compose action triggers use this same service-account configur
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     secrets:
       - gar_private_key
@@ -47,7 +47,7 @@ docker run \
   -e DD_REGISTRY_GAR_PRIVATE_CLIENTEMAIL="johndoe@myproject.iam.gserviceaccount.com" \
   -e DD_REGISTRY_GAR_PRIVATE_PRIVATEKEY__FILE="/run/secrets/gar_private_key" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>

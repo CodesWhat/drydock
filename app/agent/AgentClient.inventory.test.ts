@@ -106,7 +106,7 @@ test('signs the operation identity in the native request body when using Ed25519
 });
 
 test.each(['HTTP only', 'SSE then HTTP'])(
-  'retains real Docker provider env across native %s replication',
+  'replicates real Docker provider env redacted across native %s replication (#1523)',
   async (delivery) => {
     const agentDb = createMigratedMemoryDatabase();
     const docker = new Docker();
@@ -173,16 +173,16 @@ test.each(['HTTP only', 'SSE then HTTP'])(
       if (delivery === 'SSE then HTTP') {
         expect(frames.map(({ type }) => type)).toEqual(['dd:inventory-added']);
         for (const frame of frames) await client.handleEvent(frame.type, frame.data);
-        expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+        expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('[REDACTED]');
       }
       return { data: nativeResponse.json.mock.results[0].value };
     });
     try {
       const completed = await client.refreshInventory('docker', descriptor.name);
       expect(completed.authoritative).toBe(true);
-      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('[REDACTED]');
       expect(nativeResponse.json.mock.results[0].value.containers[0].details.env[0].value).toBe(
-        'actual-secret',
+        '[REDACTED]',
       );
       expect(store.getContainer('native')?.details?.env[0].value).toBe('[REDACTED]');
       store.createCollections(agentDb);
@@ -193,7 +193,7 @@ test.each(['HTTP only', 'SSE then HTTP'])(
       expect(publicResponse.json.mock.results[0].value.containers[0].details.env[0].value).toBe(
         '[REDACTED]',
       );
-      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('actual-secret');
+      expect(store.getContainerRaw('native')?.details?.env[0].value).toBe('[REDACTED]');
     } finally {
       unsubscribe();
       forgetControllerLocalEnumeration(docker);
@@ -266,7 +266,7 @@ test('replicates real agent store lifecycle frames and raw HTTP without registry
     expect(store.getContainerRaw('new')).toMatchObject({
       status: 'exited',
       updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' },
-      details: { env: [{ key: 'PASSWORD', value: 'actual-secret' }] },
+      details: { env: [{ key: 'PASSWORD', value: '[REDACTED]' }] },
     });
     expect(store.getContainer('new')?.details?.env[0].value).toBe('[REDACTED]');
     expect(watch).not.toHaveBeenCalled();

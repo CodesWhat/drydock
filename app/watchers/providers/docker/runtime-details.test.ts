@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   areRuntimeDetailsEqual,
+  formatContainerEnv,
   getRuntimeDetailsFromContainerSummary,
   getRuntimeDetailsFromInspect,
   mergeRuntimeDetails,
@@ -384,5 +385,49 @@ describe('docker runtime details module', () => {
       normalizeRuntimeDetails({ ports: [], volumes: [], env: [], startedAt: null }).startedAt,
     ).toBeUndefined();
     expect(normalizeRuntimeDetails({ ports: [], volumes: [], env: [] }).startedAt).toBeUndefined();
+  });
+
+  test('equality compares redacted env so a redacted stored copy matches the live values (#1523)', () => {
+    const stored = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: '[REDACTED]' },
+        { key: 'PATH', value: '/bin' },
+      ],
+    };
+    const live = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'real-secret' },
+        { key: 'PATH', value: '/bin' },
+      ],
+    };
+
+    expect(areRuntimeDetailsEqual(stored, live)).toBe(true);
+    // The known trade-off: a changed secret value alone is not a change.
+    expect(
+      areRuntimeDetailsEqual(live, {
+        ...live,
+        env: [{ key: 'DB_PASSWORD', value: 'rotated' }, live.env[1]],
+      }),
+    ).toBe(true);
+    // Non-sensitive values and keys still count.
+    expect(
+      areRuntimeDetailsEqual(stored, {
+        ...live,
+        env: [live.env[0], { key: 'PATH', value: '/usr/bin' }],
+      }),
+    ).toBe(false);
+  });
+
+  test('formatContainerEnv parses KEY=VALUE entries', () => {
+    expect(formatContainerEnv(['A=1', 'B=x=y', 'C'])).toEqual([
+      { key: 'A', value: '1' },
+      { key: 'B', value: 'x=y' },
+      { key: 'C', value: '' },
+    ]);
+    expect(formatContainerEnv(undefined)).toEqual([]);
   });
 });

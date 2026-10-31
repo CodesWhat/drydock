@@ -76,6 +76,67 @@ describe('resolveSelfContainerIdentity', () => {
     });
   });
 
+  test('falls back to the inspected hostname when the id-shaped hostname matches no container id', async () => {
+    const dockerApi = createDockerApi(
+      [
+        { Id: 'aaaaaaaaaaaa1111', Names: ['/drydock-main'] },
+        { Id: 'bbbbbbbbbbbb2222', Names: ['/other'] },
+      ],
+      {
+        aaaaaaaaaaaa1111: {
+          Id: 'aaaaaaaaaaaa1111',
+          Name: '/drydock-main',
+          Config: { Hostname: 'deadbeef0123' },
+        },
+        bbbbbbbbbbbb2222: {
+          Id: 'bbbbbbbbbbbb2222',
+          Name: '/other',
+          Config: { Hostname: 'bbbbbbbbbbbb' },
+        },
+      },
+    );
+
+    await expect(resolveSelfContainerIdentity(dockerApi, 'deadbeef0123')).resolves.toEqual({
+      id: 'aaaaaaaaaaaa1111',
+      name: 'drydock-main',
+    });
+  });
+
+  test('fails closed when an id-shaped hostname matches no id and no inspected hostname', async () => {
+    const dockerApi = createDockerApi([{ Id: 'aaaaaaaaaaaa1111' }], {
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/drydock-main',
+        Config: { Hostname: 'other-host' },
+      },
+    });
+
+    await expect(resolveSelfContainerIdentity(dockerApi, 'deadbeef0123')).resolves.toBeNull();
+  });
+
+  test('fails closed when an id-shaped hostname matches several inspected hostnames', async () => {
+    const dockerApi = createDockerApi([{ Id: 'aaaaaaaaaaaa1111' }, { Id: 'bbbbbbbbbbbb2222' }], {
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/a',
+        Config: { Hostname: 'deadbeef0123' },
+      },
+      bbbbbbbbbbbb2222: {
+        Id: 'bbbbbbbbbbbb2222',
+        Name: '/b',
+        Config: { Hostname: 'deadbeef0123' },
+      },
+    });
+
+    await expect(resolveSelfContainerIdentity(dockerApi, 'deadbeef0123')).resolves.toBeNull();
+  });
+
+  test('fails closed when an id-shaped hostname matches several container ids', async () => {
+    const dockerApi = createDockerApi([{ Id: 'cccccccccccc1111' }, { Id: 'cccccccccccc2222' }]);
+
+    await expect(resolveSelfContainerIdentity(dockerApi, 'cccccccccccc')).resolves.toBeNull();
+  });
+
   test('fails closed when inspected hostname evidence is ambiguous', async () => {
     const dockerApi = createDockerApi(
       [

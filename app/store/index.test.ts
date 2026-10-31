@@ -103,7 +103,11 @@ const {
       rowsByTable: {},
     })),
   ) {
-    return { runFirstStartImport: runFirstStartImportImpl };
+    return {
+      runFirstStartImport: runFirstStartImportImpl,
+      readStoreMetadata: vi.fn(() => undefined as string | undefined),
+      writeStoreMetadata: vi.fn(),
+    };
   }
 
   // A single, stable object backs every 'node:fs' mock for the whole file.
@@ -141,7 +145,11 @@ const {
   }
 
   function createCollectionsMock() {
-    return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
+    return {
+      createCollections: vi.fn(),
+      completeStartupInitialization: vi.fn(),
+      redactStoredContainerSnapshots: vi.fn(() => 0),
+    };
   }
 
   function createContainerMock(overrides = {}) {
@@ -152,6 +160,7 @@ const {
       rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
       rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
       reconcileGroupPolicySnapshots: vi.fn(),
+      redactStoredRuntimeEnv: vi.fn(() => 0),
       ...overrides,
     };
   }
@@ -435,6 +444,130 @@ describe('Store Module', () => {
     await storeMemory.init({ memory: true });
 
     expect(runFirstStartImportMock).not.toHaveBeenCalled();
+  });
+
+  async function initRedactionCleanup({
+    marker,
+    pragma,
+    exec,
+    redacted = 0,
+    memory = false,
+  }: {
+    marker?: string;
+    pragma?: (name: string, value?: string) => unknown;
+    exec?: (sql: string) => void;
+    redacted?: number;
+    memory?: boolean;
+  } = {}) {
+    vi.resetModules();
+    const sqliteDb = createSqliteDbMock({
+      ...(pragma ? { pragma: vi.fn(pragma) } : {}),
+      ...(exec ? { exec: vi.fn(exec) } : {}),
+    });
+    registerCommonMocks({
+      container: { redactStoredRuntimeEnv: vi.fn(() => redacted) },
+      fs: { renameSync: vi.fn() },
+      sqliteOpenDatabase: vi.fn(() => sqliteDb),
+    });
+    const importModule: any = await import('./db/import.js');
+    importModule.readStoreMetadata.mockReturnValue(marker);
+    const storeUnderTest = await import('./index.js');
+    await storeUnderTest.init({ memory });
+    return { sqliteDb, importModule };
+  }
+
+  test('should redact stored env, vacuum, checkpoint and set the marker (#1523)', async () => {
+    const { sqliteDb, importModule } = await initRedactionCleanup({ redacted: 2 });
+
+    expect(sqliteDb.exec).toHaveBeenCalledWith('VACUUM');
+    expect(sqliteDb.pragma).toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
+    expect(importModule.writeStoreMetadata).toHaveBeenCalledWith(
+      sqliteDb,
+      'env_redaction_at_rest_completed',
+      expect.any(String),
+    );
+  });
+
+  test('should still compact and set the marker on a fresh install with nothing to redact (#1523)', async () => {
+    const { sqliteDb, importModule } = await initRedactionCleanup();
+
+    expect(sqliteDb.exec).toHaveBeenCalledWith('VACUUM');
+    expect(importModule.writeStoreMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  test('should skip redaction, vacuum and checkpoint once the marker is set (#1523)', async () => {
+    const { sqliteDb, importModule } = await initRedactionCleanup({
+      marker: '2026-10-30T00:00:00.000Z',
+      redacted: 3,
+    });
+
+    expect(sqliteDb.exec).not.toHaveBeenCalledWith('VACUUM');
+    expect(sqliteDb.pragma).not.toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
+    expect(importModule.writeStoreMetadata).not.toHaveBeenCalled();
+  });
+
+  test('should leave the marker unset and not crash when VACUUM throws (#1523)', async () => {
+    const { sqliteDb, importModule } = await initRedactionCleanup({
+      redacted: 1,
+      exec: (sql) => {
+        if (sql === 'VACUUM') {
+          throw new Error('disk full');
+        }
+      },
+    });
+
+    expect(sqliteDb.exec).toHaveBeenCalledWith('VACUUM');
+    expect(sqliteDb.pragma).not.toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
+    expect(importModule.writeStoreMetadata).not.toHaveBeenCalled();
+  });
+
+  test('should retry a busy checkpoint and set the marker once it succeeds (#1523)', async () => {
+    let checkpoints = 0;
+    const { importModule } = await initRedactionCleanup({
+      pragma: (name) => {
+        if (name === 'wal_checkpoint') {
+          checkpoints += 1;
+          return checkpoints < 3 ? 1 : 0;
+        }
+        return undefined;
+      },
+    });
+
+    expect(checkpoints).toBe(3);
+    expect(importModule.writeStoreMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  test('should give up after three busy checkpoints and leave the marker unset (#1523)', async () => {
+    let checkpoints = 0;
+    const { importModule } = await initRedactionCleanup({
+      pragma: (name) => {
+        if (name === 'wal_checkpoint') {
+          checkpoints += 1;
+          return 1;
+        }
+        return undefined;
+      },
+    });
+
+    expect(checkpoints).toBe(3);
+    expect(importModule.writeStoreMetadata).not.toHaveBeenCalled();
+  });
+
+  test('should skip the vacuum in memory mode even when rows were rewritten (#1523)', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      container: { redactStoredRuntimeEnv: vi.fn(() => 1) },
+      fs: { renameSync: vi.fn() },
+    });
+
+    const storeMemoryRedacting = await import('./index.js');
+    await storeMemoryRedacting.init({ memory: true });
+
+    const driver = await import('./db/driver.js');
+    const sqliteInstance = driver.openDatabase.mock.results[0].value;
+    const importModule: any = await import('./db/import.js');
+    expect(sqliteInstance.exec).not.toHaveBeenCalledWith('VACUUM');
+    expect(importModule.writeStoreMetadata).not.toHaveBeenCalled();
   });
 
   test('should create directory if it does not exist', async () => {

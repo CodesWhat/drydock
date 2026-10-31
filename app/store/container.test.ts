@@ -604,7 +604,7 @@ test('updateContainer should clear security when explicitly set to undefined', a
   expect(updated.security).toBeUndefined();
 });
 
-test('updateContainer should preserve raw runtime env values when payload contains classified values', async () => {
+test('updateContainer should store classified runtime env redacted and without the sensitive marker (#1523)', async () => {
   seedContainer(
     createContainerFixture({
       id: 'container-runtime-classification',
@@ -620,19 +620,123 @@ test('updateContainer should preserve raw runtime env values when payload contai
     details: {
       ports: [],
       volumes: [],
-      env: [{ key: 'DB_PASSWORD', value: 'super-secret-password', sensitive: true }],
+      env: [
+        { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+        { key: 'PATH', value: '/usr/bin', sensitive: false },
+      ],
     },
   });
 
   const updated = container.updateContainer(containerToSave);
 
-  expect(updated.details.env[0]).toEqual({
-    key: 'DB_PASSWORD',
-    value: 'super-secret-password',
+  expect(updated.details.env).toEqual([
+    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'PATH', value: '/usr/bin' },
+  ]);
+  expect(container.getContainerRaw('container-runtime-classification').details.env).toEqual([
+    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'PATH', value: '/usr/bin' },
+  ]);
+});
+
+test('updateContainer should never write a raw sensitive env value to disk (#1523)', async () => {
+  container.insertContainer(
+    createContainerFixture({
+      id: 'container-no-plaintext',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [
+          { key: 'DB_PASSWORD', value: 'super-secret-password' },
+          { key: 'DATABASE_URL', value: 'postgres://user:pw-in-url@db/app' },
+          { key: 'PATH', value: '/usr/bin' },
+        ],
+      },
+    }),
+  );
+  container.updateContainer(
+    createContainerFixture({
+      id: 'container-no-plaintext',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'API_TOKEN', value: 'another-secret' }],
+      },
+    }),
+  );
+
+  const stored = JSON.stringify(db.prepare('SELECT details FROM containers').all());
+  expect(stored).not.toContain('super-secret-password');
+  expect(stored).not.toContain('pw-in-url');
+  expect(stored).not.toContain('another-secret');
+  expect(stored).toContain('API_TOKEN');
+});
+
+test('insertContainer should redact sensitive env values in the stored row (#1523)', async () => {
+  container.insertContainer(
+    createContainerFixture({
+      id: 'container-insert-redacted',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [
+          { key: 'DB_PASSWORD', value: 'super-secret-password' },
+          { key: 'PATH', value: '/usr/bin' },
+        ],
+      },
+    }),
+  );
+
+  expect(container.getContainerRaw('container-insert-redacted').details.env).toEqual([
+    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'PATH', value: '/usr/bin' },
+  ]);
+});
+
+describe('redactStoredRuntimeEnv', () => {
+  function writeRawDetails(id: string, details: unknown): void {
+    seedContainer(createContainerFixture({ id }));
+    db.prepare('UPDATE containers SET details = ? WHERE id = ?').run(JSON.stringify(details), id);
+  }
+
+  test('rewrites rows written before #1523 and leaves clean rows alone', () => {
+    writeRawDetails('raw-row', {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: 'super-secret-password' },
+        { key: 'PATH', value: '/usr/bin' },
+      ],
+    });
+    writeRawDetails('clean-row', {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'PATH', value: '/usr/bin' }],
+    });
+    container.getContainersRaw();
+
+    expect(container.redactStoredRuntimeEnv()).toBe(1);
+
+    const stored = JSON.stringify(db.prepare('SELECT details FROM containers').all());
+    expect(stored).not.toContain('super-secret-password');
+    expect(container.getContainerRaw('raw-row').details.env).toEqual([
+      { key: 'DB_PASSWORD', value: '[REDACTED]' },
+      { key: 'PATH', value: '/usr/bin' },
+    ]);
+    expect(container.getContainersRaw().find((c) => c.id === 'raw-row')?.details.env[0].value).toBe(
+      '[REDACTED]',
+    );
   });
-  expect(container.getContainerRaw('container-runtime-classification').details.env[0]).toEqual({
-    key: 'DB_PASSWORD',
-    value: 'super-secret-password',
+
+  test('is idempotent and reports zero on an already redacted store', () => {
+    writeRawDetails('raw-row', {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'API_TOKEN', value: 'secret' }],
+    });
+
+    expect(container.redactStoredRuntimeEnv()).toBe(1);
+    expect(container.redactStoredRuntimeEnv()).toBe(0);
   });
 });
 
@@ -1697,7 +1801,7 @@ test('getContainers should redact sensitive env values by default', async () => 
     value: '/usr/local/bin',
     sensitive: false,
   });
-  expect(container.getContainerRaw(containerExample.id)?.details.env[0].value).toBe('super-secret');
+  expect(container.getContainerRaw(containerExample.id)?.details.env[0].value).toBe('[REDACTED]');
 });
 
 test('store/container should not define duplicate runtime env classification logic', () => {
@@ -1733,7 +1837,7 @@ test('getContainers should always redact sensitive env values', async () => {
   });
 });
 
-test('getContainersRaw should return unredacted env values', async () => {
+test('getContainersRaw should return env values redacted at rest', async () => {
   const containerExample = createContainerFixture({
     details: {
       ports: [],
@@ -1750,7 +1854,7 @@ test('getContainersRaw should return unredacted env values', async () => {
 
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
-    value: 'super-secret',
+    value: '[REDACTED]',
   });
   expect(result[0].details.env[1]).toEqual({
     key: 'NODE_ENV',
@@ -1965,7 +2069,7 @@ test('getContainer should redact sensitive env values by default', async () => {
     value: '[REDACTED]',
     sensitive: true,
   });
-  expect(container.getContainerRaw('132456789')?.details.env[0].value).toBe('raw-secret');
+  expect(container.getContainerRaw('132456789')?.details.env[0].value).toBe('[REDACTED]');
 });
 
 test('getContainer should always redact sensitive env values', async () => {
@@ -1988,7 +2092,7 @@ test('getContainer should always redact sensitive env values', async () => {
   });
 });
 
-test('getContainerRaw should return unredacted env values', async () => {
+test('getContainerRaw should return env values redacted at rest', async () => {
   const containerExample = createContainerFixture({
     id: '132456789',
     details: {
@@ -2003,7 +2107,7 @@ test('getContainerRaw should return unredacted env values', async () => {
 
   expect(result?.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: 'raw-secret',
+    value: '[REDACTED]',
   });
 });
 
