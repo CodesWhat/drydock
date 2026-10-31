@@ -1733,9 +1733,25 @@ describe('Container Router', () => {
         vulnerabilities: [],
       });
 
+      const stored = {
+        id: 'c1',
+        name: 'nginx',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true }],
+        },
+        result: { tag: 'fresh-watcher-result' },
+      };
+      storeContainer.getContainerRaw.mockReturnValue(stored);
+
       const { res } = await callScanAll({ containerIds: ['c1'] });
       await waitForBulkScanCycleComplete();
 
+      expect(storeContainer.updateContainer.mock.calls[0][0]).toEqual({
+        ...stored,
+        security: { scan: expect.objectContaining({ status: 'scanned' }) },
+      });
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(storeContainer.getContainers).not.toHaveBeenCalled();
       expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(
