@@ -35,7 +35,7 @@ The `custom` registry lets you configure a self-hosted [Docker Registry](https:/
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com
@@ -47,7 +47,7 @@ services:
 docker run \
   -e "DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -60,7 +60,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.example.com
@@ -76,7 +76,7 @@ docker run \
   -e "DD_REGISTRY_CUSTOM_PRIVATE_LOGIN=john" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE_PASSWORD=doe" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -89,7 +89,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_CUSTOM_PRIVATE1_URL=https://registry-one.example.com
@@ -111,7 +111,7 @@ docker run \
   -e "DD_REGISTRY_CUSTOM_PRIVATE2_LOGIN=jane" \
   -e "DD_REGISTRY_CUSTOM_PRIVATE2_PASSWORD=doe" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>

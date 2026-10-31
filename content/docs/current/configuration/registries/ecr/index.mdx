@@ -32,7 +32,7 @@ ECR authorization tokens are valid for 12 hours. drydock caches the token per in
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_ECR_PRIVATE_ACCESSKEYID=xxx
@@ -48,7 +48,7 @@ docker run \
   -e DD_REGISTRY_ECR_PRIVATE_SECRETACCESSKEY="xxx" \
   -e DD_REGISTRY_ECR_PRIVATE_REGION="eu-west-1" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>

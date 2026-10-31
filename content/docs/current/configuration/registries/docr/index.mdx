@@ -30,7 +30,7 @@ The `docr` registry lets you configure [DigitalOcean Container Registry](https:/
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_DOCR_PRIVATE_TOKEN=dop_v1_xxxxxxxxxxxxx
@@ -42,7 +42,7 @@ services:
 docker run \
   -e "DD_REGISTRY_DOCR_PRIVATE_TOKEN=dop_v1_xxxxxxxxxxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -55,7 +55,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.9
+    image: codeswhat/drydock:1.8.0-rc.10
     ...
     environment:
       - DD_REGISTRY_DOCR_PRIVATE_LOGIN=doctl
@@ -69,7 +69,7 @@ docker run \
   -e "DD_REGISTRY_DOCR_PRIVATE_LOGIN=doctl" \
   -e "DD_REGISTRY_DOCR_PRIVATE_PASSWORD=dop_v1_xxxxxxxxxxxxx" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```
 </Tab>
 </Tabs>
@@ -94,5 +94,5 @@ use:
 docker run \
   -e "DD_REGISTRY_DOCR_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
   ...
-  codeswhat/drydock:1.8.0-rc.9
+  codeswhat/drydock:1.8.0-rc.10
 ```

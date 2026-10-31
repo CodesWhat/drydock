@@ -5,6 +5,15 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.10 Highlights - October 31, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Secrets stay out of the store.** Sensitive container env values are kept redacted at rest, existing stores are cleaned on first start, and revealing a value reads it live from Docker (#1523).
+- **Self-update works every time again** when the Drydock service has no `hostname:`. Recreated containers no longer inherit the old container ID as hostname (#1525).
+- **Dependency advisories fixed:** joi 18.3.1, follow-redirects 1.16.2, and fixed minimatch and glob majors in the affected workspaces.
+- RC10 includes every rc.9 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.9 Highlights - October 29, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
