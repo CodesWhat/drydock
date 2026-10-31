@@ -1257,7 +1257,7 @@ export function insertContainer(container) {
       }
     }
   }
-  const containerToSave = validateContainer(container);
+  const containerToSave = redactContainerRuntimeEnv(validateContainer(container));
   normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
@@ -1344,7 +1344,7 @@ export function updateContainer(
     containerMerged.updatePolicyOverrides = undefined;
     containerMerged.updatePolicySources = undefined;
   }
-  const containerToReturn = validateContainer(containerMerged);
+  const containerToReturn = redactContainerRuntimeEnv(validateContainer(containerMerged));
   normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);

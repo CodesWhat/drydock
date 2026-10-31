@@ -42,6 +42,7 @@ const SENSITIVE_KEY_PATTERNS = [
 // substring false positives. For example, 'PASS' would otherwise match
 // 'COMPASS' or 'BYPASS' under a plain .includes() check.
 const SENSITIVE_SEGMENT_PATTERNS = ['PASS', 'PAT'];
+const REDACTED_ENV_VALUE = '[REDACTED]';
 
 export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
@@ -67,8 +68,16 @@ export function hasUrlCredentials(value: unknown): boolean {
   }
 }
 
-export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): boolean {
-  return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
+export function isSensitiveEnvEntry(entry: {
+  key: string;
+  value?: unknown;
+  sensitive?: unknown;
+}): boolean {
+  return (
+    isSensitiveKey(entry.key) ||
+    hasUrlCredentials(entry.value) ||
+    (entry.sensitive === true && entry.value === REDACTED_ENV_VALUE)
+  );
 }
 
 export function getErrorStatusCode(error: unknown): number | undefined {
@@ -103,7 +112,7 @@ function classifyContainerRuntimeDetails<T>(details: T): T {
         const sensitive = isSensitiveEnvEntry(entry);
         return {
           key: entry.key,
-          value: sensitive ? '[REDACTED]' : entry.value,
+          value: sensitive ? REDACTED_ENV_VALUE : entry.value,
           sensitive,
         };
       }),
