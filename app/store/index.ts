@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import joi from 'joi';
 import Loki from 'lokijs';
+import { redactContainerRuntimeEnv } from '../api/container/shared.js';
 import logger from '../log/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runtime/paths.js';
 import { migrateInlineSboms } from '../security/sbom-migration.js';
@@ -117,6 +118,28 @@ function dropLegacySessionsCollection(): boolean {
   return true;
 }
 
+function redactPersistedRuntimeEnv(): boolean {
+  let changed = false;
+  for (const name of ['containers', 'updateOperations']) {
+    const collection = db?.getCollection(name);
+    if (!collection) continue;
+    for (const doc of collection.find()) {
+      const container = name === 'containers' ? doc.data : doc.data?.container;
+      if (!container) continue;
+      const redacted = redactContainerRuntimeEnv(container);
+      if (JSON.stringify(container.details?.env) === JSON.stringify(redacted.details?.env)) {
+        continue;
+      }
+      collection.update({
+        ...doc,
+        data: name === 'containers' ? redacted : { ...doc.data, container: redacted },
+      });
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function createCollections(): boolean {
   const droppedLegacySessionsCollection = dropLegacySessionsCollection();
   agentKeys.createCollections(db);
@@ -203,13 +226,11 @@ async function loadDb(
   if (err) {
     reject(err);
   } else {
+    const redactedRuntimeEnv = redactPersistedRuntimeEnv();
     // Create collections
     const droppedLegacySessionsCollection = createCollections();
-    if (droppedLegacySessionsCollection) {
-      // loadDatabase() resolving is not itself a write: LokiJS only
-      // autosaves on a later dirty write, so a store that never writes
-      // again would keep the stale Sessions collection in dd.json forever.
-      // Flush once here so the drop is durable across a restart.
+    if (droppedLegacySessionsCollection || redactedRuntimeEnv) {
+      // Flush startup repairs now; the next autosave may never run before shutdown.
       await save();
     }
     await migrateSbomsOffHeap();

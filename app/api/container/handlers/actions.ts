@@ -1,8 +1,14 @@
 import type { Request, Response } from 'express';
+import {
+  AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE,
+  AgentContainerNotFoundError,
+  AgentEnvRevealUnsupportedError,
+} from '../../../agent/AgentClient.js';
 import * as event from '../../../event/index.js';
-import type { Container, ContainerReport } from '../../../model/container.js';
+import type { ContainerReport } from '../../../model/container.js';
 import { toApiUpdateOperation } from '../../../store/update-operation.js';
 import { triggerManualWatch } from '../../../watchers/manual-watch.js';
+import { formatContainerEnv } from '../../../watchers/providers/docker/runtime-details.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import { sanitizePreviewErrorReason } from '../../preview-errors.js';
@@ -101,22 +107,18 @@ function resolveTargetedWatchTargets(
   return { targets: selectedTargets };
 }
 
-function extractContainerEnv(container: Container) {
-  const details = container.details as { env?: unknown[] } | undefined;
-  const rawEnv = Array.isArray(details?.env) ? details.env : [];
+function classifyRevealedEnv(env: Array<{ key: string; value: string }>) {
+  return env.map((entry) => ({
+    key: entry.key,
+    value: entry.value,
+    sensitive: isSensitiveEnvEntry(entry),
+  }));
+}
 
-  return rawEnv
-    .filter(
-      (entry): entry is { key: string; value: string } =>
-        !!entry &&
-        typeof entry === 'object' &&
-        typeof (entry as { key?: unknown }).key === 'string',
-    )
-    .map((entry) => ({
-      key: entry.key,
-      value: entry.value,
-      sensitive: isSensitiveEnvEntry(entry),
-    }));
+interface LiveInspectWatcher {
+  dockerApi?: {
+    getContainer: (id: string) => { inspect: () => Promise<{ Config?: { Env?: unknown } }> };
+  };
 }
 
 export function createGetContainerUpdateOperationsHandler(context: CrudHandlerContext) {
@@ -265,20 +267,56 @@ export function createWatchContainerHandler(context: CrudHandlerContext) {
 }
 
 export function createRevealContainerEnvHandler(context: CrudHandlerContext) {
-  return function revealContainerEnv(req: Request, res: Response) {
-    if (!context.getContainerRaw || !context.auditStore) {
+  return async function revealContainerEnv(req: Request, res: Response) {
+    if (!context.auditStore) {
       sendErrorResponse(res, 501, 'Environment reveal is not available');
       return;
     }
 
     const id = getPathParamValue(req.params.id);
-    const container = context.getContainerRaw(id);
+    const container = getContainerOrNotFound(context, id, res);
     if (!container) {
-      sendErrorResponse(res, 404, 'Container not found');
       return;
     }
 
-    const env = extractContainerEnv(container);
+    let env: ReturnType<typeof classifyRevealedEnv>;
+    try {
+      if (container.agent) {
+        const agent = context.getAgent(container.agent);
+        if (!agent) {
+          sendErrorResponse(res, 500, `Agent ${container.agent} not found`);
+          return;
+        }
+        env = classifyRevealedEnv(await agent.getContainerEnv(container.id));
+      } else {
+        const watcher = context.getWatchers()[resolveWatcherIdForContainer(container)] as
+          | LiveInspectWatcher
+          | undefined;
+        if (!watcher?.dockerApi) {
+          sendErrorResponse(res, 500, `No watcher found for container ${container.id}`);
+          return;
+        }
+        const inspect = await watcher.dockerApi.getContainer(container.id).inspect();
+        env = classifyRevealedEnv(formatContainerEnv(inspect?.Config?.Env));
+      }
+    } catch (error: unknown) {
+      const statusCode =
+        typeof error === 'object' && error !== null && 'statusCode' in error
+          ? error.statusCode
+          : undefined;
+      if (error instanceof AgentEnvRevealUnsupportedError) {
+        sendErrorResponse(res, 501, AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+      } else if (
+        error instanceof AgentContainerNotFoundError ||
+        statusCode === 404 ||
+        context.getErrorStatusCode(error) === 404
+      ) {
+        sendErrorResponse(res, 404, 'Container not found');
+      } else {
+        sendErrorResponse(res, 500, 'Error fetching container environment');
+      }
+      return;
+    }
     context.auditStore.insertAudit({
       action: 'env-reveal',
       containerName: container.name,

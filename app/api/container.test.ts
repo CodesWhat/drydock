@@ -1562,30 +1562,42 @@ describe('Container Router', () => {
   });
 
   describe('revealContainerEnv', () => {
-    function callRevealContainerEnv(id = 'c1') {
+    async function callRevealContainerEnv(id = 'c1') {
       const handler = getHandler('post', '/:id/env/reveal');
       const res = createResponse();
-      handler({ params: { id } }, res);
+      await handler({ params: { id } }, res);
       return res;
     }
 
-    test('should return unredacted env vars for a valid container', () => {
-      storeContainer.getContainerRaw.mockReturnValue({
+    test('should return unredacted env vars for a valid container', async () => {
+      storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test-container',
+        watcher: 'local',
         image: { name: 'nginx' },
         details: {
           ports: [],
           volumes: [],
           env: [
-            { key: 'DB_PASSWORD', value: 'super-secret' },
+            { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
             { key: 'PATH', value: '/usr/local/bin' },
           ],
         },
       });
 
-      const res = callRevealContainerEnv();
+      const getContainer = vi.fn(() => ({
+        inspect: vi.fn().mockResolvedValue({
+          Config: { Env: ['DB_PASSWORD=super-secret', 'PATH=/usr/local/bin'] },
+        }),
+      }));
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': { dockerApi: { getContainer } } },
+        trigger: {},
+      });
 
+      const res = await callRevealContainerEnv();
+
+      expect(getContainer).toHaveBeenCalledWith('c1');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         env: [
@@ -1595,23 +1607,35 @@ describe('Container Router', () => {
       });
     });
 
-    test('should return 404 when container is not found', () => {
-      storeContainer.getContainerRaw.mockReturnValue(undefined);
+    test('should return 404 when container is not found', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
 
-      const res = callRevealContainerEnv('nonexistent');
+      const res = await callRevealContainerEnv('nonexistent');
 
       expect(res.status).toHaveBeenCalledWith(404);
     });
 
-    test('should return empty env array when container has no env', () => {
-      storeContainer.getContainerRaw.mockReturnValue({
+    test('should return empty env array when container has no env', async () => {
+      storeContainer.getContainer.mockReturnValue({
         id: 'c1',
         name: 'test-container',
+        watcher: 'local',
         image: { name: 'nginx' },
         details: { ports: [], volumes: [] },
       });
 
-      const res = callRevealContainerEnv();
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            dockerApi: {
+              getContainer: vi.fn(() => ({ inspect: vi.fn().mockResolvedValue({ Config: {} }) })),
+            },
+          },
+        },
+        trigger: {},
+      });
+
+      const res = await callRevealContainerEnv();
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ env: [] });
@@ -1709,9 +1733,25 @@ describe('Container Router', () => {
         vulnerabilities: [],
       });
 
+      const stored = {
+        id: 'c1',
+        name: 'nginx',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [{ key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true }],
+        },
+        result: { tag: 'fresh-watcher-result' },
+      };
+      storeContainer.getContainerRaw.mockReturnValue(stored);
+
       const { res } = await callScanAll({ containerIds: ['c1'] });
       await waitForBulkScanCycleComplete();
 
+      expect(storeContainer.updateContainer.mock.calls[0][0]).toEqual({
+        ...stored,
+        security: { scan: expect.objectContaining({ status: 'scanned' }) },
+      });
       expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
       expect(storeContainer.getContainers).not.toHaveBeenCalled();
       expect(mockScanImageForVulnerabilities).toHaveBeenCalledWith(

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { redactContainerRuntimeEnv } from '../api/container/shared.js';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
 import {
   emitBatchUpdateCompleted,
@@ -752,6 +753,7 @@ export function insertOperation(
       if (cloned.watcher === '') cloned.watcher = undefined;
       op.container = cloned;
     }
+    op.container = redactContainerRuntimeEnv(op.container);
   }
 
   if (updateOperationCollection) {
@@ -831,6 +833,9 @@ function persistOperationPatch(
     id: existingDoc.data.id,
     updatedAt: new Date().toISOString(),
   } as UpdateOperation;
+  if (updated.container) {
+    updated.container = redactContainerRuntimeEnv(updated.container);
+  }
 
   updateOperationCollection.remove(existingDoc);
   updateOperationCollection.insert({ data: updated });

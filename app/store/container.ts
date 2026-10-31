@@ -1257,7 +1257,7 @@ export function insertContainer(container) {
       }
     }
   }
-  const containerToSave = validateContainer(container);
+  const containerToSave = redactContainerRuntimeEnv(validateContainer(container));
   normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
@@ -1344,7 +1344,7 @@ export function updateContainer(
     containerMerged.updatePolicyOverrides = undefined;
     containerMerged.updatePolicySources = undefined;
   }
-  const containerToReturn = validateContainer(containerMerged);
+  const containerToReturn = redactContainerRuntimeEnv(validateContainer(containerMerged));
   normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
@@ -1456,7 +1456,7 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
 }
 
 /**
- * Get all (filtered) containers without redacting sensitive env values.
+ * Get all (filtered) containers without additional API classification.
  * Intended for internal callers that do not return container data to users.
  *
  * WARNING: this returns live validated container objects backed by LokiJS and
@@ -1581,14 +1581,9 @@ export function getContainer(id: string) {
 }
 
 /**
- * Get container by id without redacting sensitive env values.
- *
- * Used by the env reveal endpoint, and by every write-back path that persists
- * a container it fetched earlier (security scans, the scan scheduler). Those
- * callers must NOT use `getContainer`: it masks sensitive env to
- * `'[REDACTED]'`, and while `updateContainer` restores classified details
- * rather than storing the mask, re-fetching raw keeps the write-back honest
- * instead of relying on that guard.
+ * Get the validated stored container by id without API classification.
+ * Recognised secret env values are already redacted by the write and startup paths.
+ * Internal write-back callers use this getter; env reveal inspects live Docker.
  * @param id
  */
 export function getContainerRaw(id: string) {

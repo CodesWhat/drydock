@@ -358,4 +358,102 @@ describe('agent API container', () => {
       expect(res.sendStatus).toHaveBeenCalledWith(204);
     });
   });
+  describe('getContainerEnv', () => {
+    function useWatcher(inspect) {
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': { dockerApi: { getContainer: vi.fn(() => ({ inspect })) } } },
+        trigger: {},
+      });
+      req.params.id = 'c1';
+    }
+
+    test('returns 404 with a JSON error when the agent does not watch the container', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      req.params.id = 'c1';
+      await containerApi.getContainerEnv(req, res);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('returns 500 when the watcher is missing', async () => {
+      storeContainer.getContainer.mockReturnValue({ id: 'c1', name: 'n', watcher: 'local' });
+      registry.getState.mockReturnValue({ watcher: {}, trigger: {} });
+      req.params.id = 'c1';
+      await containerApi.getContainerEnv(req, res);
+      expect(res.status).toHaveBeenCalledWith(500);
+    });
+
+    test('returns the live env parsed from the inspect output', async () => {
+      useWatcher(
+        vi.fn().mockResolvedValue({ Config: { Env: ['DB_PASSWORD=s3cret', 'PATH=/bin'] } }),
+      );
+      await containerApi.getContainerEnv(req, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({
+        env: [
+          { key: 'DB_PASSWORD', value: 's3cret' },
+          { key: 'PATH', value: '/bin' },
+        ],
+      });
+    });
+
+    test('returns an empty env when the inspect output has no config', async () => {
+      useWatcher(vi.fn().mockResolvedValue(undefined));
+      await containerApi.getContainerEnv(req, res);
+      expect(res.json).toHaveBeenCalledWith({ env: [] });
+    });
+
+    test('inspects by container id so a reused name cannot leak another env', async () => {
+      const getContainer = vi.fn((target: string) => ({
+        inspect: vi.fn(async () => {
+          if (target === 'c1') {
+            throw { statusCode: 404, message: 'no such container' };
+          }
+          return { Config: { Env: ['OTHER_SECRET=from-the-new-container'] } };
+        }),
+      }));
+      storeContainer.getContainer.mockReturnValue({
+        id: 'c1',
+        name: 'my-container',
+        watcher: 'local',
+      });
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': { dockerApi: { getContainer } } },
+        trigger: {},
+      });
+      req.params.id = 'c1';
+      await containerApi.getContainerEnv(req, res);
+      expect(getContainer).toHaveBeenCalledTimes(1);
+      expect(getContainer).toHaveBeenCalledWith('c1');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('returns 404 when docker no longer has the container', async () => {
+      useWatcher(vi.fn().mockRejectedValue({ statusCode: 404, message: 'no such container' }));
+      await containerApi.getContainerEnv(req, res);
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('returns 500 when the inspect fails', async () => {
+      useWatcher(vi.fn().mockRejectedValue(new Error('docker down')));
+      await containerApi.getContainerEnv(req, res);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Error fetching container env' });
+      expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    test('reads the first value of an array id param', async () => {
+      useWatcher(vi.fn().mockResolvedValue({ Config: { Env: [] } }));
+      req.params.id = ['c1', 'c2'];
+      await containerApi.getContainerEnv(req, res);
+      expect(storeContainer.getContainer).toHaveBeenCalledWith('c1');
+    });
+  });
 });

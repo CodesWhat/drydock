@@ -744,7 +744,7 @@ test('updateContainer should clear security when explicitly set to undefined', a
   expect(updated.security).toBeUndefined();
 });
 
-test('updateContainer should preserve raw runtime env values when payload contains classified values', async () => {
+test('updateContainer should redact stored runtime env when payload contains classified values', async () => {
   const existingContainer = {
     data: createContainerFixture({
       id: 'container-runtime-classification',
@@ -784,11 +784,13 @@ test('updateContainer should preserve raw runtime env values when payload contai
 
   expect(updated.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: 'super-secret-password',
+    value: '[REDACTED]',
+    sensitive: true,
   });
   expect(existingContainer.data.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
-    value: 'super-secret-password',
+    value: '[REDACTED]',
+    sensitive: true,
   });
 });
 

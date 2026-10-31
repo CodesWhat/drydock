@@ -10,6 +10,8 @@ description: "Release update notes and feature highlights, with direct links to 
 The fourth release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
 
 - Update joi to 18.3.1 and follow-redirects to 1.16.2 for the new high-severity advisories. Update minimatch and glob overrides to their fixed majors in development and build tooling.
+- Redact recognised secret environment names and credential-bearing URLs in the JSON store, including saved update-operation snapshots. Startup scrubs and saves the active store before serving requests. Unknown secret names can still be stored in plaintext, and older copies and backups are not scrubbed (#1523).
+- Reveal environment values from the exact live Docker container. Upgrade traditional agents with the controller; older agents and edge connections cannot reveal env. Changes only to recognised secret values no longer count as runtime-detail changes.
 - Pin `step-security/harden-runner` v2.22.3 for the hosted-runner DNS fix.
 - It includes everything in rc.3 and starts a new seven-day soak at publication. The stable `latest` and `1.7` channels do not move.
 

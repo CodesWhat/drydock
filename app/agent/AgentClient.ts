@@ -4,6 +4,7 @@ import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
 import axios, { type AxiosRequestConfig } from 'axios';
 import type { Logger } from 'pino';
+import { redactRuntimeDetailsForStorage } from '../api/container/shared.js';
 import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
@@ -290,6 +291,25 @@ function isContainerUpdateAppliedEventPayload(
 
   const containerName = (data as { containerName?: unknown }).containerName;
   return typeof containerName === 'string' && containerName.length > 0;
+}
+
+export const AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE =
+  'Env reveal needs the agent upgraded to this version';
+
+/** The agent has no env route (older agent, or an edge connection). */
+export class AgentEnvRevealUnsupportedError extends Error {
+  constructor() {
+    super(AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+    this.name = 'AgentEnvRevealUnsupportedError';
+  }
+}
+
+/** The agent answered, and does not know the container. */
+export class AgentContainerNotFoundError extends Error {
+  constructor() {
+    super('Container not found on agent');
+    this.name = 'AgentContainerNotFoundError';
+  }
 }
 
 export class AgentClient {
@@ -843,10 +863,9 @@ export class AgentClient {
     // Traditional agents own registry normalization and results. Controller-owned
     // Docker transport instead applies the controller's configured registry above.
 
-    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
-    // emitter may attach — the controller's Joi schema does not allow it.
+    // Retain classification for already-masked URLs; their credentials are no longer present.
     if (container.details?.env && Array.isArray(container.details.env)) {
-      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+      container.details = redactRuntimeDetailsForStorage(container.details);
     }
 
     if (this.shouldPreserveClearedUpdateAvailable(container)) {
@@ -2418,6 +2437,35 @@ export class AgentClient {
       return response.data;
     } catch (error: unknown) {
       this.log.error(`Error fetching container logs from agent: ${getErrorMessage(error)}`);
+      throw error;
+    }
+  }
+
+  async getContainerEnv(containerId: string): Promise<Array<{ key: string; value: string }>> {
+    if (this.edgeAdapter) {
+      throw new AgentEnvRevealUnsupportedError();
+    }
+    try {
+      const target = `/api/containers/${encodeURIComponent(containerId)}/env`;
+      const response = await axios.get<{ env?: unknown }>(
+        `${this.baseUrl}${target}`,
+        this.buildRequestConfig('GET', target),
+      );
+      const env = response.data?.env;
+      return Array.isArray(env) ? (env as Array<{ key: string; value: string }>) : [];
+    } catch (error: unknown) {
+      const failure = error as
+        | { response?: { status?: number; data?: { error?: unknown } } }
+        | undefined;
+      if (failure?.response?.status === 404) {
+        // The agent's own "container not found" is a JSON error body. A bare 404 is an
+        // agent that predates this route.
+        if (typeof failure.response.data?.error === 'string') {
+          throw new AgentContainerNotFoundError();
+        }
+        throw new AgentEnvRevealUnsupportedError();
+      }
+      this.log.error('Error fetching container env from agent');
       throw error;
     }
   }

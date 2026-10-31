@@ -452,7 +452,34 @@ describe('AgentClient', () => {
       );
     });
 
-    test('should strip sensitive field from env entries before storing', async () => {
+    test('preserves classified masked URLs from an upgraded agent', async () => {
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
+      await client.processContainer({
+        id: 'c1',
+        name: 'test',
+        details: {
+          ports: [],
+          volumes: [],
+          env: [
+            { key: 'ENDPOINT_URL', value: '[REDACTED]', sensitive: true },
+            { key: 'PUBLIC_MODE', value: 'visible', sensitive: true },
+          ],
+        },
+      } as any);
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.objectContaining({
+            env: [
+              { key: 'ENDPOINT_URL', value: '[REDACTED]', sensitive: true },
+              { key: 'PUBLIC_MODE', value: 'visible', sensitive: false },
+            ],
+          }),
+        }),
+      );
+    });
+
+    test('normalizes sensitivity metadata before storing agent env', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
       const container = {
@@ -472,8 +499,8 @@ describe('AgentClient', () => {
         expect.objectContaining({
           details: expect.objectContaining({
             env: [
-              { key: 'NORMAL', value: 'foo' },
-              { key: 'API_KEY', value: '[REDACTED]' },
+              { key: 'NORMAL', value: 'foo', sensitive: false },
+              { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
             ],
           }),
         }),
@@ -4980,6 +5007,63 @@ describe('AgentClient', () => {
     test('should throw on failure', async () => {
       axios.get.mockRejectedValue(new Error('log fetch failed'));
       await expect(client.getLogEntries()).rejects.toThrow('log fetch failed');
+    });
+  });
+
+  describe('getContainerEnv', () => {
+    test('fetches the live env from the agent with an encoded id', async () => {
+      axios.get.mockResolvedValue({ data: { env: [{ key: 'A', value: '1' }] } });
+      const result = await client.getContainerEnv('c/1');
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/api/containers/c%2F1/env'),
+        expect.any(Object),
+      );
+      expect(result).toEqual([{ key: 'A', value: '1' }]);
+    });
+
+    test('returns an empty list when the agent payload has no env array', async () => {
+      axios.get.mockResolvedValue({ data: {} });
+      await expect(client.getContainerEnv('c1')).resolves.toEqual([]);
+      axios.get.mockResolvedValue({ data: undefined });
+      await expect(client.getContainerEnv('c1')).resolves.toEqual([]);
+    });
+
+    test('maps a bare 404 to the upgrade-needed error', async () => {
+      axios.get.mockRejectedValue({ response: { status: 404, data: '<html>Cannot GET</html>' } });
+      const failure = await client.getContainerEnv('c1').catch((e: unknown) => e);
+      expect(failure).toMatchObject({ name: 'AgentEnvRevealUnsupportedError' });
+      expect((failure as Error).message).toBe(
+        'Env reveal needs the agent upgraded to this version',
+      );
+    });
+
+    test('maps a 404 with no response body to the upgrade-needed error', async () => {
+      axios.get.mockRejectedValue({ response: { status: 404 } });
+      await expect(client.getContainerEnv('c1')).rejects.toMatchObject({
+        name: 'AgentEnvRevealUnsupportedError',
+      });
+    });
+
+    test('maps a JSON 404 to container-not-found', async () => {
+      axios.get.mockRejectedValue({
+        response: { status: 404, data: { error: 'Container not found' } },
+      });
+      await expect(client.getContainerEnv('c1')).rejects.toMatchObject({
+        name: 'AgentContainerNotFoundError',
+      });
+    });
+
+    test('rethrows other failures', async () => {
+      axios.get.mockRejectedValue(new Error('env failed'));
+      await expect(client.getContainerEnv('c1')).rejects.toThrow('env failed');
+    });
+
+    test('edge connections cannot reveal env', async () => {
+      client.edgeAdapter = { requestContainerLogs: vi.fn(), deleteContainer: vi.fn() };
+      await expect(client.getContainerEnv('c1')).rejects.toMatchObject({
+        name: 'AgentEnvRevealUnsupportedError',
+      });
+      expect(axios.get).not.toHaveBeenCalled();
     });
   });
 

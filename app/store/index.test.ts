@@ -27,7 +27,7 @@ const {
     return {
       // biome-ignore lint/complexity/useArrowFunction: mock constructor requires function expression
       default: vi.fn().mockImplementation(function () {
-        return createDbInstance();
+        return { getCollection: vi.fn(() => null), ...createDbInstance() };
       }),
     };
   }

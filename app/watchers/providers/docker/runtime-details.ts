@@ -1,3 +1,4 @@
+import { redactRuntimeDetailsForStorage } from '../../../api/container/shared.js';
 import type { ContainerRuntimeDetails } from '../../../model/container.js';
 
 type UnknownRecord = Record<string, unknown>;
@@ -75,8 +76,8 @@ export function areRuntimeDetailsEqual(
   detailsA: ContainerRuntimeDetails | undefined,
   detailsB: ContainerRuntimeDetails | undefined,
 ) {
-  const normalizedDetailsA = normalizeRuntimeDetails(detailsA);
-  const normalizedDetailsB = normalizeRuntimeDetails(detailsB);
+  const normalizedDetailsA = normalizeRuntimeDetails(redactRuntimeDetailsForStorage(detailsA));
+  const normalizedDetailsB = normalizeRuntimeDetails(redactRuntimeDetailsForStorage(detailsB));
 
   if (normalizedDetailsA.startedAt !== normalizedDetailsB.startedAt) {
     return false;
@@ -231,7 +232,7 @@ function formatVolumeBinding(source: string, destination: string): string {
   return source || destination;
 }
 
-function formatContainerEnv(envVars: unknown): ContainerRuntimeDetails['env'] {
+export function formatContainerEnv(envVars: unknown): ContainerRuntimeDetails['env'] {
   if (!Array.isArray(envVars)) {
     return [];
   }
