@@ -168,6 +168,30 @@ describe('docker runtime details module', () => {
     }
   });
 
+  test('stored redacted key env equals the live raw env, so no false update (#1523)', () => {
+    const stored = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'ENCRYPTION_KEY', value: '[REDACTED]' },
+        { key: 'MODE', value: 'a' },
+      ],
+    };
+    const live = {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'ENCRYPTION_KEY', value: 'plain-live-value' },
+        { key: 'MODE', value: 'a' },
+      ],
+    };
+
+    expect(areRuntimeDetailsEqual(stored, live)).toBe(true);
+    expect(
+      areRuntimeDetailsEqual(stored, { ...live, env: [live.env[0], { key: 'MODE', value: 'b' }] }),
+    ).toBe(false);
+  });
+
   test('runtime details equality returns false when port list length differs', () => {
     expect(
       areRuntimeDetailsEqual(
