@@ -487,7 +487,7 @@ Les bogues et les demandes de fonctionnalités concrètes vont dans **[GitHub Is
 
 Merci aux utilisateurs qui ont aidé à tester les versions candidates v1.4.0 et v1.5.0 et qui ont signalé des bugs :
 
-[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
 <h2 align="center" id="codeswhat-ecosystem">Fait partie de l'écosystème CodesWhat</h2>
 

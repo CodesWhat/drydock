@@ -270,7 +270,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
 | 🗂️ | **Docker Compose Updates** | Pull and recreate Compose services through the Docker Engine API with YAML-preserving image patching. |
-| 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels; maturity gates, skip/snooze/pin, and maintenance windows are stored via UI/API or watcher configuration. Persistent group policies set update-policy defaults and restrict-only action rules for every current and future member of a group. |
+| 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels, and maturity and skip rules can be set with `dd.updatePolicy.*` labels; snooze, pin, and maintenance windows are stored via UI/API or watcher configuration. Persistent group policies set update-policy defaults and restrict-only action rules for every current and future member of a group. |
 | 🛰️ | **Distributed Agents** | Monitor remote Docker hosts over SSE. Portwing 0.9.0+ agents work over inbound Standard HTTP or dial-out Edge WebSocket transport; Drydock 1.6.0-rc.11+ can run native registry checks and single/batch Docker updates controller-side through either authenticated path. Edge also carries continuous live logs with no inbound port required; `DD_EXPERIMENTAL_PORTWING=false` remains an emergency disable. |
 | 🖥️ | **Web Dashboard** | Vue 3 UI with a zero-dependency customizable widget grid, responsive table/card views, live SSE updates, notification-bell controls, and per-container detail, logs, and stats. |
 | 🔗 | **REST API & Webhooks** | Token-authenticated endpoints for CI/CD watch and update triggers, plus signed registry webhook ingestion for push events. |
@@ -490,7 +490,7 @@ Bugs and concrete feature requests go to **[GitHub Issues](https://github.com/Co
 
 Thanks to the users who helped test v1.4.0 and v1.5.0 release candidates and reported bugs:
 
-[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
 <h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 

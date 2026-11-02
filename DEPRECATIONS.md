@@ -308,6 +308,20 @@ Older builds let the session and main LokiJS engines overwrite the same JSON fil
 
 **Snapshot and downgrade guard:** Before applying a pending schema migration to an existing `dd.sqlite`, startup writes a consistent snapshot next to it, `dd.sqlite.pre-migration-v<schema version>-<timestamp>` (owner-only, `VACUUM INTO`), and keeps the newest three. A fresh database gets none. If the snapshot can't be written (disk full, permissions), startup stops with an error instead of migrating without a restore point. Separately, a database whose recorded schema version is newer than the highest migration the running build knows is refused: Drydock logs one error naming both versions and exits 1, so an older build can't open a database a newer one migrated. To go back, run a build at least as new as the one that last ran, or stop Drydock, copy the pre-migration snapshot over `dd.sqlite`, delete any `dd.sqlite-wal` and `dd.sqlite-shm`, and start the older build. Both safeguards first shipped in v1.8.0-rc.6. Builds before this guard (v1.8.0-rc.5 and earlier) have neither safeguard, so the refusal only protects once the older build also contains the guard. A self-update that rolls back to an older image after the new one migrated the database restarts the old container against the same `/store`; a guarded old image exits with that error (visible in `docker logs`) rather than touching the data.
 
+---
+
+### `DD_SERVER_FEATURE_WEBHOOK`
+
+| | |
+| --- | --- |
+| **Deprecated in** | Never — removed directly, no deprecation period |
+| **Removed in** | v1.4.0 |
+| **Affects** | Deployments that set `DD_SERVER_FEATURE_WEBHOOK` (documented through v1.3) to enable or disable the webhook API |
+
+The v1.3 docs listed `DD_SERVER_FEATURE_WEBHOOK` (default `true`) as the switch for the webhook endpoints. v1.4.0 replaced it with the token-authenticated webhook API gated by `DD_SERVER_WEBHOOK_ENABLED` (default `false`) and `DD_SERVER_WEBHOOK_TOKEN`, and the old variable is no longer read. The removal wasn't announced in the v1.4.0 release notes; this entry is added here retroactively.
+
+**Migration:** Remove `DD_SERVER_FEATURE_WEBHOOK`. To use webhooks, set `DD_SERVER_WEBHOOK_ENABLED=true` and a `DD_SERVER_WEBHOOK_TOKEN`. See the [webhooks configuration](https://getdrydock.com/docs/configuration/webhooks).
+
 ## Enforced security changes (no deprecation window)
 
 These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability — keeping it alive behind a warning would have left the hole open. They are listed here for upgrade visibility and migration guidance.

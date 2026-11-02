@@ -487,7 +487,7 @@ Fehler und konkrete Funktionsanfragen gehören zu **[GitHub Issues](https://gith
 
 Vielen Dank an die Benutzer, die beim Testen der Release-Kandidaten v1.4.0 und v1.5.0 geholfen und Fehler gemeldet haben:
 
-[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@nchieffo](https://github.com/nchieffo) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
+[@RK62](https://github.com/RK62) &middot; [@flederohr](https://github.com/flederohr) &middot; [@rj10rd](https://github.com/rj10rd) &middot; [@larueli](https://github.com/larueli) &middot; [@Waler](https://github.com/Waler) &middot; [@ElVit](https://github.com/ElVit) &middot; [@begunfx](https://github.com/begunfx) &middot; [@Ra72xx](https://github.com/Ra72xx)
 
 <h2 align="center" id="codeswhat-ecosystem">Teil des CodesWhat-Ökosystems</h2>
 
