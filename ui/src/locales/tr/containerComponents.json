@@ -470,7 +470,7 @@
       "triggerFiltered": "Tetik filtrelendi",
       "agentMismatch": "Temsilci uyumsuzluğu",
       "noTrigger": "Tetikleyici yok",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Kendi kendini güncelleme kullanılamıyor",
       "liftsLabel": "Asansörler:"
     },
     "updateStatus": {

@@ -80,7 +80,7 @@
         "notifications": "Notificações",
         "outbox": "Caixa de saída",
         "triggers": "Triggers",
-        "auth": "Auth",
+        "auth": "Autenticação",
         "agents": "Agentes"
       },
       "sidebar": {
@@ -134,7 +134,7 @@
         "triggerSubtitle": "Trigger · {type}",
         "watcherSubtitle": "Watcher · {type}",
         "registrySubtitle": "Registry · {type}",
-        "authSubtitle": "Auth · {type}",
+        "authSubtitle": "Autenticação · {type}",
         "notificationSubtitle": "Regra de notificação · {id}",
         "scope": {
           "all": "Todos",

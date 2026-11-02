@@ -470,8 +470,8 @@
       "triggerFiltered": "Trigger bị lọc",
       "agentMismatch": "Agent không khớp",
       "noTrigger": "Không có trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
-      "liftsLabel": "Lifts:"
+      "selfUpdateUnavailable": "Không thể tự cập nhật",
+      "liftsLabel": "Gỡ bỏ:"
     },
     "updateStatus": {
       "title": "Trạng thái cập nhật",

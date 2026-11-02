@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Falha ao carregar dados do dashboard",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
+      "statContainers": "Contêineres",
+      "statUpdates": "Atualizações disponíveis",
+      "statSecurity": "Problemas de segurança",
       "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "recentUpdates": "Atualizações disponíveis",
+      "securityOverview": "Visão geral de segurança",
+      "resourceUsage": "Uso de recursos",
+      "hostStatus": "Status do host",
+      "updateBreakdown": "Distribuição de atualizações",
+      "statApprovals": "Aprovações"
     },
     "recentActivity": {
       "title": "Atividade recente",

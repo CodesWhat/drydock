@@ -89,7 +89,7 @@
       "noVulnerabilities": "Er zijn geen kwetsbaarheden gemeld"
     },
     "updateBreakdown": {
-      "title": "Uitsplitsing bijwerken",
+      "title": "Uitsplitsing van updates",
       "noUpdates": "Geen updates om te categoriseren",
       "digestHint": "Dezelfde tag, nieuwe image-digest"
     },
@@ -123,15 +123,15 @@
     "dataLoadFailed": "Kan dashboardgegevens niet laden",
     "widgets": {
       "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statUpdates": "Updates beschikbaar",
+      "statSecurity": "Beveiligingsproblemen",
+      "statRegistries": "Registers",
+      "recentUpdates": "Updates beschikbaar",
+      "securityOverview": "Beveiligingsoverzicht",
+      "resourceUsage": "Gebruik van hulpbronnen",
+      "hostStatus": "Hoststatus",
+      "updateBreakdown": "Uitsplitsing van updates",
+      "statApprovals": "Goedkeuringen"
     },
     "recentActivity": {
       "title": "Recente activiteit",

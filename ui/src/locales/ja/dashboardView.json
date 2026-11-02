@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "ダッシュボードデータの読み込みに失敗しました",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "コンテナ",
+      "statUpdates": "利用可能な更新",
+      "statSecurity": "セキュリティ問題",
+      "statRegistries": "レジストリ",
+      "recentUpdates": "利用可能な更新",
+      "securityOverview": "セキュリティ概要",
+      "resourceUsage": "リソース使用状況",
+      "hostStatus": "ホストステータス",
+      "updateBreakdown": "更新内訳",
+      "statApprovals": "承認"
     },
     "recentActivity": {
       "title": "最近のアクティビティ",

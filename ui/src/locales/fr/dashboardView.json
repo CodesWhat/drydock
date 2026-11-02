@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Impossible de charger les données du tableau de bord",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
+      "statContainers": "Conteneurs",
+      "statUpdates": "Mises à jour disponibles",
+      "statSecurity": "Problèmes de sécurité",
       "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "recentUpdates": "Mises à jour disponibles",
+      "securityOverview": "Vue sécurité",
+      "resourceUsage": "Utilisation des ressources",
+      "hostStatus": "État des hôtes",
+      "updateBreakdown": "Répartition des mises à jour",
+      "statApprovals": "Approbations"
     },
     "recentActivity": {
       "title": "Activité récente",

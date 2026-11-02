@@ -22,7 +22,7 @@
       "loadFailed": "Не вдалося завантажити методи автентифікації",
       "invalidCredentials": "Неправильне ім'я користувача або пароль",
       "oidcFailed": "Не вдалося підключитися до {name}",
-      "providerBasic": "Basic auth '{name}': {error}",
+      "providerBasic": "Basic-автентифікація '{name}': {error}",
       "providerOidc": "OIDC-постачальник '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
       "providerGeneric": "{provider}: {error}",

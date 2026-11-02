@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "대시보드 데이터를 불러오지 못했습니다",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "컨테이너",
+      "statUpdates": "사용 가능한 업데이트",
+      "statSecurity": "보안 문제",
+      "statRegistries": "레지스트리",
+      "recentUpdates": "사용 가능한 업데이트",
+      "securityOverview": "보안 개요",
+      "resourceUsage": "리소스 사용량",
+      "hostStatus": "호스트 상태",
+      "updateBreakdown": "업데이트 분류",
+      "statApprovals": "승인"
     },
     "recentActivity": {
       "title": "최근 활동",

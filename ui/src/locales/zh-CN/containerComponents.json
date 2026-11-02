@@ -470,7 +470,7 @@
       "triggerFiltered": "触发器筛选",
       "agentMismatch": "代理不匹配",
       "noTrigger": "无触发器",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "自我更新不可用",
       "liftsLabel": "解除条件："
     },
     "updateStatus": {

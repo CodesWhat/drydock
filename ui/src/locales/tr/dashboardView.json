@@ -89,7 +89,7 @@
       "noVulnerabilities": "Herhangi bir güvenlik açığı bildirilmedi"
     },
     "updateBreakdown": {
-      "title": "Dökümü Güncelle",
+      "title": "Güncelleme Dökümü",
       "noUpdates": "Kategorize edilecek güncelleme yok",
       "digestHint": "Aynı etiket, yeni imaj özeti"
     },
@@ -97,7 +97,7 @@
       "containers": "Kapsayıcılar",
       "containerDetail": "{running} çalışıyor · {stopped} durduruldu",
       "updatesAvailable": "Mevcut Güncellemeler",
-      "updateDetail": "{fresh} yeni · {mature} mevcut",
+      "updateDetail": "{fresh} yeni · {mature} olgun",
       "securityIssues": "Güvenlik Sorunları",
       "registries": "Kayıt Defterleri",
       "approvals": "Onaylar",
@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Kontrol paneli verileri yüklenemedi",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "Kapsayıcılar",
+      "statUpdates": "Mevcut Güncellemeler",
+      "statSecurity": "Güvenlik Sorunları",
+      "statRegistries": "Kayıt Defterleri",
+      "recentUpdates": "Güncellemeler Mevcut",
+      "securityOverview": "Güvenliğe Genel Bakış",
+      "resourceUsage": "Kaynak Kullanımı",
+      "hostStatus": "Ana Bilgisayar Durumu",
+      "updateBreakdown": "Güncelleme Dökümü",
+      "statApprovals": "Onaylar"
     },
     "recentActivity": {
       "title": "Son etkinlik",

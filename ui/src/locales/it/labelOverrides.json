@@ -33,7 +33,7 @@
       "actionTriggerAuto": "Azione automatica"
     },
     "sources": {
-      "override": "Override",
+      "override": "Sovrascrittura",
       "label": "Etichetta",
       "compose": "Compose",
       "watcher": "Configurazione del watcher",

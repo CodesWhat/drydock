@@ -82,8 +82,8 @@
       "rechecking": "Opnieuw controleren…",
       "skipSnoozeGroup": "Overslaan en snoozen",
       "skipThisUpdate": "Sla deze update over",
-      "snooze1d": "Snooze 1d",
-      "snooze7d": "Snooze 7d",
+      "snooze1d": "Snoozen 1d",
+      "snooze7d": "Snoozen 7d",
       "snoozeUntil": "Snoozen tot",
       "unsnooze": "Uitsnooze",
       "maturityGroup": "Volwassenheid",
@@ -470,7 +470,7 @@
       "triggerFiltered": "Trigger gefilterd",
       "agentMismatch": "Agent-mismatch",
       "noTrigger": "Geen trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Zelfupdate niet beschikbaar",
       "liftsLabel": "Liften:"
     },
     "updateStatus": {

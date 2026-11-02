@@ -470,7 +470,7 @@
       "triggerFiltered": "Триггер отфильтрован",
       "agentMismatch": "Несоответствие агента",
       "noTrigger": "Нет триггера",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Самообновление недоступно",
       "liftsLabel": "Снимает:"
     },
     "updateStatus": {

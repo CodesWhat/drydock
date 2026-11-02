@@ -470,7 +470,7 @@
       "triggerFiltered": "트리거 필터됨",
       "agentMismatch": "에이전트 불일치",
       "noTrigger": "트리거 없음",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "자체 업데이트를 사용할 수 없음",
       "liftsLabel": "해제 조건:"
     },
     "updateStatus": {
