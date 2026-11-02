@@ -1,2 +1,9 @@
-@import "tailwindcss";
+/*
+ * The demo's one Tailwind build. It wraps the real UI stylesheet (which owns
+ * the @theme: --text-3xs, --text-2xs-plus, and the rest) so the demo cannot
+ * drift from the app, and adds the @source the UI stylesheet lacks here:
+ * Tailwind scans from the Vite root (apps/demo), not ui/src. vite.config.ts
+ * points the UI's own `import './style.css'` at this file.
+ */
+@import "../../../ui/src/style.css";
 @source "../../../ui/src/**/*.{vue,ts}";
