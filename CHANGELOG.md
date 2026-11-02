@@ -6,9 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Historical entry dates retain their original changelog headings; exact publication timestamps are recorded on the corresponding [GitHub releases](https://github.com/CodesWhat/drydock/releases).
 
-> **Fork point:** upstream post-8.1.1 (2025-11-27)
-> **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
-
 ## [Unreleased]
 
 ### Security

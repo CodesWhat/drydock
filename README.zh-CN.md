@@ -502,6 +502,8 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 请参阅 [portwing 的 COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md)，了解所有三种工具的完整兼容性矩阵。
 
+出自一位开发者和许多智能体之手的小而锋利的工具。更多内容见 [codeswhat.com](https://codeswhat.com)。
+
 ---
 
 **[MIT 许可证](LICENSE)**

@@ -505,6 +505,8 @@ These three tools are designed to layer: sockguard filters the socket, portwing 
 
 See [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) for the full compatibility matrix across all three tools.
 
+Small, sharp tools from one developer and a lot of agents. More at [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[MIT License](LICENSE)**

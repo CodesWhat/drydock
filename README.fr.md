@@ -502,6 +502,8 @@ Ces trois outils sont conçus pour superposer : sockguard filtre le socket, port
 
 Voir le [COMPATIBILITY.md de portwing](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) pour connaître la matrice de compatibilité complète des trois outils.
 
+De petits outils tranchants, faits par un développeur et beaucoup d'agents. Plus sur [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[Licence MIT](LICENSE)**

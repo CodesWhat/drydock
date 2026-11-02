@@ -18,6 +18,7 @@ const transientRetryStepNames = [
   'Retry Docker Hub login',
   'Retry Quay.io login',
   'Retry manifest publish on transient registry failure',
+  'Sign container images',
   'Verify container image signatures',
   'Sign release artifact',
   'Prepare draft GitHub Release and upload signed assets',
@@ -328,4 +329,21 @@ test('release-cut generates the container SBOM with a pinned Syft image', () => 
   expect(sbomStep?.run).toContain('"registry:${image_ref}"');
   expect(sbomStep?.run).toContain('--output "spdx-json=/out/');
   expect(sbomStep?.run).not.toMatch(/trivy/i);
+});
+
+test('release-cut image signing retries as a fresh keyless cosign invocation per attempt', () => {
+  const step = getStep('Sign container images');
+  const command = step?.with?.command as string;
+
+  expect(step?.run).toBeUndefined();
+  expect(step?.if).toBe("steps.tag.outputs.is_prerelease == 'true'");
+  expect(step?.['continue-on-error']).toBeUndefined();
+  expect(Number(step?.with?.max_attempts)).toBeGreaterThanOrEqual(2);
+  expect(command).toContain('cosign sign --yes "${images[@]}"');
+  expect(command).not.toMatch(/--key|COSIGN_PRIVATE_KEY/);
+  // Signing happens before the verify step, which accepts any matching signature.
+  const names = loadReleaseSteps().map((s) => s.name);
+  expect(names.indexOf('Sign container images')).toBeLessThan(
+    names.indexOf('Verify container image signatures'),
+  );
 });

@@ -401,7 +401,7 @@ jobs:
           )
 
           issues_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues?state=open&per_page=100"
-          open_issues="$(curl -fsSL "${api_headers[@]}" "${issues_url}")"
+          open_issues="$(curl -fsSL --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors "${api_headers[@]}" "${issues_url}")"
 
           # Two single-purpose lookups rather than one filter held in a shell
           # variable: a jq filter in a variable puts `$title` inside single
@@ -430,14 +430,14 @@ jobs:
           # history worth keeping.
           if [ -z "${existing_number}" ] && [ -n "${legacy_number}" ]; then
             issue_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${legacy_number}"
-            curl -fsSL -X PATCH "${api_headers[@]}" "${issue_url}" \
+            curl -fsSL --connect-timeout 20 --max-time 60 -X PATCH "${api_headers[@]}" "${issue_url}" \
               -d "$(jq -n --arg title "${ISSUE_TITLE}" '{title: $title}')" >/dev/null
             existing_number="${legacy_number}"
           fi
 
           if [ -n "${existing_number}" ]; then
             comment_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues/${existing_number}/comments"
-            curl -fsSL -X POST "${api_headers[@]}" "${comment_url}" \
+            curl -fsSL --connect-timeout 20 --max-time 60 -X POST "${api_headers[@]}" "${comment_url}" \
               -d "$(jq -n --arg body "${comment_body}" '{body: $body}')" >/dev/null
             exit 0
           fi
@@ -456,7 +456,7 @@ jobs:
           )
 
           create_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/issues"
-          curl -fsSL -X POST "${api_headers[@]}" "${create_url}" \
+          curl -fsSL --connect-timeout 20 --max-time 60 -X POST "${api_headers[@]}" "${create_url}" \
             -d "$(jq -n --arg title "${ISSUE_TITLE}" --arg body "${issue_body}" '{title: $title, body: $body}')" >/dev/null
 
       - name: Fail workflow on fuzz failure

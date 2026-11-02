@@ -502,6 +502,8 @@ Estas tres herramientas están diseñadas para capas: sockguard filtra el socket
 
 Consulte el [COMPATIBILITY.md de portwing](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) para obtener la matriz de compatibilidad completa entre las tres herramientas.
 
+Herramientas pequeñas y afiladas de un desarrollador y muchos agentes. Más en [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[Licencia MIT](LICENSE)**
