@@ -249,10 +249,10 @@
         "componentFilter": "Lọc theo thành phần"
       },
       "tail": {
-        "50": "Tail 50",
-        "100": "Tail 100",
-        "500": "Tail 500",
-        "1000": "Tail 1000"
+        "50": "50 dòng cuối",
+        "100": "100 dòng cuối",
+        "500": "500 dòng cuối",
+        "1000": "1000 dòng cuối"
       },
       "logLevelBadge": "Mức độ nhật ký máy chủ: {level}. Chỉ các thông điệp ở mức này trở lên mới được ghi.",
       "emptyNoFilters": "Chưa có mục nhật ký nào."

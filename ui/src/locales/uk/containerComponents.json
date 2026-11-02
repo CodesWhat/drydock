@@ -470,7 +470,7 @@
       "triggerFiltered": "Тригер відфільтровано",
       "agentMismatch": "Невідповідність агента",
       "noTrigger": "Немає тригера",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Самооновлення недоступне",
       "liftsLabel": "Знімає обмеження:"
     },
     "updateStatus": {

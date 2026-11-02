@@ -25,11 +25,11 @@ const enNamespaces = readdirSync(join(localesDir, 'en')).filter((f) => f.endsWit
 const nonEnLocales = SUPPORTED_LOCALES.filter((l) => l !== 'en');
 
 /**
- * Matches vue-i18n named interpolation only. Deliberately excludes vue-i18n literal
- * escapes such as `{'@'}` (the leading quote fails the identifier class) so a legitimate
+ * Matches vue-i18n named interpolation and `@:key` linked-message references.
+ * Deliberately excludes vue-i18n literal escapes such as `{'@'}` (the leading quote fails the identifier class) so a legitimate
  * escape is not reported as a placeholder mismatch.
  */
-const PLACEHOLDER = /\{[A-Za-z_][A-Za-z0-9_]*\}/g;
+const PLACEHOLDER = /\{[A-Za-z_][A-Za-z0-9_]*\}|@:[A-Za-z0-9_.]+/g;
 
 /** Returns all dotted leaf paths and their values. Recurses into plain objects only. */
 function leafEntries(obj: unknown, prefix = ''): Array<[string, unknown]> {

@@ -28,7 +28,7 @@
       "version": "Versión"
     },
     "detail": {
-      "timestamp": "Timestamp",
+      "timestamp": "Marca de tiempo",
       "event": "Evento",
       "image": "Imagen",
       "fromVersion": "Desde versión",

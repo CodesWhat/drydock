@@ -221,7 +221,7 @@
       "unknownUser": "Usuario desconocido",
       "fields": {
         "username": "Usuario",
-        "email": "Email",
+        "email": "Correo electrónico",
         "role": "Rol",
         "provider": "Proveedor",
         "lastLogin": "Último acceso",

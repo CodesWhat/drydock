@@ -312,11 +312,11 @@
       "manualUpdateOnly": "Nur manuelles Update",
       "manualUpdateOnlyWithMessage": "Nur manuelles Update — {message}",
       "updateBtnTooltipDefault": "Update",
-      "cancelButton": "Cancel",
+      "cancelButton": "Abbrechen",
       "blockedButton": "Blockiert",
       "updateButton": "Update",
       "moreButton": "Mehr",
-      "cancelUpdateTooltip": "Cancel update"
+      "cancelUpdateTooltip": "Update abbrechen"
     },
     "groupHeader": {
       "ungrouped": "Nicht gruppiert",
@@ -470,7 +470,7 @@
       "triggerFiltered": "Trigger gefiltert",
       "agentMismatch": "Agent-Mismatch",
       "noTrigger": "Kein Trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Selbstaktualisierung nicht verfügbar",
       "liftsLabel": "Hebt auf:"
     },
     "updateStatus": {

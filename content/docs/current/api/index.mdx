@@ -111,6 +111,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/portwing/keys/:keyId` | `DELETE` | Revoke a Portwing Ed25519 public key and disconnect live sessions authenticated with it |
 | `/api/v1/portwing/ws` | `WS` | Stable Portwing edge-agent WebSocket endpoint using the `portwing/1.0` protocol |
 | `/api/v1/containers/update` | `POST` | Bulk queue updates for multiple containers (see [Container API](/docs/api/container#bulk-update-containers)) |
+| `/api/v1/dependency-groups/:rootId/update` | `POST` | Bulk update or restart the dependency chain rooted at `:rootId`, wave by wave (see [Container API](/docs/api/container#bulk-update-a-dependency-chain)); requires `X-DD-Confirm-Action: dependency-group-update` |
 | `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
 | `/api/v1/containers/:id/backups` | `GET` | [Image backups for one container](/docs/api/container#get-container-backups), sorted by most recent first |
 | `/api/v1/containers/:id/rollback` | `POST` | [Roll back a container](/docs/api/container#rollback-a-container) to a previous backup image (defaults to the most recent when `backupId` is omitted); requires `X-DD-Confirm-Action: container-rollback` |

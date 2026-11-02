@@ -5,7 +5,7 @@
     "loading": "Đang tải image...",
     "loadFailed": "Không thể tải image",
     "columns": {
-      "repository": "Repository",
+      "repository": "Kho lưu trữ",
       "tag": "Tag",
       "imageId": "ID image",
       "size": "Dung lượng",

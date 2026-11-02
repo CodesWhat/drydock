@@ -470,7 +470,7 @@
       "triggerFiltered": "トリガーフィルター",
       "agentMismatch": "エージェント不一致",
       "noTrigger": "トリガーなし",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "自己更新は利用できません",
       "liftsLabel": "解除条件："
     },
     "updateStatus": {

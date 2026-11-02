@@ -164,12 +164,12 @@
         "restartingService": "서비스 재시작 중"
       },
       "shortcuts": {
-        "title": "Keyboard shortcuts",
-        "close": "Close",
-        "focusSearch": "Focus search",
+        "title": "키보드 단축키",
+        "close": "닫기",
+        "focusSearch": "검색창으로 이동",
         "closeSearch": "검색 닫기 또는 대화상자 닫기",
         "showHelp": "도움말 표시",
-        "toggleSearch": "Toggle search"
+        "toggleSearch": "검색 열기/닫기"
       }
     },
     "announcementBanner": {

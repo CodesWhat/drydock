@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "无法加载仪表盘数据",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "容器",
+      "statUpdates": "可用更新",
+      "statSecurity": "安全风险",
+      "statRegistries": "仓库",
+      "recentUpdates": "可用更新",
+      "securityOverview": "安全概览",
+      "resourceUsage": "资源使用",
+      "hostStatus": "主机状态",
+      "updateBreakdown": "更新分布",
+      "statApprovals": "审批"
     },
     "recentActivity": {
       "title": "最近活动",

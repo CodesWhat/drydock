@@ -470,7 +470,7 @@
       "triggerFiltered": "Trigger filtrado",
       "agentMismatch": "Agente distinto",
       "noTrigger": "Sin trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Autoactualización no disponible",
       "liftsLabel": "Se libera el:"
     },
     "updateStatus": {

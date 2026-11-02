@@ -313,7 +313,7 @@
       "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}",
       "updateBtnTooltipDefault": "Zaktualizuj",
       "cancelButton": "Anuluj",
-      "blockedButton": "Blocked",
+      "blockedButton": "Zablokowano",
       "updateButton": "Zaktualizuj",
       "moreButton": "Więcej",
       "cancelUpdateTooltip": "Anuluj aktualizację"
@@ -470,7 +470,7 @@
       "triggerFiltered": "Wyzwalacz filtrowany",
       "agentMismatch": "Niedopasowanie agenta",
       "noTrigger": "Brak spustu",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Samoaktualizacja niedostępna",
       "liftsLabel": "Windy:"
     },
     "updateStatus": {

@@ -574,7 +574,7 @@
         "messageTagChange": "Mettre à jour {name} ? Le tag d'image passera de :{currentTag} à :{newTag}{kind}.",
         "messageDigestChange": "Mettre à jour {name} ? Un build plus récent de :{currentTag} est disponible (changement de récapitulatif).",
         "softBlockerSuffix": "\n\nCette mise à jour est actuellement bloquée par la politique :\n{list}\n\nCliquez sur Mettre à jour quand même pour remplacer.",
-        "softBlockerLearnMore": "Learn more",
+        "softBlockerLearnMore": "En savoir plus",
         "acceptLabel": "Mettre à jour",
         "acceptLabelOverride": "Mettre à jour quand même"
       },

@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "無法載入儀表板資料",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "容器",
+      "statUpdates": "可用更新",
+      "statSecurity": "安全風險",
+      "statRegistries": "倉庫",
+      "recentUpdates": "可用更新",
+      "securityOverview": "安全概覽",
+      "resourceUsage": "資源使用",
+      "hostStatus": "主機狀態",
+      "updateBreakdown": "更新分佈",
+      "statApprovals": "審批"
     },
     "recentActivity": {
       "title": "最近活動",

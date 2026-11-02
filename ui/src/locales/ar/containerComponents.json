@@ -470,7 +470,7 @@
       "triggerFiltered": "مُصفَّى بالمشغّل",
       "agentMismatch": "عدم تطابق الوكيل",
       "noTrigger": "لا يوجد مشغّل",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "التحديث الذاتي غير متاح",
       "liftsLabel": "يرفع القيد:"
     },
     "updateStatus": {
