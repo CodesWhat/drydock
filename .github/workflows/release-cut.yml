@@ -1004,13 +1004,22 @@ jobs:
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
           TAGS: ${{ steps.image_refs.outputs.tags }}
-        run: |
-          set -euo pipefail
-          images=()
-          while IFS= read -r tag; do
-            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
-          done <<< "${TAGS}"
-          cosign sign --yes "${images[@]}"
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            # Each attempt is a fresh keyless cosign invocation (new ephemeral
+            # key and Rekor entry). Signing a digest again only appends another
+            # signature to its .sig tag, so a retry after a partial failure is
+            # safe, and the verify step accepts any matching signature.
+            images=()
+            while IFS= read -r tag; do
+              [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+            done <<< "${TAGS}"
+            cosign sign --yes "${images[@]}"
 
       - name: Verify container image signatures
         env:

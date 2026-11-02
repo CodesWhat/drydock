@@ -4,6 +4,8 @@
 import { createHash } from 'node:crypto';
 import { byString, byValues } from 'sort-es';
 import {
+  isSensitiveEnvEntry,
+  REDACTED_ENV_VALUE,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
   redactRuntimeDetailsForStorage,
@@ -2407,29 +2409,43 @@ export function getContainer(id: string) {
 }
 
 /**
- * Startup cleanup for rows written before #1523 stored env values raw. Idempotent:
- * only rows whose details change are rewritten, and no lifecycle event is emitted.
- * Returns how many rows were rewritten.
+ * Startup cleanup for rows written before #1523 stored env values raw, and again
+ * for credential names the first pass did not know (`*_KEY`). Idempotent: only
+ * rows whose details change are rewritten, and no lifecycle event is emitted.
+ * Returns how many rows were rewritten and how many values were newly redacted.
  */
-export function redactStoredRuntimeEnv(): number {
+export function redactStoredRuntimeEnv(): { containers: number; values: number } {
   const rows = db
     .prepare('SELECT id, details FROM containers WHERE details LIKE \'%"env"%\'')
     .all();
   const update = db.prepare('UPDATE containers SET details = ? WHERE id = ?');
-  let redacted = 0;
+  let containers = 0;
+  let values = 0;
   for (const row of rows) {
-    const next = toStoredJson(
-      redactRuntimeDetailsForStorage(fromStoredJson(row.details as string)),
-    );
+    const details = fromStoredJson(row.details as string);
+    const next = toStoredJson(redactRuntimeDetailsForStorage(details));
     if (next !== row.details) {
       update.run(next, row.id);
-      redacted += 1;
+      containers += 1;
+      values += countNewlyRedactedEnvValues(details);
     }
   }
-  if (redacted > 0) {
+  if (containers > 0) {
     invalidateContainersCache();
   }
-  return redacted;
+  return { containers, values };
+}
+
+function countNewlyRedactedEnvValues(details: unknown): number {
+  // Only called for a row whose details changed, which implies an env array.
+  const env = (details as { env: Array<{ key?: unknown; value?: unknown } | null> }).env;
+  return env.filter(
+    (entry) =>
+      !!entry &&
+      typeof entry.key === 'string' &&
+      isSensitiveEnvEntry(entry as { key: string; value?: unknown }) &&
+      entry.value !== REDACTED_ENV_VALUE,
+  ).length;
 }
 
 /**

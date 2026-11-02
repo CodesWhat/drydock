@@ -1,21 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { headers } from "next/headers";
 import { AnalyticsPageview } from "@/components/analytics-pageview";
 import { RootProvider } from "@/components/root-provider";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { FAMILY_BOOTSTRAP } from "@/lib/website-behavior.mjs";
 import "./globals.css";
-
-const ibmPlexSans = IBM_Plex_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  variable: "--font-mono",
-});
+import "./website-skin.css";
+import "./website.css";
 
 // Bump this whenever the favicon/app icons change so browsers re-fetch them
 // instead of serving a stale cached icon (favicons cache aggressively).
@@ -23,13 +14,13 @@ const ICON_VERSION = "3";
 
 export const metadata: Metadata = {
   title: {
-    default: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    default: SITE_CONFIG.title,
     template: `%s | ${SITE_CONFIG.name}`,
   },
   description: SITE_CONFIG.description,
   metadataBase: new URL(BASE_URL),
   openGraph: {
-    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    title: SITE_CONFIG.title,
     description: SITE_CONFIG.description,
     url: BASE_URL,
     siteName: SITE_CONFIG.name,
@@ -40,13 +31,13 @@ export const metadata: Metadata = {
         url: SITE_CONFIG.ogImage,
         width: 1200,
         height: 630,
-        alt: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+        alt: SITE_CONFIG.title,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    title: SITE_CONFIG.title,
     description: SITE_CONFIG.description,
     creator: SITE_CONFIG.twitterCreator,
     images: [SITE_CONFIG.ogImage],
@@ -79,11 +70,26 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-product="drydock" data-family="one-dark" suppressHydrationWarning>
       <head>
         <meta name="apple-mobile-web-app-title" content={SITE_CONFIG.name} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: FAMILY_BOOTSTRAP }} />
+        <link
+          rel="preload"
+          href="/fonts/ibm-plex-mono-latin-400-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+        <link
+          rel="preload"
+          href="/fonts/instrument-serif-latin-400-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
       </head>
-      <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
+      <body>
         {/* Fail-open reveal gate: this inline script runs even if the bundled
             JS is blocked (e.g. SRI/CSP), adds `js` to <html> before sections
             paint, and runs a single IntersectionObserver. A MutationObserver on

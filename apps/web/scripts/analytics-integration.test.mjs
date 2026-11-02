@@ -198,8 +198,10 @@ test("all approved Drydock CTA families have exact annotations", () => {
   const getStarted = source("src/components/get-started.tsx");
   const footer = source("src/components/footer.tsx");
 
-  assert.match(header, /ctaId="docs_root"\s+placement="header"/u);
-  assert.match(header, /ctaId="github_repository"\s+placement="header"/u);
+  const headerNav = source("src/components/header-nav.tsx");
+  assert.match(header, /<HeaderNavLinks \/>/u);
+  assert.match(headerNav, /ctaId="docs_root"\s+placement="header"/u);
+  assert.match(headerNav, /ctaId="github_repository"\s+placement="header"/u);
   assert.match(buttons, /placement: "hero" \| "comparison"/u);
   assert.match(buttons, /ctaId="github_repository"\s+placement=\{placement\}/u);
   assert.match(buttons, /ctaId="docs_root"\s+placement=\{placement\}/u);

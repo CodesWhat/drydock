@@ -6,10 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Historical entry dates retain their original changelog headings; exact publication timestamps are recorded on the corresponding [GitHub releases](https://github.com/CodesWhat/drydock/releases).
 
-> **Fork point:** upstream post-8.1.1 (2025-11-27)
-> **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
-
 ## [Unreleased]
+
+## [1.8.0-rc.11] - 2026-11-01
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redacts env values under `*_KEY` names such as `ENCRYPTION_KEY` and rescrubs existing stores on upgrade (#1523), fixes the env reveal and password toggle icons, and ships the redesigned website.
+
+### Security
+
+- Env values under names ending in or containing a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers`, matching the debug dump's rules (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. Stores already cleaned by the earlier pass are cleaned once more on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only). Backups and volume snapshots taken before the upgrade are not scrubbed and keep whatever they held, and retained pre-1.8 JSON files are rollback snapshots that are also left as they are. Redaction goes by variable name, so a secret under a name Drydock doesn't recognize can still be stored as plaintext.
+
+### Changed
+
+- Website redesign: new layout, type and six theme families that match the app, with a whale hero, a capability palette, a git-graph roadmap, a Quick and Secure install toggle and a feature comparison matrix. Docs links now go straight to the current docs version, and the sitemap lists only that version.
+- Website header and menus: Docs, Compare and GitHub carry icons, the current page is marked with `aria-current`, and the theme button shows the active family and mode. The mobile menu has a menu icon, an icon on every row and a Sponsor link.
+- Website theme panel shows a four-colour swatch for each family. The comparison matrix uses the theme's success, warning and danger colours in tinted chips, so "No" is easy to see, and its first column stays put while the table scrolls.
+- Website FAQ questions are real `h3` headings set in bold mono instead of the display serif. Section eyebrows get a trailing rule, the roadmap shows release emoji with the accent colour on HEAD and "+N more", and the Get started note leads with a "Heads up" tag.
+- Website 404 and security advisory pages: outline buttons are visible and carry icons, the search box says it searches the Drydock docs, and the advisory has a breadcrumb, full-width tables and a neutral-text summary callout.
+- Website structured data: each page now emits one JSON-LD `@graph` built in `apps/web/src/lib/structured-data.ts`, with a shared CodesWhat `Organization` (real logo), `WebSite` and `SoftwareApplication` (stable version, feature list, free access) linked by `@id`. Comparison pages describe both tools and reuse the meta description, docs pages get a `TechArticle` with breadcrumbs built from real page titles, and the advisory gets a breadcrumb, a plain-text abstract and the same modified date as the sitemap. A new test builds every page type and checks the JSON parses, every `@id` reference resolves and no ratings appear.
+- Website `/security` is now an index of advisories, linked from the footer and listed in the sitemap and `llms.txt`. The hero heading keeps a space between its two lines in its text, the comparison index has an `h2` and "vs Drydock" link text, comparison pages promote the migration note to its own `h2` right after the table, and `robots.txt` names the AI search crawlers (OAI-SearchBot, ChatGPT-User, PerplexityBot, Claude-SearchBot, Claude-User) with an explicit allow.
+- Website publishes `/.well-known/security.txt` (RFC 9116: contact, expiry, canonical, policy). A test fails once its `Expires` is under 30 days away and says how to renew it.
+- Website comparison highlights, the footer social buttons and the ecosystem "You're here" tag follow the theme's primary colour and the approved mock: the Drydock row and column use the primary accent, footer icons sit in bordered 36px buttons, and the current project shows a pill instead of an emoji. Links, theme options and table rows now have a short hover transition that respects reduced motion.
+- Website homepage copy: the hero heading is now "Know what changed before anything updates" with a new lede and a "Try the live demo" button, the features section is retitled around the update lifecycle and gains Update Bouncer, Approval Queue and Image Backup cards, and the comparison teaser swaps Portainer for WUD with cells from the README matrix, a row where WUD wins, a "Probably not for you yet" line, a WUD and Watchtower switching note and Watchtower's December 2025 archive date. The FAQ gains how to auto-update containers and whether Drydock needs the full Docker socket, and the coverage question moved to the 100% stat's tooltip.
+- Website comparison pages: titles use `<tool> Alternative: Drydock vs <tool>` for Watchtower, WUD, Dockge and Ouroboros and `<tool> vs Drydock: Container Update Comparison` for the rest, all 60 characters or fewer, with descriptions trimmed to 155. The WUD page no longer describes Drydock as a WUD fork, and `security.txt` now lists `security@getdrydock.com`.
+- Website homepage has a Star History section after the roadmap, with the hosted chart in light and dark (the theme class picks one, no client script). The CSP `img-src` allows `https://api.star-history.com` and nothing else changed.
+- Website proof band shows live GitHub stars, Docker Hub downloads, forks and open issues (issues only, not pull requests), each linked to its source and separated by dots, in place of the static "MIT license" stat. They're fetched on the server and cached for an hour, so the CSP is unchanged. A source that fails to load is left out instead of showing a stale number. An optional `GITHUB_STATS_AUTH` environment variable raises the GitHub rate limit and never reaches the browser.
+
+### Fixed
+
+- An env value that is sensitive only because it is a URL with credentials (`MY_DSN=postgres://u:p@h/db`) kept its reveal control only until the container was stored. The SQLite store and the agent normalizer dropped the `sensitive` marker, and `[REDACTED]` can't be re-parsed as a URL, so the UI showed the masked value with no way to reveal it (#1523). The marker is now stored on redacted entries and kept on the agent path. Values were never exposed; no raw value is stored or logged.
+- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
+- The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
 
 ## [1.8.0-rc.10] - 2026-10-31
 
@@ -3672,7 +3702,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...HEAD
+[1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11
 [1.8.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...v1.8.0-rc.10
 [1.8.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...v1.8.0-rc.9
 [1.8.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...v1.8.0-rc.8

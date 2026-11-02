@@ -135,7 +135,7 @@ watcher='local'
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.10
+    image: codeswhat/drydock:1.8.0-rc.11
     ...
     environment:
       - DD_ACTION_COMMAND_LOCAL_CMD=echo "$${display_name}" can be updated to "$${update_kind_remote_value}"
@@ -147,7 +147,7 @@ services:
 docker run \
   -e 'DD_ACTION_COMMAND_LOCAL_CMD=echo "${display_name}" can be updated to "${update_kind_remote_value}"' \
   ...
-  codeswhat/drydock:1.8.0-rc.10
+  codeswhat/drydock:1.8.0-rc.11
 ```
 </Tab>
 </Tabs>
@@ -160,7 +160,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.10
+    image: codeswhat/drydock:1.8.0-rc.11
     ...
     environment:
       - DD_ACTION_COMMAND_LOCAL_CMD=bash -c /drydock/trigger.sh
@@ -175,7 +175,7 @@ docker run \
   -e DD_ACTION_COMMAND_LOCAL_CMD="bash -c /drydock/trigger.sh" \
   -v ${PWD}/drydock/trigger.sh:/drydock/trigger.sh \
   ...
-  codeswhat/drydock:1.8.0-rc.10
+  codeswhat/drydock:1.8.0-rc.11
 ```
 </Tab>
 </Tabs>

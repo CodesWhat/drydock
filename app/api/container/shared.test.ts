@@ -3,6 +3,7 @@ import { getErrorMessage } from '../../util/error.js';
 import * as sharedModule from './shared.js';
 import {
   getErrorStatusCode,
+  isSensitiveEnvEntry,
   isSensitiveKey,
   projectLabelOwnedForApi,
   redactContainerRuntimeEnv,
@@ -156,6 +157,22 @@ describe('api/container/shared', () => {
       expect(isSensitiveKey('DISPATCH')).toBe(false);
     });
 
+    test('detects KEY only as an exact key segment (#1523)', () => {
+      expect(isSensitiveKey('ENCRYPTION_KEY')).toBe(true);
+      expect(isSensitiveKey('LITELLM_MASTER_KEY')).toBe(true);
+      expect(isSensitiveKey('LITELLM_SALT_KEY')).toBe(true);
+      expect(isSensitiveKey('KEY')).toBe(true);
+      expect(isSensitiveKey('key_id')).toBe(true);
+      expect(isSensitiveKey('CLIENTKEY')).toBe(true);
+      expect(isSensitiveKey('SIGNINGKEY')).toBe(true);
+      expect(isSensitiveKey('AWS_ACCESSKEY')).toBe(true);
+      expect(isSensitiveKey('MONKEY')).toBe(false);
+      expect(isSensitiveKey('KEYBOARD_LAYOUT')).toBe(false);
+      expect(isSensitiveKey('KEYMAP')).toBe(false);
+      expect(isSensitiveKey('COMPASS_KEYS')).toBe(false);
+      expect(isSensitiveKey('GIT_COMMIT_HASH')).toBe(false);
+    });
+
     test('returns false for non-sensitive keys', () => {
       expect(isSensitiveKey('PATH')).toBe(false);
       expect(isSensitiveKey('NODE_ENV')).toBe(false);
@@ -173,7 +190,7 @@ describe('api/container/shared', () => {
       expect(redactRuntimeDetailsForStorage(noEnv)).toBe(noEnv);
     });
 
-    test('redacts sensitive entries, drops the sensitive marker and skips keyless entries', () => {
+    test('redacts sensitive entries, keeps the marker only on them and skips keyless entries', () => {
       expect(
         redactRuntimeDetailsForStorage({
           ports: [],
@@ -188,11 +205,39 @@ describe('api/container/shared', () => {
       ).toEqual({
         ports: [],
         env: [
-          { key: 'DB_PASSWORD', value: '[REDACTED]' },
-          { key: 'DATABASE_URL', value: '[REDACTED]' },
+          { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+          { key: 'DATABASE_URL', value: '[REDACTED]', sensitive: true },
           { key: 'PATH', value: '/bin' },
         ],
       });
+    });
+
+    test('a stored URL-only credential is still classified sensitive after the round trip (#1523)', () => {
+      const stored = redactRuntimeDetailsForStorage({
+        ports: [],
+        volumes: [],
+        env: [
+          { key: 'MY_DSN', value: 'postgres://u:p@h/db' },
+          { key: 'DB_PASSWORD', value: 'hunter2' },
+          { key: 'LOG_LEVEL', value: 'debug' },
+        ],
+      });
+      const served = redactContainerRuntimeEnv({ details: stored }) as any;
+      expect(served.details.env).toEqual([
+        { key: 'MY_DSN', value: '[REDACTED]', sensitive: true },
+        { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+        { key: 'LOG_LEVEL', value: 'debug', sensitive: false },
+      ]);
+      expect(JSON.stringify(stored)).not.toContain('postgres://');
+      expect(JSON.stringify(stored)).not.toContain('hunter2');
+    });
+
+    test('a redacted value only counts as sensitive when the marker is true', () => {
+      expect(isSensitiveEnvEntry({ key: 'MY_DSN', value: '[REDACTED]', sensitive: true })).toBe(
+        true,
+      );
+      expect(isSensitiveEnvEntry({ key: 'MY_DSN', value: '[REDACTED]' })).toBe(false);
+      expect(isSensitiveEnvEntry({ key: 'MY_DSN', value: 'plain', sensitive: true })).toBe(false);
     });
 
     test('is idempotent', () => {
