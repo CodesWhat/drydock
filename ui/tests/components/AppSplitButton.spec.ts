@@ -38,7 +38,15 @@ describe('AppSplitButton', () => {
       );
       expect(primary.text()).toBe('Update');
       expect(menu.classes()).toEqual(
-        expect.arrayContaining(['w-8', 'h-8', 'border-l', border, background]),
+        expect.arrayContaining([
+          'w-11',
+          'h-11',
+          'md:w-8',
+          'md:h-8',
+          'border-l',
+          border,
+          background,
+        ]),
       );
       expect(menu.attributes('aria-label')).toBe('More actions');
       expect(menu.classes()).not.toContain(openClass);
