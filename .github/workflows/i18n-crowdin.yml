@@ -97,7 +97,7 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
         run: |
           set -euo pipefail
-          status=$(curl -sS -o /tmp/files.json -w '%{http_code}' \
+          status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/files.json -w '%{http_code}' \
             -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
             "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/files?limit=500")
           if [ "${status}" != "200" ]; then
@@ -128,7 +128,7 @@ jobs:
           offset=0
           limit=500
           while :; do
-            status=$(curl -sS -o /tmp/strings-page.json -w '%{http_code}' \
+            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/strings-page.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
               "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/strings?fileId=${FILE_ID}&limit=${limit}&offset=${offset}")
             if [ "${status}" != "200" ]; then
@@ -178,7 +178,7 @@ jobs:
           while IFS= read -r string_id; do
             [ -z "${string_id}" ] && continue
             for lang in ${languages}; do
-              status=$(curl -sS -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
+              status=$(curl -sS --connect-timeout 20 --max-time 60 -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
                 -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
                 "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/translations?stringId=${string_id}&languageId=${lang}")
 
@@ -191,7 +191,7 @@ jobs:
                 fi
                 sleep $((attempt * 2))
                 attempt=$((attempt + 1))
-                status=$(curl -sS -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
+                status=$(curl -sS --connect-timeout 20 --max-time 60 -o /tmp/delete-resp.json -w '%{http_code}' -X DELETE \
                   -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
                   "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/translations?stringId=${string_id}&languageId=${lang}")
               done
@@ -221,7 +221,7 @@ jobs:
           languages="de es-ES fr pl pt-BR zh-CN"
           failed=0
           for lang in ${languages}; do
-            status=$(curl -sS -o /tmp/verify.json -w '%{http_code}' \
+            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/verify.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
               "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/languages/${lang}/translations?fileId=${FILE_ID}&limit=1")
             if [ "${status}" != "200" ]; then

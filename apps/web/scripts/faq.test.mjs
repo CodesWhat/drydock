@@ -95,8 +95,17 @@ test("faq component uses accessible button elements with aria attributes", () =>
   assert.match(faqComponentSource, /answerId/);
 });
 
-test("faq component wraps questions in h2 elements", () => {
-  assert.match(faqComponentSource, /<h2>/);
+test("faq component wraps questions in h3 elements", () => {
+  assert.match(faqComponentSource, /<h3>/);
+});
+
+test("faq answers are always in the markup and hidden when collapsed", () => {
+  // Conditional rendering (`isOpen && <p>`) kept answers out of the server HTML
+  // and left aria-controls pointing at ids that did not exist.
+  assert.doesNotMatch(faqComponentSource, /isOpen\s*&&/);
+  const answer = faqComponentSource.match(/<p\s[^>]*id=\{answerId\}[\s\S]*?<\/p>/)?.[0] ?? "";
+  assert.match(answer, /hidden=\{!isOpen\}/);
+  assert.match(answer, /\{item\.answer\}/);
 });
 
 test("faq component uses useState for open/close state", () => {
@@ -110,15 +119,20 @@ test("homepage imports the FAQ component", () => {
   assert.match(homepageSource, /\bFAQ\b/);
 });
 
-test("homepage imports faqItems for JSON-LD", () => {
-  assert.match(homepageSource, /from "\.\/data\/faq"/);
-  assert.match(homepageSource, /\bfaqItems\b/);
+const structuredDataSource = readFileSync(
+  new URL("../src/lib/structured-data.ts", import.meta.url),
+  "utf8",
+);
+
+test("the home JSON-LD graph is built from faqItems", () => {
+  assert.match(structuredDataSource, /from "\.\.\/app\/data\/faq\.ts"/);
+  assert.match(structuredDataSource, /\bfaqItems\b/);
 });
 
-test("homepage injects a FAQPage JSON-LD script", () => {
-  assert.match(homepageSource, /"FAQPage"/);
-  assert.match(homepageSource, /mainEntity/);
-  assert.match(homepageSource, /faqPageJsonLd/);
+test("homepage injects a FAQPage JSON-LD graph", () => {
+  assert.match(structuredDataSource, /"FAQPage"/);
+  assert.match(structuredDataSource, /mainEntity/);
+  assert.match(homepageSource, /buildHomeJsonLd/);
 });
 
 test("homepage renders FAQ section after Ecosystem", () => {
@@ -134,4 +148,29 @@ test("FAQ section is wrapped in a reveal div", () => {
   // like suppressHydrationWarning on the wrapper)
   const revealFaqMatch = homepageSource.match(/<div className="reveal"[^>]*>\s*<FAQ \/>/);
   assert.ok(revealFaqMatch !== null, "<FAQ /> must be wrapped in a reveal div");
+});
+
+// ── Audit follow-ups ─────────────────────────────────────────────────────────
+
+test("faq answers how to auto-update containers, monitor-first, with real env names", () => {
+  const answer = faqDataSource.match(
+    /question: "How do I automatically update Docker containers[^"]*",\s*answer:\s*"([^"]*)"/,
+  )?.[1];
+  assert.ok(answer, "the auto-update question needs an entry");
+  assert.match(answer, /monitor-first/);
+  assert.match(answer, /DD_ACTION_DOCKER_LOCAL_DRYRUN=true/);
+  assert.match(answer, /DD_ACTION_DOCKER_LOCAL_AUTO=true/);
+  assert.match(answer, /DD_ACTION_DOCKERCOMPOSE_<NAME>_FILE/);
+  assert.match(answer, /BACKUPCOUNT, default 3/);
+  assert.match(answer, /dd\.rollback\.auto=true/);
+  assert.match(answer, /getting-started#enable-auto-updates-optional/);
+});
+
+test("faq answers the Docker socket question and notes what the proxy must allow", () => {
+  assert.match(faqDataSource, /question: "Does Drydock need full access to my Docker socket\?"/);
+  assert.match(faqDataSource, /POST=1 and NETWORKS=1/);
+});
+
+test("faq says Watchtower was archived in December 2025", () => {
+  assert.match(faqDataSource, /Watchtower auto-updates[^"]*archived in December 2025/);
 });

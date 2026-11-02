@@ -14,7 +14,7 @@ export function DocsShell({ tree, children }: { tree: PageTree; children: ReactN
   // body and center as one bounded column (margins on a wide monitor, full-width on laptops).
   // Search moves into the SiteHeader (showSearch); the sidebar's own search is disabled.
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="website-docs flex min-h-screen flex-col">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-neutral-900 focus:shadow-lg dark:focus:bg-neutral-900 dark:focus:text-neutral-100"

@@ -17,27 +17,11 @@ export function SectionHeading({
 }) {
   const isRight = align === "right";
   return (
-    <div
-      className={`mb-12 flex max-w-2xl flex-col ${
-        isRight ? "ml-auto items-end text-right" : "items-start text-left"
-      }`}
-    >
-      {strike ? (
-        <p className="text-3xl font-bold tracking-tight text-neutral-400 line-through decoration-2 sm:text-4xl dark:text-neutral-600">
-          {strike}
-        </p>
-      ) : null}
-      {eyebrow ? (
-        <p className="mb-2 font-mono text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500">
-          {eyebrow}
-        </p>
-      ) : null}
-      <h2 className="text-3xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-4xl">
-        {title}
-      </h2>
-      {subtitle ? (
-        <p className="mt-3 text-base text-neutral-600 dark:text-neutral-400">{subtitle}</p>
-      ) : null}
+    <div className={`website-section-heading ${isRight ? "website-section-heading-right" : ""}`}>
+      {strike ? <p className="website-section-strike">{strike}</p> : null}
+      {eyebrow ? <p className="website-eyebrow">{eyebrow}</p> : null}
+      <h2 className="website-section-title">{title}</h2>
+      {subtitle ? <p className="website-section-subtitle">{subtitle}</p> : null}
     </div>
   );
 }

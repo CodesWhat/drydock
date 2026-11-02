@@ -3497,7 +3497,7 @@ describe('container snapshot env redaction (#1523)', () => {
       .get((inserted as { id: string }).id);
     expect(String(row?.container_snapshot)).not.toContain('super-secret-password');
     expect(JSON.parse(String(row?.container_snapshot)).details.env).toEqual([
-      { key: 'DB_PASSWORD', value: '[REDACTED]' },
+      { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
       { key: 'PATH', value: '/usr/bin' },
     ]);
   });

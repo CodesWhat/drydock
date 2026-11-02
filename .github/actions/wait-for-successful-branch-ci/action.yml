@@ -41,10 +41,16 @@ runs:
         set -euo pipefail
 
         workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}"
-        workflow_json="$(curl -fsSL \
+        # Write to a file: curl appends a successful retry to whatever a timed-out
+        # attempt already sent to stdout, but truncates an --output file.
+        workflow_file="${RUNNER_TEMP}/workflow-meta.json"
+        curl -fsSL \
+          --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors \
           -H "Authorization: Bearer ${GH_TOKEN}" \
           -H "Accept: application/vnd.github+json" \
-          "${workflow_url}")"
+          --output "${workflow_file}" \
+          "${workflow_url}"
+        workflow_json="$(cat "${workflow_file}")"
 
         workflow_id="$(echo "${workflow_json}" | jq -r '.id // empty')"
         workflow_name="$(echo "${workflow_json}" | jq -r '.name // empty')"
@@ -78,10 +84,14 @@ runs:
           # unfiltered endpoint still returns the runs fine). Pull the latest
           # 100 runs unfiltered and filter client-side via jq for resilience.
           runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/runs?per_page=100"
-          runs_json="$(curl -fsSL \
+          runs_file="${RUNNER_TEMP}/workflow-runs.json"
+          curl -fsSL \
+            --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
-            "${runs_url}")"
+            --output "${runs_file}" \
+            "${runs_url}"
+          runs_json="$(cat "${runs_file}")"
 
           # Normal cuts only accept push-triggered runs: ci-verify.yml's push
           # trigger covers main only, so a main-HEAD SHA always has one to find.

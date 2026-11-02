@@ -59,8 +59,10 @@ function runNotifyStep(openIssues: unknown[]): { status: number; requests: Reque
 method=GET
 url=
 body=
+out=
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --output) out="$2"; shift 2 ;;
     -X) method="$2"; shift 2 ;;
     -d) body="$2"; shift 2 ;;
     -H) shift 2 ;;
@@ -72,7 +74,7 @@ done
 jq -n -c --arg m "$method" --arg u "$url" --arg b "$body" \\
   '{method: $m, url: $u, body: $b}' >> '${requestLog}'
 if [ "$method" = "GET" ]; then
-  cat '${issuesJson}'
+  if [ -n "$out" ]; then cat '${issuesJson}' > "$out"; else cat '${issuesJson}'; fi
 else
   echo '{}'
 fi
@@ -87,6 +89,7 @@ fi
     const env: NodeJS.ProcessEnv = {
       PATH: `${workdir}:${process.env.PATH ?? ''}`,
       GH_TOKEN: 'stub',
+      RUNNER_TEMP: workdir,
       ISSUE_TITLE: stepEnv.ISSUE_TITLE,
       LEGACY_ISSUE_TITLE: stepEnv.LEGACY_ISSUE_TITLE,
       RUN_URL: 'https://github.com/CodesWhat/drydock/actions/runs/1',

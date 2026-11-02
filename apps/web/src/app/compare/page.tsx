@@ -3,6 +3,7 @@ import { CompareMatrix } from "@/components/compare-matrix";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { buildCompareIndexJsonLd } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
   // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
@@ -62,57 +63,23 @@ const tools = [
 ];
 
 export default function ComparePage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "CollectionPage",
-        name: "Drydock vs Alternatives — Container Update Tool Comparisons",
-        description:
-          "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane.",
-        url: `${BASE_URL}/compare`,
-        mainEntity: {
-          "@type": "ItemList",
-          numberOfItems: tools.length,
-          itemListElement: tools.map((tool, i) => ({
-            "@type": "ListItem",
-            position: i + 1,
-            url: `${BASE_URL}/compare/${tool.slug}`,
-            name: `${tool.name} vs Drydock`,
-          })),
-        },
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Home",
-            item: BASE_URL,
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: "Compare",
-            item: `${BASE_URL}/compare`,
-          },
-        ],
-      },
-    ],
-  };
+  const jsonLd = buildCompareIndexJsonLd(tools, {
+    name: "Drydock vs Alternatives — Container Update Tool Comparisons",
+    description:
+      "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane.",
+  });
 
   return (
     <>
       <JsonLd data={jsonLd} />
       <MarketingShell>
         {/* Hero */}
-        <section className="px-4 pt-16 pb-12">
-          <div className="mx-auto max-w-4xl text-center">
-            <h1 className="mb-4 text-4xl font-bold tracking-tight text-neutral-900 sm:text-5xl dark:text-neutral-100">
+        <section className="pt-16 pb-12">
+          <div className="website-wrap">
+            <h1 className="mb-4 text-4xl font-bold tracking-tight text-[var(--dd-text)] sm:text-5xl dark:text-[var(--dd-text)]">
               Drydock vs Alternatives
             </h1>
-            <p className="mx-auto max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
+            <p className="max-w-2xl text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
               We built Drydock to go further than any existing container update tool. Click any tool
               to see exactly how we compare.
             </p>
@@ -120,8 +87,9 @@ export default function ComparePage() {
         </section>
 
         {/* Full comparison matrix */}
-        <section className="px-4 pb-24">
-          <div className="mx-auto max-w-5xl">
+        <section className="pb-24">
+          <div className="website-wrap">
+            <h2 className="sr-only">Compare Drydock with each tool</h2>
             <CompareMatrix />
           </div>
         </section>
