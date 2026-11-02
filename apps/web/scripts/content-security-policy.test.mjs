@@ -94,6 +94,7 @@ test("CSP permits the badge image origins the homepage hero loads", () => {
     "https://www.bestpractices.dev",
     "https://codecov.io",
     "https://awesome.re",
+    "https://api.star-history.com",
   ]);
 });
 

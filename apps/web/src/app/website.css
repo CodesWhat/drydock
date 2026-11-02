@@ -1020,3 +1020,23 @@ html[data-product="drydock"]:not(.dark) .website-docs #nd-sidebar a[data-active=
     transition: none;
   }
 }
+
+/* Star History chart: both themes render, the active one shows. */
+.website-star-chart {
+  display: block;
+  max-width: 800px;
+  margin-inline: auto;
+}
+.website-star-chart img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 800 / 533;
+}
+.website-star-chart img.website-star-chart-dark,
+.dark .website-star-chart img.website-star-chart-light {
+  display: none;
+}
+.dark .website-star-chart img.website-star-chart-dark {
+  display: block;
+}

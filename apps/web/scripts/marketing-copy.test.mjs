@@ -70,3 +70,21 @@ test("roadmap HEAD follows the active RC while retaining older candidates", () =
   );
   assert.equal(marketing.getRoadmapHead([]), undefined);
 });
+
+test("star history chart renders both themes, no client JS, linked to star-history.com", () => {
+  const chart = readFileSync(
+    new URL("../src/components/star-history.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(chart, /^"use client"|fetch\(|<picture/m);
+  assert.match(
+    chart,
+    /api\.star-history\.com\/svg\?repos=\$\{encodeURIComponent\(REPO_SLUG\.toLowerCase\(\)\)\}/,
+  );
+  assert.match(chart, /&theme=dark/);
+  assert.match(chart, /www\.star-history\.com\/#/);
+  assert.equal((chart.match(/width=\{800\}/g) ?? []).length, 2);
+  assert.equal((chart.match(/loading="lazy"/g) ?? []).length, 2);
+  const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /<StarHistory \/>/);
+});
