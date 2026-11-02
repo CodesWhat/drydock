@@ -1,6 +1,6 @@
-import { ArrowRight, Check, Minus, X } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { ComparisonCellIcon } from "@/components/comparison-cell-icon";
+import { ComparisonCellChip, ComparisonCellIcon } from "@/components/comparison-cell-icon";
 import { SectionHeading } from "@/components/section-heading";
 import { SITE_CONFIG } from "@/lib/site-config";
 
@@ -43,7 +43,7 @@ const featureRows: FeatureRow[] = [
   {
     label: "Distributed agents",
     drydock: "yes",
-    watchtower: "no",
+    watchtower: "partial",
     diun: "no",
     portainer: "partial",
   },
@@ -53,7 +53,7 @@ function ViewAllLink() {
   return (
     <Link
       href="/compare"
-      className="group inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white/50 px-6 py-3 font-medium text-neutral-900 backdrop-blur-sm transition-all hover:border-neutral-300 hover:bg-white/80 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-100 dark:hover:border-neutral-700 dark:hover:bg-neutral-900/80"
+      className="group inline-flex items-center gap-2 rounded-lg border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)] px-6 py-3 font-medium text-[var(--dd-text)] transition-all hover:border-[var(--dd-border-strong)] hover:bg-[var(--dd-bg-card)] dark:text-[var(--dd-text)] dark:hover:border-[var(--dd-border-strong)] dark:hover:bg-[var(--dd-bg-card)]"
     >
       View all comparisons
       <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -76,8 +76,8 @@ function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
 
 export function CompareSection() {
   return (
-    <section className="border-t border-border/60 py-20">
-      <div className="mx-auto max-w-4xl px-4">
+    <section className="website-section website-section--centered">
+      <div className="website-wrap">
         <SectionHeading
           eyebrow={`Why ${SITE_CONFIG.name}`}
           title="How we compare"
@@ -85,12 +85,17 @@ export function CompareSection() {
           align="right"
         />
 
-        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
-          <div className="overflow-x-auto">
+        <div className="overflow-hidden rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
+          <section
+            className="relative overflow-x-auto"
+            aria-label="Feature comparison"
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: The labelled overflow region needs keyboard focus for horizontal scrolling.
+            tabIndex={0}
+          >
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-neutral-200 dark:border-neutral-800">
-                  <th className="px-5 py-3 text-left font-medium text-neutral-500 dark:text-neutral-400">
+                <tr className="border-b border-[var(--dd-border-strong)]">
+                  <th className="px-5 py-3 text-left font-medium text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                     Feature
                   </th>
                   {tools.map((tool) => (
@@ -100,12 +105,12 @@ export function CompareSection() {
                         "px-4 py-3 text-center font-semibold",
                         tool === SITE_CONFIG.name
                           ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
-                          : "text-neutral-500 dark:text-neutral-400",
+                          : "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]",
                       ].join(" ")}
                     >
                       {tool}
                       {tool === "Watchtower" && (
-                        <span className="mt-0.5 block text-[10px] font-normal uppercase tracking-wide text-neutral-400 dark:text-neutral-600">
+                        <span className="mt-0.5 block text-xs font-normal uppercase tracking-wide text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                           Archived
                         </span>
                       )}
@@ -118,11 +123,11 @@ export function CompareSection() {
                   <tr
                     key={row.label}
                     className={[
-                      "border-b border-neutral-100 last:border-0 dark:border-neutral-800/60",
-                      i % 2 === 1 ? "bg-neutral-50/50 dark:bg-neutral-800/20" : "",
+                      "border-b border-[var(--dd-border-strong)] last:border-0",
+                      i % 2 === 1 ? "bg-[var(--dd-bg-sidebar)]" : "",
                     ].join(" ")}
                   >
-                    <td className="px-5 py-3 text-neutral-700 dark:text-neutral-300">
+                    <td className="px-5 py-3 text-[var(--dd-text)] dark:text-[var(--tx-sec)]">
                       {row.label}
                     </td>
                     {tools.map((tool) => (
@@ -140,17 +145,17 @@ export function CompareSection() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </section>
 
-          <div className="border-t border-neutral-200 px-5 py-4 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-500">
+          <div className="border-t border-[var(--dd-border-strong)] px-5 py-4 text-xs text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3 w-3 text-emerald-500" /> Yes
+              <ComparisonCellChip value="yes" /> Yes
             </span>
             <span className="mx-3 inline-flex items-center gap-1.5">
-              <Minus className="h-3 w-3 text-amber-400" /> Partial
+              <ComparisonCellChip value="partial" /> Partial
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <X className="h-3 w-3 text-neutral-400" /> No
+              <ComparisonCellChip value="no" /> No
             </span>
           </div>
         </div>

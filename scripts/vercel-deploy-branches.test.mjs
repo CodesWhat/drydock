@@ -30,27 +30,26 @@ const quiet = [
   'feat/v1.9-webhook-retries',
 ];
 
-test('the site deploys main and branches that opt in with -web-', () => {
-  const rules = rulesFor('web');
-  for (const branch of ['main', 'fix/v1.8-web-mobile-nav', 'feat/v1.9-web']) {
-    assert.equal(deploys(rules, branch), true, branch);
-  }
-  for (const branch of [...quiet, 'fix/v1.8-demo-csp']) {
-    assert.equal(deploys(rules, branch), false, branch);
-  }
-});
-
-test('the demo deploys main and branches that opt in with -demo-', () => {
-  const rules = rulesFor('demo');
-  for (const branch of ['main', 'fix/v1.8-demo-csp-www', 'feat/v1.9-demo']) {
-    assert.equal(deploys(rules, branch), true, branch);
-  }
-  for (const branch of quiet
-    .filter((b) => !b.includes('-demo-'))
-    .concat('fix/v1.8-web-mobile-nav')) {
-    assert.equal(deploys(rules, branch), false, branch);
-  }
-});
+for (const project of ['web', 'demo']) {
+  test(`${project} deploys production main only, including rejecting former preview opt-ins`, () => {
+    const rules = rulesFor(project);
+    assert.deepEqual(rules, { '**': false, main: true });
+    assert.equal(deploys(rules, 'main'), true);
+    for (const branch of [
+      ...quiet,
+      'dev/website',
+      'feat/website-redesign',
+      'fix/v1.8-web-mobile-nav',
+      'feat/v1.9-web',
+      'fix/v1.8-demo-csp-www',
+      'feat/v1.9-demo',
+      'main-web',
+      'main/release',
+    ]) {
+      assert.equal(deploys(rules, branch), false, branch);
+    }
+  });
+}
 
 test('neither project relies on an ignore step, which would still count as a deployment', () => {
   for (const project of ['web', 'demo']) {

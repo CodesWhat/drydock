@@ -5,8 +5,12 @@ import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
 import { JsonLd } from "@/components/json-ld";
-import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { BASE_URL, DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
 import { getDocsPage, source } from "@/lib/source";
+import { versions } from "../../../../scripts/docs-versions.mjs";
+
+// The current docs index would otherwise be titled "Introduction | Drydock".
+const DOCS_INDEX_TITLE = "Drydock Documentation | Docker Container Update Monitor";
 
 function MdxImage(
   props: Omit<React.ComponentProps<"img">, "src"> & {
@@ -35,7 +39,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
   const segments = params.slug ?? [];
   const breadcrumbItems = [
     { name: "Home", url: BASE_URL },
-    { name: "Docs", url: `${BASE_URL}/docs` },
+    { name: "Docs", url: `${BASE_URL}${DOCS_ROOT}` },
     ...segments.map((seg, i) => ({
       name:
         i === segments.length - 1
@@ -77,25 +81,41 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   if (!page) notFound();
 
   const url = `${BASE_URL}${page.url}`;
+  const [versionSlug, ...rest] = page.slugs;
+  const isArchived =
+    versionSlug !== versions[0].slug && versions.some((v) => v.slug === versionSlug);
+  // An archived page canonicalises to the same page in the current docs when one
+  // exists. With no current counterpart it stays self-canonical and is kept out
+  // of the index, so old versions don't outrank the current docs.
+  const currentCounterpart = isArchived ? getDocsPage([versions[0].slug, ...rest]) : undefined;
+  const canonical = currentCounterpart ? `${BASE_URL}${currentCounterpart.url}` : url;
+  const isCurrentIndex = page.url === DOCS_ROOT;
+  const title = isCurrentIndex ? DOCS_INDEX_TITLE : page.data.title;
+  const socialTitle = isCurrentIndex
+    ? DOCS_INDEX_TITLE
+    : `${page.data.title} | ${SITE_CONFIG.name}`;
 
   return {
-    title: page.data.title,
+    title: isCurrentIndex ? { absolute: title } : title,
     description: page.data.description,
     alternates: {
-      canonical: url,
+      canonical,
     },
+    ...(isArchived && !currentCounterpart ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
-      title: page.data.title,
+      title: socialTitle,
       description: page.data.description,
       url,
       type: "article",
       siteName: SITE_CONFIG.name,
+      images: [SITE_CONFIG.ogImage],
     },
     twitter: {
-      title: page.data.title,
+      title: socialTitle,
       description: page.data.description,
       card: "summary_large_image",
       creator: SITE_CONFIG.twitterCreator,
+      images: [SITE_CONFIG.ogImage],
     },
   };
 }

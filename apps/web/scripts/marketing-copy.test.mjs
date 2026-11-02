@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import * as marketing from "../src/lib/site-content.ts";
 
-const heroSource = readFileSync(new URL("../src/components/hero.tsx", import.meta.url), "utf8");
+const proofSource = readFileSync(
+  new URL("../src/components/github-badges.tsx", import.meta.url),
+  "utf8",
+);
 const siteContent = readFileSync(new URL("../src/lib/site-content.ts", import.meta.url), "utf8");
 const faqSource = readFileSync(new URL("../src/app/data/faq.ts", import.meta.url), "utf8");
 
 test("hero scopes its 100% coverage claim to TypeScript", () => {
-  assert.match(heroSource, /value: "100%", label: "(?:TS|TypeScript) coverage"/);
+  assert.match(proofSource, /<b>100%<\/b> (?:TS|TypeScript) coverage/);
 });
 
 test("coverage FAQ distinguishes TypeScript gates, Vue component floors, and typechecking", () => {

@@ -9,7 +9,13 @@ import { Hero } from "@/components/hero";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Roadmap } from "@/components/roadmap";
-import { BASE_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
+import {
+  BASE_URL,
+  DOCS_ROOT,
+  GITHUB_RELEASES_URL,
+  GITHUB_URL,
+  SITE_CONFIG,
+} from "@/lib/site-config";
 import { faqItems } from "./data/faq";
 
 export const metadata: Metadata = {
@@ -24,7 +30,7 @@ export default function Home() {
     "@type": "SoftwareApplication",
     name: SITE_CONFIG.name,
     url: BASE_URL,
-    description: "Open source container update monitoring built in TypeScript with modern tooling.",
+    description: SITE_CONFIG.description,
     applicationCategory: "DeveloperApplication",
     operatingSystem: "Docker",
     license: "https://opensource.org/licenses/MIT",
@@ -44,7 +50,7 @@ export default function Home() {
     },
     softwareHelp: {
       "@type": "WebPage",
-      url: `${BASE_URL}/docs`,
+      url: `${BASE_URL}${DOCS_ROOT}`,
     },
   };
 

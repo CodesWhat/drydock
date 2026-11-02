@@ -2,7 +2,7 @@ import { BookOpen } from "lucide-react";
 import { GithubIcon } from "@/components/github-icon";
 import { TrackedLink } from "@/components/tracked-link";
 import { Button } from "@/components/ui/button";
-import { GITHUB_URL } from "@/lib/site-config";
+import { DOCS_ROOT, GITHUB_URL } from "@/lib/site-config";
 
 export function CtaButtons({
   align = "center",
@@ -11,10 +11,10 @@ export function CtaButtons({
   align?: "center" | "start";
   placement: "hero" | "comparison";
 }) {
-  const justifyClass = align === "start" ? "sm:justify-start" : "sm:justify-center";
+  const justifyClass = align === "start" ? "justify-start" : "justify-center";
   return (
-    <div className={`grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:gap-4 ${justifyClass}`}>
-      <Button size="lg" className="w-full sm:w-auto" asChild>
+    <div className={`flex flex-wrap gap-3 ${justifyClass}`}>
+      <Button size="lg" className="w-auto" asChild>
         <TrackedLink
           href={GITHUB_URL}
           ctaId="github_repository"
@@ -26,8 +26,8 @@ export function CtaButtons({
           View on GitHub
         </TrackedLink>
       </Button>
-      <Button variant="outline" size="lg" className="w-full sm:w-auto" asChild>
-        <TrackedLink href="/docs" ctaId="docs_root" placement={placement}>
+      <Button variant="outline" size="lg" className="w-auto" asChild>
+        <TrackedLink href={DOCS_ROOT} ctaId="docs_root" placement={placement}>
           <BookOpen className="h-4 w-4" />
           Documentation
         </TrackedLink>

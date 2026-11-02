@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
@@ -86,10 +87,17 @@ export default function TrivyAdvisoryPage() {
     <>
       <JsonLd data={jsonLd} />
       <MarketingShell>
-        <article className="mx-auto max-w-4xl px-6 py-16">
-          <div className="rounded-xl border border-neutral-200 bg-white/70 p-8 shadow-sm backdrop-blur-sm sm:p-12 dark:border-neutral-800 dark:bg-neutral-950/70">
+        <article className="website-advisory">
+          <div className="website-advisory-body">
             {/* Title block */}
             <div className="mb-12">
+              <nav aria-label="Breadcrumb" className="website-breadcrumb">
+                <Link href="/">Drydock</Link>
+                <span aria-hidden="true">/</span>
+                <span>Security</span>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Trivy supply chain compromise</span>
+              </nav>
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
                   Not Affected
@@ -97,20 +105,18 @@ export default function TrivyAdvisoryPage() {
                 <Badge variant="outline">GHSA-69fq-xp46-6x23</Badge>
                 <Badge variant="outline">CWE-506</Badge>
               </div>
-              <h1 className="mb-3 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-100">
+              <h1 className="mb-3 text-3xl font-bold tracking-tight text-[var(--dd-text)] sm:text-4xl dark:text-[var(--dd-text)]">
                 Trivy Supply Chain Compromise
               </h1>
-              <p className="text-lg text-neutral-600 dark:text-neutral-400">
+              <p className="text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 Security advisory &middot; March 22, 2026
               </p>
             </div>
 
             {/* Summary box */}
-            <div className="mb-12 rounded-lg border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-800/50 dark:bg-emerald-950/30">
-              <h2 className="mb-2 text-lg font-semibold text-emerald-900 dark:text-emerald-200">
-                Drydock is not affected by this breach
-              </h2>
-              <p className="text-emerald-800 dark:text-emerald-300">
+            <div className="website-advisory-callout">
+              <h2>Drydock is not affected by this breach</h2>
+              <p>
                 We have audited our entire CI/CD pipeline, dependency tree, and runtime
                 integrations. Drydock does not use the compromised GitHub Actions, did not pull the
                 backdoored binary, and all workflow actions are pinned by immutable commit SHA. No
@@ -152,7 +158,7 @@ export default function TrivyAdvisoryPage() {
 
               <h2>Exposure windows</h2>
               <div className="overflow-x-auto">
-                <table className="w-auto">
+                <table className="w-full">
                   <thead>
                     <tr>
                       <th>Component</th>
@@ -467,7 +473,7 @@ uses: aquasecurity/trivy-action@<full-commit-sha>  # 0.24.0`}</code>
 
               <h2>Timeline</h2>
               <div className="overflow-x-auto">
-                <table className="w-auto">
+                <table className="w-full">
                   <thead>
                     <tr>
                       <th>Date (UTC)</th>

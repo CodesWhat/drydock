@@ -93,6 +93,7 @@ test("CSP permits the badge image origins the homepage hero loads", () => {
     "https://qlty.sh",
     "https://www.bestpractices.dev",
     "https://codecov.io",
+    "https://awesome.re",
   ]);
 });
 
@@ -162,4 +163,16 @@ test("site-wide headers send Cross-Origin-Opener-Policy same-origin", () => {
     entry.headers.find((header) => header.key === "Cross-Origin-Opener-Policy"),
     { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   );
+});
+
+test("only development can embed the existing local demo on its fixed port", () => {
+  const production = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", false);
+  const development = buildContentSecurityPolicy("c2VjdXJlLW5vbmNl", true);
+  assert.deepEqual(getDirectiveSources(production, "frame-src"), ["https://demo.getdrydock.com"]);
+  assert.deepEqual(getDirectiveSources(development, "frame-src"), [
+    "https://demo.getdrydock.com",
+    "http://127.0.0.1:4179",
+  ]);
+  assert.ok(production.split("; ").includes("upgrade-insecure-requests"));
+  assert.equal(getDirective(development, "upgrade-insecure-requests"), undefined);
 });

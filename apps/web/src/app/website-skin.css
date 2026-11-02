@@ -1,0 +1,420 @@
+/* Drydock skin: the product's own UI identity. IBM Plex Mono + Instrument Serif, One Dark plus 5 more families x light/dark (from ui/src/theme/tokens.css). Surfaces, status tones and the primary come from the family. */
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(/fonts/ibm-plex-mono-latin-400-italic.woff2) format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(/fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(/fonts/ibm-plex-mono-latin-600-normal.woff2) format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url(/fonts/ibm-plex-mono-latin-700-normal.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url(/fonts/instrument-serif-latin-400-normal.woff2) format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url(/fonts/instrument-serif-latin-400-italic.woff2) format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+html[data-product="drydock"],
+[data-skin="drydock"] {
+  --font-ui: var(--mono);
+  --ui-size: 12px;
+  --ui-ls: 0.04em;
+  --brand-w: 400;
+  --brand-size: 24px;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --serif: "Instrument Serif", Georgia, serif;
+}
+
+/* ---- the product's real tokens, 6 families x light/dark (generated from ui/src/theme/tokens.css) ---- */
+html[data-product="drydock"][data-family="one-dark"].dark {
+  --dd-bg: #282c34;
+  --dd-bg-sidebar: #21252b;
+  --dd-bg-card: #2c313c;
+  --dd-bg-elevated: #31353f;
+  --dd-bg-inset: #1e2127;
+  --dd-bg-code: #1e2127;
+  --dd-border: #181a1f;
+  --dd-border-strong: #3e4452;
+  --dd-sticky-separator: #8f97a8;
+  --dd-text: #abb2bf;
+  --dd-text-secondary: #acb2bb;
+  --dd-text-muted: #acb1c0;
+  --dd-scrollbar: #4b5263;
+  --dd-success: #98c379;
+  --dd-danger: #ef989f;
+  --dd-warning: #d8a87c;
+  --dd-caution: #e5c07b;
+  --dd-info: #72b8f1;
+  --dd-primary: #8ab0ff;
+  --dd-primary-fg: #000000;
+  --dd-alt: #d59ce6;
+  --dd-neutral: #acb2bb;
+  --dd-success-muted: color-mix(in srgb, var(--dd-success) 15%, transparent);
+  --dd-danger-muted: color-mix(in srgb, var(--dd-danger) 15%, transparent);
+  --dd-warning-muted: color-mix(in srgb, var(--dd-warning) 15%, transparent);
+  --dd-caution-muted: color-mix(in srgb, var(--dd-caution) 15%, transparent);
+  --dd-info-muted: color-mix(in srgb, var(--dd-info) 15%, transparent);
+  --dd-primary-muted: color-mix(in srgb, var(--dd-primary) 15%, transparent);
+  --dd-alt-muted: color-mix(in srgb, var(--dd-alt) 15%, transparent);
+  --dd-neutral-muted: color-mix(in srgb, var(--dd-neutral) 15%, transparent);
+  --dd-shadow-tooltip: 0 2px 8px color-mix(in srgb, #020617 30%, transparent);
+  --dd-shadow-modal: 0 8px 24px color-mix(in srgb, #020617 24%, transparent);
+  --dd-shadow-sm: var(--dd-shadow-tooltip);
+  --dd-shadow-lg: var(--dd-shadow-modal);
+  --dd-shadow-inset: inset 0 8px 16px -8px color-mix(in srgb, #020617 40%, transparent);
+  --dd-hover-overlay: color-mix(in srgb, var(--dd-text) 8%, transparent);
+  --dd-log-text: #abb2bf;
+  --dd-log-text-muted: #5c6370;
+  --dd-log-line: color-mix(in srgb, var(--dd-border) 55%, transparent);
+  --dd-log-divider: color-mix(in srgb, var(--dd-border-strong) 70%, transparent);
+  --dd-log-footer-bg: color-mix(in srgb, var(--dd-bg-code) 80%, var(--dd-bg-elevated) 20%);
+  --dd-zebra-stripe: color-mix(in srgb, var(--dd-bg-card) 92%, var(--dd-text) 8%);
+  --hdr-bg: #373b42;
+}
+html[data-product="drydock"][data-family="one-dark"]:not(.dark) {
+  --dd-bg: #fafafa;
+  --dd-bg-sidebar: #f0f0f0;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #e5e5e6;
+  --dd-bg-inset: #f0f0f0;
+  --dd-bg-code: #282c34;
+  --dd-border: #e5e5e6;
+  --dd-border-strong: #cecece;
+  --dd-sticky-separator: #767676;
+  --dd-text: #383a42;
+  --dd-text-secondary: #696c77;
+  --dd-text-muted: #a0a1a7;
+  --dd-scrollbar: #cecece;
+  --dd-success: #50a14f;
+  --dd-danger: #e45649;
+  --dd-warning: #c18401;
+  --dd-caution: #986801;
+  --dd-info: #4078f2;
+  --dd-primary: #526fff;
+  --dd-primary-fg: #000000;
+  --dd-alt: #a626a4;
+  --dd-neutral: #a0a1a7;
+  --dd-log-text: #abb2bf;
+  --dd-log-text-muted: #5c6370;
+  --hdr-bg: #eeeeee;
+}
+html[data-product="drydock"][data-family="github"].dark {
+  --dd-bg: #0d1117;
+  --dd-bg-sidebar: #010409;
+  --dd-bg-card: #161b22;
+  --dd-bg-elevated: #161b22;
+  --dd-bg-inset: #131920;
+  --dd-bg-code: #0d1117;
+  --dd-border: #30363d;
+  --dd-border-strong: #484f58;
+  --dd-sticky-separator: #8b949e;
+  --dd-text: #c9d1d9;
+  --dd-text-secondary: #8b949e;
+  --dd-text-muted: #8d949d;
+  --dd-scrollbar: #484f58;
+  --dd-success: #2ea850;
+  --dd-danger: #e66c73;
+  --dd-warning: #bf8700;
+  --dd-caution: #d4a72c;
+  --dd-info: #4195f7;
+  --dd-primary: #58a6ff;
+  --dd-primary-fg: #000000;
+  --dd-alt: #bc8cff;
+  --dd-neutral: #8d949d;
+  --dd-log-text: #c9d1d9;
+  --dd-log-text-muted: #6e7681;
+  --hdr-bg: #1e2227;
+}
+html[data-product="drydock"][data-family="github"]:not(.dark) {
+  --dd-bg: #ffffff;
+  --dd-bg-sidebar: #f6f8fa;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #f6f8fa;
+  --dd-bg-inset: #f6f8fa;
+  --dd-bg-code: #24292e;
+  --dd-border: #d8dee4;
+  --dd-border-strong: #c5ccd3;
+  --dd-sticky-separator: #6e7681;
+  --dd-text: #24292e;
+  --dd-text-secondary: #57606a;
+  --dd-text-muted: #6e7681;
+  --dd-scrollbar: #c5ccd3;
+  --dd-success: #1a7f37;
+  --dd-danger: #cf222e;
+  --dd-warning: #9a6700;
+  --dd-caution: #bf8700;
+  --dd-info: #0969da;
+  --dd-primary: #0969da;
+  --dd-primary-fg: #ffffff;
+  --dd-alt: #6f42c1;
+  --dd-neutral: #6e7681;
+  --dd-log-text: #c9d1d9;
+  --dd-log-text-muted: #6e7681;
+  --hdr-bg: #f2f2f2;
+}
+html[data-product="drydock"][data-family="dracula"].dark {
+  --dd-bg: #282a36;
+  --dd-bg-sidebar: #21222c;
+  --dd-bg-card: #44475a;
+  --dd-bg-elevated: #343746;
+  --dd-bg-inset: #363848;
+  --dd-bg-code: #1e1f29;
+  --dd-border: #44475a;
+  --dd-border-strong: #6272a4;
+  --dd-sticky-separator: #b6bcd6;
+  --dd-text: #f8f8f2;
+  --dd-text-secondary: #d4d7e3;
+  --dd-text-muted: #d3d7e5;
+  --dd-scrollbar: #6272a4;
+  --dd-success: #50fa7b;
+  --dd-danger: #ffcbcb;
+  --dd-warning: #ffcd99;
+  --dd-caution: #f1fa8c;
+  --dd-info: #8be9fd;
+  --dd-primary: #e1cffc;
+  --dd-primary-fg: #000000;
+  --dd-alt: #ffc6e7;
+  --dd-neutral: #d3d7e5;
+  --dd-log-text: #f8f8f2;
+  --dd-log-text-muted: #6272a4;
+  --hdr-bg: #373944;
+}
+html[data-product="drydock"][data-family="dracula"]:not(.dark) {
+  --dd-bg: #f8f8f2;
+  --dd-bg-sidebar: #eee8e4;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #eee8e4;
+  --dd-bg-inset: #e8e2de;
+  --dd-bg-code: #282a36;
+  --dd-border: #d6d0cc;
+  --dd-border-strong: #bab4b0;
+  --dd-sticky-separator: #767676;
+  --dd-text: #282a36;
+  --dd-text-secondary: #44475a;
+  --dd-text-muted: #6272a4;
+  --dd-scrollbar: #bab4b0;
+  --dd-success: #2d9e4f;
+  --dd-danger: #d63838;
+  --dd-warning: #d48a38;
+  --dd-caution: #b5a620;
+  --dd-info: #3a96a8;
+  --dd-primary: #7c5cbf;
+  --dd-primary-fg: #ffffff;
+  --dd-alt: #c44a8f;
+  --dd-neutral: #6272a4;
+  --dd-log-text: #f8f8f2;
+  --dd-log-text-muted: #6272a4;
+  --hdr-bg: #ecece6;
+}
+html[data-product="drydock"][data-family="catppuccin"].dark {
+  --dd-bg: #1e1e2e;
+  --dd-bg-sidebar: #181825;
+  --dd-bg-card: #313244;
+  --dd-bg-elevated: #262637;
+  --dd-bg-inset: #282839;
+  --dd-bg-code: #11111b;
+  --dd-border: #313244;
+  --dd-border-strong: #45475a;
+  --dd-sticky-separator: #9399b2;
+  --dd-text: #cdd6f4;
+  --dd-text-secondary: #b0b7ce;
+  --dd-text-muted: #b4b7c3;
+  --dd-scrollbar: #585b70;
+  --dd-success: #a6e3a1;
+  --dd-danger: #f59bb4;
+  --dd-warning: #fab387;
+  --dd-caution: #f9e2af;
+  --dd-info: #8db7fa;
+  --dd-primary: #89dceb;
+  --dd-primary-fg: #000000;
+  --dd-alt: #cba6f7;
+  --dd-neutral: #b4b7c3;
+  --dd-log-text: #cdd6f4;
+  --dd-log-text-muted: #6c7086;
+  --hdr-bg: #2e2e3d;
+}
+html[data-product="drydock"][data-family="catppuccin"]:not(.dark) {
+  --dd-bg: #eff1f5;
+  --dd-bg-sidebar: #e6e9ef;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #e6e9ef;
+  --dd-bg-inset: #dce0e8;
+  --dd-bg-code: #1e1e2e;
+  --dd-border: #ccd0da;
+  --dd-border-strong: #acb0be;
+  --dd-sticky-separator: #6c6f85;
+  --dd-text: #4c4f69;
+  --dd-text-secondary: #6c6f85;
+  --dd-text-muted: #9ca0b0;
+  --dd-scrollbar: #acb0be;
+  --dd-success: #40a02b;
+  --dd-danger: #d20f39;
+  --dd-warning: #fe640b;
+  --dd-caution: #df8e1d;
+  --dd-info: #1e66f5;
+  --dd-primary: #04a5e5;
+  --dd-primary-fg: #000000;
+  --dd-alt: #8839ef;
+  --dd-neutral: #9ca0b0;
+  --dd-log-text: #cdd6f4;
+  --dd-log-text-muted: #6c7086;
+  --hdr-bg: #e3e5e9;
+}
+html[data-product="drydock"][data-family="gruvbox"].dark {
+  --dd-bg: #282828;
+  --dd-bg-sidebar: #1d2021;
+  --dd-bg-card: #3c3836;
+  --dd-bg-elevated: #32302f;
+  --dd-bg-inset: #1d2021;
+  --dd-bg-code: #1d2021;
+  --dd-border: #3c3836;
+  --dd-border-strong: #504945;
+  --dd-sticky-separator: #a89984;
+  --dd-text: #ebdbb2;
+  --dd-text-secondary: #d5c4a1;
+  --dd-text-muted: #c5bdb4;
+  --dd-scrollbar: #665c54;
+  --dd-success: #c0c428;
+  --dd-danger: #fda89d;
+  --dd-warning: #feaa64;
+  --dd-caution: #fabd2f;
+  --dd-info: #acc3ba;
+  --dd-primary: #fea962;
+  --dd-primary-fg: #000000;
+  --dd-alt: #e2b0bd;
+  --dd-neutral: #c5bdb4;
+  --dd-log-text: #ebdbb2;
+  --dd-log-text-muted: #928374;
+  --hdr-bg: #373737;
+}
+html[data-product="drydock"][data-family="gruvbox"]:not(.dark) {
+  --dd-bg: #fbf1c7;
+  --dd-bg-sidebar: #f9f5d7;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #f2e5bc;
+  --dd-bg-inset: #f9f5d7;
+  --dd-bg-code: #282828;
+  --dd-border: #d5c4a1;
+  --dd-border-strong: #bdae93;
+  --dd-sticky-separator: #7c6f64;
+  --dd-text: #3c3836;
+  --dd-text-secondary: #504945;
+  --dd-text-muted: #928374;
+  --dd-scrollbar: #bdae93;
+  --dd-success: #98971a;
+  --dd-danger: #cc241d;
+  --dd-warning: #d65d0e;
+  --dd-caution: #d79921;
+  --dd-info: #458588;
+  --dd-primary: #d65d0e;
+  --dd-primary-fg: #000000;
+  --dd-alt: #b16286;
+  --dd-neutral: #928374;
+  --dd-log-text: #ebdbb2;
+  --dd-log-text-muted: #928374;
+  --hdr-bg: #eee5bd;
+}
+html[data-product="drydock"][data-family="ayu"].dark {
+  --dd-bg: #242936;
+  --dd-bg-sidebar: #1f2430;
+  --dd-bg-card: #2d3440;
+  --dd-bg-elevated: #282e3b;
+  --dd-bg-inset: #1a1e28;
+  --dd-bg-code: #1f2430;
+  --dd-border: #171b24;
+  --dd-border-strong: #2d3342;
+  --dd-sticky-separator: #9aa5b3;
+  --dd-text: #cccac2;
+  --dd-text-secondary: #b3b9c2;
+  --dd-text-muted: #b0b9c5;
+  --dd-scrollbar: #475266;
+  --dd-success: #87d96c;
+  --dd-danger: #f49e92;
+  --dd-warning: #e6b450;
+  --dd-caution: #ffcc66;
+  --dd-info: #6acdff;
+  --dd-primary: #ffcc66;
+  --dd-primary-fg: #000000;
+  --dd-alt: #d4bfff;
+  --dd-neutral: #b3b9c2;
+  --dd-log-text: #cccac2;
+  --dd-log-text-muted: #5c697d;
+  --hdr-bg: #333844;
+}
+html[data-product="drydock"][data-family="ayu"]:not(.dark) {
+  --dd-bg: #fcfcfc;
+  --dd-bg-sidebar: #f8f9fa;
+  --dd-bg-card: #ffffff;
+  --dd-bg-elevated: #f3f4f5;
+  --dd-bg-inset: #f8f9fa;
+  --dd-bg-code: #242936;
+  --dd-border: #e8e9eb;
+  --dd-border-strong: #d4d5d7;
+  --dd-sticky-separator: #6c7680;
+  --dd-text: #5c6166;
+  --dd-text-secondary: #828e9f;
+  --dd-text-muted: #9aa5b3;
+  --dd-scrollbar: #d4d5d7;
+  --dd-success: #6cbf43;
+  --dd-danger: #e65050;
+  --dd-warning: #ea9216;
+  --dd-caution: #ffaa33;
+  --dd-info: #22a4e6;
+  --dd-primary: #f29718;
+  --dd-primary-fg: #000000;
+  --dd-alt: #a37acc;
+  --dd-neutral: #828e9f;
+  --dd-log-text: #cccac2;
+  --dd-log-text-muted: #5c697d;
+  --hdr-bg: #efefef;
+}
+
+html[data-product="drydock"].dark {
+  color-scheme: dark;
+  --tx-mix: 0%;
+  --sec-mix: 0%;
+}
+html[data-product="drydock"]:not(.dark) {
+  color-scheme: light;
+  --tx-mix: 50%;
+  --sec-mix: 35%;
+}
+html[data-product="drydock"][data-family="catppuccin"]:not(.dark) {
+  --tx-mix: 70%;
+  --sec-mix: 50%;
+}
+html[data-product="drydock"][data-family="ayu"]:not(.dark) {
+  --tx-mix: 90%;
+  --sec-mix: 80%;
+}

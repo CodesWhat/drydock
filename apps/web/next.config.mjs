@@ -44,6 +44,9 @@ const nextConfig = {
       },
     ],
   },
+  // All docs redirects stay temporary: their target is the current version,
+  // which changes every release, and browsers cache a permanent redirect.
+  // Internal links go straight to DOCS_ROOT, so there is no hop to optimise.
   redirects: async () => [
     {
       source: "/docs",

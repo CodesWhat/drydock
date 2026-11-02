@@ -17,14 +17,14 @@ export function buildContentSecurityPolicy(nonce, isDevelopment) {
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh https://www.bestpractices.dev https://codecov.io",
+    "img-src 'self' data: https://img.shields.io https://github.com https://qlty.sh https://www.bestpractices.dev https://codecov.io https://awesome.re",
     "font-src 'self' data:",
     "connect-src 'self' https://e.codeswhat.com",
-    "frame-src https://demo.getdrydock.com",
+    `frame-src https://demo.getdrydock.com${isDevelopment ? " http://127.0.0.1:4179" : ""}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
-    "upgrade-insecure-requests",
+    ...(!isDevelopment ? ["upgrade-insecure-requests"] : []),
   ].join("; ");
 }
