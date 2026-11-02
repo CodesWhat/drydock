@@ -11,7 +11,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.10.0-r0`; the repository no longer serves `2.9.0-r0`.
-- Docs: the quick start on the docs index page now runs as written. It was missing the auth settings and the `/store` volume, so a fresh install stopped at startup. The v1.7 docs examples are pinned to 1.7.0 instead of `latest`.
+- Docs: the quick start on the docs index page now runs as written. It was missing the auth settings and the `/store` volume, so a fresh install stopped at startup.
 - Dashboard widget titles (Updates Available, Security Overview, Resource Usage, Host Status, Update Breakdown and the stat tiles) and the "Self-update unavailable" badge now show in the selected language in every locale. The German Cancel button, the Korean keyboard shortcuts dialog and log tail sizes, the Russian, Ukrainian and Vietnamese log tail sizes, and a few Spanish, French, Italian, Dutch, Polish and Brazilian Portuguese labels were translated too. The Turkish "mature" count reads "olgun" instead of "mevcut".
 - Docs site: the docs pages use a wider layout, and the docs header is slimmer, with search and the theme toggle moved into the sidebar. The WUD comparison notes when the competitor numbers were last checked.
 
