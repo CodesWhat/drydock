@@ -41,6 +41,7 @@ import { Semaphore } from '../../../updates/lock-primitives.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { createContainerBackupScope } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { sleep } from '../../../util/sleep.js';
 import { getDockerWatcherSourceKey } from '../../../watchers/providers/docker/container-init.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
@@ -1884,9 +1885,7 @@ class Docker<
         logContainer.debug?.(
           `Container ${containerName} health state not yet available — waiting for health gate`,
         );
-        await new Promise((resolve) =>
-          setTimeout(resolve, NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS),
-        );
+        await sleep(NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS);
         continue;
       }
 
@@ -1899,7 +1898,7 @@ class Docker<
         throw new Error(`Health gate failed: container ${containerName} reported unhealthy`);
       }
 
-      await new Promise((resolve) => setTimeout(resolve, NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS));
+      await sleep(NON_SELF_UPDATE_HEALTH_POLL_INTERVAL_MS);
     }
 
     throw new Error(
