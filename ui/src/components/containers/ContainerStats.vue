@@ -338,7 +338,7 @@ onUnmounted(() => {
       v-else-if="loadError"
       role="alert"
       class="flex flex-col items-start gap-2 p-3 text-2xs-plus dd-rounded"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
       <span class="break-words">{{ loadError }}</span>
       <AppButton size="xs" variant="outlined" type="button" data-test="stats-retry" @click="loadStats">
         {{ t('common.retry') }}

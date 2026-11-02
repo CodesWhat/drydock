@@ -515,7 +515,7 @@ function searchScopeChipStyles(scope: SearchScope, active: boolean) {
     return {
       backgroundColor: 'var(--dd-primary-muted)',
       borderColor: 'var(--dd-primary)',
-      color: 'var(--dd-primary)',
+      color: 'var(--dd-primary-badge)',
     };
   }
   if (scope === 'all') {
@@ -1579,7 +1579,7 @@ onUnmounted(() => {
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
                         : 'var(--dd-warning-muted)',
-                      color: item.badgeColor === 'red' ? 'var(--dd-danger)' : 'var(--dd-warning)',
+                      color: item.badgeColor === 'red' ? 'var(--dd-danger-badge)' : 'var(--dd-warning-badge)',
                     }">
                 {{ item.badge }}
               </span>

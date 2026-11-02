@@ -611,7 +611,7 @@ onUnmounted(() => {
   <DataViewLayout>
       <div v-if="scanError" role="alert"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ scanError }}
         <AppButton v-if="scanRecoveryNeeded" size="sm" variant="muted" class="ml-2"
                    :disabled="refreshingScanResults" @click="refreshScanResults">
@@ -620,14 +620,14 @@ onUnmounted(() => {
       </div>
       <div v-if="error"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ error }}
       </div>
 
       <div v-if="runtimeError"
            role="alert"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded flex flex-wrap items-center gap-2"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         <span class="min-w-0 break-words">{{ runtimeError }}</span>
         <AppButton v-if="!runtimeStatus"
                    size="sm" variant="text-danger" weight="semibold"

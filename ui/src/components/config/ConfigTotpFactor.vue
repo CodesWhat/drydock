@@ -203,7 +203,7 @@ onUnmounted(dispose);
       <div
         v-else-if="loadState === 'error'"
         class="dd-rounded px-3 py-2 space-y-2"
-        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
         data-testid="totp-load-error"
         role="alert"
       >
@@ -217,7 +217,7 @@ onUnmounted(dispose);
         <div
           v-if="unavailable"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
           data-testid="totp-unavailable"
         >
           {{ t(`totpFactor.unavailable.${unavailableKeys[unavailable]}`) }}
@@ -226,7 +226,7 @@ onUnmounted(dispose);
         <div
           v-if="notice"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }"
+          :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary-badge)' }"
           data-testid="totp-notice"
           role="status"
         >
@@ -236,7 +236,7 @@ onUnmounted(dispose);
         <div
           v-if="errorText"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
           data-testid="totp-error"
           role="alert"
         >
@@ -250,7 +250,7 @@ onUnmounted(dispose);
               class="badge dd-text-badge-xs inline-flex"
               :style="
                 isActive
-                  ? { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }
+                  ? { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success-badge)' }
                   : { backgroundColor: 'var(--dd-bg-inset)', color: 'var(--dd-text-muted)' }
               "
             >

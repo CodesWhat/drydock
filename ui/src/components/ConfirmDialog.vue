@@ -106,12 +106,12 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
                 ? {
                     backgroundColor: 'var(--dd-danger-muted)',
                     border: '1px solid var(--dd-danger)',
-                    color: 'var(--dd-danger)',
+                    color: 'var(--dd-danger-badge)',
                   }
                 : {
                     backgroundColor: 'var(--dd-warning-muted)',
                     border: '1px solid var(--dd-warning)',
-                    color: 'var(--dd-warning)',
+                    color: 'var(--dd-warning-badge)',
                   }"
               @click="accept">
               {{ current.acceptLabel || t('sharedComponents.confirmDialog.confirm') }}

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // WCAG 2.2 normal-text target: contrast ratio >= 4.5:1.
@@ -424,5 +424,76 @@ describe('light theme badge text contrast (tone-badge on its own tint, 4.5:1)', 
   it('AppBadge reads the badge colour for its text', () => {
     const source = readFileSync(join(process.cwd(), 'src/components/AppBadge.vue'), 'utf8');
     expect(source).toContain('var(--dd-${props.tone}-badge)');
+  });
+});
+
+// Guard: inline status text painted on its own tint must use `--dd-<tone>-badge`. A plain
+// `color: var(--dd-<tone>)` within two lines of `var(--dd-<tone>-muted)` is a text/tint pair that
+// fails 4.5:1 in light themes. Icons and dots are exempt (non-text), as are the badge tokens.
+describe('inline tone text on its own tint uses the badge colour', () => {
+  const TONES = ['warning', 'caution', 'danger', 'success', 'info', 'primary', 'alt', 'neutral'];
+  const NON_TEXT_LINE = /<(AppIcon|StatusDot|svg)\b/;
+
+  function walk(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return walk(full);
+      return /\.(vue|ts)$/.test(entry.name) ? [full] : [];
+    });
+  }
+
+  // Data tables whose `color` feeds icons, bar fills and text alike, so it must stay the tone.
+  const EXEMPT_FILES = [
+    'src/views/dashboard/useDashboardComputed.ts',
+    // Icon variant: the colour paints a bare icon with no tint behind it.
+    'src/components/containers/NoUpdateReasonBadge.vue',
+  ];
+
+  function findOffenders(lines: string[]): number[] {
+    const hits: number[] = [];
+    lines.forEach((line, index) => {
+      if (NON_TEXT_LINE.test(line)) return;
+      for (const tone of TONES) {
+        const text = new RegExp(`(?<![-\\w])color\\s*:\\s*[^;},\\n]*?var\\(--dd-${tone}\\)(?!-)`);
+        if (!text.test(line)) continue;
+        const near = lines.slice(Math.max(0, index - 2), index + 3).join('\n');
+        if (near.includes(`var(--dd-${tone}-muted)`)) hits.push(index + 1);
+      }
+    });
+    return hits;
+  }
+
+  it('flags a synthetic text/tint pair and passes the badge fix', () => {
+    expect(
+      findOffenders([
+        `:style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"`,
+      ]),
+    ).toEqual([1]);
+    expect(
+      findOffenders([
+        `:style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"`,
+      ]),
+    ).toEqual([]);
+    expect(
+      findOffenders([
+        `<AppIcon :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }" />`,
+      ]),
+    ).toEqual([]);
+  });
+
+  it('has no inline tone text on its own tint in src', () => {
+    const offenders = walk(join(process.cwd(), 'src'))
+      .filter((file) => !EXEMPT_FILES.some((exempt) => file.endsWith(exempt)))
+      .flatMap((file) =>
+        findOffenders(readFileSync(file, 'utf8').split('\n')).map((line) => `${file}:${line}`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  it.each(TONES)('style.css maps dd-bg-%s-muted with dd-text-%s to the badge colour', (tone) => {
+    const css = readFileSync(join(process.cwd(), 'src/style.css'), 'utf8');
+    expect(css).toContain(
+      `.dd-bg-${tone}-muted.dd-text-${tone} {\n  color: var(--dd-${tone}-badge);`,
+    );
   });
 });

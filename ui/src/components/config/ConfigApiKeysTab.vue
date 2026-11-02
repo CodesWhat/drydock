@@ -190,12 +190,12 @@ function statusLabel(status: ApiKey['status']): string {
 
 function statusStyle(status: ApiKey['status']): Record<string, string> {
   if (status === 'active') {
-    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' };
+    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success-badge)' };
   }
   if (status === 'expired') {
-    return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' };
+    return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' };
   }
-  return { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' };
+  return { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' };
 }
 
 function toggleScope(scope: string) {
@@ -373,7 +373,7 @@ defineExpose({ load });
       class="dd-rounded p-4 flex items-center justify-between gap-4 flex-wrap"
       role="alert"
       data-testid="api-key-review-banner"
-      :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+      :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
     >
       <div class="dd-text-body">{{ t('configView.apiKeys.review.banner') }}</div>
       <AppButton variant="secondary" size="sm" :disabled="acknowledging" @click="finishReview">
@@ -396,7 +396,7 @@ defineExpose({ load });
         <div
           v-if="revealedKey"
           class="dd-rounded p-4 space-y-2"
-          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
         >
           <div class="dd-text-label font-medium">{{ t('configView.apiKeys.reveal.title') }}</div>
           <div class="dd-text-body">{{ t('configView.apiKeys.reveal.description') }}</div>
@@ -414,7 +414,7 @@ defineExpose({ load });
         <div
           v-if="loadError || actionError"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
         >
           {{ loadError || actionError }}
         </div>
@@ -422,7 +422,7 @@ defineExpose({ load });
         <div
           v-if="cascadeNotice"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }"
+          :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary-badge)' }"
         >
           {{ cascadeNotice }}
         </div>

@@ -288,7 +288,7 @@ function getStatusTone(container: Container) {
     <div
       v-if="error"
       class="shrink-0 mb-4 px-4 py-3 dd-rounded-lg flex items-center gap-3 text-xs font-medium"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)', border: '1px solid var(--dd-danger)' }">
       <AppIcon name="warning" :size="14" class="shrink-0" />
       <span class="min-w-0 break-words">{{ error }}</span>
       <AppIconButton icon="x" size="toolbar" variant="plain"
