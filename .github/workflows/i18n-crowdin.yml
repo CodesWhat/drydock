@@ -97,7 +97,7 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
         run: |
           set -euo pipefail
-          status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors -o /tmp/files.json -w '%{http_code}' \
+          status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/files.json -w '%{http_code}' \
             -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
             "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/files?limit=500")
           if [ "${status}" != "200" ]; then
@@ -128,7 +128,7 @@ jobs:
           offset=0
           limit=500
           while :; do
-            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors -o /tmp/strings-page.json -w '%{http_code}' \
+            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/strings-page.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
               "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/strings?fileId=${FILE_ID}&limit=${limit}&offset=${offset}")
             if [ "${status}" != "200" ]; then
@@ -221,7 +221,7 @@ jobs:
           languages="de es-ES fr pl pt-BR zh-CN"
           failed=0
           for lang in ${languages}; do
-            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors -o /tmp/verify.json -w '%{http_code}' \
+            status=$(curl -sS --connect-timeout 20 --max-time 60 --retry 3 --retry-max-time 180 --retry-all-errors -o /tmp/verify.json -w '%{http_code}' \
               -H "Authorization: Bearer ${CROWDIN_PERSONAL_TOKEN}" \
               "https://api.crowdin.com/api/v2/projects/${CROWDIN_PROJECT_ID}/languages/${lang}/translations?fileId=${FILE_ID}&limit=1")
             if [ "${status}" != "200" ]; then

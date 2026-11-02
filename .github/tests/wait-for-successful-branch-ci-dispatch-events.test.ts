@@ -67,7 +67,15 @@ function runsJsonWith(
 // Stub 'curl' for the poll script under test. Only implements the one GET the
 // script issues per attempt: the workflow-runs listing endpoint.
 const stubCurlScript = `#!/usr/bin/env bash
-printf '%s' "\${FAKE_RUNS_JSON:?FAKE_RUNS_JSON not set}"
+out=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+body="\${FAKE_RUNS_JSON:?FAKE_RUNS_JSON not set}"
+if [ -n "$out" ]; then printf '%s' "$body" > "$out"; else printf '%s' "$body"; fi
 exit 0
 `;
 
@@ -90,6 +98,7 @@ function runPoll(options: { allowDispatchEvents: string; runsJson: string }): Po
     const env: NodeJS.ProcessEnv = {
       PATH: `${stubDir}:${process.env.PATH ?? ''}`,
       GH_TOKEN: 'test-token',
+      RUNNER_TEMP: workdir,
       GITHUB_API_URL: 'https://api.example.invalid',
       GITHUB_REPOSITORY: 'CodesWhat/drydock',
       TARGET_SHA,
