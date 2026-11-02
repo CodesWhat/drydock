@@ -1164,7 +1164,7 @@ function handleCardSortChange(event: Event): void {
                   <div v-for="col in cardBodyColumns" :key="col.key"
                        class="field flex items-baseline justify-between gap-3">
                     <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
-                    <dd class="text-2xs-plus dd-text" :class="cellContentClass(col)">
+                    <dd class="flex-1 text-end text-2xs-plus dd-text" :class="cellContentClass(col)">
                       <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="true">
                         {{ row[col.key] }}
                       </slot>

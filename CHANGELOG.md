@@ -41,6 +41,7 @@ This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redact
 - The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
 - The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
 - Light themes: muted and secondary text (and the neutral status tone) now meet 4.5:1 contrast on every surface in all six families. The notification bell count badge uses a per-theme `--dd-danger-fg` foreground instead of white, which measured 2.2:1 on the dark themes.
+- Approvals: on mobile cards the Image, Version, Scan and Age values render again (a zero-width container query collapsed every card body value in the shared data table). Version shows the tag change, such as `4.38.16 → 4.39.0`, instead of truncated image refs, and the Age column no longer clips.
 
 ## [1.8.0-rc.10] - 2026-10-31
 
