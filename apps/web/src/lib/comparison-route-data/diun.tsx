@@ -43,9 +43,9 @@ bell|Audit Trail & Observability|Drydock ships a full audit log with REST API an
     rotate: RotateCcw,
     bell: Bell,
   },
-  metadataTitle: "Diun vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Diun vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Diun (Docker Image Update Notifier) and Drydock for container update monitoring. See how Drydock adds a full web UI, auto-updates, security scanning, and 23 registry integrations beyond Diun's notification-only approach.",
+    "Diun only notifies. Drydock adds a web UI, auto-updates, vulnerability scanning and 23 registries.",
   metadataKeywords: [
     "diun vs drydock",
     "diun alternative",

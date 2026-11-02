@@ -44,9 +44,9 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Drydock is
     bell: Bell,
     lock: Lock,
   },
-  metadataTitle: "Komodo vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Komodo vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Komodo and Drydock for container management and update monitoring. See how Drydock's update-safety features — auto rollback, maintenance windows, lifecycle hooks — complement Komodo's broader DevOps platform.",
+    "Komodo is a broader DevOps platform. Drydock adds update safety: auto rollback, maintenance windows and lifecycle hooks.",
   metadataKeywords: [
     "komodo vs drydock",
     "komodo alternative",
