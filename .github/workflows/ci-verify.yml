@@ -993,7 +993,10 @@ jobs:
     # Path-filtered: skips (→ counts as pass) on changesets that don't touch the
     # site, so it never blocks backend-only PRs.
     needs: [changes]
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Fail closed: a failed changes job must fail this required check, not skip it
+    # (a skipped required check counts as passing). !cancelled() keeps a cancelled run
+    # from starting it.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || (github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30  # install + build (~5) + image pull + three-engine run with one retry
     permissions:
@@ -1028,6 +1031,14 @@ jobs:
             mcr.microsoft.com:443
             *.data.mcr.microsoft.com:443
           disable-sudo: true
+
+      - name: Fail closed when path filter did not succeed
+        if: needs.changes.result != 'success'
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::Changes: Path Filter finished as '${CHANGES_RESULT}', so this required check cannot be skipped safely."
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
@@ -1300,7 +1311,10 @@ jobs:
     # pre-merge. This job closes that gap by scanning the same QA image
     # `build` already produced instead of building a second time. Path-
     # filtered like e2e/dast so it skips cleanly on docs-only PRs.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
+    # Fail closed: a failed changes job must fail this required check, not skip it
+    # (a skipped required check counts as passing). !cancelled() keeps a cancelled run
+    # from starting it.
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.changes.result != 'success' || (github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true'))) }}
     needs: [build, changes]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -1327,6 +1341,14 @@ jobs:
             release-assets.githubusercontent.com:443
             *.actions.githubusercontent.com:443
           disable-sudo: true
+
+      - name: Fail closed when path filter did not succeed
+        if: needs.changes.result != 'success'
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::Changes: Path Filter finished as '${CHANGES_RESULT}', so this required check cannot be skipped safely."
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
@@ -1850,7 +1872,10 @@ jobs:
 
   e2e:
     name: "E2E: Cucumber"
-    if: github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true')
+    # Fail closed: a failed changes job must fail this required check, not skip it
+    # (a skipped required check counts as passing). !cancelled() keeps a cancelled run
+    # from starting it.
+    if: ${{ !cancelled() && needs.build.result == 'success' && (needs.changes.result != 'success' || (github.event_name == 'workflow_dispatch' || (github.event_name != 'schedule' && needs.changes.outputs.runtime == 'true'))) }}
     runs-on: ubuntu-24.04
     # Covers the bounded npm/setup retry budgets, readiness waits, scenario
     # execution, and post-failure evidence collection without racing job expiry.
@@ -1869,6 +1894,14 @@ jobs:
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
           egress-policy: audit
+
+      - name: Fail closed when path filter did not succeed
+        if: needs.changes.result != 'success'
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::Changes: Path Filter finished as '${CHANGES_RESULT}', so this required check cannot be skipped safely."
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0

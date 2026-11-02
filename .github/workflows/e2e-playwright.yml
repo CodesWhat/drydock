@@ -98,7 +98,10 @@ jobs:
 
   playwright:
     name: "E2E: Playwright"
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true'
+    # Fail closed: a failed changes job must fail this required check, not skip it
+    # (a skipped required check counts as passing). !cancelled() keeps a cancelled run
+    # from starting it.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || (github.event_name == 'workflow_dispatch' || needs.changes.outputs.runtime == 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35  # UI build + Docker build + QA stack startup + Playwright pull + UI flow tests
     needs: [changes]
@@ -119,6 +122,14 @@ jobs:
         uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43  # v2.22.3
         with:
           egress-policy: audit
+
+      - name: Fail closed when path filter did not succeed
+        if: needs.changes.result != 'success'
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::Changes: Path Filter finished as '${CHANGES_RESULT}', so this required check cannot be skipped safely."
+          exit 1
 
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
