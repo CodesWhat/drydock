@@ -1,12 +1,11 @@
 import { FullSearchTrigger, SearchTrigger } from "fumadocs-ui/layouts/shared/slots/search-trigger";
 import Image from "next/image";
 import Link from "next/link";
-import { GithubIcon } from "@/components/github-icon";
+import { HeaderNavLinks } from "@/components/header-nav";
 import { MobileNavigation } from "@/components/mobile-navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { TrackedLink } from "@/components/tracked-link";
 import { iconButtonCn } from "@/lib/class-names";
-import { DOCS_ROOT, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 export function SiteHeader({
   maxWidthClassName = "max-w-6xl",
@@ -31,28 +30,7 @@ export function SiteHeader({
               <FullSearchTrigger className="me-1 hidden h-9 w-44 sm:inline-flex lg:w-56" />
             </>
           )}
-          <TrackedLink
-            href={DOCS_ROOT}
-            ctaId="docs_root"
-            placement="header"
-            className="website-nav-link"
-          >
-            Docs
-          </TrackedLink>
-          <Link href="/compare" className="website-nav-link">
-            Compare
-          </Link>
-          <TrackedLink
-            href={GITHUB_URL}
-            ctaId="github_repository"
-            placement="header"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="GitHub"
-            className={iconButtonCn}
-          >
-            <GithubIcon className="h-5 w-5" />
-          </TrackedLink>
+          <HeaderNavLinks />
           <ThemeToggle />
           <MobileNavigation />
         </nav>

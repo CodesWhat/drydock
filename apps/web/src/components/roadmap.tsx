@@ -29,7 +29,7 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
   const refLine = (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       {isHead ? (
-        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-xs font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+        <span className="rounded bg-[color-mix(in_srgb,var(--dd-primary)_18%,transparent)] px-1.5 py-0.5 font-mono text-xs font-bold text-[var(--tx-primary)]">
           HEAD -&gt; {milestone.version}
         </span>
       ) : (
@@ -50,6 +50,11 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
             : "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
         }`}
       >
+        {milestone.emoji ? (
+          <span aria-hidden="true" className="mr-1.5">
+            {milestone.emoji}
+          </span>
+        ) : null}
         {milestone.title}
       </span>
     </div>
@@ -63,10 +68,10 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
         <div
           className={`relative z-10 mt-1 flex h-3 w-3 shrink-0 items-center justify-center rounded-full border-2 ${
             isHead
-              ? "border-emerald-400 bg-emerald-400 ring-2 ring-emerald-400/40 ring-offset-1 dark:ring-offset-neutral-950"
+              ? "border-[var(--dd-primary)] bg-[var(--dd-primary)] ring-2 ring-[color-mix(in_srgb,var(--dd-primary)_40%,transparent)] ring-offset-1 ring-offset-[var(--dd-bg-card)]"
               : isReleased
                 ? "border-emerald-600 bg-emerald-600 dark:border-emerald-500 dark:bg-emerald-500"
-                : "border-dashed border-[var(--dd-border-strong)] bg-transparent border-[var(--dd-border-strong)]"
+                : "border-[1.5px] border-dashed border-[var(--tx-sec)] bg-[var(--dd-bg-card)]"
           }`}
         />
       </div>
@@ -82,7 +87,7 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
                 {preview.map((item) => (
                   <GitItem key={item} item={item} />
                 ))}
-                <span className="inline-flex items-center gap-1 font-mono text-xs text-[var(--tx-sec)] transition-colors hover:text-[var(--dd-text)] dark:text-[var(--tx-sec)] dark:hover:text-[var(--tx-sec)]">
+                <span className="inline-flex items-center gap-1 font-mono text-xs text-[var(--tx-primary)] transition-colors hover:text-[var(--dd-text)]">
                   <span className="text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">│</span>
                   <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
                   <span className="group-open:hidden">+{rest.length} more</span>
@@ -128,11 +133,11 @@ export function Roadmap() {
               Released
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 ring-2 ring-emerald-400/40" />
+              <span className="h-2 w-2 rounded-full bg-[var(--dd-primary)] ring-2 ring-[color-mix(in_srgb,var(--dd-primary)_40%,transparent)]" />
               Current (HEAD)
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full border-2 border-dashed border-[var(--dd-border-strong)]" />
+              <span className="h-2 w-2 rounded-full border-[1.5px] border-dashed border-[var(--tx-sec)]" />
               Planned
             </span>
           </div>

@@ -115,6 +115,7 @@ export function Demo() {
     <section id="demo" ref={section} className="website-demo" aria-labelledby="demo-heading">
       <div className="website-wrap">
         <div className="website-demo-heading">
+          <p className="website-eyebrow website-eyebrow--struck">Screenshots</p>
           <h2 id="demo-heading">See it in action</h2>
           <p>The real Drydock interface, running live with sample data. No install required.</p>
         </div>

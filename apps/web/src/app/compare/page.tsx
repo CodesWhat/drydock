@@ -107,12 +107,12 @@ export default function ComparePage() {
       <JsonLd data={jsonLd} />
       <MarketingShell>
         {/* Hero */}
-        <section className="px-4 pt-16 pb-12">
-          <div className="mx-auto max-w-4xl text-center">
+        <section className="pt-16 pb-12">
+          <div className="website-wrap">
             <h1 className="mb-4 text-4xl font-bold tracking-tight text-[var(--dd-text)] sm:text-5xl dark:text-[var(--dd-text)]">
               Drydock vs Alternatives
             </h1>
-            <p className="mx-auto max-w-2xl text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
+            <p className="max-w-2xl text-lg text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
               We built Drydock to go further than any existing container update tool. Click any tool
               to see exactly how we compare.
             </p>
@@ -120,8 +120,8 @@ export default function ComparePage() {
         </section>
 
         {/* Full comparison matrix */}
-        <section className="px-4 pb-24">
-          <div className="mx-auto max-w-5xl">
+        <section className="pb-24">
+          <div className="website-wrap">
             <CompareMatrix />
           </div>
         </section>

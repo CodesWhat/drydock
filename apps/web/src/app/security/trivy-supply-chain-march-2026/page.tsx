@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +91,13 @@ export default function TrivyAdvisoryPage() {
           <div className="website-advisory-body">
             {/* Title block */}
             <div className="mb-12">
+              <nav aria-label="Breadcrumb" className="website-breadcrumb">
+                <Link href="/">Drydock</Link>
+                <span aria-hidden="true">/</span>
+                <span>Security</span>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page">Trivy supply chain compromise</span>
+              </nav>
               <div className="mb-4 flex flex-wrap items-center gap-3">
                 <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300">
                   Not Affected
@@ -106,11 +114,9 @@ export default function TrivyAdvisoryPage() {
             </div>
 
             {/* Summary box */}
-            <div className="mb-12 rounded-lg border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-800/50 dark:bg-emerald-950/30">
-              <h2 className="mb-2 text-lg font-semibold text-emerald-900 dark:text-emerald-200">
-                Drydock is not affected by this breach
-              </h2>
-              <p className="text-emerald-800 dark:text-emerald-300">
+            <div className="website-advisory-callout">
+              <h2>Drydock is not affected by this breach</h2>
+              <p>
                 We have audited our entire CI/CD pipeline, dependency tree, and runtime
                 integrations. Drydock does not use the compromised GitHub Actions, did not pull the
                 backdoored binary, and all workflow actions are pinned by immutable commit SHA. No
@@ -152,7 +158,7 @@ export default function TrivyAdvisoryPage() {
 
               <h2>Exposure windows</h2>
               <div className="overflow-x-auto">
-                <table className="w-auto">
+                <table className="w-full">
                   <thead>
                     <tr>
                       <th>Component</th>
@@ -467,7 +473,7 @@ uses: aquasecurity/trivy-action@<full-commit-sha>  # 0.24.0`}</code>
 
               <h2>Timeline</h2>
               <div className="overflow-x-auto">
-                <table className="w-auto">
+                <table className="w-full">
                   <thead>
                     <tr>
                       <th>Date (UTC)</th>

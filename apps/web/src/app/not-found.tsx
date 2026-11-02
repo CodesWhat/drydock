@@ -1,8 +1,9 @@
-import { FullSearchTrigger } from "fumadocs-ui/layouts/shared/slots/search-trigger";
+import { ArrowLeft, BookOpen, GitCompare } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing-shell";
+import { NotFoundSearch } from "@/components/not-found-search";
 import { Button } from "@/components/ui/button";
 import { DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
 
@@ -36,19 +37,25 @@ export default function NotFound() {
           The link is stale or the page moved. Nothing is tracked at this address, so there’s no
           update to roll out.
         </p>
-        <FullSearchTrigger
-          className="website-not-found-search"
-          aria-label="Search the Drydock docs"
-        />
+        <NotFoundSearch />
         <div className="flex flex-wrap gap-3">
           <Button asChild>
-            <Link href="/">Back to Drydock</Link>
+            <Link href="/">
+              <ArrowLeft aria-hidden="true" />
+              Back to Drydock
+            </Link>
           </Button>
-          <Button variant="outline" asChild>
-            <Link href={DOCS_ROOT}>Docs</Link>
+          <Button variant="outline" className="website-outline-button" asChild>
+            <Link href={DOCS_ROOT}>
+              <BookOpen aria-hidden="true" />
+              Docs
+            </Link>
           </Button>
-          <Button variant="outline" asChild>
-            <Link href="/compare">Compare</Link>
+          <Button variant="outline" className="website-outline-button" asChild>
+            <Link href="/compare">
+              <GitCompare aria-hidden="true" />
+              Compare
+            </Link>
           </Button>
         </div>
       </section>

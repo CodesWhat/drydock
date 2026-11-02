@@ -21,7 +21,7 @@ test("sitemap lists only current docs and omits request-time lastmod", () => {
 });
 
 test("nav, footer and CTA docs links go straight to DOCS_ROOT", () => {
-  for (const file of ["site-header", "footer", "mobile-navigation", "cta-buttons", "get-started"]) {
+  for (const file of ["header-nav", "footer", "mobile-navigation", "cta-buttons", "get-started"]) {
     const source = read(`../src/components/${file}.tsx`);
     assert.doesNotMatch(source, /["'`]\/docs["'`/]/, `${file} must not link to bare /docs`);
     assert.match(source, /DOCS_ROOT/, `${file} must use DOCS_ROOT`);

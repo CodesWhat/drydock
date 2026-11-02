@@ -95,8 +95,8 @@ test("faq component uses accessible button elements with aria attributes", () =>
   assert.match(faqComponentSource, /answerId/);
 });
 
-test("faq component wraps questions in h2 elements", () => {
-  assert.match(faqComponentSource, /<h2>/);
+test("faq component wraps questions in h3 elements", () => {
+  assert.match(faqComponentSource, /<h3>/);
 });
 
 test("faq answers are always in the markup and hidden when collapsed", () => {

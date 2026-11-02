@@ -142,7 +142,7 @@ export function GetStarted() {
         />
 
         {/* Segmented Quick / Secure toggle */}
-        <div className="mb-5 flex justify-center">
+        <div className="mb-5 flex justify-start">
           <div
             role="tablist"
             aria-label="Install preset"
@@ -191,20 +191,31 @@ export function GetStarted() {
           </div>
         </div>
 
-        <div role="tabpanel" id="preset-panel" aria-labelledby={`tab-${preset}`}>
+        <div
+          role="tabpanel"
+          id="preset-panel"
+          aria-labelledby={`tab-${preset}`}
+          className="max-w-[880px]"
+        >
           {preset === "quick" ? <QuickSnippet /> : <SecureSnippet />}
 
           {/* Contextual note under the snippet */}
-          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-center text-sm">
+          <div className="mt-4 flex items-start justify-start gap-2 text-sm">
             {preset === "quick" ? (
-              <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
-                <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
+                <span className="website-headsup">
+                  <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  Heads up
+                </span>
                 Mounts the Docker socket directly and runs with anonymous auth. Fine for a local
                 try, not for production.
               </p>
             ) : (
               <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+                <ShieldCheck
+                  className="h-4 w-4 shrink-0 text-[var(--dd-success)]"
+                  aria-hidden="true"
+                />
                 Drydock never touches the raw socket.{" "}
                 <TrackedLink
                   href={`${DOCS_ROOT}/guides/security`}

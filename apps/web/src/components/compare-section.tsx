@@ -1,6 +1,6 @@
-import { ArrowRight, Check, Minus, X } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { ComparisonCellIcon } from "@/components/comparison-cell-icon";
+import { ComparisonCellChip, ComparisonCellIcon } from "@/components/comparison-cell-icon";
 import { SectionHeading } from "@/components/section-heading";
 import { SITE_CONFIG } from "@/lib/site-config";
 
@@ -149,13 +149,13 @@ export function CompareSection() {
 
           <div className="border-t border-[var(--dd-border-strong)] px-5 py-4 text-xs text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
             <span className="inline-flex items-center gap-1.5">
-              <Check className="h-3 w-3 text-emerald-500" /> Yes
+              <ComparisonCellChip value="yes" /> Yes
             </span>
             <span className="mx-3 inline-flex items-center gap-1.5">
-              <Minus className="h-3 w-3 text-amber-400" /> Partial
+              <ComparisonCellChip value="partial" /> Partial
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <X className="h-3 w-3 text-[var(--tx-sec)]" /> No
+              <ComparisonCellChip value="no" /> No
             </span>
           </div>
         </div>

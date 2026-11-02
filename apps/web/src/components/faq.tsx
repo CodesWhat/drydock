@@ -28,13 +28,13 @@ export function FAQ() {
                     i % 2 === 1 ? "bg-[var(--dd-bg-sidebar)]" : "",
                   ].join(" ")}
                 >
-                  <h2>
+                  <h3>
                     <button
                       type="button"
                       aria-expanded={isOpen}
                       aria-controls={answerId}
                       onClick={() => setOpenIndex(isOpen ? null : i)}
-                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-4 text-left text-sm font-medium text-[var(--dd-text)] hover:bg-[var(--dd-hover-overlay)] dark:text-[var(--dd-text)]"
+                      className="flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-4 text-left font-mono text-[13px] font-bold text-[var(--dd-text)] hover:bg-[var(--dd-hover-overlay)] dark:text-[var(--dd-text)]"
                     >
                       <span>{item.question}</span>
                       <span
@@ -47,7 +47,7 @@ export function FAQ() {
                         +
                       </span>
                     </button>
-                  </h2>
+                  </h3>
                   {/* Always rendered so the answer is in the server HTML and
                       aria-controls resolves; collapsed answers are hidden. */}
                   <p

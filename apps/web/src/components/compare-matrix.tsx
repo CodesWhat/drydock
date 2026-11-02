@@ -1,6 +1,6 @@
-import { ArrowUpRight, Check, Minus, X } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
-import { ComparisonCellIcon } from "@/components/comparison-cell-icon";
+import { ComparisonCellChip, ComparisonCellIcon } from "@/components/comparison-cell-icon";
 import { SITE_CONFIG } from "@/lib/site-config";
 
 // Full comparison matrix for /compare. Each competitor row links to its
@@ -199,21 +199,23 @@ const TOOLS: Tool[] = [
   },
 ];
 
+const SCROLL_CN = "website-matrix-scroll relative overflow-x-auto";
+
 export function CompareMatrix() {
   return (
     <div className="overflow-hidden rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The labelled overflow region needs keyboard focus for horizontal scrolling. */}
-      <section className="relative overflow-x-auto" aria-label="Feature comparison" tabIndex={0}>
+      <section className={SCROLL_CN} aria-label="Feature comparison" tabIndex={0}>
         <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-[var(--dd-border-strong)]">
-              <th className="px-4 py-3 text-left font-medium text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
+              <th className="website-matrix-sticky px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 Tool
               </th>
               {FEATURES.map((f) => (
                 <th
                   key={f.key}
-                  className="whitespace-nowrap px-3 py-3 text-center text-xs font-medium text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
+                  className="whitespace-nowrap px-3 py-3 text-center text-xs font-medium uppercase tracking-wider text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
                 >
                   {f.label}
                 </th>
@@ -226,10 +228,13 @@ export function CompareMatrix() {
                 key={tool.name}
                 className={[
                   "border-b border-[var(--dd-border-strong)] last:border-0 border-[var(--dd-border-strong)]",
-                  tool.highlight ? "bg-emerald-500/5" : "",
+                  tool.highlight ? "website-matrix-row--highlight" : "",
                 ].join(" ")}
               >
-                <th scope="row" className="whitespace-nowrap px-4 py-3 text-left font-normal">
+                <th
+                  scope="row"
+                  className="website-matrix-sticky whitespace-nowrap px-4 py-3 text-left font-normal"
+                >
                   {tool.slug ? (
                     <Link
                       href={`/compare/${tool.slug}`}
@@ -257,13 +262,13 @@ export function CompareMatrix() {
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-[var(--dd-border-strong)] px-4 py-3 text-xs text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
         <span className="inline-flex items-center gap-1.5">
-          <Check className="h-3 w-3 text-emerald-500" /> Yes
+          <ComparisonCellChip value="yes" /> Yes
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <Minus className="h-3 w-3 text-amber-400" /> Partial
+          <ComparisonCellChip value="partial" /> Partial
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <X className="h-3 w-3 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]" /> No
+          <ComparisonCellChip value="no" /> No
         </span>
         <span className="text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
           · Click a tool for the full breakdown

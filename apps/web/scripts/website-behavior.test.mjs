@@ -155,7 +155,7 @@ test("comparison table scrollers contain absolutely positioned labels", async ()
   const { readFile } = await import("node:fs/promises");
   for (const file of ["compare-matrix.tsx", "compare-section.tsx", "comparison-page.tsx"]) {
     const source = await readFile(new URL(`../src/components/${file}`, import.meta.url), "utf8");
-    const scrollers = source.match(/className="[^"]*\boverflow-x-auto\b[^"]*"/g) ?? [];
+    const scrollers = source.match(/"[^"]*\boverflow-x-auto\b[^"]*"/g) ?? [];
     assert.ok(scrollers.length > 0, `${file} has an overflow-x-auto scroller`);
     for (const scroller of scrollers) {
       assert.match(scroller, /\brelative\b/, `${file} scroller needs relative: ${scroller}`);
