@@ -190,3 +190,18 @@ test("WUD appears only as a competitor: no fork or derived-from wording in the s
   const faq = read("../src/app/data/faq.ts");
   assert.doesNotMatch(faq, /\bWUD\b[^.]*\bfork/i);
 });
+
+test("competitor pages don't contradict the README matrix", () => {
+  const wud = read("../src/lib/comparison-route-data/wud.tsx");
+  assert.match(wud, /Registry providers\|25\|23\|competitor/);
+  assert.match(wud, /Trigger integrations\|33 triggers\|[^|]*\|competitor/);
+  assert.match(wud, /Lifecycle hooks\|Yes[^|]*\|[^|]*\|tie/);
+  assert.match(wud, /RBAC \/ multi-user roles\|Yes[^|]*\|[^|]*\|competitor/);
+  assert.doesNotMatch(wud, /11 more registries|None of these exist in WUD|Lifecycle hooks\|None/);
+  const dozzle = read("../src/lib/comparison-route-data/dozzle.tsx");
+  assert.doesNotMatch(
+    dozzle,
+    /Image update detection\|No\||Auto-update containers\|No\||doesn't manage container updates|doesn't monitor for image updates/,
+  );
+  assert.doesNotMatch(read("../src/lib/comparison-route-data/diun.tsx"), /REST API\|None/);
+});
