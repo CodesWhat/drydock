@@ -8,7 +8,8 @@ export const THEME_FAMILIES = [
 ];
 
 export const FAMILY_KEY = "dd-website-family";
-export const FAMILY_BOOTSTRAP = `(function(){try{var f=localStorage.getItem(${JSON.stringify(FAMILY_KEY)});if(${JSON.stringify(THEME_FAMILIES.map((family) => family.id))}.includes(f))document.documentElement.dataset.family=f;}catch{}})();`;
+// A fixed string: it's inlined into the page, and a test keeps it in step with THEME_FAMILIES.
+export const FAMILY_BOOTSTRAP = `(function(){try{var f=localStorage.getItem("dd-website-family");if(["one-dark","github","dracula","catppuccin","gruvbox","ayu"].includes(f))document.documentElement.dataset.family=f;}catch{}})();`;
 
 export function getThemeFamily(value) {
   return THEME_FAMILIES.some((family) => family.id === value) ? value : "one-dark";

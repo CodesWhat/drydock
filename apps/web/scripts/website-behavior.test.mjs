@@ -13,6 +13,13 @@ test("saved theme families are validated before applying document attributes", (
   }
 });
 
+test("the inlined family bootstrap stays in step with the family list and storage key", () => {
+  assert.ok(behavior.FAMILY_BOOTSTRAP.includes(JSON.stringify(behavior.FAMILY_KEY)));
+  assert.ok(
+    behavior.FAMILY_BOOTSTRAP.includes(JSON.stringify(behavior.THEME_FAMILIES.map((f) => f.id))),
+  );
+});
+
 test("demo readiness requires the expected origin, exact iframe window and message", () => {
   assert.equal(typeof behavior.isDemoReadyMessage, "function");
   const frame = {};
