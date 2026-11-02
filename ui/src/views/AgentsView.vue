@@ -55,6 +55,9 @@ interface AgentLog {
 }
 
 const { t } = useI18n();
+// Accepted duplication (DR-94): this view collapses on the window width via `windowNarrow` rather
+// than the DataTable width-based card mode the containers table uses. Moving it to the shared
+// card mode is a layout rewrite, not a touch-target fix, and is deferred.
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const router = useRouter();
 let activeAgentStatusListener: EventListener | null = null;

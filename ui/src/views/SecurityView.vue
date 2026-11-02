@@ -65,6 +65,9 @@ const updateDialogUpdateEligibility = ref<UpdateEligibility | undefined>(undefin
 
 const chooserSummary = ref<ImageSummary | null>(null);
 
+// Accepted duplication (DR-94): this view collapses on the window width via `windowNarrow` rather
+// than the DataTable width-based card mode the containers table uses. Moving it to the shared
+// card mode is a layout rewrite, not a touch-target fix, and is deferred.
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
 const scanError = ref<string | null>(null);
