@@ -25,8 +25,8 @@ export function Features() {
       <div className="website-wrap website-section-grid">
         <SectionHeading
           eyebrow="Batteries included"
-          title="Everything you need"
-          subtitle="A full update management platform out of the box. No plugins, no paid tiers."
+          title="See it, check it, then update it"
+          subtitle="Watch, scan, approve, back up, roll back. All of it ships in the MIT image, with no paid tier."
         />
         <div className="website-palette">
           <div className="website-palette-search">
