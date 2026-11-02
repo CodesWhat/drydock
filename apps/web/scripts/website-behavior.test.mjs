@@ -138,3 +138,15 @@ test("the nonce bootstrap restores a valid family before paint and fails safely 
   );
   assert.equal(document.documentElement.dataset.family, "one-dark");
 });
+
+test("theme mode buttons do not read resolvedTheme before hydration", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile(
+    new URL("../src/components/theme-toggle.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /useSyncExternalStore\(/);
+  assert.match(source, /aria-pressed=\{mounted && resolvedTheme === "light"\}/);
+  assert.match(source, /aria-pressed=\{mounted && resolvedTheme === "dark"\}/);
+  assert.doesNotMatch(source, /aria-pressed=\{resolvedTheme/);
+});

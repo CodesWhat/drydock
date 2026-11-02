@@ -2,11 +2,18 @@
 
 import { Moon, Palette, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { FAMILY_KEY, getThemeFamily, THEME_FAMILIES } from "@/lib/website-behavior.mjs";
+
+const subscribeNoop = () => () => {};
 
 export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
+  const mounted = useSyncExternalStore(
+    subscribeNoop,
+    () => true,
+    () => false,
+  );
   const [family, setFamily] = useState("one-dark");
   const panel = useRef<HTMLDetailsElement>(null);
 
@@ -68,7 +75,7 @@ export function ThemeToggle() {
         <div className="website-theme-modes">
           <button
             type="button"
-            aria-pressed={resolvedTheme === "light"}
+            aria-pressed={mounted && resolvedTheme === "light"}
             onClick={() => setTheme("light")}
           >
             <Sun size={14} />
@@ -76,7 +83,7 @@ export function ThemeToggle() {
           </button>
           <button
             type="button"
-            aria-pressed={resolvedTheme === "dark"}
+            aria-pressed={mounted && resolvedTheme === "dark"}
             onClick={() => setTheme("dark")}
           >
             <Moon size={14} />
