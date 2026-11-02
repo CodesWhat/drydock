@@ -119,15 +119,20 @@ test("homepage imports the FAQ component", () => {
   assert.match(homepageSource, /\bFAQ\b/);
 });
 
-test("homepage imports faqItems for JSON-LD", () => {
-  assert.match(homepageSource, /from "\.\/data\/faq"/);
-  assert.match(homepageSource, /\bfaqItems\b/);
+const structuredDataSource = readFileSync(
+  new URL("../src/lib/structured-data.ts", import.meta.url),
+  "utf8",
+);
+
+test("the home JSON-LD graph is built from faqItems", () => {
+  assert.match(structuredDataSource, /from "\.\.\/app\/data\/faq\.ts"/);
+  assert.match(structuredDataSource, /\bfaqItems\b/);
 });
 
-test("homepage injects a FAQPage JSON-LD script", () => {
-  assert.match(homepageSource, /"FAQPage"/);
-  assert.match(homepageSource, /mainEntity/);
-  assert.match(homepageSource, /faqPageJsonLd/);
+test("homepage injects a FAQPage JSON-LD graph", () => {
+  assert.match(structuredDataSource, /"FAQPage"/);
+  assert.match(structuredDataSource, /mainEntity/);
+  assert.match(homepageSource, /buildHomeJsonLd/);
 });
 
 test("homepage renders FAQ section after Ecosystem", () => {

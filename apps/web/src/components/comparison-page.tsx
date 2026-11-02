@@ -166,6 +166,35 @@ export function ComparisonPage({
           </div>
         </section>
 
+        {/* Migration note */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-3xl">
+            <Card className="border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
+                    <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="mb-2 text-lg font-semibold text-[var(--dd-text)] dark:text-[var(--dd-text)]">
+                      {migrationTitle}
+                    </h2>
+                    <p className="mb-4 text-sm text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
+                      {migrationDescription}
+                    </p>
+                    <DockerRunSnippet
+                      contentClassName="pt-4 pb-4"
+                      iconClassName="h-3.5 w-3.5"
+                      headerClassName="mb-2 flex items-center gap-2 text-[var(--tx-sec)]"
+                      label="Quick start"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
         {/* Key Differentiators */}
         <section className="px-4 py-16">
           <div className="mx-auto max-w-5xl">
@@ -200,35 +229,6 @@ export function ComparisonPage({
                 </Card>
               ))}
             </div>
-          </div>
-        </section>
-
-        {/* Migration note */}
-        <section className="px-4 py-16">
-          <div className="mx-auto max-w-3xl">
-            <Card className="border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
-              <CardContent className="pt-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
-                    <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="mb-2 text-lg font-semibold text-[var(--dd-text)] dark:text-[var(--dd-text)]">
-                      {migrationTitle}
-                    </h3>
-                    <p className="mb-4 text-sm text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
-                      {migrationDescription}
-                    </p>
-                    <DockerRunSnippet
-                      contentClassName="pt-4 pb-4"
-                      iconClassName="h-3.5 w-3.5"
-                      headerClassName="mb-2 flex items-center gap-2 text-[var(--tx-sec)]"
-                      label="Quick start"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
 

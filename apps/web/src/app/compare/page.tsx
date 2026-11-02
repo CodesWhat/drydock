@@ -3,6 +3,7 @@ import { CompareMatrix } from "@/components/compare-matrix";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { buildCompareIndexJsonLd } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
   // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
@@ -62,45 +63,11 @@ const tools = [
 ];
 
 export default function ComparePage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "CollectionPage",
-        name: "Drydock vs Alternatives — Container Update Tool Comparisons",
-        description:
-          "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane.",
-        url: `${BASE_URL}/compare`,
-        mainEntity: {
-          "@type": "ItemList",
-          numberOfItems: tools.length,
-          itemListElement: tools.map((tool, i) => ({
-            "@type": "ListItem",
-            position: i + 1,
-            url: `${BASE_URL}/compare/${tool.slug}`,
-            name: `${tool.name} vs Drydock`,
-          })),
-        },
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Home",
-            item: BASE_URL,
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: "Compare",
-            item: `${BASE_URL}/compare`,
-          },
-        ],
-      },
-    ],
-  };
+  const jsonLd = buildCompareIndexJsonLd(tools, {
+    name: "Drydock vs Alternatives — Container Update Tool Comparisons",
+    description:
+      "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, WUD, and Arcane.",
+  });
 
   return (
     <>
@@ -122,6 +89,7 @@ export default function ComparePage() {
         {/* Full comparison matrix */}
         <section className="pb-24">
           <div className="website-wrap">
+            <h2 className="sr-only">Compare Drydock with each tool</h2>
             <CompareMatrix />
           </div>
         </section>

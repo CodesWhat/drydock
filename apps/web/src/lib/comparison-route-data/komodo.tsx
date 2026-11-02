@@ -76,5 +76,4 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Drydock is
   migrationDescription:
     "Komodo and Drydock serve different needs. If you want safe, monitored container updates with rollback and security scanning, Drydock is purpose-built for that. One Docker command to get started.",
   jsonLdName: "Komodo vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Komodo and Drydock for container management and update monitoring.",
 } satisfies ComparisonRouteRawConfig;

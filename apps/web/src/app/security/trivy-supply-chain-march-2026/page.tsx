@@ -3,7 +3,11 @@ import Link from "next/link";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
+import { getAdvisory } from "@/lib/advisories";
 import { BASE_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
+import { buildAdvisoryJsonLd } from "@/lib/structured-data";
+
+const ADVISORY = getAdvisory("trivy-supply-chain-march-2026");
 
 export const metadata: Metadata = {
   // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
@@ -40,34 +44,10 @@ export const metadata: Metadata = {
 };
 
 export default function TrivyAdvisoryPage() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    headline: "Trivy Supply Chain Compromise — Drydock Security Advisory",
-    description:
-      "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
-    datePublished: "2026-03-22",
-    dateModified: "2026-07-18",
-    image: `${BASE_URL}${SITE_CONFIG.ogImage}`,
-    mainEntityOfPage: {
-      "@type": "WebPage",
-      "@id": `${BASE_URL}/security/trivy-supply-chain-march-2026`,
-    },
-    author: {
-      "@type": "Organization",
-      name: "CodesWhat",
-      url: "https://codeswhat.com",
-      sameAs: ["https://github.com/CodesWhat"],
-    },
-    publisher: {
-      "@type": "Organization",
-      name: "CodesWhat",
-      url: "https://codeswhat.com",
-      logo: {
-        "@type": "ImageObject",
-        url: `${BASE_URL}${SITE_CONFIG.ogImage}`,
-      },
-    },
+  const jsonLd = buildAdvisoryJsonLd(ADVISORY.slug, {
+    abstract:
+      "Drydock is not affected by the March 2026 Trivy supply chain compromise. No user action is required for Drydock itself.",
+    isBasedOn: "https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23",
     keywords: "GHSA-69fq-xp46-6x23, CWE-506, supply chain attack, Trivy, security advisory",
     about: [
       {
@@ -81,7 +61,7 @@ export default function TrivyAdvisoryPage() {
         url: "https://cwe.mitre.org/data/definitions/506.html",
       },
     ],
-  };
+  });
 
   return (
     <>
@@ -94,7 +74,7 @@ export default function TrivyAdvisoryPage() {
               <nav aria-label="Breadcrumb" className="website-breadcrumb">
                 <Link href="/">Drydock</Link>
                 <span aria-hidden="true">/</span>
-                <span>Security</span>
+                <Link href="/security">Security</Link>
                 <span aria-hidden="true">/</span>
                 <span aria-current="page">Trivy supply chain compromise</span>
               </nav>

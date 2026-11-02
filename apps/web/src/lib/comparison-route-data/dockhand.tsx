@@ -74,5 +74,4 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand g
   migrationDescription:
     "Both are solid choices. If you want update safety controls (rollback, maintenance windows, hooks) and the broadest registry and notification coverage — all free — Drydock is built for that. One Docker command to get started.",
   jsonLdName: "Dockhand vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Dockhand and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;

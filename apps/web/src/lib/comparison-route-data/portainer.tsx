@@ -75,5 +75,4 @@ eye|Lightweight & Focused|We keep Drydock under 80MB RAM with a single focused p
   migrationDescription:
     "Drydock can run alongside Portainer. Use Portainer for general container management and Drydock for update monitoring with safety controls, security scanning, and broad notification support — all without a paid tier.",
   jsonLdName: "Portainer vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Portainer and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;

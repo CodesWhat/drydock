@@ -241,6 +241,7 @@ export function CompareMatrix() {
                       className="group inline-flex items-center gap-1.5 font-medium text-[var(--dd-text)] transition-colors hover:text-[var(--dd-text)] dark:text-[var(--tx-sec)] dark:hover:text-[var(--tx-sec)]"
                     >
                       {tool.name}
+                      <span className="sr-only"> vs Drydock</span>
                       <ArrowUpRight className="h-3.5 w-3.5 text-[var(--tx-sec)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                     </Link>
                   ) : (

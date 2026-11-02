@@ -75,5 +75,4 @@ bell|Audit Trail & Observability|Drydock ships a full audit log with REST API an
   migrationDescription:
     "If you're using Diun for notifications, Drydock can do the same — plus give you a full dashboard, auto-updates, security scanning, and container management. One Docker command to get started.",
   jsonLdName: "Diun vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Diun and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;
