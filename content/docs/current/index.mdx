@@ -19,7 +19,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 - 🔎 Auto-discovery of running containers
 - 📦 23 registry integrations (Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, and more)
-- 🔔 20+ trigger types with per-event/provider notification templates, live preview, and bell preferences
+- 🔔 21 trigger types with per-event/provider notification templates, live preview, and bell preferences
 - 🧪 Dry-run preview before applying updates
 - 💾 Image backup and one-click rollback
 - 🔄 Auto-rollback on health check failure
@@ -37,6 +37,9 @@ import { Callout } from 'fumadocs-ui/components/callout';
 ```bash
 docker run -d --name drydock \
   -v /var/run/docker.sock:/var/run/docker.sock \
+  -v "$(pwd)/drydock-store:/store" \
+  -e DD_AUTH_BASIC_ADMIN_USER=admin \
+  -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \
   -p 3000:3000 \
   codeswhat/drydock:1.8.0-rc.12
 ```
