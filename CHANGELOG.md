@@ -44,6 +44,7 @@ This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redact
 - Approvals: on mobile cards the Image, Version, Scan and Age values render again (a zero-width container query collapsed every card body value in the shared data table). Version shows the tag change, such as `4.38.16 → 4.39.0`, instead of truncated image refs, and the Age column no longer clips.
 - Accessibility: every page now has one `h1` (the top-bar page title; container logs keeps its own). Animations and transitions follow the OS reduced-motion setting. The log level, tail and component selects, log search box, appearance sliders and the settings sync switch have accessible names. Icon buttons are 44 px below the `md` breakpoint.
 - UI polish: the filter bar count reads `14/15 scanned` instead of `14/15scanned`, Hosts shows `12/12 running` instead of repeating the total, the Host and Rule headers line up with their left-aligned cells, System Logs no longer blames filters for an empty list when none are set, the Image Update bucket in Update Breakdown explains itself on hover, security cards drop the empty footer when nothing is fixable or updatable, and the notification count badge stays inside the top bar when it reads `9+`.
+- Light themes: status badge text (success, warning, info, danger and the rest) is darkened to meet 4.5:1 on its own tint in all six families. Hues and tints are unchanged, dark themes are unaffected, and the shared tone colours keep their values for icons and fills.
 
 ## [1.8.0-rc.10] - 2026-10-31
 

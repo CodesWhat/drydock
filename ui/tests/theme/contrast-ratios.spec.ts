@@ -367,3 +367,62 @@ describe('--dd-danger-fg on --dd-danger (notification badge)', () => {
     expect(source).not.toMatch(/badge-pulse[^>]*text-white/s);
   });
 });
+
+// Status badges paint tone text on a 15% tint of the same tone over whatever surface the badge
+// sits on. Light themes use a darkened `--dd-<tone>-badge` (hue kept, tint unchanged) so the
+// text clears 4.5:1 on every surface; dark themes alias it to the tone.
+describe('light theme badge text contrast (tone-badge on its own tint, 4.5:1)', () => {
+  const BADGE_TONES = [
+    'warning',
+    'caution',
+    'danger',
+    'success',
+    'info',
+    'primary',
+    'alt',
+    'neutral',
+  ];
+
+  describe.each(LIGHT_THEMES)('$name', ({ selector }) => {
+    const block = extractBlock(tokensSource, selector);
+    const rootBlock = extractBlock(tokensSource, ':root');
+    const pick = (tone: string) => {
+      const own = block.match(new RegExp(`--dd-${tone}-badge:\\s*(#[0-9a-fA-F]{6})`));
+      return own ? own[1] : getHex(block, `--dd-${tone}`);
+    };
+
+    it.each(BADGE_TONES.flatMap((t) => SURFACE_VARS.map((s) => [t, s] as const)))(
+      '%s badge text on its tint over %s clears 4.5:1',
+      (tone, surfaceVar) => {
+        const text = pick(tone);
+        const tint = compositeOver(
+          getHex(block, `--dd-${tone}`),
+          MUTED_MIX_ALPHA,
+          getHex(block, surfaceVar),
+        );
+        expect(contrastRatio(text, tint)).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+      },
+    );
+
+    it('keeps the hue of each darkened badge colour (same channel ordering as the tone)', () => {
+      for (const tone of BADGE_TONES) {
+        const a = hexToRgb(getHex(block, `--dd-${tone}`));
+        const b = hexToRgb(pick(tone));
+        expect(b.r).toBeLessThanOrEqual(a.r);
+        expect(b.g).toBeLessThanOrEqual(a.g);
+        expect(b.b).toBeLessThanOrEqual(a.b);
+      }
+    });
+
+    it('root aliases every badge colour to its tone for dark themes', () => {
+      for (const tone of BADGE_TONES) {
+        expect(rootBlock).toContain(`--dd-${tone}-badge: var(--dd-${tone});`);
+      }
+    });
+  });
+
+  it('AppBadge reads the badge colour for its text', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/AppBadge.vue'), 'utf8');
+    expect(source).toContain('var(--dd-${props.tone}-badge)');
+  });
+});

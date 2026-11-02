@@ -23,6 +23,14 @@
   --dd-primary-fg: #000000;
   --dd-alt: #d59ce6;
   --dd-neutral: #acb2bb;
+  --dd-success-badge: var(--dd-success);
+  --dd-danger-badge: var(--dd-danger);
+  --dd-warning-badge: var(--dd-warning);
+  --dd-caution-badge: var(--dd-caution);
+  --dd-info-badge: var(--dd-info);
+  --dd-primary-badge: var(--dd-primary);
+  --dd-alt-badge: var(--dd-alt);
+  --dd-neutral-badge: var(--dd-neutral);
   --dd-success-muted: color-mix(in srgb, var(--dd-success) 15%, transparent);
   --dd-danger-muted: color-mix(in srgb, var(--dd-danger) 15%, transparent);
   --dd-warning-muted: color-mix(in srgb, var(--dd-warning) 15%, transparent);
@@ -73,6 +81,14 @@ html.theme-one-dark.light {
   --dd-neutral: #656569;
   --dd-log-text: #abb2bf;
   --dd-log-text-muted: #5c6370;
+  --dd-warning-badge: #765101;
+  --dd-caution-badge: #775101;
+  --dd-danger-badge: #963930;
+  --dd-success-badge: #316230;
+  --dd-info-badge: #2d54a9;
+  --dd-primary-badge: #3a4fb5;
+  --dd-alt-badge: #942292;
+  --dd-neutral-badge: #58585b;
 }
 
 /* GitHub Dark */
@@ -131,6 +147,13 @@ html.theme-github.light {
   --dd-neutral: #6b727d;
   --dd-log-text: #c9d1d9;
   --dd-log-text-muted: #6e7681;
+  --dd-warning-badge: #865a00;
+  --dd-caution-badge: #825c00;
+  --dd-danger-badge: #bc1f2a;
+  --dd-success-badge: #177232;
+  --dd-info-badge: #085fc4;
+  --dd-primary-badge: #085fc4;
+  --dd-neutral-badge: #5e646e;
 }
 
 /* Dracula Dark */
@@ -189,6 +212,14 @@ html.theme-dracula.light {
   --dd-neutral: #55638f;
   --dd-log-text: #f8f8f2;
   --dd-log-text-muted: #6272a4;
+  --dd-warning-badge: #774d1f;
+  --dd-caution-badge: #605811;
+  --dd-danger-badge: #9e2929;
+  --dd-success-badge: #1c6231;
+  --dd-info-badge: #245d68;
+  --dd-primary-badge: #614895;
+  --dd-alt-badge: #8d3567;
+  --dd-neutral-badge: #4a567c;
 }
 
 /* Catppuccin Mocha (Dark) */
@@ -247,6 +278,14 @@ html.theme-catppuccin.light {
   --dd-neutral: #5f626b;
   --dd-log-text: #cdd6f4;
   --dd-log-text-muted: #6c7086;
+  --dd-warning-badge: #8e3806;
+  --dd-caution-badge: #764b0f;
+  --dd-danger-badge: #a40c2c;
+  --dd-success-badge: #26601a;
+  --dd-info-badge: #174db8;
+  --dd-primary-badge: #025b7e;
+  --dd-alt-badge: #6b2dbd;
+  --dd-neutral-badge: #53555d;
 }
 
 /* Gruvbox Dark */
@@ -305,6 +344,14 @@ html.theme-gruvbox.light {
   --dd-neutral: #6f6458;
   --dd-log-text: #ebdbb2;
   --dd-log-text-muted: #928374;
+  --dd-warning-badge: #923f0a;
+  --dd-caution-badge: #725111;
+  --dd-danger-badge: #a71e18;
+  --dd-success-badge: #5b5b10;
+  --dd-info-badge: #315e61;
+  --dd-primary-badge: #923f0a;
+  --dd-alt-badge: #7f4760;
+  --dd-neutral-badge: #61574d;
 }
 
 /* Ayu Mirage (Dark) */
@@ -363,4 +410,12 @@ html.theme-ayu.light {
   --dd-neutral: #656f7c;
   --dd-log-text: #cccac2;
   --dd-log-text-muted: #5c697d;
+  --dd-warning-badge: #88550d;
+  --dd-caution-badge: #85581b;
+  --dd-danger-badge: #a83a3a;
+  --dd-success-badge: #3c6b26;
+  --dd-info-badge: #156791;
+  --dd-primary-badge: #88550d;
+  --dd-alt-badge: #72558f;
+  --dd-neutral-badge: #59626d;
 }
