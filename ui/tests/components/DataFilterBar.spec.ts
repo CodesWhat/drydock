@@ -69,6 +69,12 @@ describe('DataFilterBar', () => {
       expect(w.text()).toContain('containers');
     });
 
+    it('separates the count from its label with a space', () => {
+      const w = factory({ filteredCount: 14, totalCount: 15, countLabel: 'scanned' });
+      expect(w.text()).toContain('14/15 scanned');
+      expect(w.text()).not.toContain('14/15scanned');
+    });
+
     it('omits count label when not provided', () => {
       const w = factory({ filteredCount: 3, totalCount: 12 });
       expect(w.text()).toContain('3/12');

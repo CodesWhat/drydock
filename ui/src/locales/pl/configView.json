@@ -254,7 +254,8 @@
         "500": "Ogon 500",
         "1000": "Ogon 1000"
       },
-      "logLevelBadge": "Poziom dziennika serwera: {level}. Przechwytywane są tylko wiadomości na tym poziomie lub wyższym."
+      "logLevelBadge": "Poziom dziennika serwera: {level}. Przechwytywane są tylko wiadomości na tym poziomie lub wyższym.",
+      "emptyNoFilters": "Brak jeszcze wpisów logu."
     }
   }
 }

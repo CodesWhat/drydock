@@ -254,7 +254,8 @@
         "500": "Ultime 500",
         "1000": "Ultime 1000"
       },
-      "logLevelBadge": "Livello log server: {level}. Vengono acquisiti solo i messaggi a questo livello o superiore."
+      "logLevelBadge": "Livello log server: {level}. Vengono acquisiti solo i messaggi a questo livello o superiore.",
+      "emptyNoFilters": "Ancora nessuna voce di log."
     }
   }
 }

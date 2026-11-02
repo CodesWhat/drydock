@@ -977,7 +977,9 @@ onUnmounted(() => {
             </div>
 
             <!-- Footer: fixable state + lifecycle actions (resources use their own row above). -->
-            <div class="px-4 py-2.5 flex items-center justify-between"
+            <div v-if="row.fixable > 0 || row.hasUpdate"
+                 data-test="security-card-footer"
+                 class="px-4 py-2.5 flex items-center justify-between"
                  :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <span v-if="row.fixable > 0" class="text-2xs-plus font-semibold"
                     :style="{ color: fixableColor(row.fixable, row.total) }">

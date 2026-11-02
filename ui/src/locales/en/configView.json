@@ -254,7 +254,8 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured.",
+      "emptyNoFilters": "No log entries yet."
     }
   }
 }

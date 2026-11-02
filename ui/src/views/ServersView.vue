@@ -61,6 +61,7 @@ const tableColumns = computed(() => [
   {
     key: 'name',
     label: t('serversView.columns.host'),
+    align: 'text-start',
     size: 220,
     minSize: 160,
     maxSize: 360,
@@ -318,9 +319,9 @@ onMounted(fetchServers);
           </template>
           <template #cell-containers="{ row }">
             <div class="flex items-center justify-center gap-2">
-              <span class="font-semibold dd-text">{{ row.containers.total }}</span>
               <span class="text-2xs" :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
-                {{ row.containers.running }} {{ t('serversView.detail.running') }}
+                <span class="font-semibold">{{ row.containers.running }}/{{ row.containers.total }}</span>
+                {{ t('serversView.detail.running') }}
               </span>
             </div>
           </template>

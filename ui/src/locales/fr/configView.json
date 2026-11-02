@@ -254,7 +254,8 @@
         "500": "500 dernières",
         "1000": "1000 dernières"
       },
-      "logLevelBadge": "Niveau de log serveur : {level}. Seuls les messages à ce niveau ou supérieur sont capturés."
+      "logLevelBadge": "Niveau de log serveur : {level}. Seuls les messages à ce niveau ou supérieur sont capturés.",
+      "emptyNoFilters": "Aucune entrée de journal pour le moment."
     }
   }
 }

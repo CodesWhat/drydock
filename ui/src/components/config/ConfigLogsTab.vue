@@ -146,7 +146,7 @@ function togglePin() {
           v-model:newest-first="newestFirst"
           class="flex-1 min-h-0"
           :entries="props.entries"
-          :empty-message="t('configView.logs.emptyMessage')"
+          :empty-message="filtersModified ? t('configView.logs.emptyMessage') : t('configView.logs.emptyNoFilters')"
           :paused="viewerPaused"
           :auto-scroll-pinned="autoScrollPinned"
           :status-label="statusLabel"

@@ -254,7 +254,8 @@
         "500": "Staart 500",
         "1000": "Staart 1000"
       },
-      "logLevelBadge": "Serverlogniveau: {level}. Alleen berichten op dit niveau of hoger worden vastgelegd."
+      "logLevelBadge": "Serverlogniveau: {level}. Alleen berichten op dit niveau of hoger worden vastgelegd.",
+      "emptyNoFilters": "Nog geen logregels."
     }
   }
 }

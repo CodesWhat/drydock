@@ -104,7 +104,7 @@ function isUnread(entry: AuditEntry): boolean {
             @click="toggle"
     />
     <span v-if="unreadCount > 0"
-          class="badge-pulse absolute -top-0.5 -end-0.5 w-4 h-4 flex items-center justify-center rounded-full text-3xs font-bold pointer-events-none"
+          class="badge-pulse absolute top-0.5 end-0 min-w-4 h-4 px-1 flex items-center justify-center rounded-full text-3xs font-bold pointer-events-none"
           style="background: var(--dd-danger); color: var(--dd-danger-fg);">
       {{ unreadCount > 9 ? '9+' : unreadCount }}
     </span>

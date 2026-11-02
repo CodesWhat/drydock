@@ -263,6 +263,7 @@ const tableColumns = computed(() => [
   {
     key: 'name',
     label: t('notificationsView.columns.rule'),
+    align: 'text-start',
     sortable: false,
     size: 320,
     minSize: 220,

@@ -163,4 +163,17 @@ describe('ConfigLogsTab', () => {
     ).toBeTruthy();
     wrapper.unmount();
   });
+
+  it('does not blame filters for an empty log when none are set', () => {
+    const wrapper = mount(ConfigLogsTab, { props: { ...baseProps } });
+    expect(wrapper.text()).toContain('No log entries yet.');
+    expect(wrapper.text()).not.toContain('current filters');
+    wrapper.unmount();
+  });
+
+  it('keeps the filter wording for an empty log when a filter is active', () => {
+    const wrapper = mount(ConfigLogsTab, { props: { ...baseProps, logLevelFilter: 'error' } });
+    expect(wrapper.text()).toContain('No log entries found for current filters.');
+    wrapper.unmount();
+  });
 });

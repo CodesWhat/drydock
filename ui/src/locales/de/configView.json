@@ -254,7 +254,8 @@
         "500": "Letzte 500",
         "1000": "Letzte 1000"
       },
-      "logLevelBadge": "Server-Log-Level: {level}. Nur Nachrichten auf diesem Level oder höher werden erfasst."
+      "logLevelBadge": "Server-Log-Level: {level}. Nur Nachrichten auf diesem Level oder höher werden erfasst.",
+      "emptyNoFilters": "Noch keine Logeinträge."
     }
   }
 }

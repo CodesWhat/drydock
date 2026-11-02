@@ -254,7 +254,8 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Mức độ nhật ký máy chủ: {level}. Chỉ các thông điệp ở mức này trở lên mới được ghi."
+      "logLevelBadge": "Mức độ nhật ký máy chủ: {level}. Chỉ các thông điệp ở mức này trở lên mới được ghi.",
+      "emptyNoFilters": "Chưa có mục nhật ký nào."
     }
   }
 }
