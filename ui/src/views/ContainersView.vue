@@ -26,6 +26,7 @@ import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container, ContainerUpdateOperation } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
+import { buildDependencyTrees } from '../utils/dependency-tree';
 import { hasHardBlocker } from '../utils/update-eligibility';
 import { mapApiContainers } from '../utils/container-mapper';
 import {
@@ -192,6 +193,8 @@ function containerRowFingerprint(c: Container): string {
     c.updatePolicyState ?? '',
     c.noUpdateReason ?? '',
     c.registryError ?? '',
+    c.dependencyCount ?? 0,
+    c.dependentCount ?? 0,
   ].join('|');
 }
 
@@ -770,21 +773,41 @@ const containerSortAsc = usePreference(
     preferences.containers.sort.asc = value;
   },
 );
+// Stack, dependency and fleet grouping are alternative layouts of the same
+// list, so turning one on turns the others off.
 const groupByStack = usePreference(
   () => preferences.containers.groupByStack,
   (value) => {
     preferences.containers.groupByStack = value;
+    if (value) {
+      preferences.containers.groupByDependency = false;
+    }
+  },
+);
+const groupByDependency = usePreference(
+  () => preferences.containers.groupByDependency,
+  (value) => {
+    preferences.containers.groupByDependency = value;
+    if (value) {
+      preferences.containers.groupByStack = false;
+    }
   },
 );
 
 watch(
   fleet.groupBy,
   (value) => {
-    if (value !== 'none') groupByStack.value = false;
+    if (value !== 'none') {
+      groupByStack.value = false;
+      groupByDependency.value = false;
+    }
   },
   { immediate: true },
 );
 watch(groupByStack, (value) => {
+  if (value) fleet.groupBy.value = 'none';
+});
+watch(groupByDependency, (value) => {
   if (value) fleet.groupBy.value = 'none';
 });
 watch(fleet.groupLabel, (value, previous) => {
@@ -1291,6 +1314,8 @@ interface RenderGroup {
   containerCount: number;
   updatesAvailable: number;
   updatableCount: number;
+  dependencyRootId?: string;
+  dependencyDepths?: Record<string, number>;
 }
 
 const groupedContainers = computed<RenderGroup[]>(() => {
@@ -1355,8 +1380,57 @@ const groupedContainers = computed<RenderGroup[]>(() => {
   return named;
 });
 
+function summarizeContainers(containers: typeof displayContainers.value) {
+  return {
+    containers,
+    containerCount: containers.length,
+    updatesAvailable: containers.filter((container) => container.newTag).length,
+    updatableCount: containers.filter(
+      (container) => container.newTag && !hasHardBlocker(container.updateEligibility),
+    ).length,
+  };
+}
+
+type DisplayContainer = (typeof displayContainers.value)[number];
+const { adjacency: dependencyAdjacency } = useDependencyGraph();
+
+// One group per dependency tree, parents listed before their dependents, then
+// everything with no dependency edges in an unnamed group at the end (the same
+// shape the stack view uses for ungrouped containers).
+const dependencyContainers = computed<RenderGroup[]>(() => {
+  const byId = new Map(sortedContainers.value.map((container) => [container.id, container]));
+  const trees = buildDependencyTrees(
+    dependencyAdjacency.value,
+    sortedContainers.value.map((container) => container.id),
+  );
+  const groups: RenderGroup[] = trees.components.map((component) => {
+    const containers = component.entries.map((entry) => byId.get(entry.id) as DisplayContainer);
+    const rootNames = component.rootIds.map((id) => (byId.get(id) as DisplayContainer).name);
+    return {
+      key: `dependency:${component.rootIds[0]}`,
+      name: rootNames.join(', '),
+      ...summarizeContainers(containers),
+      dependencyRootId: component.rootIds[0],
+      dependencyDepths: Object.fromEntries(
+        component.entries.map((entry) => [entry.id, entry.depth]),
+      ),
+    };
+  });
+  if (trees.ungroupedIds.length > 0) {
+    groups.push({
+      key: '__ungrouped__',
+      name: null,
+      ...summarizeContainers(trees.ungroupedIds.map((id) => byId.get(id) as DisplayContainer)),
+    });
+  }
+  return groups;
+});
+
 const renderGroups = computed<RenderGroup[]>(() => {
   if (fleet.groupBy.value !== 'none') return fleet.group(sortedContainers.value, t);
+  if (groupByDependency.value) {
+    return dependencyContainers.value;
+  }
   if (!groupByStack.value) {
     return [
       {
@@ -1594,6 +1668,7 @@ provide(containersViewTemplateContextKey, {
   resetColumns,
   tt,
   groupByStack,
+  groupByDependency,
   rechecking,
   recheckAll,
   renderGroups,

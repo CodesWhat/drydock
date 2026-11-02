@@ -37,7 +37,7 @@
       "version": "Version",
       "versionTooltip": "Version détectée à partir des métadonnées de l'image. Elle peut correspondre au tag et se masque avant Hôte lorsque l'espace est limité.",
       "update": "Mise à jour",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "Type de mise à jour disponible : majeure, mineure, correctif ou mise à jour de l'image avec le même tag.",
       "status": "État",
       "host": "Hôte",
       "registry": "Registry",

@@ -44,7 +44,10 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   type TranslateFn,
 } from '../../utils/container-update';
-import type { DependencyAdjacency } from '../../utils/dependency-graph-view';
+import {
+  collectTransitiveChildIds,
+  type DependencyAdjacency,
+} from '../../utils/dependency-graph-view';
 import { findStaleParents, formatStaleParentNames } from '../../utils/dependency-update-guard';
 import { ApiError, errorMessage } from '../../utils/error';
 import {
@@ -704,6 +707,8 @@ async function confirmDependencyGroupUpdateState(args: {
   containerActionsEnabled: boolean;
   containerActionsDisabledReason: string;
   target: ContainerActionTarget;
+  /** Ids the list currently shows. Chain members outside it are labelled in the dialog. */
+  shownIds?: ReadonlySet<string>;
   containerIdMap: Record<string, string>;
   inputError: Ref<string | null>;
   dependencyPreviewLoading: Ref<boolean>;
@@ -728,10 +733,21 @@ async function confirmDependencyGroupUpdateState(args: {
     // expectedContainerIds so the backend can bind the eventual update to
     // this same chain rather than whatever it happens to be at accept time.
     const expectedContainerIds = preview.waves.flatMap((wave) => wave.containers.map((c) => c.id));
+    // The backend only runs the whole connected chain (expectedContainerIds
+    // must match it exactly), so a member hidden by the current filter can't
+    // be left out. Name it in the dialog instead of updating it unannounced.
+    let hiddenCount = 0;
     const waveList = preview.waves
       .map((wave, index) => {
         const names = wave.containers
-          .map((c) => (c.actionKind === 'restart' ? `${c.name} (restart)` : c.name))
+          .map((c) => {
+            let label = c.actionKind === 'restart' ? `${c.name} (restart)` : c.name;
+            if (args.shownIds && !args.shownIds.has(c.id)) {
+              hiddenCount += 1;
+              label += ` (${args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenMarker')})`;
+            }
+            return label;
+          })
           .join(', ');
         return `${index + 1}. ${names}`;
       })
@@ -747,6 +763,11 @@ async function confirmDependencyGroupUpdateState(args: {
     if (waveList) {
       message += args.t('containerComponents.confirmDialogs.dependencyGroup.waveList', {
         list: waveList,
+      });
+    }
+    if (hiddenCount > 0) {
+      message += args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenNote', {
+        count: hiddenCount,
       });
     }
     if (preview.warnings.cycles.length > 0) {
@@ -1052,6 +1073,44 @@ function buildStaleParentsWarning(args: {
   };
 }
 
+/**
+ * Builds the "dependents are not updated with this" note for a single
+ * container's Update confirmation (#219). A single update never cascades to
+ * the containers that depend on it, so listing them tells the user what is
+ * left behind and points at the chain update that covers them.
+ */
+function buildDependentsNote(args: {
+  adjacency: DependencyAdjacency;
+  containerId: string | undefined;
+  name: string;
+  t: TranslateFn;
+}): string {
+  if (!args.containerId) {
+    return '';
+  }
+  const dependentIds = [...collectTransitiveChildIds(args.adjacency, args.containerId)];
+  if (dependentIds.length === 0) {
+    return '';
+  }
+  const { names, overflow } = formatStaleParentNames(
+    dependentIds.map((id) => {
+      const node = args.adjacency.nodeById.get(id);
+      return { id, name: node?.displayName || node?.name || id };
+    }),
+  );
+  let note = `\n\n${args.t('containerComponents.dependencyGraph.dependentsNote', {
+    name: args.name,
+    dependents: names,
+    count: dependentIds.length,
+  })}`;
+  if (overflow > 0) {
+    note += ` ${args.t('containerComponents.dependencyGraph.staleParentsOverflow', {
+      count: overflow,
+    })}`;
+  }
+  return note;
+}
+
 function createConfirmHandlers(args: {
   confirm: ReturnType<typeof useConfirmDialog>;
   containerIdMap: Readonly<Ref<Record<string, string>>>;
@@ -1198,7 +1257,12 @@ function createConfirmHandlers(args: {
       containers: args.containers.value,
       t: args.t,
     });
-    message = `${message}${staleParents.suffix}`;
+    message = `${message}${staleParents.suffix}${buildDependentsNote({
+      adjacency: adjacency.value,
+      containerId,
+      name,
+      t: args.t,
+    })}`;
 
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.update.header'),
@@ -1951,11 +2015,15 @@ export function useContainerActions(input: UseContainerActionsInput) {
     t: t as TranslateFn,
   });
 
-  async function confirmDependencyGroupUpdate(target: ContainerActionTarget) {
+  async function confirmDependencyGroupUpdate(
+    target: ContainerActionTarget,
+    shownIds?: ReadonlySet<string>,
+  ) {
     await confirmDependencyGroupUpdateState({
       containerActionsEnabled: containerActionsEnabled.value,
       containerActionsDisabledReason: containerActionsDisabledReason.value,
       target,
+      shownIds,
       containerIdMap: input.containerIdMap.value,
       inputError: input.error,
       dependencyPreviewLoading: dependencyGroupPreviewLoading,

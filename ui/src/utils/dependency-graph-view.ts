@@ -16,6 +16,8 @@ export interface DependencyAdjacency {
   childIdsByParent: Map<string, string[]>;
   nodeById: Map<string, DependencyGraphNode>;
   cycleMemberIds: Set<string>;
+  /** node id -> dependency targets the API could not resolve to a container. */
+  unresolvedTargetsByNodeId: Map<string, string[]>;
 }
 
 /** A null/undefined graph (not yet loaded) yields empty, safely-traversable maps. */
@@ -26,9 +28,16 @@ export function buildDependencyAdjacency(
   const childIdsByParent = new Map<string, string[]>();
   const nodeById = new Map<string, DependencyGraphNode>();
   const cycleMemberIds = new Set<string>();
+  const unresolvedTargetsByNodeId = new Map<string, string[]>();
 
   if (!graph) {
-    return { parentIdsByChild, childIdsByParent, nodeById, cycleMemberIds };
+    return {
+      parentIdsByChild,
+      childIdsByParent,
+      nodeById,
+      cycleMemberIds,
+      unresolvedTargetsByNodeId,
+    };
   }
 
   for (const node of graph.nodes) {
@@ -51,7 +60,19 @@ export function buildDependencyAdjacency(
     }
   }
 
-  return { parentIdsByChild, childIdsByParent, nodeById, cycleMemberIds };
+  for (const unresolved of graph.unresolved) {
+    const targets = unresolvedTargetsByNodeId.get(unresolved.nodeId) ?? [];
+    targets.push(unresolved.missingTarget);
+    unresolvedTargetsByNodeId.set(unresolved.nodeId, targets);
+  }
+
+  return {
+    parentIdsByChild,
+    childIdsByParent,
+    nodeById,
+    cycleMemberIds,
+    unresolvedTargetsByNodeId,
+  };
 }
 
 function resolveNodes(
@@ -104,6 +125,24 @@ export function collectTransitiveParentIds(
     queue.push(...(adjacency.parentIdsByChild.get(current) ?? []));
   }
   return parents;
+}
+
+/**
+ * BFS over `childIdsByParent` collecting every transitive child (dependent)
+ * of `id`, cycle-safe via a visited set. `id` itself is never included.
+ */
+export function collectTransitiveChildIds(adjacency: DependencyAdjacency, id: string): Set<string> {
+  const children = new Set<string>();
+  const queue = [...(adjacency.childIdsByParent.get(id) ?? [])];
+  while (queue.length > 0) {
+    const current = queue.shift() as string;
+    if (current === id || children.has(current)) {
+      continue;
+    }
+    children.add(current);
+    queue.push(...(adjacency.childIdsByParent.get(current) ?? []));
+  }
+  return children;
 }
 
 /**
