@@ -1,5 +1,5 @@
 html[data-product="drydock"] {
-  --fd-layout-width: 1240px;
+  --fd-layout-width: 1600px;
   --font-sans: var(--mono);
   --font-mono: var(--mono);
   --color-fd-background: var(--dd-bg);
