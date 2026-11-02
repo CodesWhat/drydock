@@ -239,7 +239,7 @@ export function CompareMatrix() {
                       <ArrowUpRight className="h-3.5 w-3.5 text-[var(--tx-sec)] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                     </Link>
                   ) : (
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span className="font-semibold text-emerald-800 dark:text-emerald-300">
                       {tool.name}
                     </span>
                   )}

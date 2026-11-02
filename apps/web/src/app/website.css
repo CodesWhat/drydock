@@ -347,6 +347,9 @@ html[data-product="drydock"] body {
   --color-fd-secondary: var(--dd-bg-elevated);
   --color-fd-muted-foreground: var(--tx-sec);
 }
+html[data-product="drydock"]:not(.dark) .website-docs #nd-sidebar a[data-active="true"] {
+  color: color-mix(in srgb, var(--dd-primary) 15%, var(--dd-text));
+}
 .website-docs :where(#nd-page) h1 {
   font: 400 clamp(38px, 5.2vw, 58px) / 1 var(--serif);
   letter-spacing: -0.015em;
@@ -416,6 +419,9 @@ html[data-product="drydock"] body {
 .website-advisory :where(.prose) a {
   color: var(--tx-primary);
   overflow-wrap: anywhere;
+}
+.website-advisory .prose table th {
+  color: var(--dd-text);
 }
 .website-advisory .prose pre {
   font-size: 12px;

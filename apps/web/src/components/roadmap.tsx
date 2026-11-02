@@ -29,14 +29,14 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
   const refLine = (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       {isHead ? (
-        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-xs font-bold text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
+        <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 font-mono text-xs font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
           HEAD -&gt; {milestone.version}
         </span>
       ) : (
         <span
           className={`font-mono text-xs font-semibold ${
             isReleased
-              ? "text-emerald-600 dark:text-emerald-400"
+              ? "text-emerald-800 dark:text-emerald-300"
               : "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
           }`}
         >
