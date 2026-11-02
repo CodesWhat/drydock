@@ -269,6 +269,9 @@ html[data-product="drydock"] body {
   text-transform: none;
 }
 .website-proof-stats a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--tx-primary);
   padding-block: 3px;
 }

@@ -1,3 +1,4 @@
+import { Heart } from "lucide-react";
 import { GITHUB_URL, REPO_SLUG } from "@/lib/site-config";
 
 type Badge = { href: string; src: string; alt: string };
@@ -63,6 +64,7 @@ export function GitHubBadges() {
         </li>
         <li>
           <a href="https://github.com/sponsors/CodesWhat" target="_blank" rel="noopener noreferrer">
+            <Heart size={14} aria-hidden="true" />
             Sponsor
           </a>
         </li>
