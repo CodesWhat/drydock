@@ -3,8 +3,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const demoRoot = fileURLToPath(new URL('../..', import.meta.url));
 const uiSrc = fileURLToPath(new URL('../../../../ui/src', import.meta.url));
