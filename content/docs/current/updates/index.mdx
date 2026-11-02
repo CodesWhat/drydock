@@ -5,6 +5,18 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.12 Highlights - November 2, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Light theme contrast.** Muted text and status badge text now meet 4.5:1 on every surface in all six theme families, and the notification count badge uses a per-theme foreground.
+- **Approvals on mobile.** Image, Version, Scan and Age values render again on mobile cards, and Version shows the tag change.
+- **Accessibility.** Every page has one `h1`, animations follow the OS reduced-motion setting, and form controls and icon buttons have accessible names and touch-sized targets.
+- **UI polish.** Filter bar and Hosts counts read cleanly, table headers line up with their cells, and empty states stop blaming filters when none are set.
+- **Metrics read path.** Metrics read raw containers instead of building full API views.
+- **Website browser checks.** The site is now driven in Chromium, Firefox and WebKit in CI.
+- RC12 includes every rc.11 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.11 Highlights - November 1, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

@@ -33,7 +33,7 @@ const props = withDefaults(
     errorClass: 'text-2xs-plus px-3 py-2 dd-rounded',
     errorStyle: () => ({
       backgroundColor: 'var(--dd-danger-muted)',
-      color: 'var(--dd-danger)',
+      color: 'var(--dd-danger-badge)',
     }),
     emptyClass: 'px-3 py-4 dd-text-muted text-center',
   },

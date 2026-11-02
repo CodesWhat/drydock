@@ -17,6 +17,11 @@ const emit = defineEmits<{
   viewAll: [];
 }>();
 
+// "Image update" (digest) buckets read as "0 / IMAGE UPDATE" with no hint of what they count.
+function bucketHint(kind: UpdateBreakdownBucket['kind']): string | undefined {
+  return kind === 'digest' ? t('dashboardView.updateBreakdown.digestHint') : undefined;
+}
+
 function handleViewAll() {
   emit('viewAll');
 }
@@ -83,6 +88,7 @@ onBeforeUnmount(() => {
         <div
           v-for="kind in updateBreakdownBuckets"
           :key="kind.label"
+          :title="bucketHint(kind.kind)"
           class="text-center p-2.5 dd-rounded"
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="w-8 h-8 mx-auto dd-rounded flex items-center justify-center mb-1.5"
@@ -106,6 +112,7 @@ onBeforeUnmount(() => {
       <div
         v-for="kind in updateBreakdownBuckets"
         :key="kind.label"
+        :title="bucketHint(kind.kind)"
         class="flex items-center gap-2 flex-1 min-w-0 px-2 py-1.5 dd-rounded"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
         <div class="w-6 h-6 shrink-0 dd-rounded flex items-center justify-center"

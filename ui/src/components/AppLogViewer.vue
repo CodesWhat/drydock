@@ -647,6 +647,7 @@ function toggleSortOrder(): void {
             class="w-full pl-7 pr-2 py-1.5 dd-rounded text-2xs-plus outline-none dd-text dd-placeholder"
             style="background-color: var(--dd-log-footer-bg)"
             :placeholder="t('appShell.logViewer.search.placeholder')"
+            :aria-label="t('appShell.logViewer.search.placeholder')"
           />
         </div>
 

@@ -13,7 +13,7 @@ vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn() }) },
 }));
 vi.mock('../store/container.js', () => ({
-  getContainers: () => [{ id: 'container-1', name: 'web', watcher: 'local', agent: 'edge' }],
+  getContainersRaw: () => [{ id: 'container-1', name: 'web', watcher: 'local', agent: 'edge' }],
 }));
 
 beforeAll(() => {

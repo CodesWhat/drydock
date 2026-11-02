@@ -33,6 +33,10 @@ export const GRID_BREAKPOINTS: Breakpoints = {
 };
 
 /** Column counts per responsive breakpoint. */
+// Accepted duplication (DR-94): the dashboard keeps one column-count variant per breakpoint here and
+// widgets still carry their own compact/stat-size variants (see DashboardUpdateBreakdownWidget's
+// full/medium/compact modes). Folding them into one scheme is a dashboard layout rewrite, not part
+// of the #242 touch-target pass, and is deferred.
 export const GRID_COLS: Breakpoints = {
   xxs: 1,
   xs: 1,

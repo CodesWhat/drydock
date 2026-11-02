@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "Dökümü Güncelle",
-      "noUpdates": "Kategorize edilecek güncelleme yok"
+      "noUpdates": "Kategorize edilecek güncelleme yok",
+      "digestHint": "Aynı etiket, yeni imaj özeti"
     },
     "stats": {
       "containers": "Kapsayıcılar",

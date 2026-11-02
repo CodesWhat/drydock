@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "resetFilters": "Reset filters",
+        "levelFilter": "Filter by log level",
+        "tailSize": "Number of log lines",
+        "componentFilter": "Filter by component"
       },
       "tail": {
         "50": "Tail 50",
@@ -251,7 +254,8 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured.",
+      "emptyNoFilters": "No log entries yet."
     }
   }
 }

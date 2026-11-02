@@ -1095,7 +1095,7 @@ function confirmDashboardUpdateAll() {
 /* Drag handle pill */
 .dd-drag-handle {
   cursor: grab;
-  color: var(--dd-neutral);
+  color: var(--dd-neutral-badge);
   background: var(--dd-neutral-muted);
   border-radius: var(--dd-radius);
   padding: 2px 6px;

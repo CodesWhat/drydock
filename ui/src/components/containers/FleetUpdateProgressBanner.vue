@@ -34,7 +34,7 @@ function runningLabel(batch: { activeContainerNames: string[] }): string | undef
     v-for="batch in activeBatches"
     :key="batch.batchId"
     class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-    :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary)' }"
+    :style="{ backgroundColor: 'var(--dd-primary-muted)', color: 'var(--dd-primary-badge)' }"
     data-test="fleet-update-progress">
     <div>
       {{ t('containerComponents.listContent.fleetUpdateProgress', { done: doneCount(batch), total: batch.total }) }}

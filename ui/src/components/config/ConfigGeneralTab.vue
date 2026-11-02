@@ -88,7 +88,7 @@ function isStaticTableRow() {
     <div
       v-if="props.serverError"
       class="px-3 py-2 dd-text-body dd-rounded"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
     >
       {{ props.serverError }}
     </div>
@@ -96,7 +96,7 @@ function isStaticTableRow() {
     <div
       v-if="props.settingsError"
       class="px-3 py-2 dd-text-body dd-rounded"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
     >
       {{ props.settingsError }}
     </div>
@@ -316,7 +316,7 @@ function isStaticTableRow() {
               :class="props.cacheClearing ? 'opacity-50 pointer-events-none' : ''"
               :style="{
                 backgroundColor: 'var(--dd-danger-muted)',
-                color: 'var(--dd-danger)',
+                color: 'var(--dd-danger-badge)',
                 border: '1px solid var(--dd-danger)',
               }"
               @click="emit('clear-icon-cache')"

@@ -243,7 +243,10 @@
         "warn": "Waarschuw",
         "error": "Fout",
         "allComponents": "Alle componenten",
-        "resetFilters": "Filters opnieuw instellen"
+        "resetFilters": "Filters opnieuw instellen",
+        "levelFilter": "Filteren op logniveau",
+        "tailSize": "Aantal logregels",
+        "componentFilter": "Filteren op component"
       },
       "tail": {
         "50": "Staart 50",
@@ -251,7 +254,8 @@
         "500": "Staart 500",
         "1000": "Staart 1000"
       },
-      "logLevelBadge": "Serverlogniveau: {level}. Alleen berichten op dit niveau of hoger worden vastgelegd."
+      "logLevelBadge": "Serverlogniveau: {level}. Alleen berichten op dit niveau of hoger worden vastgelegd.",
+      "emptyNoFilters": "Nog geen logregels."
     }
   }
 }

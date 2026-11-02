@@ -513,6 +513,32 @@ tr.dd-row-scanning > td.dd-data-table-row-overlay-host > .dd-row-overlay {
   color: var(--dd-neutral);
 }
 
+/* Status text on its own tint uses the AA-checked badge colour (darker in light themes). */
+.dd-bg-success-muted.dd-text-success {
+  color: var(--dd-success-badge);
+}
+.dd-bg-danger-muted.dd-text-danger {
+  color: var(--dd-danger-badge);
+}
+.dd-bg-warning-muted.dd-text-warning {
+  color: var(--dd-warning-badge);
+}
+.dd-bg-caution-muted.dd-text-caution {
+  color: var(--dd-caution-badge);
+}
+.dd-bg-info-muted.dd-text-info {
+  color: var(--dd-info-badge);
+}
+.dd-bg-primary-muted.dd-text-primary {
+  color: var(--dd-primary-badge);
+}
+.dd-bg-alt-muted.dd-text-alt {
+  color: var(--dd-alt-badge);
+}
+.dd-bg-neutral-muted.dd-text-neutral {
+  color: var(--dd-neutral-badge);
+}
+
 /* Semantic borders */
 .dd-border-success {
   border-color: var(--dd-success);
@@ -888,5 +914,17 @@ html.dd-transitioning::view-transition-new(*) {
 @container (min-width: 160px) {
   .dd-cell-show-160 {
     display: inline-flex;
+  }
+}
+
+/* Honour the OS reduced-motion setting. Spinners stay: they signal progress, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast, .animate-spin),
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast, .animate-spin)::before,
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast, .animate-spin)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

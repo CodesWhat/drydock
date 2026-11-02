@@ -145,8 +145,8 @@ const enrichedPorts = computed(() =>
         </div>
         <div v-if="selectedContainer.newTag" class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
               :style="{ backgroundColor: 'var(--dd-success-muted)' }">
-          <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
-          <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
+          <span style="color: var(--dd-success-badge);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
+          <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success-badge);">{{ selectedContainer.newTag }}</CopyableTag>
           <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)" v-tooltip.top="selectedContainer.updateMaturityTooltip">
             {{ getUpdateKindLabel(selectedContainer.updateKind) }}
           </AppBadge>
@@ -154,7 +154,7 @@ const enrichedPorts = computed(() =>
         <div v-else class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs"
               :style="{ backgroundColor: 'var(--dd-success-muted)' }">
           <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
-          <span class="font-medium" style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
+          <span class="font-medium" style="color: var(--dd-success-badge);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
         </div>
         <NoUpdateReasonBadge
           v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
@@ -231,7 +231,7 @@ const enrichedPorts = computed(() =>
               class="mt-3 flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
               :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
           <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
-          <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+          <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger-badge);">{{ selectedContainer.registryError }}</span>
         </div>
       </div>
     </div>
@@ -265,7 +265,7 @@ const enrichedPorts = computed(() =>
                 class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
                 :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
             <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-            <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ warning }}</span>
+            <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning-badge);">{{ warning }}</span>
           </div>
         </div>
       </div>
@@ -297,7 +297,7 @@ const enrichedPorts = computed(() =>
         <div v-if="selectedLifecycleHooks.preAbortBehavior"
               class="px-3 py-2 dd-rounded text-xs"
               :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-          <span style="color: var(--dd-info);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
+          <span style="color: var(--dd-info-badge);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
         </div>
         <div class="px-3 py-2 dd-rounded text-xs"
               :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
@@ -358,25 +358,25 @@ const enrichedPorts = computed(() =>
         </div>
         <div v-else-if="detailVulnerabilityError"
               class="px-3 py-2 dd-rounded text-xs"
-              :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+              :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
           {{ detailVulnerabilityError }}
         </div>
         <template v-else>
           <div class="flex items-center gap-2 flex-wrap text-2xs-plus">
             <span class="badge text-2xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
               {{ t('containerComponents.fullPageOverview.critical') }} {{ vulnerabilitySummary.critical }}
             </span>
             <span class="badge text-2xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }">
               {{ t('containerComponents.fullPageOverview.high') }} {{ vulnerabilitySummary.high }}
             </span>
             <span class="badge text-2xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution)' }">
+                  :style="{ backgroundColor: 'var(--dd-caution-muted)', color: 'var(--dd-caution-badge)' }">
               {{ t('containerComponents.fullPageOverview.medium') }} {{ vulnerabilitySummary.medium }}
             </span>
             <span class="badge text-2xs font-bold"
-                  :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
+                  :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info-badge)' }">
               {{ t('containerComponents.fullPageOverview.low') }} {{ vulnerabilitySummary.low }}
             </span>
             <span class="dd-text-muted ml-auto">{{ vulnerabilityTotal }} {{ t('containerComponents.fullPageOverview.total') }}</span>
@@ -414,7 +414,7 @@ const enrichedPorts = computed(() =>
           </div>
           <div v-if="detailSbomError"
                 class="px-3 py-2 dd-rounded text-xs"
-                :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
             {{ detailSbomError }}
           </div>
           <div v-else-if="detailSbomLoading"

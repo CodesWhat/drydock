@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "Distribuição de atualizações",
-      "noUpdates": "Nenhuma atualização para categorizar"
+      "noUpdates": "Nenhuma atualização para categorizar",
+      "digestHint": "Mesma tag, novo digest da imagem"
     },
     "stats": {
       "containers": "Contêineres",

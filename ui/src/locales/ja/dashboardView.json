@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "更新内訳",
-      "noUpdates": "分類する更新がありません"
+      "noUpdates": "分類する更新がありません",
+      "digestHint": "同じタグで、イメージダイジェストが新しい"
     },
     "stats": {
       "containers": "コンテナ",

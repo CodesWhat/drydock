@@ -205,6 +205,12 @@ const currentPageIcon = computed(() => {
   return hiddenPages[route.path]?.icon ?? 'dashboard';
 });
 
+// The top-bar title is the page's h1. The container logs page renders its own h1 (the
+// container name) and its route has no nav entry, so the bar falls back to a plain span there.
+const topBarTitleTag = computed(() =>
+  /^\/containers\/[^/]+\/logs\/?$/.test(route.path) ? 'span' : 'h1',
+);
+
 function navigateTo(navRoute: string) {
   router.push(navRoute);
   if (isMobile.value) isMobileMenuOpen.value = false;
@@ -509,7 +515,7 @@ function searchScopeChipStyles(scope: SearchScope, active: boolean) {
     return {
       backgroundColor: 'var(--dd-primary-muted)',
       borderColor: 'var(--dd-primary)',
-      color: 'var(--dd-primary)',
+      color: 'var(--dd-primary-badge)',
     };
   }
   if (scope === 'all') {
@@ -1573,7 +1579,7 @@ onUnmounted(() => {
                       backgroundColor: item.badgeColor === 'red'
                         ? 'var(--dd-danger-muted)'
                         : 'var(--dd-warning-muted)',
-                      color: item.badgeColor === 'red' ? 'var(--dd-danger)' : 'var(--dd-warning)',
+                      color: item.badgeColor === 'red' ? 'var(--dd-danger-badge)' : 'var(--dd-warning-badge)',
                     }">
                 {{ item.badge }}
               </span>
@@ -1658,9 +1664,9 @@ onUnmounted(() => {
 
           <nav class="flex items-center gap-1.5 text-xs-plus">
             <AppIcon :name="currentPageIcon" :size="16" class="leading-none dd-text-muted" />
-            <span class="font-medium leading-none dd-text">
+            <component :is="topBarTitleTag" class="font-medium leading-none dd-text" data-test="topbar-title">
               {{ currentPageLabel }}
-            </span>
+            </component>
             <div id="breadcrumb-actions" class="flex items-center" />
           </nav>
         </div>

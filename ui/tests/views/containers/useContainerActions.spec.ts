@@ -2835,23 +2835,23 @@ describe('useContainerActions', () => {
     expect(composable.formatRollbackReason('ROLLED-BACK')).toBe('rolled back');
     expect(composable.getOperationStatusStyle('succeeded')).toEqual({
       backgroundColor: 'var(--dd-success-muted)',
-      color: 'var(--dd-success)',
+      color: 'var(--dd-success-badge)',
     });
     expect(composable.getOperationStatusStyle('rolled-back')).toEqual({
       backgroundColor: 'var(--dd-warning-muted)',
-      color: 'var(--dd-warning)',
+      color: 'var(--dd-warning-badge)',
     });
     expect(composable.getOperationStatusStyle('failed')).toEqual({
       backgroundColor: 'var(--dd-danger-muted)',
-      color: 'var(--dd-danger)',
+      color: 'var(--dd-danger-badge)',
     });
     expect(composable.getOperationStatusStyle('queued')).toEqual({
       backgroundColor: 'var(--dd-info-muted)',
-      color: 'var(--dd-info)',
+      color: 'var(--dd-info-badge)',
     });
     expect(composable.getOperationStatusStyle(undefined)).toEqual({
       backgroundColor: 'var(--dd-info-muted)',
-      color: 'var(--dd-info)',
+      color: 'var(--dd-info-badge)',
     });
     expect(
       composable.getTriggerKey({

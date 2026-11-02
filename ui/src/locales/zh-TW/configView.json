@@ -243,7 +243,10 @@
         "warn": "警告",
         "error": "錯誤",
         "allComponents": "所有組件",
-        "resetFilters": "重設篩選"
+        "resetFilters": "重設篩選",
+        "levelFilter": "依記錄層級篩選",
+        "tailSize": "記錄行數",
+        "componentFilter": "依元件篩選"
       },
       "tail": {
         "50": "末尾 50 條",
@@ -251,7 +254,8 @@
         "500": "末尾 500 條",
         "1000": "末尾 1000 條"
       },
-      "logLevelBadge": "伺服器日誌級別：{level}。僅捕獲此級別及更高級別的訊息。"
+      "logLevelBadge": "伺服器日誌級別：{level}。僅捕獲此級別及更高級別的訊息。",
+      "emptyNoFilters": "尚無記錄項目。"
     }
   }
 }
