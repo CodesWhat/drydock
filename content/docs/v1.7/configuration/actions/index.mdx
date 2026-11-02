@@ -107,7 +107,7 @@ Operations waiting on the global cap remain in `queued` status, which the UI alr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     environment:
       # Allow at most 3 container updates to run simultaneously.
       - DD_UPDATE_MAX_CONCURRENT=3
@@ -133,7 +133,7 @@ Heartbeats re-emit `phase: 'health-gate'` (the same phase already displayed by t
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     environment:
       # Emit a health-gate heartbeat every 5 seconds.
       - DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS=5000
@@ -159,7 +159,7 @@ The check is conservative: inspect failures are warned-and-tolerated (Drydock ca
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     environment:
       # Extend grace period to 5 seconds for slow-starting containers.
       - DD_UPDATE_POST_START_LIVENESS_GRACE_MS=5000
@@ -186,7 +186,7 @@ All container actions are tracked via Prometheus counters. See [Monitoring](/doc
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     environment:
       - DD_SERVER_FEATURE_CONTAINERACTIONS=false
       - DD_SERVER_FEATURE_DELETE=false

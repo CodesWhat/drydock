@@ -204,7 +204,7 @@ If any step fails, the helper rolls back to the previous container automatically
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_ACTION_DOCKER_EXAMPLE_PRUNE=true
@@ -216,7 +216,7 @@ services:
 docker run \
   -e "DD_ACTION_DOCKER_EXAMPLE_PRUNE=true" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>

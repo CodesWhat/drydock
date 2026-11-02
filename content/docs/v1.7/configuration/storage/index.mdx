@@ -35,7 +35,7 @@ Login sessions persist in their own file next to the main store — `dd-sessions
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     volumes:
       - /path-on-my-host:/store
@@ -47,7 +47,7 @@ services:
 docker run \
   -v /path-on-my-host:/store \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>

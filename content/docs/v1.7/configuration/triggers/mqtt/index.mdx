@@ -62,7 +62,7 @@ Old retained state messages on unscoped topics are not removed automatically. Mo
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -74,7 +74,7 @@ services:
 docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_URL="mqtt://localhost:1883" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>
@@ -87,7 +87,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtts://localhost:8883
@@ -109,7 +109,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CLIENTCERT="/drydock/mqtt/client-cert.pem" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_TLS_CACHAIN="/drydock/mqtt/ca.pem" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>
@@ -122,7 +122,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MAQIATTO_URL=tcp://maqiatto.com:1883
@@ -140,7 +140,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_PASSWORD="mysecretpassword" \
     -e DD_NOTIFICATION_MQTT_MAQIATTO_TOPIC="john@doe.com/drydock/image" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>
@@ -181,7 +181,7 @@ Drydock integrates with [Home Assistant](https://www.home-assistant.io/) via [MQ
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -197,7 +197,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_ENABLED="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>
@@ -242,7 +242,7 @@ Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_COMMANDS=true` to let Home Assista
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.7.0
+    image: codeswhat/drydock
     ...
     environment:
       - DD_NOTIFICATION_MQTT_MOSQUITTO_URL=mqtt://localhost:1883
@@ -260,7 +260,7 @@ docker run \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_DISCOVERY="true" \
     -e DD_NOTIFICATION_MQTT_MOSQUITTO_HASS_COMMANDS="true" \
   ...
-  codeswhat/drydock:1.7.0
+  codeswhat/drydock
 ```
 </Tab>
 </Tabs>
