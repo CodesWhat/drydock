@@ -104,7 +104,7 @@ export function CompareSection() {
                       className={[
                         "px-4 py-3 text-center font-semibold",
                         tool === SITE_CONFIG.name
-                          ? "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300"
+                          ? "website-compare-self-head"
                           : "text-[var(--tx-sec)] dark:text-[var(--tx-sec)]",
                       ].join(" ")}
                     >
@@ -135,7 +135,7 @@ export function CompareSection() {
                         key={tool}
                         className={[
                           "px-4 py-3 text-center",
-                          tool === SITE_CONFIG.name ? "bg-emerald-500/5" : "",
+                          tool === SITE_CONFIG.name ? "website-compare-self-cell" : "",
                         ].join(" ")}
                       >
                         <ComparisonCellIcon value={cellValue(row, tool)} />
