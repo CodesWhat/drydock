@@ -14,13 +14,38 @@ test("hero scopes its 100% coverage claim to TypeScript", () => {
   assert.match(proofSource, /<b>100%<\/b> (?:TS|TypeScript) coverage/);
 });
 
-test("coverage FAQ distinguishes TypeScript gates, Vue component floors, and typechecking", () => {
-  const answer = faqSource.match(/question: "[^"]*coverage[^"]*",([\s\S]*?)(?=\n {2}\},)/i)?.[1];
-  assert.ok(answer, "the headline coverage claim needs a detailed FAQ explanation");
-  assert.match(answer, /100%.*backend.*TypeScript/);
-  assert.match(answer, /Vue.*aggregate.*floors/);
-  assert.match(answer, /typecheck.*scripts and templates/);
-  assert.match(answer, /does not.*runtime coverage/);
+test("the coverage detail lives on the stat tooltip, not in a FAQ answer", () => {
+  const tooltip = proofSource.match(/<li title="([^"]*)">\s*<b>100%<\/b>/)?.[1];
+  assert.ok(tooltip, "the 100% stat needs a tooltip carrying the coverage scope");
+  assert.match(tooltip, /100%.*backend.*TypeScript/);
+  assert.match(tooltip, /Vue.*aggregate floors/);
+  assert.match(tooltip, /vue-tsc typechecks scripts and templates/);
+  assert.match(tooltip, /without establishing runtime coverage/);
+  assert.doesNotMatch(faqSource, /question: "[^"]*coverage/i);
+});
+
+test("hero H1 states the monitor-first stance and keeps a space between its lines", () => {
+  const hero = readFileSync(new URL("../src/components/hero.tsx", import.meta.url), "utf8");
+  assert.match(hero, /Know what changed <span>before anything updates<\/span>/);
+  assert.doesNotMatch(hero, /Container Update\s*<span>/);
+});
+
+test("hero offers the live demo as a CTA", () => {
+  const cta = readFileSync(new URL("../src/components/cta-buttons.tsx", import.meta.url), "utf8");
+  assert.match(cta, /placement === "hero"/);
+  assert.match(cta, /href="#demo"/);
+  assert.match(cta, /Try the live demo/);
+});
+
+test("features section leads with the lifecycle and lists Update Bouncer and approvals", () => {
+  const features = readFileSync(new URL("../src/components/features.tsx", import.meta.url), "utf8");
+  assert.match(features, /See it, check it, then update it/);
+  assert.match(features, /no paid tier/);
+  const titles = marketing.features.map((feature) => feature.title);
+  for (const title of ["Update Bouncer", "Approval Queue", "Image Backup", "Dry-Run Preview"]) {
+    assert.ok(titles.includes(title), `${title} needs a feature card`);
+  }
+  assert.doesNotMatch(siteContent, /Feature-flagged for safety/);
 });
 
 test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {

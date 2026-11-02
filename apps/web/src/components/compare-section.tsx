@@ -11,42 +11,32 @@ type FeatureValue = "yes" | "no" | "partial";
 interface FeatureRow {
   label: string;
   drydock: FeatureValue;
-  watchtower: FeatureValue;
+  wud: FeatureValue;
   diun: FeatureValue;
-  portainer: FeatureValue;
+  watchtower: FeatureValue;
 }
 
+// Cells are copied from the README feature comparison matrix (update managers).
 const featureRows: FeatureRow[] = [
-  { label: "Web UI", drydock: "yes", watchtower: "no", diun: "no", portainer: "yes" },
+  { label: "Web UI / dashboard", drydock: "yes", wud: "yes", diun: "no", watchtower: "no" },
+  { label: "Semver-aware updates", drydock: "yes", wud: "yes", diun: "partial", watchtower: "no" },
   {
-    label: "Update notifications",
+    label: "Image backup & rollback",
     drydock: "yes",
-    watchtower: "yes",
-    diun: "yes",
-    portainer: "partial",
-  },
-  {
-    label: "Multi-registry support",
-    drydock: "yes",
-    watchtower: "partial",
-    diun: "partial",
-    portainer: "partial",
-  },
-  {
-    label: "Vulnerability scanning",
-    drydock: "yes",
-    watchtower: "no",
+    wud: "partial",
     diun: "no",
-    portainer: "no",
+    watchtower: "no",
   },
-  { label: "Dry-run + rollback", drydock: "yes", watchtower: "no", diun: "no", portainer: "no" },
+  { label: "Vulnerability scanning", drydock: "yes", wud: "no", diun: "no", watchtower: "no" },
   {
     label: "Distributed agents",
     drydock: "yes",
-    watchtower: "partial",
+    wud: "partial",
     diun: "no",
-    portainer: "partial",
+    watchtower: "partial",
   },
+  // Where others win. Drydock has no RBAC yet (README matrix).
+  { label: "RBAC / multi-user roles", drydock: "no", wud: "yes", diun: "no", watchtower: "no" },
 ];
 
 function ViewAllLink() {
@@ -61,15 +51,15 @@ function ViewAllLink() {
   );
 }
 
-const tools = [SITE_CONFIG.name, "Portainer", "Diun", "Watchtower"] as const;
+const tools = [SITE_CONFIG.name, "WUD", "Diun", "Watchtower"] as const;
 type Tool = (typeof tools)[number];
 
 function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
   const map: Record<Tool, FeatureValue> = {
     [SITE_CONFIG.name]: row.drydock,
-    Watchtower: row.watchtower,
+    WUD: row.wud,
     Diun: row.diun,
-    Portainer: row.portainer,
+    Watchtower: row.watchtower,
   };
   return map[tool];
 }
@@ -81,7 +71,7 @@ export function CompareSection() {
         <SectionHeading
           eyebrow={`Why ${SITE_CONFIG.name}`}
           title="How we compare"
-          subtitle="A quick look at what we support that Portainer, Diun, and others don't."
+          subtitle="How Drydock stacks up against WUD, Diun and Watchtower (archived December 2025). Rows come from the README matrix, including one where WUD wins."
           align="right"
         />
 
@@ -158,6 +148,30 @@ export function CompareSection() {
               <ComparisonCellChip value="no" /> No
             </span>
           </div>
+        </div>
+
+        <div className="mt-6 space-y-3 text-sm text-[var(--tx-sec)]">
+          <p>
+            <b className="text-[var(--dd-text)]">Probably not for you yet:</b> Swarm, Kubernetes and
+            Nomad watchers, RBAC and multi-user roles, and a one-shot CI mode. Swarm, Kubernetes and
+            RBAC are planned for v2.0 and later. If you need any of them today, WUD is the closer
+            fit.
+          </p>
+          <p>
+            <b className="text-[var(--dd-text)]">Switching:</b> coming from WUD? Run{" "}
+            <code>docker exec -it drydock node dist/index.js config migrate --dry-run</code> to
+            preview the rewrite of your <code>WUD_*</code> variables and <code>wud.*</code> labels
+            to <code>DD_*</code> and <code>dd.*</code>. Coming from Watchtower, which was archived
+            in December 2025? Read the{" "}
+            <Link href="/compare/watchtower" className="underline underline-offset-4">
+              Watchtower comparison
+            </Link>{" "}
+            or the{" "}
+            <Link href="/compare/wud" className="underline underline-offset-4">
+              WUD comparison
+            </Link>
+            .
+          </p>
         </div>
 
         <div className="mt-8 text-center">

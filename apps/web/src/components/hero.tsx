@@ -23,11 +23,12 @@ export function Hero() {
               </Link>
             </p>
             <h1 id="hero-heading" className="website-display">
-              Container Update <span>Monitoring</span>
+              Know what changed <span>before anything updates</span>
             </h1>
             <p className="website-lede">
-              Self-hosted and open source. Drydock watches every container you&apos;re running,
-              flags what&apos;s outdated or exposed, and lets you roll out fixes on your terms.
+              Drydock watches your Docker containers and 23 registries, tells you what&apos;s
+              outdated and whether it&apos;s major, minor, patch or digest, and updates only when
+              you say so. Scans, backups and rollback are built in. Self-hosted, MIT licensed.
             </p>
             <CtaButtons align="start" placement="hero" />
           </div>
