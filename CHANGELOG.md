@@ -40,6 +40,7 @@ This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redact
 - An env value that is sensitive only because it is a URL with credentials (`MY_DSN=postgres://u:p@h/db`) kept its reveal control only until the container was stored. The SQLite store and the agent normalizer dropped the `sensitive` marker, and `[REDACTED]` can't be re-parsed as a URL, so the UI showed the masked value with no way to reveal it (#1523). The marker is now stored on redacted entries and kept on the agent path. Values were never exposed; no raw value is stored or logged.
 - The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
 - The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
+- Light themes: muted and secondary text (and the neutral status tone) now meet 4.5:1 contrast on every surface in all six families. The notification bell count badge uses a per-theme `--dd-danger-fg` foreground instead of white, which measured 2.2:1 on the dark themes.
 
 ## [1.8.0-rc.10] - 2026-10-31
 

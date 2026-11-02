@@ -334,3 +334,36 @@ describe('hardcoded white text on a --dd-primary background (component scan)', (
     expect(tagsWithHardcodedWhiteOnPrimary(source)).toEqual([]);
   });
 });
+
+// The light themes were never covered by the dark-theme text suite above, and their muted
+// text tokens (e.g. One Dark Light's #a0a1a7, about 2.1:1) failed 4.5:1 on most surfaces.
+describe('light theme text contrast (WCAG 2.2 normal-text target, 4.5:1)', () => {
+  describe.each(LIGHT_THEMES)('$name', ({ selector }) => {
+    const block = extractBlock(tokensSource, selector);
+
+    it.each(TEXT_VARS.flatMap((t) => SURFACE_VARS.map((s) => [t, s] as const)))(
+      'body text %s on surface %s clears 4.5:1',
+      (textVar, surfaceVar) => {
+        const ratio = contrastRatio(getHex(block, textVar), getHex(block, surfaceVar));
+        expect(ratio).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+      },
+    );
+  });
+});
+
+// The notification bell's count badge paints on a solid --dd-danger fill, so it needs a
+// per-theme foreground (hardcoded white measured 2.17:1 on the dark themes' pale danger).
+describe('--dd-danger-fg on --dd-danger (notification badge)', () => {
+  it.each(ALL_THEMES)('$name: clears 4.5:1', ({ selector }) => {
+    const block = extractBlock(tokensSource, selector);
+    expect(
+      contrastRatio(getHex(block, '--dd-danger'), getHex(block, '--dd-danger-fg')),
+    ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL_TEXT);
+  });
+
+  it('NotificationBell uses the token instead of text-white', () => {
+    const source = readFileSync(join(process.cwd(), 'src/components/NotificationBell.vue'), 'utf8');
+    expect(source).toContain('var(--dd-danger-fg)');
+    expect(source).not.toMatch(/badge-pulse[^>]*text-white/s);
+  });
+});
