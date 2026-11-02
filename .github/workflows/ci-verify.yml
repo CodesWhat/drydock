@@ -988,15 +988,23 @@ jobs:
   web:
     name: "Web: Site Build & Scripts Tests"
     # apps/web ships via Vercel (separate from the Docker image), and Vercel only
-    # runs `next build` — never the node:test scripts suite. This job is that gate.
+    # runs `next build` — never the node:test scripts suite. This job is that gate,
+    # and it also drives the production build in chromium, firefox and webkit.
     # Path-filtered: skips (→ counts as pass) on changesets that don't touch the
     # site, so it never blocks backend-only PRs.
     needs: [changes]
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30  # install + build (~5) + image pull + three-engine run with one retry
     permissions:
       contents: read
+    env:
+      # Pinned to match @playwright/test in apps/web/package.json. The image ships
+      # chromium, firefox and webkit with their system libraries, which `playwright
+      # install --with-deps` would need sudo (disabled by Harden Runner) and
+      # apt/cdn.playwright.dev egress to fetch. Pinned by digest as well as tag.
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:47b510dd9230bf0b9bfc9b20102241e577ea7a99334ab4c3ca19f19770e9b8ea
+      WEB_E2E_PORT: "3100"
 
     steps:
       - name: Harden Runner
@@ -1007,6 +1015,9 @@ jobs:
           # apps/web/src/app/layout.tsx downloads IBM Plex at build time, but
           # the web job only runs on web-path changes, so the gap stayed
           # invisible on every non-web PR after the block-mode flip.
+          # mcr.microsoft.com + *.data.mcr.microsoft.com: the Playwright image
+          # (registry endpoint and the blob host it redirects layers to). The
+          # browsers come from the image, so cdn.playwright.dev is not needed.
           allowed-endpoints: >
             github.com:443
             registry.npmjs.org:443
@@ -1014,6 +1025,8 @@ jobs:
             fonts.googleapis.com:443
             fonts.gstatic.com:443
             *.actions.githubusercontent.com:443
+            mcr.microsoft.com:443
+            *.data.mcr.microsoft.com:443
           disable-sudo: true
 
       - name: Checkout
@@ -1047,6 +1060,88 @@ jobs:
       - name: Build site (Next.js)
         run: npm run build
         working-directory: apps/web
+
+      - name: Verify Playwright image matches package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="$(node -p "require('./apps/web/package.json').devDependencies['@playwright/test']")"
+          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble(@sha256:[0-9a-f]{64})?$ ]]; then
+            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble optionally pinned with @sha256:<digest>."
+            exit 1
+          fi
+
+          image_version="${BASH_REMATCH[1]}"
+          if [[ "$package_version" != "$image_version" ]]; then
+            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but apps/web/package.json pins @playwright/test to $package_version."
+            exit 1
+          fi
+
+      - name: Pull Playwright image
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: docker pull "$PLAYWRIGHT_IMAGE"
+
+      # The production build, served on loopback. Third-party stats are fetched
+      # server-side and are allowed to fail (the page leaves them out), so the
+      # blocked egress here is fine.
+      - name: Start production site
+        shell: bash
+        working-directory: apps/web
+        run: |
+          set -euo pipefail
+          nohup node browser-tests/serve.mjs > "$RUNNER_TEMP/web-serve.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl --silent --fail --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error title=Site did not start::No answer on port ${WEB_E2E_PORT} after 60s"
+          { cat "$RUNNER_TEMP/web-serve.log" || true; }
+          exit 1
+
+      # --network host reaches the site on loopback; --ipc=host avoids browser
+      # /dev/shm exhaustion; --init reaps zombie browser processes. The config
+      # reuses the server started above. No continue-on-error: a failing engine
+      # fails the required check.
+      - name: Browser checks (chromium, firefox, webkit)
+        run: |
+          docker run --rm \
+            --init \
+            --network host \
+            --ipc=host \
+            --user "$(id -u):$(id -g)" \
+            -e CI=true \
+            -e HOME=/tmp \
+            -e WEB_E2E_PORT \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/apps/web \
+            "$PLAYWRIGHT_IMAGE" \
+            npx playwright test --retries=1
+        timeout-minutes: 12
+
+      - name: Upload browser check report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: web-browser-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            apps/web/playwright-report
+            apps/web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Stop production site
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          { pkill -f 'browser-tests/serve.mjs' || true; }
+          { pkill -f 'next start' || true; }
 
   build:
     name: "Build"
