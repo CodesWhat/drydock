@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import joi from 'joi';
 import Loki from 'lokijs';
-import { redactContainerRuntimeEnv } from '../api/container/shared.js';
+import {
+  isSensitiveEnvEntry,
+  REDACTED_ENV_VALUE,
+  redactContainerRuntimeEnv,
+} from '../api/container/shared.js';
 import logger from '../log/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runtime/paths.js';
 import { migrateInlineSboms } from '../security/sbom-migration.js';
@@ -118,8 +122,27 @@ function dropLegacySessionsCollection(): boolean {
   return true;
 }
 
-function redactPersistedRuntimeEnv(): boolean {
+function countNewlyRedactedEnvValues(
+  env: Array<{ key?: unknown; value?: unknown } | null>,
+): number {
+  return env.filter(
+    (entry) =>
+      !!entry &&
+      typeof entry.key === 'string' &&
+      isSensitiveEnvEntry(entry as { key: string; value?: unknown }) &&
+      entry.value !== REDACTED_ENV_VALUE,
+  ).length;
+}
+
+/**
+ * Rewrites persisted env values the current rules flag. It runs on every start
+ * and only touches docs that change, so a new credential name is picked up on
+ * the first start after an upgrade without a marker.
+ */
+function redactPersistedRuntimeEnv(): { changed: boolean; containers: number; values: number } {
   let changed = false;
+  let containers = 0;
+  let values = 0;
   for (const name of ['containers', 'updateOperations']) {
     const collection = db?.getCollection(name);
     if (!collection) continue;
@@ -135,9 +158,13 @@ function redactPersistedRuntimeEnv(): boolean {
         data: name === 'containers' ? redacted : { ...doc.data, container: redacted },
       });
       changed = true;
+      if (name === 'containers') {
+        containers += 1;
+        values += countNewlyRedactedEnvValues(container.details?.env);
+      }
     }
   }
-  return changed;
+  return { changed, containers, values };
 }
 
 function createCollections(): boolean {
@@ -227,9 +254,14 @@ async function loadDb(
     reject(err);
   } else {
     const redactedRuntimeEnv = redactPersistedRuntimeEnv();
+    if (redactedRuntimeEnv.values > 0) {
+      log.info(
+        `Redacted ${redactedRuntimeEnv.values} sensitive env values in ${redactedRuntimeEnv.containers} containers`,
+      );
+    }
     // Create collections
     const droppedLegacySessionsCollection = createCollections();
-    if (droppedLegacySessionsCollection || redactedRuntimeEnv) {
+    if (droppedLegacySessionsCollection || redactedRuntimeEnv.changed) {
       // Flush startup repairs now; the next autosave may never run before shutdown.
       await save();
     }

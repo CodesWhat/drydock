@@ -104,6 +104,22 @@ describe('api/container/shared', () => {
       expect(isSensitiveKey('BYPASS_RATE')).toBe(false);
     });
 
+    test('detects KEY only as an exact key segment (#1523)', () => {
+      expect(isSensitiveKey('ENCRYPTION_KEY')).toBe(true);
+      expect(isSensitiveKey('LITELLM_MASTER_KEY')).toBe(true);
+      expect(isSensitiveKey('LITELLM_SALT_KEY')).toBe(true);
+      expect(isSensitiveKey('KEY')).toBe(true);
+      expect(isSensitiveKey('key_id')).toBe(true);
+      expect(isSensitiveKey('CLIENTKEY')).toBe(true);
+      expect(isSensitiveKey('SIGNINGKEY')).toBe(true);
+      expect(isSensitiveKey('AWS_ACCESSKEY')).toBe(true);
+      expect(isSensitiveKey('MONKEY')).toBe(false);
+      expect(isSensitiveKey('KEYBOARD_LAYOUT')).toBe(false);
+      expect(isSensitiveKey('KEYMAP')).toBe(false);
+      expect(isSensitiveKey('COMPASS_KEYS')).toBe(false);
+      expect(isSensitiveKey('GIT_COMMIT_HASH')).toBe(false);
+    });
+
     test('detects PAT only as an exact key segment', () => {
       expect(isSensitiveKey('GITHUB_PAT')).toBe(true);
       expect(isSensitiveKey('PAT')).toBe(true);

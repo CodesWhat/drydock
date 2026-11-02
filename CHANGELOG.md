@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Env values under names with a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers` (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. The startup scrub runs on every start, so stores cleaned by rc.4 are cleaned again for the new names on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only).
+
+### Fixed
+
+- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
+
 ## [1.7.1-rc.4] — 2026-10-31
 
 This is the fourth release candidate for the 1.7.1 maintenance release. It includes all rc.3 changes, fixes four dependency advisories and backports environment redaction for the 1.7 JSON store. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
