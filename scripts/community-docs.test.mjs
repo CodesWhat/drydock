@@ -61,7 +61,7 @@ test('the roadmap preserves unfinished community requests', () => {
   }
   assert.match(section, /not implemented/u);
   assert.match(section, /DD_DEFAULTS_WATCH_DIGEST/u);
-  assert.match(section, /available for testing in v1\.8\.0-rc\.10/u);
+  assert.match(section, /available for testing in v1\.8\.0-rc\.11/u);
 });
 
 test('the current translation guide matches the UI-only Crowdin mapping', () => {

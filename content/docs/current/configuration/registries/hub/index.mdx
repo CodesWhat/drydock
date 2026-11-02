@@ -51,7 +51,7 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.10
+    image: codeswhat/drydock:1.8.0-rc.11
     ...
     environment:
       - DD_REGISTRY_HUB_PUBLIC_LOGIN=johndoe
@@ -65,7 +65,7 @@ docker run \
   -e DD_REGISTRY_HUB_PUBLIC_LOGIN="johndoe" \
   -e DD_REGISTRY_HUB_PUBLIC_TOKEN="example-token" \
   ...
-  codeswhat/drydock:1.8.0-rc.10
+  codeswhat/drydock:1.8.0-rc.11
 ```
 </Tab>
 </Tabs>
@@ -96,7 +96,7 @@ For example,
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.10
+    image: codeswhat/drydock:1.8.0-rc.11
     ...
     environment:
       - DD_REGISTRY_HUB_PUBLIC_AUTH=YOUR_BASE64_AUTH
@@ -108,7 +108,7 @@ services:
 docker run \
   -e DD_REGISTRY_HUB_PUBLIC_AUTH="YOUR_BASE64_AUTH" \
   ...
-  codeswhat/drydock:1.8.0-rc.10
+  codeswhat/drydock:1.8.0-rc.11
 ```
 </Tab>
 </Tabs>

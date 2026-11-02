@@ -5,6 +5,15 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.11 Highlights - November 1, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **`*_KEY` env values are now redacted.** Names such as `ENCRYPTION_KEY` and `LITELLM_MASTER_KEY` are stored and returned redacted, and existing stores are rescrubbed on the first start after upgrading. Backups taken before the upgrade and retained pre-1.8 JSON files are not scrubbed. Redaction goes by variable name, so a secret under an unrecognized name can still be stored as plaintext (#1523).
+- **Blank icons fixed.** The env value reveal button and the login password toggle render again (#1523).
+- **Website redesign.** New layout and theme families, and the `/docs` redirects are temporary again so browsers don't cache a stale docs version.
+- RC11 includes every rc.10 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.10 Highlights - October 31, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

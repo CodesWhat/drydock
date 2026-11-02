@@ -11,9 +11,16 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.11] - 2026-11-01
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redacts env values under `*_KEY` names such as `ENCRYPTION_KEY` and rescrubs existing stores on upgrade (#1523), fixes the env reveal and password toggle icons, and ships the redesigned website.
+
 ### Security
 
-- Env values under names ending in or containing a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers`, matching the debug dump's rules (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. Stores already cleaned by the earlier pass are cleaned once more on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only).
+- Env values under names ending in or containing a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers`, matching the debug dump's rules (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. Stores already cleaned by the earlier pass are cleaned once more on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only). Backups and volume snapshots taken before the upgrade are not scrubbed and keep whatever they held, and retained pre-1.8 JSON files are rollback snapshots that are also left as they are. Redaction goes by variable name, so a secret under a name Drydock doesn't recognize can still be stored as plaintext.
 
 ### Changed
 
@@ -3689,7 +3696,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...HEAD
+[1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11
 [1.8.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...v1.8.0-rc.10
 [1.8.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...v1.8.0-rc.9
 [1.8.0-rc.8]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.7...v1.8.0-rc.8
