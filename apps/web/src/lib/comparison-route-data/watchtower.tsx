@@ -43,7 +43,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
     radio: Radio,
     rotate: RotateCcw,
   },
-  metadataTitle: "Watchtower vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Watchtower Alternative: Drydock vs Watchtower",
   metadataDescription:
     "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025 — see how Drydock provides a modern, actively maintained alternative with a full UI, 23 registries, security scanning, and more.",
   metadataKeywords: [
@@ -61,13 +61,15 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   twitterDescription:
     "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025 — see how Drydock provides a modern, actively maintained alternative.",
   competitorName: "Watchtower",
-  heroTitle: "Watchtower vs Drydock",
+  heroTitle: "Watchtower alternative: Drydock vs Watchtower",
   heroDescription: (
     <p>
-      Watchtower served the Docker community well for years. With its{" "}
-      <strong className="text-neutral-900 dark:text-neutral-200">archival in December 2025</strong>,
-      Drydock offers an actively maintained alternative with a modern UI, security scanning, and
-      monitor-first design.
+      Watchtower was{" "}
+      <strong className="text-neutral-900 dark:text-neutral-200">archived in December 2025</strong>.
+      Its last release was v1.7.1 in November 2023, and an unofficial community fork,
+      nicholas-fedor/watchtower, is still released. Drydock is an actively maintained, MIT-licensed
+      alternative with a web dashboard, dry-run preview, image backup and automatic rollback on
+      health-check failure, and it checks 23 registries.
     </p>
   ),
   competitorBadge: {
@@ -85,7 +87,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   migrationTitle: "Coming from Watchtower?",
   migrationDescription:
     "Drydock takes a different approach than Watchtower — it's monitor-first rather than update-first. This means you get visibility into what's available before anything changes. Getting started takes one Docker command, and you can have the dashboard running in under a minute.",
-  jsonLdName: "Watchtower vs Drydock — Container Update Monitoring Comparison",
+  jsonLdName: "Watchtower Alternative: Drydock vs Watchtower",
   jsonLdDescription:
     "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025.",
 } satisfies ComparisonRouteRawConfig;

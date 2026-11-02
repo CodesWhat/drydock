@@ -99,6 +99,15 @@ test("faq component wraps questions in h2 elements", () => {
   assert.match(faqComponentSource, /<h2>/);
 });
 
+test("faq answers are always in the markup and hidden when collapsed", () => {
+  // Conditional rendering (`isOpen && <p>`) kept answers out of the server HTML
+  // and left aria-controls pointing at ids that did not exist.
+  assert.doesNotMatch(faqComponentSource, /isOpen\s*&&/);
+  const answer = faqComponentSource.match(/<p\s[^>]*id=\{answerId\}[\s\S]*?<\/p>/)?.[0] ?? "";
+  assert.match(answer, /hidden=\{!isOpen\}/);
+  assert.match(answer, /\{item\.answer\}/);
+});
+
 test("faq component uses useState for open/close state", () => {
   assert.match(faqComponentSource, /useState/);
 });

@@ -48,14 +48,15 @@ export function FAQ() {
                       </span>
                     </button>
                   </h2>
-                  {isOpen && (
-                    <p
-                      id={answerId}
-                      className="px-6 pb-5 pt-1 text-sm leading-relaxed text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
-                    >
-                      {item.answer}
-                    </p>
-                  )}
+                  {/* Always rendered so the answer is in the server HTML and
+                      aria-controls resolves; collapsed answers are hidden. */}
+                  <p
+                    id={answerId}
+                    hidden={!isOpen}
+                    className="px-6 pb-5 pt-1 text-sm leading-relaxed text-[var(--tx-sec)] dark:text-[var(--tx-sec)]"
+                  >
+                    {item.answer}
+                  </p>
                 </div>
               );
             })}
