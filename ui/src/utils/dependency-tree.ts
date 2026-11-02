@@ -60,7 +60,9 @@ export function buildDependencyTrees(
       entries.push({ id, depth });
       const children = (adjacency.childIdsByParent.get(id) ?? [])
         .filter((childId) => present.has(childId) && !visited.has(childId))
-        .sort((left, right) => (orderIndex.get(left) ?? 0) - (orderIndex.get(right) ?? 0));
+        .sort(
+          (left, right) => (orderIndex.get(left) as number) - (orderIndex.get(right) as number),
+        );
       for (const childId of children) {
         if (!visited.has(childId)) {
           walk(childId, depth + 1);
