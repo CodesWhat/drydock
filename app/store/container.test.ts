@@ -715,7 +715,7 @@ describe('redactStoredRuntimeEnv', () => {
     });
     container.getContainersRaw();
 
-    expect(container.redactStoredRuntimeEnv()).toBe(1);
+    expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 1, values: 1 });
 
     const stored = JSON.stringify(db.prepare('SELECT details FROM containers').all());
     expect(stored).not.toContain('super-secret-password');
@@ -735,8 +735,46 @@ describe('redactStoredRuntimeEnv', () => {
       env: [{ key: 'API_TOKEN', value: 'secret' }],
     });
 
-    expect(container.redactStoredRuntimeEnv()).toBe(1);
-    expect(container.redactStoredRuntimeEnv()).toBe(0);
+    expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 1, values: 1 });
+    expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 0, values: 0 });
+  });
+
+  test('drops malformed env entries without counting them as redacted values', () => {
+    writeRawDetails('odd', {
+      ports: [],
+      volumes: [],
+      env: [null, { value: 'no-key' }, { key: 'ENCRYPTION_KEY', value: '[REDACTED]' }],
+    });
+
+    expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 1, values: 0 });
+  });
+
+  test('counts values and containers, and rescrubs key-named values left by the earlier scrub (#1523)', () => {
+    writeRawDetails('a', {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'DB_PASSWORD', value: '[REDACTED]' },
+        { key: 'ENCRYPTION_KEY', value: 'enc-plain' },
+        { key: 'LITELLM_MASTER_KEY', value: 'master-plain' },
+      ],
+    });
+    writeRawDetails('b', {
+      ports: [],
+      volumes: [],
+      env: [
+        { key: 'LITELLM_SALT_KEY', value: 'salt-plain' },
+        { key: 'MONKEY', value: 'banana' },
+      ],
+    });
+
+    expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 2, values: 3 });
+
+    const stored = JSON.stringify(db.prepare('SELECT details FROM containers').all());
+    expect(stored).not.toContain('enc-plain');
+    expect(stored).not.toContain('master-plain');
+    expect(stored).not.toContain('salt-plain');
+    expect(stored).toContain('banana');
   });
 });
 

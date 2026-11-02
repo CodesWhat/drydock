@@ -160,7 +160,7 @@ const {
       rehydrateUpdateLifecycleCacheFromStore: vi.fn(),
       rehydrateUpdatePolicyRetentionCacheFromStore: vi.fn(),
       reconcileGroupPolicySnapshots: vi.fn(),
-      redactStoredRuntimeEnv: vi.fn(() => 0),
+      redactStoredRuntimeEnv: vi.fn(() => ({ containers: 0, values: 0 })),
       ...overrides,
     };
   }
@@ -465,7 +465,9 @@ describe('Store Module', () => {
       ...(exec ? { exec: vi.fn(exec) } : {}),
     });
     registerCommonMocks({
-      container: { redactStoredRuntimeEnv: vi.fn(() => redacted) },
+      container: {
+        redactStoredRuntimeEnv: vi.fn(() => ({ containers: redacted, values: redacted * 2 })),
+      },
       fs: { renameSync: vi.fn() },
       sqliteOpenDatabase: vi.fn(() => sqliteDb),
     });
@@ -483,7 +485,7 @@ describe('Store Module', () => {
     expect(sqliteDb.pragma).toHaveBeenCalledWith('wal_checkpoint', 'TRUNCATE');
     expect(importModule.writeStoreMetadata).toHaveBeenCalledWith(
       sqliteDb,
-      'env_redaction_at_rest_completed',
+      'env_redaction_at_rest_v2_completed',
       expect.any(String),
     );
   });
@@ -493,6 +495,43 @@ describe('Store Module', () => {
 
     expect(sqliteDb.exec).toHaveBeenCalledWith('VACUUM');
     expect(importModule.writeStoreMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  test('should scrub again when only the first-generation marker is present (#1523)', async () => {
+    vi.resetModules();
+    const sqliteDb = createSqliteDbMock();
+    const redactStoredRuntimeEnv = vi.fn(() => ({ containers: 2, values: 5 }));
+    registerCommonMocks({
+      container: { redactStoredRuntimeEnv },
+      fs: { renameSync: vi.fn() },
+      sqliteOpenDatabase: vi.fn(() => sqliteDb),
+    });
+    const importModule: any = await import('./db/import.js');
+    importModule.readStoreMetadata.mockImplementation((_db: unknown, key: string) =>
+      key === 'env_redaction_at_rest_completed' ? '2026-10-30T00:00:00.000Z' : undefined,
+    );
+    const storeUnderTest = await import('./index.js');
+    await storeUnderTest.init({ memory: false });
+
+    expect(redactStoredRuntimeEnv).toHaveBeenCalledTimes(1);
+    expect(sqliteDb.exec).toHaveBeenCalledWith('VACUUM');
+    expect(importModule.writeStoreMetadata).toHaveBeenCalledWith(
+      sqliteDb,
+      'env_redaction_at_rest_v2_completed',
+      expect.any(String),
+    );
+    const logger = (await import('../log/index.js')).default;
+    expect(storeScopedLog(logger).info).toHaveBeenCalledWith(
+      'Redacted 5 sensitive env values in 2 containers',
+    );
+  });
+
+  test('should log nothing about redaction when no values needed it (#1523)', async () => {
+    await initRedactionCleanup({ redacted: 0 });
+    const logger = (await import('../log/index.js')).default;
+    expect(storeScopedLog(logger).info).not.toHaveBeenCalledWith(
+      expect.stringContaining('Redacted'),
+    );
   });
 
   test('should skip redaction, vacuum and checkpoint once the marker is set (#1523)', async () => {
@@ -556,7 +595,7 @@ describe('Store Module', () => {
   test('should skip the vacuum in memory mode even when rows were rewritten (#1523)', async () => {
     vi.resetModules();
     registerCommonMocks({
-      container: { redactStoredRuntimeEnv: vi.fn(() => 1) },
+      container: { redactStoredRuntimeEnv: vi.fn(() => ({ containers: 1, values: 1 })) },
       fs: { renameSync: vi.fn() },
     });
 

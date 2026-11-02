@@ -155,8 +155,11 @@ function checkpointSqliteDatabase(): boolean {
   return Number(busy ?? 0) === 0;
 }
 
-/** Marker in `store_metadata`: the #1523 compaction finished, so it never runs again. */
-const ENV_REDACTION_MARKER_KEY = 'env_redaction_at_rest_completed';
+/**
+ * Marker in `store_metadata`: the #1523 compaction finished, so it never runs again.
+ * v2 (the `*_KEY` names): a store that carries the v1 marker is scrubbed once more.
+ */
+const ENV_REDACTION_MARKER_KEY = 'env_redaction_at_rest_v2_completed';
 const REDACTION_CHECKPOINT_ATTEMPTS = 3;
 const REDACTION_CHECKPOINT_RETRY_DELAY_MS = 100;
 
@@ -189,13 +192,15 @@ function redactStoredEnvAtRest(): void {
     return;
   }
   try {
-    const redactedRows =
-      container.redactStoredRuntimeEnv() + updateOperation.redactStoredContainerSnapshots();
+    const redactedEnv = container.redactStoredRuntimeEnv();
+    updateOperation.redactStoredContainerSnapshots();
     if (isMemoryMode) {
       return;
     }
-    if (redactedRows > 0) {
-      log.info(`Redacted sensitive env values in ${redactedRows} stored record(s)`);
+    if (redactedEnv.values > 0) {
+      log.info(
+        `Redacted ${redactedEnv.values} sensitive env values in ${redactedEnv.containers} containers`,
+      );
     }
     db.exec('VACUUM');
     if (!checkpointUntilNotBusy()) {

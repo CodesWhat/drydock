@@ -11,6 +11,14 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- Env values under names ending in or containing a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers`, matching the debug dump's rules (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. Stores already cleaned by the earlier pass are cleaned once more on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only).
+
+### Fixed
+
+- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
+
 ## [1.8.0-rc.10] - 2026-10-31
 
 > [!WARNING]
