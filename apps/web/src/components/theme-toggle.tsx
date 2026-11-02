@@ -19,7 +19,7 @@ const SWATCHES: Record<string, [string, string, string, string]> = {
   ayu: ["#242936", "#ffcc66", "#fcfcfc", "#f29718"],
 };
 
-export function ThemeToggle() {
+export function ThemeToggle({ inline = false }: { inline?: boolean }) {
   const { resolvedTheme, setTheme } = useTheme();
   const mounted = useSyncExternalStore(
     subscribeNoop,
@@ -66,6 +66,56 @@ export function ThemeToggle() {
 
   const familyLabel = THEME_FAMILIES.find((item) => item.id === family)?.label ?? "Theme";
   const summaryLabel = mounted && resolvedTheme ? `${familyLabel} · ${resolvedTheme}` : "Theme";
+
+  const panelBody = (
+    <div
+      className={inline ? "website-theme-panel website-theme-panel--inline" : "website-theme-panel"}
+    >
+      <p className="website-eyebrow">Colour theme</p>
+      <div className="website-theme-families">
+        {THEME_FAMILIES.map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            aria-pressed={family === item.id}
+            onClick={() => chooseFamily(item.id)}
+          >
+            <span className="website-swatch" aria-hidden="true">
+              {(SWATCHES[item.id] ?? []).map((color) => (
+                <i key={color} style={{ background: color }} />
+              ))}
+            </span>
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="website-theme-modes">
+        <button
+          type="button"
+          aria-pressed={mounted && resolvedTheme === "light"}
+          onClick={() => setTheme("light")}
+        >
+          <Sun size={14} />
+          Light
+        </button>
+        <button
+          type="button"
+          aria-pressed={mounted && resolvedTheme === "dark"}
+          onClick={() => setTheme("dark")}
+        >
+          <Moon size={14} />
+          Dark
+        </button>
+      </div>
+      <p className="website-theme-note">
+        The same six theme families as the app. Esc closes this panel.
+      </p>
+    </div>
+  );
+
+  // inline: the panel alone, always visible (used by the docs mobile menu so a theme
+  // change is one tap after opening the menu).
+  if (inline) return panelBody;
 
   return (
     <details className="website-themes" ref={panel}>
