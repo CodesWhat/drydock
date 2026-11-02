@@ -47,6 +47,9 @@ const quality: Badge[] = [
   },
 ];
 
+const COVERAGE_SCOPE =
+  "CI enforces 100% line, branch, function and statement coverage on the backend sources and UI TypeScript files. Vue components have separate aggregate floors, and vue-tsc typechecks scripts and templates without establishing runtime coverage.";
+
 export async function GitHubBadges() {
   // GITHUB_STATS_AUTH is optional and server-only (no NEXT_PUBLIC_ prefix).
   const live = await fetchLiveStats(
@@ -69,7 +72,7 @@ export async function GitHubBadges() {
         <li>
           <b>21</b> triggers
         </li>
-        <li title="CI enforces 100% line, branch, function and statement coverage on the backend sources and UI TypeScript files. Vue components have separate aggregate floors, and vue-tsc typechecks scripts and templates without establishing runtime coverage.">
+        <li>
           <b>100%</b> TS coverage
         </li>
         {liveStats.map((stat) => (
@@ -86,6 +89,9 @@ export async function GitHubBadges() {
           </a>
         </li>
       </ul>
+      <p className="website-proof-note">
+        <b>Coverage scope:</b> {COVERAGE_SCOPE}
+      </p>
       <ul className="website-proof-badges" aria-label="Project badges">
         {quality.map((badge) => (
           <li key={badge.alt}>
