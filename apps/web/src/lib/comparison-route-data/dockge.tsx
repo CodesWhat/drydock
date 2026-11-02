@@ -74,5 +74,4 @@ radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR,
   migrationDescription:
     "Drydock and Dockge complement each other well. Use Dockge to manage your compose files and Drydock to monitor for image updates and apply them safely. One Docker command to add Drydock to your stack.",
   jsonLdName: "Dockge vs Drydock — Docker Compose & Container Update Comparison",
-  jsonLdDescription: "Compare Dockge and Drydock for Docker container management.",
 } satisfies ComparisonRouteRawConfig;

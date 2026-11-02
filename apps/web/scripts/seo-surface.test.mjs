@@ -56,9 +56,10 @@ test("site title and description carry the search phrase and the README counts",
   assert.match(siteConfig.SITE_CONFIG.description, /23 registries/);
   assert.match(siteConfig.SITE_CONFIG.description, /21 triggers/);
   assert.ok(siteConfig.SITE_CONFIG.description.length <= 160);
-  const page = read("../src/app/page.tsx");
-  assert.match(page, /description: SITE_CONFIG\.description/);
-  assert.doesNotMatch(page, /built in TypeScript/);
+  const structured = read("../src/lib/structured-data.ts");
+  assert.match(structured, /description: SITE_CONFIG\.description/);
+  assert.doesNotMatch(structured, /built in TypeScript/);
+  assert.doesNotMatch(read("../src/app/page.tsx"), /built in TypeScript/);
 });
 
 test("llms.txt is built in llmstxt.org shape from resolved links", () => {

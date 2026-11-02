@@ -88,6 +88,4 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   migrationDescription:
     "Drydock takes a different approach than Watchtower — it's monitor-first rather than update-first. This means you get visibility into what's available before anything changes. Getting started takes one Docker command, and you can have the dashboard running in under a minute.",
   jsonLdName: "Watchtower Alternative: Drydock vs Watchtower",
-  jsonLdDescription:
-    "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025.",
 } satisfies ComparisonRouteRawConfig;

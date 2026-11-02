@@ -77,5 +77,4 @@ bell|Additional Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft 
   migrationDescription:
     "We're a direct WUD fork, so migration is straightforward. Your existing Docker socket mount works as-is. You'll get the same monitoring capabilities plus security scanning, agents, audit log, and a modernized UI.",
   jsonLdName: "WUD vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare What's Up Docker (WUD) and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;

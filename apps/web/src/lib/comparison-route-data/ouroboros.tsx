@@ -88,6 +88,4 @@ bell|21 Trigger Integrations|Drydock notifies across 17 native channels, Slack, 
   migrationDescription:
     "Ouroboros hasn't been updated in years. Drydock gives you the same auto-update capability plus a full dashboard, security scanning, rollback, and much more. One Docker command to get started.",
   jsonLdName: "Ouroboros vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription:
-    "Compare Ouroboros and Drydock for container update monitoring. Ouroboros is no longer maintained.",
 } satisfies ComparisonRouteRawConfig;

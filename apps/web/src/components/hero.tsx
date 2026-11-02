@@ -23,7 +23,7 @@ export function Hero() {
               </Link>
             </p>
             <h1 id="hero-heading" className="website-display">
-              Container Update<span>Monitoring</span>
+              Container Update <span>Monitoring</span>
             </h1>
             <p className="website-lede">
               Self-hosted and open source. Drydock watches every container you&apos;re running,

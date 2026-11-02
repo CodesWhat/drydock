@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { ADVISORIES } from "@/lib/advisories";
 import { getComparisonRouteSlugs } from "@/lib/comparison-route-data";
 import { BASE_URL, DOCS_ROOT } from "@/lib/site-config";
 import { source } from "@/lib/source";
@@ -23,10 +24,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: BASE_URL },
     { url: `${BASE_URL}/compare` },
     ...comparePages,
-    {
-      url: `${BASE_URL}/security/trivy-supply-chain-march-2026`,
-      lastModified: new Date("2026-03-22"),
-    },
+    { url: `${BASE_URL}/security` },
+    ...ADVISORIES.map((advisory) => ({
+      url: `${BASE_URL}/security/${advisory.slug}`,
+      lastModified: new Date(advisory.dateModified),
+    })),
     ...docPages,
   ];
 }
