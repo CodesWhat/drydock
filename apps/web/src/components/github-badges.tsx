@@ -1,5 +1,6 @@
 import { Heart } from "lucide-react";
-import { GITHUB_URL, REPO_SLUG } from "@/lib/site-config";
+import { fetchLiveStats, formatCount } from "@/lib/live-stats";
+import { DOCKER_HUB_URL, GITHUB_URL, REPO_SLUG, SITE_CONFIG } from "@/lib/site-config";
 
 type Badge = { href: string; src: string; alt: string };
 
@@ -46,7 +47,19 @@ const quality: Badge[] = [
   },
 ];
 
-export function GitHubBadges() {
+export async function GitHubBadges() {
+  // GITHUB_STATS_AUTH is optional and server-only (no NEXT_PUBLIC_ prefix).
+  const live = await fetchLiveStats(
+    { repoSlug: REPO_SLUG, dockerImage: SITE_CONFIG.dockerImage },
+    { auth: process.env.GITHUB_STATS_AUTH || undefined },
+  );
+  const liveStats = [
+    { value: live.stars, label: "stars", href: `${GITHUB_URL}/stargazers` },
+    { value: live.downloads, label: "downloads", href: DOCKER_HUB_URL },
+    { value: live.forks, label: "forks", href: `${GITHUB_URL}/forks` },
+    { value: live.openIssues, label: "open issues", href: `${GITHUB_URL}/issues` },
+  ].filter((stat): stat is typeof stat & { value: number } => stat.value !== undefined);
+
   return (
     <div className="website-proof">
       <ul className="website-proof-stats" aria-label="Product facts">
@@ -56,12 +69,16 @@ export function GitHubBadges() {
         <li>
           <b>21</b> triggers
         </li>
-        <li>
+        <li title="CI enforces 100% line, branch, function and statement coverage on the backend sources and UI TypeScript files. Vue components have separate aggregate floors, and vue-tsc typechecks scripts and templates without establishing runtime coverage.">
           <b>100%</b> TS coverage
         </li>
-        <li>
-          <b>MIT</b> license
-        </li>
+        {liveStats.map((stat) => (
+          <li key={stat.label}>
+            <a href={stat.href} target="_blank" rel="noopener noreferrer">
+              <b>{formatCount(stat.value)}</b> {stat.label}
+            </a>
+          </li>
+        ))}
         <li>
           <a href="https://github.com/sponsors/CodesWhat" target="_blank" rel="noopener noreferrer">
             <Heart size={14} aria-hidden="true" />

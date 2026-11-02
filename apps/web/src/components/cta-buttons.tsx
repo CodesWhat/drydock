@@ -1,4 +1,4 @@
-import { BookOpen } from "lucide-react";
+import { BookOpen, Play } from "lucide-react";
 import { GithubIcon } from "@/components/github-icon";
 import { TrackedLink } from "@/components/tracked-link";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,14 @@ export function CtaButtons({
           Documentation
         </TrackedLink>
       </Button>
+      {placement === "hero" ? (
+        <Button variant="outline" size="lg" className="w-auto" asChild>
+          <a href="#demo">
+            <Play className="h-4 w-4" />
+            Try the live demo
+          </a>
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -43,9 +43,9 @@ bell|21 Trigger Integrations|Drydock notifies across 17 native channels, Slack, 
     rotate: RotateCcw,
     bell: Bell,
   },
-  metadataTitle: "Ouroboros vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Ouroboros Alternative: Drydock vs Ouroboros",
   metadataDescription:
-    "Compare Ouroboros and Drydock for container update monitoring. Ouroboros is no longer maintained — see how Drydock provides a modern, actively maintained alternative with a full UI, security scanning, and more.",
+    "Ouroboros is no longer maintained. Drydock is an active alternative with a web UI, vulnerability scanning and rollback.",
   metadataKeywords: [
     "ouroboros vs drydock",
     "ouroboros alternative",
@@ -88,6 +88,4 @@ bell|21 Trigger Integrations|Drydock notifies across 17 native channels, Slack, 
   migrationDescription:
     "Ouroboros hasn't been updated in years. Drydock gives you the same auto-update capability plus a full dashboard, security scanning, rollback, and much more. One Docker command to get started.",
   jsonLdName: "Ouroboros vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription:
-    "Compare Ouroboros and Drydock for container update monitoring. Ouroboros is no longer maintained.",
 } satisfies ComparisonRouteRawConfig;

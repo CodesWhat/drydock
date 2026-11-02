@@ -268,7 +268,7 @@ html[data-product="drydock"] body {
   letter-spacing: 0.08em;
 }
 .website-display {
-  font-size: clamp(48px, 5.6vw, 84px);
+  font-size: clamp(40px, 4.6vw, 68px);
   line-height: 0.95;
   letter-spacing: -0.02em;
   margin: 0;
@@ -313,6 +313,11 @@ html[data-product="drydock"] body {
   gap: 8px;
   font-size: 12px;
   text-transform: uppercase;
+  color: var(--tx-sec);
+}
+.website-proof-stats li + li::before {
+  content: "\00b7";
+  margin: 0 9px 0 -9px;
   color: var(--tx-sec);
 }
 .website-proof-stats b {
@@ -384,9 +389,34 @@ html[data-product="drydock"] body {
 }
 .website-footer-social a {
   display: inline-flex;
-  min-width: 24px;
-  min-height: 24px;
+  width: 36px;
+  height: 36px;
   align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dd-border-strong);
+  border-radius: 4px;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+.website-footer-social a:hover {
+  background: var(--dd-hover-overlay);
+  border-color: var(--dd-primary);
+}
+.website-here-pill {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--dd-primary) 15%, transparent);
+  color: var(--dd-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.website-matrix-name {
+  color: var(--dd-primary);
 }
 .website-footer-bottom {
   display: flex;
@@ -539,7 +569,7 @@ html[data-product="drydock"]:not(.dark) .website-docs #nd-sidebar a[data-active=
   box-shadow: 1px 0 0 var(--dd-border-strong);
 }
 .website-matrix-row--highlight {
-  --matrix-tint: color-mix(in srgb, var(--dd-success) 8%, transparent);
+  --matrix-tint: color-mix(in srgb, var(--dd-primary) 12%, transparent);
   background: var(--matrix-tint);
 }
 .website-matrix-row--highlight .website-matrix-sticky {
@@ -938,4 +968,75 @@ html[data-product="drydock"]:not(.dark) .website-docs #nd-sidebar a[data-active=
   .website-header-inner {
     gap: 6px;
   }
+}
+
+/* Drydock column in the homepage comparison teaser: the theme's primary, like the matrix row. */
+.website-compare-self-head {
+  background: color-mix(in srgb, var(--dd-primary) 15%, transparent);
+  color: var(--dd-primary);
+}
+.website-compare-self-cell {
+  background: color-mix(in srgb, var(--dd-primary) 8%, transparent);
+}
+
+/* Interactive states: one short transition so hover and focus changes don't snap.
+   Reduced motion is handled globally in globals.css. */
+.website-proof-stats a,
+.website-proof-badges a,
+.website-theme-panel button,
+.website-mobile-panel a,
+.website-demo-views button,
+.website-demo-bar button,
+.website-matrix-scroll tbody tr,
+.website-footer a {
+  transition:
+    color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+.website-proof-stats a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.website-proof-badges a:hover {
+  opacity: 0.8;
+}
+.website-theme-panel button:hover,
+.website-mobile-panel a:hover,
+.website-matrix-scroll tbody tr:not(.website-matrix-row--highlight):hover {
+  background: var(--dd-hover-overlay);
+}
+@media (prefers-reduced-motion: reduce) {
+  .website-proof-stats a,
+  .website-proof-badges a,
+  .website-theme-panel button,
+  .website-mobile-panel a,
+  .website-demo-views button,
+  .website-demo-bar button,
+  .website-matrix-scroll tbody tr,
+  .website-footer a,
+  .website-footer-social a {
+    transition: none;
+  }
+}
+
+/* Star History chart: both themes render, the active one shows. */
+.website-star-chart {
+  display: block;
+  max-width: 800px;
+  margin-inline: auto;
+}
+.website-star-chart img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 800 / 533;
+}
+.website-star-chart img.website-star-chart-dark,
+.dark .website-star-chart img.website-star-chart-light {
+  display: none;
+}
+.dark .website-star-chart img.website-star-chart-dark {
+  display: block;
 }

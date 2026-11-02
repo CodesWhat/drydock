@@ -1,6 +1,8 @@
 import {
+  Archive,
   BarChart3,
   Bell,
+  ClipboardCheck,
   Container,
   Eye,
   History,
@@ -10,6 +12,7 @@ import {
   Play,
   Radio,
   RotateCcw,
+  ShieldCheck,
   Webhook,
 } from "lucide-react";
 
@@ -89,7 +92,34 @@ export const features: Feature[] = [
     color: "text-cyan-500 dark:text-cyan-400",
     bg: "bg-cyan-100 dark:bg-cyan-900/50",
     description:
-      "Preview updates before applying them. Pre-update image backup with one-click rollback.",
+      "Preview what an update would do before it touches a container. Turn on DRYRUN first, then switch it off when you trust the result.",
+    category: "operations",
+  },
+  {
+    icon: Archive,
+    title: "Image Backup",
+    color: "text-slate-500 dark:text-slate-400",
+    bg: "bg-slate-100 dark:bg-slate-900/50",
+    description:
+      "Keeps the previous image before each update (3 by default, configurable), so you can roll back in one click.",
+    category: "operations",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Update Bouncer",
+    color: "text-red-500 dark:text-red-400",
+    bg: "bg-red-100 dark:bg-red-900/50",
+    description:
+      "Trivy or Grype scanning blocks unsafe updates before they deploy. Adds cosign signature checks and CycloneDX and SPDX SBOMs.",
+    category: "security",
+  },
+  {
+    icon: ClipboardCheck,
+    title: "Approval Queue",
+    color: "text-lime-500 dark:text-lime-400",
+    bg: "bg-lime-100 dark:bg-lime-900/50",
+    description:
+      "Hold updates for a human to approve before anything runs. Available in the v1.8 release candidate.",
     category: "operations",
   },
   {
@@ -134,7 +164,7 @@ export const features: Feature[] = [
     color: "text-indigo-500 dark:text-indigo-400",
     bg: "bg-indigo-100 dark:bg-indigo-900/50",
     description:
-      "Automatic rollback on health check failure. Configurable image backup retention policies.",
+      "Rolls back on its own when the new container fails its health check. Set dd.rollback.auto=true to keep watching after the update.",
     category: "operations",
   },
   {
@@ -143,7 +173,7 @@ export const features: Feature[] = [
     color: "text-green-500 dark:text-green-400",
     bg: "bg-green-100 dark:bg-green-900/50",
     description:
-      "Start, stop, and restart containers directly from the UI or API. Feature-flagged for safety.",
+      "Start, stop, restart and update containers from the UI or API. On by default; set DD_SERVER_FEATURE_CONTAINERACTIONS=false to turn it off.",
     category: "operations",
   },
   {
