@@ -44,9 +44,9 @@ eye|Lightweight & Focused|We keep Drydock under 80MB RAM with a single focused p
     radio: Radio,
     eye: Eye,
   },
-  metadataTitle: "Portainer vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Portainer vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Portainer and Drydock for container update monitoring. Portainer is a full container management platform — see how Drydock's focused update monitoring with rollback, security scanning, and 23 registries offers a lightweight alternative.",
+    "Portainer manages whole stacks. Drydock focuses on update monitoring with rollback, security scanning and 23 registries.",
   metadataKeywords: [
     "portainer vs drydock",
     "portainer alternative",

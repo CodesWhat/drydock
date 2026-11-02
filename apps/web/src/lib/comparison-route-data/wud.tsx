@@ -29,7 +29,7 @@ Test framework|Jest|Vitest 4|self
 License|MIT|MIT|tie
 `,
   highlightsTable: `
-git-branch|Fork & Evolve|We started as a WUD fork, then migrated to TypeScript, added security scanning, distributed agents, audit logging, and dozens of new features — taking WUD's foundation much further.
+git-branch|Migration Command|A built-in config migrate command previews, then rewrites your WUD_* variables and wud.* labels to DD_* and dd.*.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and Update Bouncer to block vulnerable deploys — none of which WUD includes.
 network|Distributed Agents|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard — no need to expose the Docker API over TCP. WUD supports multiple Docker hosts too, but requires the remote Docker API to be exposed over TCP or TLS.
 radio|23 Registry Providers|11 more registries than WUD — including GAR, Harbor, Artifactory, Nexus, Alibaba Cloud, IBM Cloud, and Oracle Cloud.
@@ -44,9 +44,9 @@ bell|Additional Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft 
     rotate: RotateCcw,
     bell: Bell,
   },
-  metadataTitle: "WUD vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "WUD Alternative: Drydock vs WUD",
   metadataDescription:
-    "Compare What's Up Docker (WUD) and Drydock for container update monitoring. Drydock is a WUD fork with security scanning, distributed agents, audit logging, rollback, and many more features.",
+    "Drydock and WUD compared. Drydock adds vulnerability scanning, image backup and rollback. WUD has RBAC and a one-shot CI mode.",
   metadataKeywords: [
     "wud vs drydock",
     "what's up docker vs drydock",
@@ -58,23 +58,23 @@ bell|Additional Trigger Services|Google Chat, Matrix, Mattermost, and Microsoft 
     "what's up docker replacement",
   ],
   openGraphDescription:
-    "Compare What's Up Docker (WUD) and Drydock. Drydock is a WUD fork with security scanning, agents, audit logging, and more.",
+    "Compare What's Up Docker (WUD) and Drydock: security scanning, agents, audit logging and rollback, plus where WUD is ahead.",
   twitterDescription:
-    "Compare What's Up Docker (WUD) and Drydock. Drydock is a WUD fork with security scanning, agents, audit logging, and more.",
+    "Compare What's Up Docker (WUD) and Drydock: security scanning, agents, audit logging and rollback, plus where WUD is ahead.",
   competitorName: "WUD",
   heroTitle: "WUD vs Drydock",
   heroDescription: (
     <p>
-      We forked{" "}
       <strong className="text-neutral-900 dark:text-neutral-200">
         What&apos;s Up Docker (WUD)
       </strong>{" "}
-      and have evolved significantly since — migrating to TypeScript, adding security scanning,
-      distributed agents, audit logging, rollback, and 11 additional registry providers.
+      is the closest alternative to Drydock. Both watch your containers and update them on your
+      terms. Drydock adds security scanning, distributed agents, audit logging, and rollback. WUD
+      has RBAC and a one-shot CI mode.
     </p>
   ),
   migrationTitle: "Coming from WUD?",
   migrationDescription:
-    "We're a direct WUD fork, so migration is straightforward. Your existing Docker socket mount works as-is. You'll get the same monitoring capabilities plus security scanning, agents, audit log, and a modernized UI.",
+    "Run config migrate --dry-run inside the Drydock container to preview how your WUD_* variables and wud.* labels map to DD_* and dd.*, then rewrite them. Since v1.6, Drydock no longer reads WUD_* or wud.* at runtime.",
   jsonLdName: "WUD vs Drydock — Container Update Monitoring Comparison",
 } satisfies ComparisonRouteRawConfig;

@@ -43,9 +43,9 @@ rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update 
     bell: Bell,
     radio: Radio,
   },
-  metadataTitle: "Dozzle vs Drydock — Container Log Viewer & Update Monitoring Comparison",
+  metadataTitle: "Dozzle vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Dozzle and Drydock for Docker container management. Dozzle is a real-time log viewer, Drydock monitors container updates — see how they complement each other or which fits your needs.",
+    "Dozzle is a real-time log viewer. Drydock monitors container updates. See how they complement each other.",
   metadataKeywords: [
     "dozzle vs drydock",
     "dozzle alternative",

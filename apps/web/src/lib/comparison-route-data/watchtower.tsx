@@ -45,7 +45,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   },
   metadataTitle: "Watchtower Alternative: Drydock vs Watchtower",
   metadataDescription:
-    "Compare Watchtower and Drydock for container update monitoring. Watchtower was archived Dec 2025 — see how Drydock provides a modern, actively maintained alternative with a full UI, 23 registries, security scanning, and more.",
+    "Watchtower was archived in December 2025. Drydock is maintained, with a web UI, 23 registries, vulnerability scanning and rollback.",
   metadataKeywords: [
     "watchtower vs drydock",
     "watchtower alternative",

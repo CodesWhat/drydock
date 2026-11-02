@@ -19,7 +19,7 @@ const DAY = 86_400_000;
 const MIN_DAYS_LEFT = 30;
 
 test("security.txt carries the RFC 9116 required fields", () => {
-  assert.deepEqual(fields.get("Contact"), ["mailto:security@codeswhat.com"]);
+  assert.deepEqual(fields.get("Contact"), ["mailto:security@getdrydock.com"]);
   assert.equal(fields.get("Expires")?.length, 1);
   assert.equal(
     fields.get("Canonical")?.[0],
