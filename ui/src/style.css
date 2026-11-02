@@ -890,3 +890,15 @@ html.dd-transitioning::view-transition-new(*) {
     display: inline-flex;
   }
 }
+
+/* Honour the OS reduced-motion setting. Spinners stay: they signal progress, not decoration. */
+@media (prefers-reduced-motion: reduce) {
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast),
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast)::before,
+  *:not(.dd-spin, .dd-spin-slow, .dd-spin-fast)::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

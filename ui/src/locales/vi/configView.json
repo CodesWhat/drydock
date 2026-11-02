@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "Tất cả thành phần",
-        "resetFilters": "Đặt lại bộ lọc"
+        "resetFilters": "Đặt lại bộ lọc",
+        "levelFilter": "Lọc theo mức nhật ký",
+        "tailSize": "Số dòng nhật ký",
+        "componentFilter": "Lọc theo thành phần"
       },
       "tail": {
         "50": "Tail 50",

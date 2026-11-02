@@ -175,6 +175,7 @@ function togglePin() {
 
             <select
               v-model="logLevelFilterModel"
+              :aria-label="t('configView.logs.toolbar.levelFilter')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="all">{{ t('configView.logs.toolbar.allLevels') }}</option>
@@ -186,6 +187,7 @@ function togglePin() {
 
             <select
               v-model.number="tailModel"
+              :aria-label="t('configView.logs.toolbar.tailSize')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option :value="50">{{ t('configView.logs.tail.50') }}</option>
@@ -196,6 +198,7 @@ function togglePin() {
 
             <select
               v-model="componentFilterModel"
+              :aria-label="t('configView.logs.toolbar.componentFilter')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="">{{ t('configView.logs.toolbar.allComponents') }}</option>

@@ -243,7 +243,10 @@
         "warn": "Waarschuw",
         "error": "Fout",
         "allComponents": "Alle componenten",
-        "resetFilters": "Filters opnieuw instellen"
+        "resetFilters": "Filters opnieuw instellen",
+        "levelFilter": "Filteren op logniveau",
+        "tailSize": "Aantal logregels",
+        "componentFilter": "Filteren op component"
       },
       "tail": {
         "50": "Staart 50",

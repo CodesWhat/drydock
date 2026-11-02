@@ -25,3 +25,17 @@ describe('style.css scrollbar rules', () => {
     expect(css).toMatch(/\.dd-scroll-stable\s*\{[^}]*scrollbar-gutter:\s*stable/);
   });
 });
+
+describe('style.css reduced motion', () => {
+  it('has a global prefers-reduced-motion override that shortens animations and transitions', () => {
+    const block = css.match(/@media \(prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/);
+    expect(block).not.toBeNull();
+    expect(block?.[0]).toMatch(/animation-duration:\s*0\.01ms\s*!important/);
+    expect(block?.[0]).toMatch(/animation-iteration-count:\s*1\s*!important/);
+    expect(block?.[0]).toMatch(/transition-duration:\s*0\.01ms\s*!important/);
+  });
+
+  it('keeps progress spinners running', () => {
+    expect(css).toMatch(/:not\(\.dd-spin, \.dd-spin-slow, \.dd-spin-fast\)/);
+  });
+});

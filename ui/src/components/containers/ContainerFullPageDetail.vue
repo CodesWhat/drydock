@@ -125,9 +125,9 @@ function getStatusTone(container: Container) {
               v-tooltip.top="getStatusLabel(selectedContainer)"
               size="lg" />
             <div class="min-w-0">
-              <h1 class="text-base sm:text-lg font-bold truncate dd-text">
+              <h2 class="text-base sm:text-lg font-bold truncate dd-text">
                 {{ selectedContainer.name }}
-              </h1>
+              </h2>
               <div class="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span class="text-2xs-plus sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
                   {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}

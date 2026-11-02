@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "전체 컴포넌트",
-        "resetFilters": "필터 초기화"
+        "resetFilters": "필터 초기화",
+        "levelFilter": "로그 수준으로 필터링",
+        "tailSize": "로그 줄 수",
+        "componentFilter": "구성 요소로 필터링"
       },
       "tail": {
         "50": "Tail 50",

@@ -243,7 +243,10 @@
         "warn": "Ostrzegaj",
         "error": "Błąd",
         "allComponents": "Wszystkie komponenty",
-        "resetFilters": "Zresetuj filtry"
+        "resetFilters": "Zresetuj filtry",
+        "levelFilter": "Filtruj według poziomu logów",
+        "tailSize": "Liczba wierszy logów",
+        "componentFilter": "Filtruj według komponentu"
       },
       "tail": {
         "50": "Ogon 50",

@@ -243,7 +243,10 @@
         "warn": "Avertissement",
         "error": "Erreur",
         "allComponents": "Tous les composants",
-        "resetFilters": "Réinitialiser les filtres"
+        "resetFilters": "Réinitialiser les filtres",
+        "levelFilter": "Filtrer par niveau de journal",
+        "tailSize": "Nombre de lignes de journal",
+        "componentFilter": "Filtrer par composant"
       },
       "tail": {
         "50": "50 dernières",

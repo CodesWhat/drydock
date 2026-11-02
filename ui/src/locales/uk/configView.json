@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "Всі компоненти",
-        "resetFilters": "Скинути фільтри"
+        "resetFilters": "Скинути фільтри",
+        "levelFilter": "Фільтр за рівнем журналу",
+        "tailSize": "Кількість рядків журналу",
+        "componentFilter": "Фільтр за компонентом"
       },
       "tail": {
         "50": "Tail 50",

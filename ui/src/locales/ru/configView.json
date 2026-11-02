@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "Все компоненты",
-        "resetFilters": "Сбросить фильтры"
+        "resetFilters": "Сбросить фильтры",
+        "levelFilter": "Фильтр по уровню журнала",
+        "tailSize": "Количество строк журнала",
+        "componentFilter": "Фильтр по компоненту"
       },
       "tail": {
         "50": "Tail 50",

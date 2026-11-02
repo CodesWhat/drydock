@@ -42,6 +42,7 @@ This candidate includes all v1.8.0-rc.10 changes and upgrade warnings. It redact
 - The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
 - Light themes: muted and secondary text (and the neutral status tone) now meet 4.5:1 contrast on every surface in all six families. The notification bell count badge uses a per-theme `--dd-danger-fg` foreground instead of white, which measured 2.2:1 on the dark themes.
 - Approvals: on mobile cards the Image, Version, Scan and Age values render again (a zero-width container query collapsed every card body value in the shared data table). Version shows the tag change, such as `4.38.16 → 4.39.0`, instead of truncated image refs, and the Age column no longer clips.
+- Accessibility: every page now has one `h1` (the top-bar page title; container logs keeps its own). Animations and transitions follow the OS reduced-motion setting. The log level, tail and component selects, log search box, appearance sliders and the settings sync switch have accessible names. Icon buttons are 44 px below the `md` breakpoint.
 
 ## [1.8.0-rc.10] - 2026-10-31
 

@@ -243,7 +243,10 @@
         "warn": "Aviso",
         "error": "Error",
         "allComponents": "Todos los componentes",
-        "resetFilters": "Restablecer filtros"
+        "resetFilters": "Restablecer filtros",
+        "levelFilter": "Filtrar por nivel de registro",
+        "tailSize": "Número de líneas de registro",
+        "componentFilter": "Filtrar por componente"
       },
       "tail": {
         "50": "Últimas 50",

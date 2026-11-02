@@ -243,7 +243,10 @@
         "warn": "Uyar",
         "error": "Hata",
         "allComponents": "Tüm Bileşenler",
-        "resetFilters": "Filtreleri sıfırla"
+        "resetFilters": "Filtreleri sıfırla",
+        "levelFilter": "Günlük düzeyine göre filtrele",
+        "tailSize": "Günlük satırı sayısı",
+        "componentFilter": "Bileşene göre filtrele"
       },
       "tail": {
         "50": "Kuyruk 50",

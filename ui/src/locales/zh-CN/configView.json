@@ -243,7 +243,10 @@
         "warn": "警告",
         "error": "错误",
         "allComponents": "所有组件",
-        "resetFilters": "重置筛选"
+        "resetFilters": "重置筛选",
+        "levelFilter": "按日志级别筛选",
+        "tailSize": "日志行数",
+        "componentFilter": "按组件筛选"
       },
       "tail": {
         "50": "末尾 50 条",

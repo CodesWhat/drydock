@@ -243,7 +243,10 @@
         "warn": "警告",
         "error": "錯誤",
         "allComponents": "所有組件",
-        "resetFilters": "重設篩選"
+        "resetFilters": "重設篩選",
+        "levelFilter": "依記錄層級篩選",
+        "tailSize": "記錄行數",
+        "componentFilter": "依元件篩選"
       },
       "tail": {
         "50": "末尾 50 條",

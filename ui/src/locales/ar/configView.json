@@ -243,7 +243,10 @@
         "warn": "تحذير",
         "error": "خطأ",
         "allComponents": "جميع المكوّنات",
-        "resetFilters": "إعادة ضبط الفلاتر"
+        "resetFilters": "إعادة ضبط الفلاتر",
+        "levelFilter": "التصفية حسب مستوى السجل",
+        "tailSize": "عدد أسطر السجل",
+        "componentFilter": "التصفية حسب المكوّن"
       },
       "tail": {
         "50": "آخر 50",

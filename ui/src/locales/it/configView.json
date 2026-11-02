@@ -243,7 +243,10 @@
         "warn": "Avviso",
         "error": "Errore",
         "allComponents": "Tutti i componenti",
-        "resetFilters": "Reimposta filtri"
+        "resetFilters": "Reimposta filtri",
+        "levelFilter": "Filtra per livello di log",
+        "tailSize": "Numero di righe di log",
+        "componentFilter": "Filtra per componente"
       },
       "tail": {
         "50": "Ultime 50",

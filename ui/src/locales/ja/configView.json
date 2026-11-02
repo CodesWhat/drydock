@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "全コンポーネント",
-        "resetFilters": "フィルターをリセット"
+        "resetFilters": "フィルターをリセット",
+        "levelFilter": "ログレベルで絞り込む",
+        "tailSize": "ログの行数",
+        "componentFilter": "コンポーネントで絞り込む"
       },
       "tail": {
         "50": "末尾 50",

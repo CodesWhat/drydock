@@ -119,6 +119,7 @@ function handleFontSizeInput(event: Event) {
           </div>
           <ToggleSwitch
             data-test="sync-toggle"
+            :aria-label="t('configView.appearance.sync.label')"
             :model-value="props.syncEnabled"
             :disabled="props.syncLoading"
             @update:model-value="props.onToggleSync()"
@@ -291,6 +292,7 @@ function handleFontSizeInput(event: Event) {
             max="1.3"
             step="0.05"
             :value="props.fontSize"
+            :aria-label="t('configView.appearance.fontSize.title')"
             class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
             :style="{ background: 'var(--dd-border-strong)', accentColor: 'var(--dd-primary)' }"
             @input="handleFontSizeInput"
@@ -376,6 +378,7 @@ function handleFontSizeInput(event: Event) {
             max="1.5"
             step="0.05"
             :value="props.iconScale"
+            :aria-label="t('configView.appearance.iconSize.title')"
             class="flex-1 h-1.5 rounded-full appearance-none cursor-pointer"
             :style="{ background: 'var(--dd-border-strong)', accentColor: 'var(--dd-primary)' }"
             @input="handleIconScaleInput"

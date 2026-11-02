@@ -260,6 +260,15 @@ describe('ContainerLogs', () => {
     expect(rows[1].text()).toContain('first');
   });
 
+  it('gives the tail select and the search input accessible names', () => {
+    const wrapper = mountComponent();
+    const tail = wrapper.findAll('select')[0];
+    expect(tail.attributes('aria-label')).toBe('Number of log lines');
+    expect(
+      wrapper.get('[data-test="container-log-search-input"]').attributes('aria-label'),
+    ).toBeTruthy();
+  });
+
   it('downloads current log selection as a .log file', async () => {
     const appendSpy = vi.spyOn(document.body, 'appendChild');
     const removeSpy = vi.spyOn(document.body, 'removeChild');

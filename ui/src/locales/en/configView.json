@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "resetFilters": "Reset filters",
+        "levelFilter": "Filter by log level",
+        "tailSize": "Number of log lines",
+        "componentFilter": "Filter by component"
       },
       "tail": {
         "50": "Tail 50",
