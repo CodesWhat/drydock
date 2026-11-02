@@ -9,14 +9,9 @@ import { Hero } from "@/components/hero";
 import { JsonLd } from "@/components/json-ld";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Roadmap } from "@/components/roadmap";
-import {
-  BASE_URL,
-  DOCS_ROOT,
-  GITHUB_RELEASES_URL,
-  GITHUB_URL,
-  SITE_CONFIG,
-} from "@/lib/site-config";
-import { faqItems } from "./data/faq";
+import { StarHistory } from "@/components/star-history";
+import { BASE_URL } from "@/lib/site-config";
+import { buildHomeJsonLd } from "@/lib/structured-data";
 
 export const metadata: Metadata = {
   alternates: {
@@ -25,66 +20,9 @@ export const metadata: Metadata = {
 };
 
 export default function Home() {
-  const softwareAppJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: SITE_CONFIG.name,
-    url: BASE_URL,
-    description: SITE_CONFIG.description,
-    applicationCategory: "DeveloperApplication",
-    operatingSystem: "Docker",
-    license: "https://opensource.org/licenses/MIT",
-    downloadUrl: GITHUB_RELEASES_URL,
-    installUrl: GITHUB_RELEASES_URL,
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "USD",
-    },
-    sameAs: [GITHUB_URL, SITE_CONFIG.twitterUrl],
-    author: {
-      "@type": "Organization",
-      name: "CodesWhat",
-      url: "https://codeswhat.com",
-      sameAs: ["https://github.com/CodesWhat"],
-    },
-    softwareHelp: {
-      "@type": "WebPage",
-      url: `${BASE_URL}${DOCS_ROOT}`,
-    },
-  };
-
-  const websiteJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: SITE_CONFIG.name,
-    url: BASE_URL,
-    publisher: {
-      "@type": "Organization",
-      name: "CodesWhat",
-      url: "https://codeswhat.com",
-      sameAs: ["https://github.com/CodesWhat"],
-    },
-  };
-
-  const faqPageJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqItems.map((item) => ({
-      "@type": "Question",
-      name: item.question,
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: item.answer,
-      },
-    })),
-  };
-
   return (
     <>
-      <JsonLd data={softwareAppJsonLd} />
-      <JsonLd data={websiteJsonLd} />
-      <JsonLd data={faqPageJsonLd} />
+      <JsonLd data={buildHomeJsonLd()} />
       <MarketingShell>
         <Hero />
         <div className="reveal" suppressHydrationWarning>
@@ -98,6 +36,9 @@ export default function Home() {
         <Demo />
         <div className="reveal" suppressHydrationWarning>
           <Roadmap />
+        </div>
+        <div className="reveal" suppressHydrationWarning>
+          <StarHistory />
         </div>
         <div className="reveal" suppressHydrationWarning>
           <CompareSection />

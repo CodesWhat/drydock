@@ -41,6 +41,7 @@ export function GET() {
       { title: "GitHub repository", url: GITHUB_URL },
       { title: "Releases", url: GITHUB_RELEASES_URL },
       { title: "Docker Hub image", url: DOCKER_HUB_URL },
+      { title: "Security advisories", url: `${BASE_URL}/security` },
       {
         title: "Trivy supply chain advisory (March 2026)",
         url: `${BASE_URL}/security/trivy-supply-chain-march-2026`,

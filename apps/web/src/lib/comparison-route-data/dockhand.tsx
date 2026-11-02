@@ -44,9 +44,9 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand g
     network: Network,
     lock: Lock,
   },
-  metadataTitle: "Dockhand vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Dockhand vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Dockhand and Drydock for container update monitoring. See how Drydock's 23 registries, 17 notification services and 4 update actions, automatic rollback, and distributed agents compare to Dockhand's approach.",
+    "Dockhand and Drydock side by side: 23 registries, automatic rollback, distributed agents and update actions.",
   metadataKeywords: [
     "dockhand vs drydock",
     "dockhand alternative",
@@ -74,5 +74,4 @@ lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand g
   migrationDescription:
     "Both are solid choices. If you want update safety controls (rollback, maintenance windows, hooks) and the broadest registry and notification coverage — all free — Drydock is built for that. One Docker command to get started.",
   jsonLdName: "Dockhand vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Dockhand and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;

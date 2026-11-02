@@ -530,6 +530,7 @@ const routes = [
   "/docs/v1.8/monitoring",
   "/docs/v1.8/quickstart",
   "/docs/v1.8/updates",
+  "/security",
   "/security/trivy-supply-chain-march-2026",
 ] as const;
 

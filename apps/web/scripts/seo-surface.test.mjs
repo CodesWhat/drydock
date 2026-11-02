@@ -56,9 +56,10 @@ test("site title and description carry the search phrase and the README counts",
   assert.match(siteConfig.SITE_CONFIG.description, /23 registries/);
   assert.match(siteConfig.SITE_CONFIG.description, /21 triggers/);
   assert.ok(siteConfig.SITE_CONFIG.description.length <= 160);
-  const page = read("../src/app/page.tsx");
-  assert.match(page, /description: SITE_CONFIG\.description/);
-  assert.doesNotMatch(page, /built in TypeScript/);
+  const structured = read("../src/lib/structured-data.ts");
+  assert.match(structured, /description: SITE_CONFIG\.description/);
+  assert.doesNotMatch(structured, /built in TypeScript/);
+  assert.doesNotMatch(read("../src/app/page.tsx"), /built in TypeScript/);
 });
 
 test("llms.txt is built in llmstxt.org shape from resolved links", () => {
@@ -105,9 +106,57 @@ test("hero shows stable first and links the RC to its migration warning", () => 
   assert.match(siteConfig.SITE_CONFIG.version, /rc/);
 });
 
-test("homepage comparison marks Watchtower distributed agents partial, like the detail page", () => {
+test("homepage comparison swaps Portainer for WUD and takes its cells from the README matrix", () => {
   const source = read("../src/components/compare-section.tsx");
-  assert.match(source, /label: "Distributed agents",\s*drydock: "yes",\s*watchtower: "partial"/);
+  assert.match(source, /const tools = \[SITE_CONFIG\.name, "WUD", "Diun", "Watchtower"\]/);
+  assert.doesNotMatch(source, /Portainer/);
+  assert.match(
+    source,
+    /label: "Distributed agents",\s*drydock: "yes",\s*wud: "partial",\s*diun: "no",\s*watchtower: "partial"/,
+  );
+  assert.match(source, /label: "RBAC \/ multi-user roles", drydock: "no", wud: "yes"/);
+  assert.match(source, /archived December 2025/);
+});
+
+test("homepage comparison says what Drydock doesn't do and points WUD and Watchtower users somewhere", () => {
+  const source = read("../src/components/compare-section.tsx");
+  assert.match(source, /Probably not for you yet/);
+  assert.match(
+    source,
+    /Swarm, Kubernetes and\s+Nomad watchers, RBAC and multi-user roles, and a one-shot CI mode/,
+  );
+  assert.match(source, /config migrate --dry-run/);
+  assert.match(source, /href="\/compare\/watchtower"/);
+  assert.match(source, /href="\/compare\/wud"/);
+});
+
+test("comparison page metadata stays inside SERP length and uses the alternative pattern for dead tools", () => {
+  const dir = "../src/lib/comparison-route-data/";
+  const alternatives = ["watchtower", "wud", "dockge", "ouroboros"];
+  for (const slug of [
+    ...alternatives,
+    "arcane",
+    "diun",
+    "dockhand",
+    "dozzle",
+    "komodo",
+    "portainer",
+  ]) {
+    const source = read(`${dir}${slug}.tsx`);
+    const title = source.match(/metadataTitle:\s*"([^"]+)"/)?.[1];
+    const description = source.match(/metadataDescription:\s*"([^"]+)"/)?.[1];
+    assert.ok(title && title.length <= 60, `${slug} title is ${title?.length} chars`);
+    assert.ok(
+      description && description.length <= 155,
+      `${slug} description is ${description?.length} chars`,
+    );
+    assert.match(
+      title,
+      alternatives.includes(slug)
+        ? /Alternative: Drydock vs /
+        : /vs Drydock: Container Update Comparison$/,
+    );
+  }
 });
 
 test("roadmap does not claim static-image monitoring shipped and matches the README rows", async () => {
@@ -133,4 +182,26 @@ test("watchtower page title and lead say alternative and name the fork", () => {
   assert.match(source, /heroTitle: "Watchtower alternative/);
   assert.match(source, /nicholas-fedor\/watchtower/);
   assert.match(source, /v1\.7\.1/);
+});
+
+test("WUD appears only as a competitor: no fork or derived-from wording in the site's own copy", () => {
+  const wud = read("../src/lib/comparison-route-data/wud.tsx");
+  assert.doesNotMatch(wud, /\bfork(ed)?\b|Fork & Evolve|evolved/i);
+  const faq = read("../src/app/data/faq.ts");
+  assert.doesNotMatch(faq, /\bWUD\b[^.]*\bfork/i);
+});
+
+test("competitor pages don't contradict the README matrix", () => {
+  const wud = read("../src/lib/comparison-route-data/wud.tsx");
+  assert.match(wud, /Registry providers\|25\|23\|competitor/);
+  assert.match(wud, /Trigger integrations\|33 triggers\|[^|]*\|competitor/);
+  assert.match(wud, /Lifecycle hooks\|Yes[^|]*\|[^|]*\|tie/);
+  assert.match(wud, /RBAC \/ multi-user roles\|Yes[^|]*\|[^|]*\|competitor/);
+  assert.doesNotMatch(wud, /11 more registries|None of these exist in WUD|Lifecycle hooks\|None/);
+  const dozzle = read("../src/lib/comparison-route-data/dozzle.tsx");
+  assert.doesNotMatch(
+    dozzle,
+    /Image update detection\|No\||Auto-update containers\|No\||doesn't manage container updates|doesn't monitor for image updates/,
+  );
+  assert.doesNotMatch(read("../src/lib/comparison-route-data/diun.tsx"), /REST API\|None/);
 });

@@ -42,9 +42,9 @@ radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR,
     network: Network,
     radio: Radio,
   },
-  metadataTitle: "Dockge vs Drydock — Docker Compose & Container Update Comparison",
+  metadataTitle: "Dockge Alternative: Drydock vs Dockge",
   metadataDescription:
-    "Compare Dockge and Drydock for Docker container management. Dockge manages compose stacks, Drydock monitors and updates container images — see how they complement each other or which fits your needs.",
+    "Dockge manages compose stacks. Drydock watches registries and updates images. See how they differ and where they fit together.",
   metadataKeywords: [
     "dockge vs drydock",
     "dockge alternative",
@@ -74,5 +74,4 @@ radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR,
   migrationDescription:
     "Drydock and Dockge complement each other well. Use Dockge to manage your compose files and Drydock to monitor for image updates and apply them safely. One Docker command to add Drydock to your stack.",
   jsonLdName: "Dockge vs Drydock — Docker Compose & Container Update Comparison",
-  jsonLdDescription: "Compare Dockge and Drydock for Docker container management.",
 } satisfies ComparisonRouteRawConfig;

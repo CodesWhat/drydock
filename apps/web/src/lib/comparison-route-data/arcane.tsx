@@ -45,9 +45,9 @@ radio|23 Registry Providers|Dedicated auth per registry — Docker Hub, GHCR, EC
     bell: Bell,
     radio: Radio,
   },
-  metadataTitle: "Arcane vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Arcane vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Arcane and Drydock for Docker container management and update monitoring. Arcane is a broad Docker/Compose/Swarm management platform with RBAC and Git-based deployment; Drydock is a focused update watcher with rollback, maintenance windows, and a deep security-scanning stack.",
+    "Arcane is a broader management platform with RBAC. Drydock is a focused update watcher with rollback and security scanning.",
   metadataKeywords: [
     "arcane vs drydock",
     "arcane alternative",
@@ -81,6 +81,4 @@ radio|23 Registry Providers|Dedicated auth per registry — Docker Hub, GHCR, EC
   migrationDescription:
     "Arcane and Drydock solve different problems. If you want a full Docker/Compose/Swarm management UI with RBAC, Git-based deployment, and mobile apps, Arcane is built for that — and it does not yet have drydock's rollback, maintenance windows, or lifecycle hooks. If you want an update-focused watcher with those safety features plus a deeper security-scanning stack, Drydock is purpose-built for that, though it has no RBAC, Compose editor, or Swarm support today. One Docker command to get started.",
   jsonLdName: "Arcane vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription:
-    "Compare Arcane and Drydock for Docker container management and update monitoring.",
 } satisfies ComparisonRouteRawConfig;

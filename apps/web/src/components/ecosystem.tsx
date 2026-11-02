@@ -67,11 +67,7 @@ function Mascot({ p, box }: { p: Project; box: string }) {
 }
 
 function HereChip() {
-  return (
-    <span className="text-lg leading-none" role="img" aria-label="You're here">
-      📍
-    </span>
-  );
+  return <span className="website-here-pill">You&apos;re here</span>;
 }
 
 function Arrow() {

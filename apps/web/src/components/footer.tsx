@@ -43,6 +43,7 @@ const compareLinks: FooterLink[] = [
   ].map((name) => ({ label: `${name} vs Drydock`, href: `/compare/${name.toLowerCase()}` })),
 ];
 const securityLinks: FooterLink[] = [
+  { label: "All advisories", href: "/security" },
   { label: "Trivy supply chain compromise", href: "/security/trivy-supply-chain-march-2026" },
   { label: "Hardening guide", href: `${DOCS_ROOT}/guides/security` },
 ];

@@ -1,0 +1,6 @@
+# RFC 9116. Renew Expires before it is 30 days away: scripts/security-txt.test.mjs fails then.
+Contact: mailto:security@getdrydock.com
+Expires: 2027-05-01T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://getdrydock.com/.well-known/security.txt
+Policy: https://github.com/CodesWhat/drydock/blob/main/SECURITY.md

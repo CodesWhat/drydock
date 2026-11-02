@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { buildComparisonJsonLd } from "@/lib/structured-data";
 
 type ComparisonMetadataConfig = {
   slug: string;
@@ -11,13 +12,6 @@ type ComparisonMetadataConfig = {
   keywords: string[];
   openGraphDescription?: string;
   twitterDescription?: string;
-};
-
-type ComparisonJsonLdConfig = {
-  slug: string;
-  name: string;
-  description: string;
-  competitorName: string;
 };
 
 export type ComparisonRouteConfig = {
@@ -35,7 +29,6 @@ export type ComparisonRouteConfig = {
   migrationTitle: string;
   migrationDescription: string;
   jsonLdName: string;
-  jsonLdDescription: string;
   competitorBadge?: {
     icon: LucideIcon;
     label: string;
@@ -89,56 +82,6 @@ export function buildComparisonMetadata({
   };
 }
 
-export function buildComparisonJsonLd({
-  slug,
-  name,
-  description,
-  competitorName,
-}: ComparisonJsonLdConfig): Record<string, unknown> {
-  return {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        name,
-        description,
-        url: `${BASE_URL}/compare/${slug}`,
-        mainEntity: {
-          "@type": "SoftwareApplication",
-          name: SITE_CONFIG.name,
-          url: BASE_URL,
-          applicationCategory: "DeveloperApplication",
-          operatingSystem: "Docker",
-          license: "https://opensource.org/licenses/MIT",
-        },
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Home",
-            item: BASE_URL,
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: "Compare",
-            item: `${BASE_URL}/compare`,
-          },
-          {
-            "@type": "ListItem",
-            position: 3,
-            name: competitorName,
-            item: `${BASE_URL}/compare/${slug}`,
-          },
-        ],
-      },
-    ],
-  };
-}
-
 export function createComparisonRoute(config: ComparisonRouteConfig) {
   const competitorBadge = config.competitorBadge ?? {
     icon: Check,
@@ -176,7 +119,7 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
         jsonLd={buildComparisonJsonLd({
           slug: config.slug,
           name: config.jsonLdName,
-          description: config.jsonLdDescription,
+          description: config.metadataDescription,
           competitorName: config.competitorName,
         })}
       />

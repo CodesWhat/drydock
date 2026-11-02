@@ -5,6 +5,11 @@ export const faqItems: Array<{ question: string; answer: string }> = [
       "On every poll cycle Drydock reads the image reference and current digest from each watched container, then queries the upstream registry for available tags. It applies your per-container tag filters (dd.tag.include / dd.tag.exclude regex patterns compiled with re2js for linear-time evaluation) and semantic-version ordering to determine the latest eligible tag. If the latest digest differs from the running one, the container is flagged as having an available update. SSE keeps connected browser sessions in sync in real time without polling on the client side.",
   },
   {
+    question: "How do I automatically update Docker containers with Drydock?",
+    answer:
+      "Drydock is monitor-first: with no action trigger it only reports what's outdated, and updates start when you add one. Use the docker action (DD_ACTION_DOCKER_LOCAL_*) for containers started with docker run, or the dockercompose action (DD_ACTION_DOCKERCOMPOSE_<NAME>_FILE, with the compose file mounted writable) for Compose stacks. The docker action defaults to AUTO=oninclude, so only containers labeled dd.action.include=docker update on their own. Set DD_ACTION_DOCKER_LOCAL_AUTO=true to cover every watched container. Start with DD_ACTION_DOCKER_LOCAL_DRYRUN=true to preview before real updates. Before each update Drydock keeps a backup of the previous image (DD_ACTION_DOCKER_LOCAL_BACKUPCOUNT, default 3) and rolls back if the new container fails its health check. Add dd.rollback.auto=true to keep watching health after the update finishes. If you use a socket proxy, it needs POST=1 and NETWORKS=1. Step by step: getdrydock.com/docs/getting-started#enable-auto-updates-optional.",
+  },
+  {
     question: "Which container registries does Drydock support?",
     answer:
       "Drydock ships with 23 registry providers: Docker Hub, GitHub Container Registry (GHCR), Amazon ECR, Google Container Registry (GCR), Google Artifact Registry (GAR), GitLab Registry, Red Hat Quay, LinuxServer Container Registry (LSCR), Azure Container Registry (ACR), Harbor, JFrog Artifactory, Sonatype Nexus, Gitea, Forgejo, Codeberg, and more — plus a generic private-registry provider for anything that speaks HTTP Basic or bearer token auth. TLS customization (CA file, insecure skip-verify) is available on every provider.",
@@ -27,7 +32,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "How does Drydock compare to Watchtower?",
     answer:
-      "Watchtower auto-updates containers on a schedule with minimal config and no UI. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Grype/Trivy CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
+      "Watchtower auto-updates containers on a schedule with minimal config and no UI, and it was archived in December 2025. Drydock is an update management platform: it detects what is available, shows you a dashboard, lets you preview and approve changes, backs up images before applying them, and rolls back automatically if the new container fails its health check. It also adds security scanning (Grype/Trivy CVEs, SBOM generation, Cosign signature verification) and per-container update policies. If you want silent automatic updates, Watchtower is simpler. If you want visibility, control, security gates, and notification integrations, Drydock fits better.",
   },
   {
     question: "Does Drydock support vulnerability scanning and image signature verification?",
@@ -35,9 +40,9 @@ export const faqItems: Array<{ question: string; answer: string }> = [
       "Yes. Drydock integrates Trivy and Grype (DD_SECURITY_SCANNER=grype|trivy|both, with Grype recommended) for CVE scanning and SBOM generation for any image in your update queue. The Update Bouncer deployment gate supports Cosign signature verification — you can block an update from being applied if the new image is unsigned or signed by an unexpected identity. Scanning and verification are opt-in per container or globally, and results surface in the dashboard alongside the available-update list so you can make an informed decision before pulling.",
   },
   {
-    question: "What does the 100% TypeScript coverage claim include?",
+    question: "Does Drydock need full access to my Docker socket?",
     answer:
-      "CI enforces 100% line, branch, function, and statement coverage for the configured backend sources and UI TypeScript files. Vue single-file components have separate aggregate coverage floors: 87.54% statements, 81.57% branches, 84.39% functions, and 87.89% lines. Those floors include script and generated-template mappings, not a 100% claim for every component. A separate vue-tsc typecheck checks scripts and templates; passing it does not establish runtime coverage or mutation quality.",
+      "No. The recommended setup puts a socket proxy (tecnativa/docker-socket-proxy or sockguard) in front of the socket, so Drydock only reaches the Docker API endpoints you allow. Read-only watching needs CONTAINERS, IMAGES, EVENTS, SERVICES and INFO. Add POST=1 and NETWORKS=1 only if you want container actions and auto-updates. Mounting /var/run/docker.sock directly works for a quick local try, but it hands Drydock the whole Docker API.",
   },
   {
     question: "Is Drydock open source, and how do I get started?",

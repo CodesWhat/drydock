@@ -13,7 +13,7 @@ Registry support|Docker Hub + private via Docker config|23 dedicated registry in
 Trigger integrations|17 services|21 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
-REST API|None (gRPC CLI only)|Full REST API|self
+REST API|Partial (gRPC CLI)|Full REST API|self
 Prometheus metrics|Yes (since v4.32.0)|Full /metrics endpoint + Grafana template|self
 MQTT / Home Assistant|Partial|Yes|self
 Image backup & rollback|No|Pre-update backup with retention + auto rollback|self
@@ -43,9 +43,9 @@ bell|Audit Trail & Observability|Drydock ships a full audit log with REST API an
     rotate: RotateCcw,
     bell: Bell,
   },
-  metadataTitle: "Diun vs Drydock — Container Update Monitoring Comparison",
+  metadataTitle: "Diun vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Compare Diun (Docker Image Update Notifier) and Drydock for container update monitoring. See how Drydock adds a full web UI, auto-updates, security scanning, and 23 registry integrations beyond Diun's notification-only approach.",
+    "Diun only notifies. Drydock adds a web UI, auto-updates, vulnerability scanning and 23 registries.",
   metadataKeywords: [
     "diun vs drydock",
     "diun alternative",
@@ -75,5 +75,4 @@ bell|Audit Trail & Observability|Drydock ships a full audit log with REST API an
   migrationDescription:
     "If you're using Diun for notifications, Drydock can do the same — plus give you a full dashboard, auto-updates, security scanning, and container management. One Docker command to get started.",
   jsonLdName: "Diun vs Drydock — Container Update Monitoring Comparison",
-  jsonLdDescription: "Compare Diun and Drydock for container update monitoring.",
 } satisfies ComparisonRouteRawConfig;
