@@ -18,6 +18,17 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
+### Changed
+
+- Website redesign: new layout, type and six theme families that match the app, with a whale hero, a capability palette, a git-graph roadmap, a Quick and Secure install toggle and a feature comparison matrix. Docs links now go straight to the current docs version, and the sitemap lists only that version.
+- Website header and menus: Docs, Compare and GitHub carry icons, the current page is marked with `aria-current`, and the theme button shows the active family and mode. The mobile menu has a menu icon, an icon on every row and a Sponsor link.
+- Website theme panel shows a four-colour swatch for each family. The comparison matrix uses the theme's success, warning and danger colours in tinted chips, so "No" is easy to see, and its first column stays put while the table scrolls.
+- Website FAQ questions are real `h3` headings set in bold mono instead of the display serif. Section eyebrows get a trailing rule, the roadmap shows release emoji with the accent colour on HEAD and "+N more", and the Get started note leads with a "Heads up" tag.
+- Website 404 and security advisory pages: outline buttons are visible and carry icons, the search box says it searches the Drydock docs, and the advisory has a breadcrumb, full-width tables and a neutral-text summary callout.
+
+### Fixed
+
+- The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
 
 ## [1.8.0-rc.10] - 2026-10-31
 
