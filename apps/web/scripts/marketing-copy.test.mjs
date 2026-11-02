@@ -76,7 +76,8 @@ test("star history chart renders both themes, no client JS, linked to star-histo
     new URL("../src/components/star-history.tsx", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(chart, /^"use client"|fetch\(|<picture/m);
+  assert.doesNotMatch(chart, /^"use client"/m);
+  assert.doesNotMatch(chart, /fetch\(|<picture/);
   assert.match(
     chart,
     /api\.star-history\.com\/svg\?repos=\$\{encodeURIComponent\(REPO_SLUG\.toLowerCase\(\)\)\}/,

@@ -55,8 +55,11 @@ test("fetchLiveStats reads stars, forks, issues-only and downloads from the righ
   });
   assert.deepEqual(stats, { stars: 11, forks: 3, openIssues: 4, downloads: 2500 });
   const urls = calls.map((call) => call.url);
-  assert.ok(urls.includes("https://api.github.com/repos/Acme/widget"));
-  assert.ok(urls.includes("https://hub.docker.com/v2/repositories/acme/widget"));
+  const parsed = urls.map((url) => new URL(url));
+  const requested = (origin, pathname) =>
+    parsed.some((url) => url.origin === origin && url.pathname === pathname);
+  assert.ok(requested("https://api.github.com", "/repos/Acme/widget"));
+  assert.ok(requested("https://hub.docker.com", "/v2/repositories/acme/widget"));
   const search = urls.find((url) => url.includes("/search/issues"));
   assert.match(decodeURIComponent(search), /repo:Acme\/widget type:issue state:open/);
   for (const call of calls) {
