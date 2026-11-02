@@ -2550,6 +2550,13 @@ describe('SecurityView', () => {
       expect(w.get('[data-card-id="api"]').text()).toContain('2 new');
       expect(w.get('[data-card-id="worker"]').text()).toContain('Low');
       expect(w.get('[data-card-id="worker"]').text()).toContain('1 fixed, 1 new');
+      // A card with nothing fixable and no pending update has no footer to show.
+      expect(
+        w.get('[data-card-id="nginx"]').find('[data-test="security-card-footer"]').exists(),
+      ).toBe(true);
+      expect(
+        w.get('[data-card-id="api"]').find('[data-test="security-card-footer"]').exists(),
+      ).toBe(false);
 
       const cleanCard = w.get('[data-card-id="clean-image"]');
       expect(cleanCard.text()).toContain('Clean');

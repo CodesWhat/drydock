@@ -209,7 +209,7 @@ onMounted(async () => {
   <DataViewLayout>
       <div v-if="error"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ error }}
       </div>
 
@@ -353,7 +353,7 @@ onMounted(async () => {
             <div v-if="detailLoading" class="text-2xs-plus dd-text-muted">{{ t('registriesView.detail.refreshing') }}</div>
             <div v-if="detailError"
                  class="px-3 py-2 text-2xs-plus dd-rounded"
-                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+                 :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }">
               {{ detailError }}
             </div>
 

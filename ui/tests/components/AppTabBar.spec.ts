@@ -221,7 +221,7 @@ describe('AppTabBar', () => {
 
     expect(badge).toBeDefined();
     expect(badge!.attributes('style')).toContain('background-color: var(--dd-neutral-muted)');
-    expect(badge!.attributes('style')).toContain('color: var(--dd-neutral)');
+    expect(badge!.attributes('style')).toContain('color: var(--dd-neutral-badge)');
   });
 
   it('wrapper div has correct border styling', () => {

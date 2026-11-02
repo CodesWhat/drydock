@@ -352,6 +352,25 @@ describe('ApprovalsView', () => {
       expect(mockListApprovals).toHaveBeenCalledTimes(1);
     });
 
+    it('shows the tag delta in Version for bare tags and image:tag refs', async () => {
+      mockListApprovals.mockResolvedValue(
+        makeListResponse([
+          makeApproval({ id: 'a', fromRef: '4.38.16', toRef: '4.39.0' }),
+          makeApproval({
+            id: 'b',
+            fromRef: 'registry:5000/team/app:1.2.3',
+            toRef: 'registry:5000/team/app:1.3.0',
+          }),
+        ]),
+      );
+      const wrapper = await mountView();
+      const from = wrapper.findAll('[data-testid="approval-from-ref"]');
+      const to = wrapper.findAll('[data-testid="approval-to-ref"]');
+      expect(from.map((n) => n.text())).toEqual(['4.38.16', '1.2.3']);
+      expect(to.map((n) => n.text())).toEqual(['4.39.0', '1.3.0']);
+      expect(from[1].attributes('title')).toBe('registry:5000/team/app:1.2.3');
+    });
+
     it('explains notify mode while keeping approval disabled', async () => {
       mockUpdateMode.value = 'notify';
       const wrapper = await mountView();

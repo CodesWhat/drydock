@@ -146,4 +146,34 @@ describe('ConfigLogsTab', () => {
     expect(wrapper.findComponent({ name: 'AppButton' }).exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('gives every toolbar select and the search input an accessible name', () => {
+    const wrapper = mount(ConfigLogsTab, {
+      props: { ...baseProps, components: ['api'] },
+    });
+    const selects = wrapper.findAll('select');
+    expect(selects).toHaveLength(3);
+    expect(selects.map((select) => select.attributes('aria-label'))).toEqual([
+      'Filter by log level',
+      'Number of log lines',
+      'Filter by component',
+    ]);
+    expect(
+      wrapper.get('[data-test="container-log-search-input"]').attributes('aria-label'),
+    ).toBeTruthy();
+    wrapper.unmount();
+  });
+
+  it('does not blame filters for an empty log when none are set', () => {
+    const wrapper = mount(ConfigLogsTab, { props: { ...baseProps } });
+    expect(wrapper.text()).toContain('No log entries yet.');
+    expect(wrapper.text()).not.toContain('current filters');
+    wrapper.unmount();
+  });
+
+  it('keeps the filter wording for an empty log when a filter is active', () => {
+    const wrapper = mount(ConfigLogsTab, { props: { ...baseProps, logLevelFilter: 'error' } });
+    expect(wrapper.text()).toContain('No log entries found for current filters.');
+    wrapper.unmount();
+  });
 });

@@ -12,7 +12,7 @@ defineProps<{
   <div class="my-3 px-3 py-2 dd-rounded flex items-center gap-2.5"
        :style="{ backgroundColor: 'var(--dd-info-muted)', border: '1px solid var(--dd-info)' }">
     <AppIcon name="restart" :size="12" class="animate-spin shrink-0" :style="{ color: 'var(--dd-info)' }" />
-    <span class="text-2xs-plus font-semibold" :style="{ color: 'var(--dd-info)' }">
+    <span class="text-2xs-plus font-semibold" :style="{ color: 'var(--dd-info-badge)' }">
       {{ t('sharedComponents.scanProgressBanner.scanning', { done: progress.done, total: progress.total }) }}
     </span>
     <div class="flex-1 h-1 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-inset)' }">

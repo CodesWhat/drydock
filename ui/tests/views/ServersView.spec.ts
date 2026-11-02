@@ -181,6 +181,31 @@ describe('ServersView', () => {
     ]);
   });
 
+  describe('host table polish', () => {
+    it('aligns the Host header with its left-aligned cells', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as ComponentOptions<any>);
+      const columns = table.props('columns') as Array<{ key: string; align?: string }>;
+      expect(columns.find((c) => c.key === 'name')?.align).toBe('text-start');
+    });
+
+    it('renders container counts as running/total instead of repeating the total', async () => {
+      mockGetAgents.mockResolvedValue([
+        {
+          name: 'Edge-1',
+          connected: true,
+          host: '10.0.0.21',
+          containers: { total: 3, running: 2, stopped: 1, updatesAvailable: 0 },
+          images: 1,
+        },
+      ]);
+      const wrapper = await mountServersView();
+      const text = wrapper.text().replace(/\s+/g, ' ');
+      expect(text).toContain('2/3 running');
+      expect(text).not.toMatch(/\b3 2 running/);
+    });
+  });
+
   describe('tableColumns (card-mode annotations)', () => {
     it('flags status with cardPriority so it wins the card subtitle over the mono host address', async () => {
       const wrapper = await mountServersView();

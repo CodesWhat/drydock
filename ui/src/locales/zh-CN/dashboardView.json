@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "更新分布",
-      "noUpdates": "没有要分类的更新"
+      "noUpdates": "没有要分类的更新",
+      "digestHint": "标签相同,镜像摘要已更新"
     },
     "stats": {
       "containers": "容器",

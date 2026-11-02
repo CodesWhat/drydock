@@ -344,7 +344,7 @@ function updateKindInitial(kind?: string): string {
         v-if="dashboardUpdateError"
         data-test="dashboard-update-error"
         class="mx-3 sm:mx-5 mt-3 px-3 py-2 text-2xs-plus dd-rounded"
-        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+        :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ dashboardUpdateError }}
       </div>
 

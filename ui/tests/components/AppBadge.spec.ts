@@ -14,7 +14,7 @@ describe('AppBadge', () => {
     expect(span.classes()).toContain('dd-text-badge-sm');
     expect(span.classes()).toContain('uppercase');
     expect(span.attributes('style')).toContain('background-color: var(--dd-neutral-muted)');
-    expect(span.attributes('style')).toContain('color: var(--dd-neutral)');
+    expect(span.attributes('style')).toContain('color: var(--dd-neutral-badge)');
   });
 
   it('applies correct size classes for xs', () => {
@@ -69,14 +69,14 @@ describe('AppBadge', () => {
   });
 
   it.each([
-    ['success', '--dd-success-muted', '--dd-success'],
-    ['danger', '--dd-danger-muted', '--dd-danger'],
-    ['warning', '--dd-warning-muted', '--dd-warning'],
-    ['caution', '--dd-caution-muted', '--dd-caution'],
-    ['info', '--dd-info-muted', '--dd-info'],
-    ['primary', '--dd-primary-muted', '--dd-primary'],
-    ['alt', '--dd-alt-muted', '--dd-alt'],
-    ['neutral', '--dd-neutral-muted', '--dd-neutral'],
+    ['success', '--dd-success-muted', '--dd-success-badge'],
+    ['danger', '--dd-danger-muted', '--dd-danger-badge'],
+    ['warning', '--dd-warning-muted', '--dd-warning-badge'],
+    ['caution', '--dd-caution-muted', '--dd-caution-badge'],
+    ['info', '--dd-info-muted', '--dd-info-badge'],
+    ['primary', '--dd-primary-muted', '--dd-primary-badge'],
+    ['alt', '--dd-alt-muted', '--dd-alt-badge'],
+    ['neutral', '--dd-neutral-muted', '--dd-neutral-badge'],
   ] as const)('applies correct color style for tone=%s', (tone, bgVar, textVar) => {
     const wrapper = mount(AppBadge, {
       props: { tone },

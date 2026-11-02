@@ -243,7 +243,10 @@
         "warn": "Warnung",
         "error": "Fehler",
         "allComponents": "Alle Komponenten",
-        "resetFilters": "Filter zurücksetzen"
+        "resetFilters": "Filter zurücksetzen",
+        "levelFilter": "Nach Log-Level filtern",
+        "tailSize": "Anzahl der Logzeilen",
+        "componentFilter": "Nach Komponente filtern"
       },
       "tail": {
         "50": "Letzte 50",
@@ -251,7 +254,8 @@
         "500": "Letzte 500",
         "1000": "Letzte 1000"
       },
-      "logLevelBadge": "Server-Log-Level: {level}. Nur Nachrichten auf diesem Level oder höher werden erfasst."
+      "logLevelBadge": "Server-Log-Level: {level}. Nur Nachrichten auf diesem Level oder höher werden erfasst.",
+      "emptyNoFilters": "Noch keine Logeinträge."
     }
   }
 }

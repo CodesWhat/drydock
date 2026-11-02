@@ -243,7 +243,10 @@
         "warn": "Avviso",
         "error": "Errore",
         "allComponents": "Tutti i componenti",
-        "resetFilters": "Reimposta filtri"
+        "resetFilters": "Reimposta filtri",
+        "levelFilter": "Filtra per livello di log",
+        "tailSize": "Numero di righe di log",
+        "componentFilter": "Filtra per componente"
       },
       "tail": {
         "50": "Ultime 50",
@@ -251,7 +254,8 @@
         "500": "Ultime 500",
         "1000": "Ultime 1000"
       },
-      "logLevelBadge": "Livello log server: {level}. Vengono acquisiti solo i messaggi a questo livello o superiore."
+      "logLevelBadge": "Livello log server: {level}. Vengono acquisiti solo i messaggi a questo livello o superiore.",
+      "emptyNoFilters": "Ancora nessuna voce di log."
     }
   }
 }

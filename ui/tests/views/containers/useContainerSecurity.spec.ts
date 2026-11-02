@@ -136,7 +136,7 @@ describe('useContainerSecurity', () => {
     expect(composable.runtimeOriginLabel('explicit')).toBe('Explicit');
     expect(composable.runtimeOriginStyle('unknown')).toEqual({
       backgroundColor: 'var(--dd-warning-muted)',
-      color: 'var(--dd-warning)',
+      color: 'var(--dd-warning-badge)',
     });
   });
 
@@ -526,12 +526,12 @@ describe('useContainerSecurity', () => {
     expect(composable.runtimeOriginLabel('inherited')).toBe('Inherited');
     expect(composable.runtimeOriginStyle('inherited')).toEqual({
       backgroundColor: 'var(--dd-info-muted)',
-      color: 'var(--dd-info)',
+      color: 'var(--dd-info-badge)',
     });
     expect(composable.runtimeOriginLabel('unknown')).toBe('Unknown');
     expect(composable.runtimeOriginStyle('explicit')).toEqual({
       backgroundColor: 'var(--dd-success-muted)',
-      color: 'var(--dd-success)',
+      color: 'var(--dd-success-badge)',
     });
   });
 

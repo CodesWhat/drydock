@@ -243,7 +243,10 @@
         "warn": "Uyar",
         "error": "Hata",
         "allComponents": "Tüm Bileşenler",
-        "resetFilters": "Filtreleri sıfırla"
+        "resetFilters": "Filtreleri sıfırla",
+        "levelFilter": "Günlük düzeyine göre filtrele",
+        "tailSize": "Günlük satırı sayısı",
+        "componentFilter": "Bileşene göre filtrele"
       },
       "tail": {
         "50": "Kuyruk 50",
@@ -251,7 +254,8 @@
         "500": "Kuyruk 500",
         "1000": "Kuyruk 1000"
       },
-      "logLevelBadge": "Sunucu günlük düzeyi: {level}. Yalnızca bu düzeydeki veya üzerindeki iletiler yakalanır."
+      "logLevelBadge": "Sunucu günlük düzeyi: {level}. Yalnızca bu düzeydeki veya üzerindeki iletiler yakalanır.",
+      "emptyNoFilters": "Henüz günlük girdisi yok."
     }
   }
 }

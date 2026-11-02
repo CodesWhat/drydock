@@ -131,7 +131,7 @@ function togglePin() {
         <div
           v-else-if="props.error"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
         >
           <p>{{ props.error }}</p>
           <AppButton
@@ -146,7 +146,7 @@ function togglePin() {
           v-model:newest-first="newestFirst"
           class="flex-1 min-h-0"
           :entries="props.entries"
-          :empty-message="t('configView.logs.emptyMessage')"
+          :empty-message="filtersModified ? t('configView.logs.emptyMessage') : t('configView.logs.emptyNoFilters')"
           :paused="viewerPaused"
           :auto-scroll-pinned="autoScrollPinned"
           :status-label="statusLabel"
@@ -175,6 +175,7 @@ function togglePin() {
 
             <select
               v-model="logLevelFilterModel"
+              :aria-label="t('configView.logs.toolbar.levelFilter')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="all">{{ t('configView.logs.toolbar.allLevels') }}</option>
@@ -186,6 +187,7 @@ function togglePin() {
 
             <select
               v-model.number="tailModel"
+              :aria-label="t('configView.logs.toolbar.tailSize')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option :value="50">{{ t('configView.logs.tail.50') }}</option>
@@ -196,6 +198,7 @@ function togglePin() {
 
             <select
               v-model="componentFilterModel"
+              :aria-label="t('configView.logs.toolbar.componentFilter')"
               class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="">{{ t('configView.logs.toolbar.allComponents') }}</option>

@@ -337,6 +337,7 @@ onBeforeUnmount(() => {
 
         <select
           v-model="tailSize"
+          :aria-label="t('configView.logs.toolbar.tailSize')"
           class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
           <option v-for="option in tailOptions" :key="option.label" :value="option.value">{{ option.label }}</option>
@@ -345,6 +346,7 @@ onBeforeUnmount(() => {
         <select
           v-if="hasJsonEntries"
           v-model="levelFilter"
+          :aria-label="t('configView.logs.toolbar.levelFilter')"
           class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
           <option v-for="option in levelOptions" :key="option" :value="option">

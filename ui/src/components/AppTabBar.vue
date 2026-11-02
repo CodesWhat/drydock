@@ -41,7 +41,7 @@ const iconSize = computed(() =>
 
 const countStyle = {
   backgroundColor: 'var(--dd-neutral-muted)',
-  color: 'var(--dd-neutral)',
+  color: 'var(--dd-neutral-badge)',
 };
 </script>
 

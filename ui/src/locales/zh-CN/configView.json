@@ -243,7 +243,10 @@
         "warn": "警告",
         "error": "错误",
         "allComponents": "所有组件",
-        "resetFilters": "重置筛选"
+        "resetFilters": "重置筛选",
+        "levelFilter": "按日志级别筛选",
+        "tailSize": "日志行数",
+        "componentFilter": "按组件筛选"
       },
       "tail": {
         "50": "末尾 50 条",
@@ -251,7 +254,8 @@
         "500": "末尾 500 条",
         "1000": "末尾 1000 条"
       },
-      "logLevelBadge": "服务器日志级别：{level}。仅捕获此级别及更高级别的消息。"
+      "logLevelBadge": "服务器日志级别：{level}。仅捕获此级别及更高级别的消息。",
+      "emptyNoFilters": "暂无日志条目。"
     }
   }
 }

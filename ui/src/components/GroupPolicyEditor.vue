@@ -177,7 +177,7 @@ function addSuggestion(trigger: string) {
       v-if="failure?.kind === 'conflict' || failure?.kind === 'notFound'"
       role="alert"
       class="dd-rounded px-3 py-2 dd-text-body flex items-center justify-between gap-3"
-      :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+      :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
       data-testid="group-policy-conflict"
     >
       <span>{{

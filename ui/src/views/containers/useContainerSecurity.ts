@@ -300,12 +300,12 @@ function createSelectedComposePaths(
 
 function runtimeOriginStyle(origin: RuntimeOrigin) {
   if (origin === 'explicit') {
-    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' };
+    return { backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success-badge)' };
   }
   if (origin === 'inherited') {
-    return { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' };
+    return { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info-badge)' };
   }
-  return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' };
+  return { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' };
 }
 
 function createSelectedImageMetadata(
