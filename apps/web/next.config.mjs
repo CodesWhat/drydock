@@ -44,14 +44,14 @@ const nextConfig = {
       },
     ],
   },
-  // /docs and the unversioned deep links are permanent so link equity moves to
-  // the versioned URLs. /docs/current stays temporary on purpose: it moves
-  // every release.
+  // All docs redirects stay temporary: their target is the current version,
+  // which changes every release, and browsers cache a permanent redirect.
+  // Internal links go straight to DOCS_ROOT, so there is no hop to optimise.
   redirects: async () => [
     {
       source: "/docs",
       destination: `/docs/${docsCurrentVersion}`,
-      permanent: true,
+      permanent: false,
     },
     {
       source: "/docs/current/:path*",
@@ -61,7 +61,7 @@ const nextConfig = {
     {
       source: `/docs/:path((?!${docsRedirectExclusions}).*)`,
       destination: `/docs/${docsCurrentVersion}/:path`,
-      permanent: true,
+      permanent: false,
     },
   ],
 };
