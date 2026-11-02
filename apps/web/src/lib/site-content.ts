@@ -310,9 +310,10 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Dependency-aware update flows",
-      "Image cleanup and static-image monitoring",
-      "Operator quality-of-life workflows",
+      "Dependency-aware update ordering",
+      "Per-action update policy",
+      "Keyboard shortcuts and PWA",
+      "Legacy DD_TRIGGER_* variables removed",
     ],
   },
   {
@@ -327,85 +328,35 @@ export const roadmap: Milestone[] = [
       "Landed: revision-checked editors for selected local file-owned settings",
       "Landed: fleet bulk actions with confirmation and bounded update concurrency",
       "Landed: SQLite persistence and one-time legacy JSON import",
+      "Landed: Images page with inventory and prune",
     ],
   },
   {
-    version: "v2.0.0",
-    title: "Platform Expansion",
+    version: "v1.9.0",
+    title: "Policy depth & Ecosystem",
+    emoji: "\u{1F9ED}",
+    status: "planned",
+    dotColor:
+      "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
+    items: [
+      "Per-update-type candidates and running-version ceilings",
+      "Watcher include/exclude filters",
+      "Audit actor and export",
+      "Home Assistant and Homepage integrations",
+    ],
+  },
+  {
+    version: "v2.0+",
+    title: "Platform Expansion & Beyond",
     emoji: "\u{1F30D}",
     status: "planned",
     dotColor:
       "border-rose-400 bg-rose-50 text-rose-500 dark:border-rose-500 dark:bg-rose-950 dark:text-rose-400",
     items: [
-      "Additional orchestrator support",
-      "Stack deployment workflows",
-      "Native Podman provider direction",
-    ],
-  },
-  {
-    version: "v2.1.0",
-    title: "Progressive Delivery",
-    emoji: "\u{1F3AF}",
-    status: "planned",
-    dotColor:
-      "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
-    items: ["Health-gated rollouts", "Canary-style deployments", "Durable self-update flows"],
-  },
-  {
-    version: "v2.2.0",
-    title: "Container Operations",
-    emoji: "\u{1F4BB}",
-    status: "planned",
-    dotColor:
-      "border-teal-400 bg-teal-50 text-teal-500 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-400",
-    items: [
-      "Container shell and file workflows",
-      "Image build and publish workflows",
-      "Day-two container maintenance tools",
-    ],
-  },
-  {
-    version: "v2.3.0",
-    title: "Automation & Developer Experience",
-    emoji: "\u{1F527}",
-    status: "planned",
-    dotColor:
-      "border-cyan-400 bg-cyan-50 text-cyan-500 dark:border-cyan-500 dark:bg-cyan-950 dark:text-cyan-400",
-    items: [
-      "Stronger operator authentication",
-      "API key and scripting workflows",
-      "CLI and developer tooling",
-    ],
-  },
-  {
-    version: "v2.4.0",
-    title: "Data Safety & Templates",
-    emoji: "\u{1F4E6}",
-    status: "planned",
-    dotColor:
-      "border-lime-400 bg-lime-50 text-lime-500 dark:border-lime-500 dark:bg-lime-950 dark:text-lime-400",
-    items: ["Scheduled backup workflows", "Reusable stack templates", "Secret management"],
-  },
-  {
-    version: "v3.0.0",
-    title: "Advanced Platform",
-    emoji: "\u{1F52E}",
-    status: "planned",
-    dotColor:
-      "border-fuchsia-400 bg-fuchsia-50 text-fuchsia-500 dark:border-fuchsia-500 dark:bg-fuchsia-950 dark:text-fuchsia-400",
-    items: ["Infrastructure visualization", "Specialized hardware monitoring"],
-  },
-  {
-    version: "v3.1.0",
-    title: "Enterprise Access & Compliance",
-    emoji: "\u{1F510}",
-    status: "planned",
-    dotColor:
-      "border-violet-400 bg-violet-50 text-violet-500 dark:border-violet-500 dark:bg-violet-950 dark:text-violet-400",
-    items: [
-      "Role and environment-scoped permissions",
-      "Directory and identity-provider integration",
-      "Compliance posture and hardened image options",
+      "Swarm and Kubernetes watchers",
+      "GitOps sync",
+      "Health gates and canary deploys",
+      "RBAC and LDAP/AD",
     ],
   },
 ];

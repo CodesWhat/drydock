@@ -43,7 +43,7 @@ const featureRows: FeatureRow[] = [
   {
     label: "Distributed agents",
     drydock: "yes",
-    watchtower: "no",
+    watchtower: "partial",
     diun: "no",
     portainer: "partial",
   },

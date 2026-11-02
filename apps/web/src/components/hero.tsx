@@ -1,7 +1,11 @@
 import Image from "next/image";
+import Link from "next/link";
 import { CtaButtons } from "@/components/cta-buttons";
 import { GitHubBadges } from "@/components/github-badges";
-import { SITE_CONFIG } from "@/lib/site-config";
+import { DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
+
+// "1.8.0-rc.10" -> "v1.8". The pill names the series, not the exact RC.
+const rcSeries = `v${SITE_CONFIG.version.split(".").slice(0, 2).join(".")}`;
 
 export function Hero() {
   return (
@@ -10,7 +14,13 @@ export function Hero() {
         <div className="website-hero-grid">
           <div>
             <p className="website-version">
-              v{SITE_CONFIG.version} <span>Open source</span>
+              v{SITE_CONFIG.stableVersion} <span>stable</span> <span aria-hidden="true">·</span>{" "}
+              <Link
+                href={`${DOCS_ROOT}/configuration/storage#upgrade-from-json`}
+                className="underline underline-offset-4"
+              >
+                {rcSeries} RC <span>available to test</span>
+              </Link>
             </p>
             <h1 id="hero-heading" className="website-display">
               Container Update<span>Monitoring</span>
