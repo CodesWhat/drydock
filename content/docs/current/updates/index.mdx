@@ -5,6 +5,16 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1-rc.5 Highlights — November 1, 2026
+
+The fifth release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- Redact env values under `*_KEY` names such as `ENCRYPTION_KEY` and `LITELLM_MASTER_KEY`. Existing stores are rescrubbed on the first start after upgrading. Backups made before the upgrade are not scrubbed, and a secret under an unrecognized name can still be stored as plaintext (#1523).
+- Fix the env value reveal button and the login password toggle rendering blank (#1523).
+- It includes everything in rc.4 and starts a new seven-day soak at publication. The stable `latest` and `1.7` channels do not move.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.5/CHANGELOG.md#171-rc5--2026-11-01) for the full release notes.
+
 ## v1.7.1-rc.4 Highlights — October 31, 2026
 
 The fourth release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
