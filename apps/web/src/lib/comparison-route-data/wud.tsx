@@ -79,6 +79,6 @@ bell|Trigger Services|21 trigger integrations including Google Chat, Matrix, Mat
   ),
   migrationTitle: "Coming from WUD?",
   migrationDescription:
-    'Mount the folder with your Compose and .env files into a one-off container and preview with: docker run --rm -v "$PWD":/work -w /work --entrypoint node codeswhat/drydock /home/node/app/dist/index.js config migrate --dry-run --file compose.yml (repeat --file for more files). Rerun without --dry-run to rewrite them. It maps WUD_* variables and the supported wud.* labels to DD_* and dd.*; review any wud.* label it leaves in place, such as wud.rollback.enable. Since v1.6, Drydock no longer reads WUD_* or wud.* at runtime.',
+    'Mount the folder with your Compose and .env files into a one-off container and preview with: docker run --rm -v "$PWD":/work -w /work codeswhat/drydock node /home/node/app/dist/index.js config migrate --dry-run --file compose.yml (repeat --file for more files). Rerun without --dry-run to rewrite them. It maps WUD_* variables and the supported wud.* labels to DD_* and dd.*; review any wud.* label it leaves in place, such as wud.rollback.enable. Since v1.6, Drydock no longer reads WUD_* or wud.* at runtime.',
   jsonLdName: "WUD vs Drydock — Container Update Monitoring Comparison",
 } satisfies ComparisonRouteRawConfig;

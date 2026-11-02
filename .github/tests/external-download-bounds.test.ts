@@ -93,5 +93,5 @@ test.each(retriedCalls)('%s caps total retry time', (_where, { command }) => {
 });
 
 test.each(retriedCalls)('%s writes its response to a file, not stdout', (_where, { command }) => {
-  expect(command).toMatch(/(\s-o\s|--output\s|>\s*\S)/);
+  expect(command).toMatch(/(\s-o\s|--output\s)/);
 });

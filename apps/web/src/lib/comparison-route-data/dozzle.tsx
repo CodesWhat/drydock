@@ -12,7 +12,7 @@ Image update detection|Yes, digest checks (v11)|Yes, across 23 registries|tie
 Auto-update containers|Yes, bulk and scheduled with safe swap and cleanup (v11)|Yes (optional, monitor-first)|tie
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|Yes, if the new container fails to start, restarts or turns unhealthy|Yes, on health check failure|tie
-Image backup|Old container kept only until the new one runs stably|Pre-update backup with retention|self
+Image backup|Old container removed once the new one is stable, replaced image kept as one spare|Pre-update backup with retention|self
 Trigger integrations|Slack, Discord, Ntfy, webhooks|21 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
