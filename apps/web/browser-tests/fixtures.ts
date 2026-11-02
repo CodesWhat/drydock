@@ -38,7 +38,9 @@ export const test = base.extend<{ diagnostics: Diagnostics }>({
         (url) => url.origin !== origin,
         async (route) => {
           const request = route.request();
-          if (request.url().startsWith(DEMO_ORIGIN)) return route.abort("connectionrefused");
+          if (new URL(request.url()).origin === new URL(DEMO_ORIGIN).origin) {
+            return route.abort("connectionrefused");
+          }
           if (request.resourceType() === "image") {
             return route.fulfill({ status: 200, contentType: "image/svg+xml", body: PIXEL_SVG });
           }

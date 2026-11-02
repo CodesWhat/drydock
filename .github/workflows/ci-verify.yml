@@ -1096,7 +1096,9 @@ jobs:
           set -euo pipefail
           nohup node browser-tests/serve.mjs > "$RUNNER_TEMP/web-serve.log" 2>&1 &
           for _ in $(seq 1 60); do
-            if curl --silent --fail --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/"; then
+            if curl --silent --fail --max-time 2 --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/"; then
+              # Build the docs search index once so the first search spec doesn't pay the cold start.
+              { curl --silent --max-time 60 --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/api/search?query=docker" || true; }
               exit 0
             fi
             sleep 1
@@ -1122,7 +1124,7 @@ jobs:
             -v "${{ github.workspace }}:/work" \
             -w /work/apps/web \
             "$PLAYWRIGHT_IMAGE" \
-            npx playwright test --retries=1
+            npx playwright test --retries=1 --reporter=list,github
         timeout-minutes: 12
 
       - name: Upload browser check report
