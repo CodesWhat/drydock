@@ -103,7 +103,7 @@ export function ComparisonPage({
               aria-label="Detailed feature comparison"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: This overflow region needs focus for keyboard scrolling.
               tabIndex={0}
-              className="overflow-x-auto rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]"
+              className="relative overflow-x-auto rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]"
             >
               <table className="w-full min-w-[600px] text-sm">
                 <thead>

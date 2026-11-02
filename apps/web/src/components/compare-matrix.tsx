@@ -203,7 +203,7 @@ export function CompareMatrix() {
   return (
     <div className="overflow-hidden rounded-[4px] border border-[var(--dd-border-strong)] bg-[var(--dd-bg-card)]">
       {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The labelled overflow region needs keyboard focus for horizontal scrolling. */}
-      <section className="overflow-x-auto" aria-label="Feature comparison" tabIndex={0}>
+      <section className="relative overflow-x-auto" aria-label="Feature comparison" tabIndex={0}>
         <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-[var(--dd-border-strong)]">
