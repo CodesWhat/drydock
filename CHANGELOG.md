@@ -8,6 +8,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.12] - 2026-11-02
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.11 changes and upgrade warnings. It adds light-theme contrast and status badge fixes, an approvals mobile card fix, accessibility structure, UI polish, a lighter metrics read path and browser CI for the website.
+
 ### Fixed
 
 - Light themes: muted and secondary text (and the neutral status tone) now meet 4.5:1 contrast on every surface in all six families. The notification bell count badge uses a per-theme `--dd-danger-fg` foreground instead of white, which measured 2.2:1 on the dark themes.
@@ -3711,7 +3718,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...HEAD
+[1.8.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...v1.8.0-rc.12
 [1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11
 [1.8.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...v1.8.0-rc.10
 [1.8.0-rc.9]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.8...v1.8.0-rc.9
