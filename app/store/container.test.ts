@@ -630,11 +630,11 @@ test('updateContainer should store classified runtime env redacted and without t
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.details.env).toEqual([
-    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
     { key: 'PATH', value: '/usr/bin' },
   ]);
   expect(container.getContainerRaw('container-runtime-classification').details.env).toEqual([
-    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
     { key: 'PATH', value: '/usr/bin' },
   ]);
 });
@@ -688,8 +688,36 @@ test('insertContainer should redact sensitive env values in the stored row (#152
   );
 
   expect(container.getContainerRaw('container-insert-redacted').details.env).toEqual([
-    { key: 'DB_PASSWORD', value: '[REDACTED]' },
+    { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
     { key: 'PATH', value: '/usr/bin' },
+  ]);
+});
+
+test('a URL-only credential keeps its reveal marker through the SQLite round trip (#1523)', async () => {
+  seedContainer(
+    createContainerFixture({
+      id: 'url-only-env',
+      details: {
+        ports: [],
+        volumes: [],
+        env: [
+          { key: 'MY_DSN', value: 'postgres://u:p@h/db' },
+          { key: 'DB_PASSWORD', value: 'hunter2' },
+          { key: 'LOG_LEVEL', value: 'debug' },
+        ],
+      },
+    }),
+  );
+
+  const stored = JSON.stringify(
+    db.prepare('SELECT details FROM containers WHERE id = ?').get('url-only-env'),
+  );
+  expect(stored).not.toContain('postgres://');
+  expect(stored).not.toContain('hunter2');
+  expect(container.getContainer('url-only-env')?.details.env).toEqual([
+    { key: 'MY_DSN', value: '[REDACTED]', sensitive: true },
+    { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
+    { key: 'LOG_LEVEL', value: 'debug', sensitive: false },
   ]);
 });
 
@@ -720,7 +748,7 @@ describe('redactStoredRuntimeEnv', () => {
     const stored = JSON.stringify(db.prepare('SELECT details FROM containers').all());
     expect(stored).not.toContain('super-secret-password');
     expect(container.getContainerRaw('raw-row').details.env).toEqual([
-      { key: 'DB_PASSWORD', value: '[REDACTED]' },
+      { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
       { key: 'PATH', value: '/usr/bin' },
     ]);
     expect(container.getContainersRaw().find((c) => c.id === 'raw-row')?.details.env[0].value).toBe(
@@ -743,7 +771,11 @@ describe('redactStoredRuntimeEnv', () => {
     writeRawDetails('odd', {
       ports: [],
       volumes: [],
-      env: [null, { value: 'no-key' }, { key: 'ENCRYPTION_KEY', value: '[REDACTED]' }],
+      env: [
+        null,
+        { value: 'no-key' },
+        { key: 'ENCRYPTION_KEY', value: '[REDACTED]', sensitive: true },
+      ],
     });
 
     expect(container.redactStoredRuntimeEnv()).toEqual({ containers: 1, values: 0 });
@@ -754,7 +786,7 @@ describe('redactStoredRuntimeEnv', () => {
       ports: [],
       volumes: [],
       env: [
-        { key: 'DB_PASSWORD', value: '[REDACTED]' },
+        { key: 'DB_PASSWORD', value: '[REDACTED]', sensitive: true },
         { key: 'ENCRYPTION_KEY', value: 'enc-plain' },
         { key: 'LITELLM_MASTER_KEY', value: 'master-plain' },
       ],
@@ -1893,6 +1925,7 @@ test('getContainersRaw should return env values redacted at rest', async () => {
   expect(result[0].details.env[0]).toEqual({
     key: 'API_TOKEN',
     value: '[REDACTED]',
+    sensitive: true,
   });
   expect(result[0].details.env[1]).toEqual({
     key: 'NODE_ENV',
@@ -2146,6 +2179,7 @@ test('getContainerRaw should return env values redacted at rest', async () => {
   expect(result?.details.env[0]).toEqual({
     key: 'DB_PASSWORD',
     value: '[REDACTED]',
+    sensitive: true,
   });
 });
 

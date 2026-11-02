@@ -72,16 +72,27 @@ export function hasUrlCredentials(value: unknown): boolean {
   }
 }
 
-export function isSensitiveEnvEntry(entry: { key: string; value?: unknown }): boolean {
-  return isSensitiveKey(entry.key) || hasUrlCredentials(entry.value);
+export function isSensitiveEnvEntry(entry: {
+  key: string;
+  value?: unknown;
+  sensitive?: unknown;
+}): boolean {
+  return (
+    isSensitiveKey(entry.key) ||
+    hasUrlCredentials(entry.value) ||
+    // A stored URL credential is already '[REDACTED]', so the value can no longer
+    // be re-parsed. The persisted marker is the only record that it was one.
+    (entry.sensitive === true && entry.value === REDACTED_ENV_VALUE)
+  );
 }
 
 export const REDACTED_ENV_VALUE = '[REDACTED]';
 
 /**
  * Details as they are written to the store (#1523): every env entry that
- * `isSensitiveEnvEntry` flags keeps its key but loses its value, and the API-only
- * `sensitive` marker is dropped so the result still passes the container schema.
+ * `isSensitiveEnvEntry` flags keeps its key but loses its value, and carries
+ * `sensitive: true` so a URL-only credential, which can't be re-derived from
+ * '[REDACTED]', still shows the reveal control after a read back.
  * Idempotent, so a row that is already redacted, or an already-classified payload
  * from an API response or an agent, comes out the same.
  */
@@ -99,10 +110,11 @@ export function redactRuntimeDetailsForStorage<T>(details: T): T {
     ...detailsWithEnv,
     env: detailsWithEnv.env
       .filter((entry) => hasEnvKey(entry))
-      .map((entry) => ({
-        key: entry.key,
-        value: isSensitiveEnvEntry(entry) ? REDACTED_ENV_VALUE : entry.value,
-      })),
+      .map((entry) =>
+        isSensitiveEnvEntry(entry)
+          ? { key: entry.key, value: REDACTED_ENV_VALUE, sensitive: true }
+          : { key: entry.key, value: entry.value },
+      ),
   } as T;
 }
 
