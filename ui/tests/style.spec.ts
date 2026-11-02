@@ -36,6 +36,6 @@ describe('style.css reduced motion', () => {
   });
 
   it('keeps progress spinners running', () => {
-    expect(css).toMatch(/:not\(\.dd-spin, \.dd-spin-slow, \.dd-spin-fast\)/);
+    expect(css).toMatch(/:not\(\.dd-spin, \.dd-spin-slow, \.dd-spin-fast, \.animate-spin\)/);
   });
 });
