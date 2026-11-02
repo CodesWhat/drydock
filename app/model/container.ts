@@ -193,6 +193,8 @@ export interface ContainerUpdateRollbackState {
 export interface ContainerRuntimeEnv {
   key: string;
   value: string;
+  /** Set on a redacted entry so the reveal control survives storage (#1523). */
+  sensitive?: boolean;
 }
 
 export interface ContainerRuntimeDetails {
@@ -607,6 +609,7 @@ const schema = joi.object({
         joi.object({
           key: joi.string().required(),
           value: joi.string().allow('').required(),
+          sensitive: joi.boolean().optional(),
         }),
       )
       .required(),
