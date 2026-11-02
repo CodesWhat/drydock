@@ -243,7 +243,10 @@
         "warn": "Avertissement",
         "error": "Erreur",
         "allComponents": "Tous les composants",
-        "resetFilters": "Réinitialiser les filtres"
+        "resetFilters": "Réinitialiser les filtres",
+        "levelFilter": "Filtrer par niveau de journal",
+        "tailSize": "Nombre de lignes de journal",
+        "componentFilter": "Filtrer par composant"
       },
       "tail": {
         "50": "50 dernières",
@@ -251,7 +254,8 @@
         "500": "500 dernières",
         "1000": "1000 dernières"
       },
-      "logLevelBadge": "Niveau de log serveur : {level}. Seuls les messages à ce niveau ou supérieur sont capturés."
+      "logLevelBadge": "Niveau de log serveur : {level}. Seuls les messages à ce niveau ou supérieur sont capturés.",
+      "emptyNoFilters": "Aucune entrée de journal pour le moment."
     }
   }
 }

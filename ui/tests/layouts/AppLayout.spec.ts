@@ -506,6 +506,31 @@ describe('AppLayout', () => {
       expect(main.classes()).toContain('sm:pe-[9px]');
     });
 
+    it('renders the top-bar page title as the page h1', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const title = wrapper.get('[data-test="topbar-title"]');
+      expect(title.element.tagName).toBe('H1');
+      expect(wrapper.findAll('h1')).toHaveLength(1);
+    });
+
+    it('leaves the h1 to the container logs page, which renders its own', async () => {
+      const originalPath = mockRoute.path;
+      mockRoute.path = '/containers/abc123/logs';
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        expect(wrapper.get('[data-test="topbar-title"]').element.tagName).toBe('SPAN');
+        expect(wrapper.findAll('h1')).toHaveLength(0);
+      } finally {
+        mockRoute.path = originalPath;
+      }
+    });
+
     it('exposes the matched route name on the main content landmark', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);

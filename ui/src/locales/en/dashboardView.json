@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "noUpdates": "No updates to categorize",
+      "digestHint": "Same tag, new image digest"
     },
     "stats": {
       "containers": "Containers",

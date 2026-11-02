@@ -19,7 +19,7 @@ const props = withDefaults(
     :class="props.variant === 'inline' ? 'gap-1 px-1.5 py-0.5 dd-rounded-sm text-2xs' : ''"
     :style="
       props.variant === 'inline'
-        ? { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }
+        ? { backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }
         : { color: 'var(--dd-warning)' }
     "
   >

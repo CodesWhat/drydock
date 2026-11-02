@@ -194,9 +194,9 @@ const tableColumns = computed<DataTableColumn[]>(() => [
     key: 'age',
     label: t('approvalsView.columns.age'),
     sortable: false,
-    size: 110,
-    minSize: 90,
-    maxSize: 150,
+    size: 130,
+    minSize: 110,
+    maxSize: 170,
   },
 ]);
 
@@ -535,6 +535,13 @@ function confirmDefer(approval: ApprovalRecord) {
   });
 }
 
+// The backend stores bare tags (`4.38.16`); the demo seed and some providers send
+// `image:tag`. Show only the tag so the Version column reads as a delta, not a truncated image.
+function refTag(ref: string): string {
+  const colon = ref.lastIndexOf(':');
+  return colon > ref.lastIndexOf('/') ? ref.slice(colon + 1) : ref;
+}
+
 function formatAge(approval: ApprovalRecord): string {
   return timeAgo(approval.createdAt, locale.value, t);
 }
@@ -638,7 +645,7 @@ onUnmounted(() => {
 
     <div v-if="isNotifyMode"
          class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-         :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }">
+         :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }">
       {{ t('approvalsView.notifyModeBanner') }}
     </div>
 
@@ -671,7 +678,7 @@ onUnmounted(() => {
 
     <div v-if="error"
          class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+         :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
       {{ error }}
     </div>
 
@@ -730,9 +737,9 @@ onUnmounted(() => {
       </template>
       <template #cell-version="{ row }">
         <div v-if="!isDetailRow(row)" class="flex items-center gap-1.5 min-w-0">
-          <span class="truncate font-mono text-2xs-plus dd-text-muted" :title="row.fromRef">{{ row.fromRef }}</span>
+          <span class="truncate font-mono text-2xs-plus dd-text-muted" :title="row.fromRef" data-testid="approval-from-ref">{{ refTag(row.fromRef) }}</span>
           <AppIcon name="arrow-right" :size="10" class="shrink-0 dd-text-muted" />
-          <span class="truncate font-mono text-2xs-plus dd-text" :title="row.toRef">{{ row.toRef }}</span>
+          <span class="truncate font-mono text-2xs-plus dd-text" :title="row.toRef" data-testid="approval-to-ref">{{ refTag(row.toRef) }}</span>
           <AppBadge :tone="semverTone(row.semverDiff)" size="xs" class="shrink-0">
             {{ t(`approvalsView.semver.${row.semverDiff}`) }}
           </AppBadge>

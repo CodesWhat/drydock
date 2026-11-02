@@ -198,6 +198,15 @@ describe('NotificationBell', () => {
     expect(wrapper.find('.badge-pulse').text()).toBe('9+');
   });
 
+  it('keeps the badge inside the button bounds and widens for the 9+ label', async () => {
+    const wrapper = factory();
+    await flushPromises();
+    const badge = wrapper.find('.badge-pulse');
+    expect(badge.classes()).toEqual(expect.arrayContaining(['min-w-4', 'px-1', 'top-0.5']));
+    expect(badge.classes()).not.toContain('-top-0.5');
+    expect(badge.classes()).not.toContain('w-4');
+  });
+
   it('hides badge when all entries are read', async () => {
     localStorage.setItem('dd-bell-last-seen', JSON.stringify(new Date().toISOString()));
     const wrapper = factory();

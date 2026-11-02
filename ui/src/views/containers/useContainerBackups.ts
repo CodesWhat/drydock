@@ -75,24 +75,24 @@ function getOperationStatusStyle(status: unknown) {
   if (normalized === 'succeeded') {
     return {
       backgroundColor: 'var(--dd-success-muted)',
-      color: 'var(--dd-success)',
+      color: 'var(--dd-success-badge)',
     };
   }
   if (normalized === 'rolled-back') {
     return {
       backgroundColor: 'var(--dd-warning-muted)',
-      color: 'var(--dd-warning)',
+      color: 'var(--dd-warning-badge)',
     };
   }
   if (normalized === 'failed') {
     return {
       backgroundColor: 'var(--dd-danger-muted)',
-      color: 'var(--dd-danger)',
+      color: 'var(--dd-danger-badge)',
     };
   }
   return {
     backgroundColor: 'var(--dd-info-muted)',
-    color: 'var(--dd-info)',
+    color: 'var(--dd-info-badge)',
   };
 }
 

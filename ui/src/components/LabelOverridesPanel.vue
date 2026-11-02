@@ -502,7 +502,7 @@ async function reload() {
       v-if="loadError"
       role="alert"
       class="dd-text-body px-3 py-2 dd-rounded flex items-center justify-between gap-3"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
       data-testid="label-overrides-error"
     >
       <span>{{ loadError }}</span>
@@ -521,7 +521,7 @@ async function reload() {
         {{ readOnlyText }}
       </p>
       <p v-if="status" role="status" aria-live="polite" class="dd-text-body px-3 py-2 dd-rounded"
-         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+         :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success-badge)' }"
          data-testid="label-overrides-status">
         {{ status }}
       </p>
@@ -529,7 +529,7 @@ async function reload() {
         v-if="reloadMessage"
         role="alert"
         class="dd-rounded px-3 py-2 dd-text-body flex items-center justify-between gap-3"
-        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
         data-testid="label-overrides-conflict"
       >
         <span>{{ reloadMessage }}</span>
@@ -543,7 +543,7 @@ async function reload() {
       <div
         v-if="warnings.length > 0"
         class="dd-text-body px-3 py-2 dd-rounded space-y-1"
-        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+        :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
         data-testid="label-overrides-warnings"
       >
         <div class="font-medium">{{ t('labelOverrides.warnings.title') }}</div>

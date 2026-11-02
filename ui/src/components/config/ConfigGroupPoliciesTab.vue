@@ -222,7 +222,7 @@ void init();
           v-if="status"
           role="status"
           class="dd-text-body px-3 py-2 dd-rounded"
-          :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)' }"
+          :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success-badge)' }"
           data-testid="group-policies-status"
         >
           {{ status }}
@@ -230,7 +230,7 @@ void init();
         <div
           v-if="warnings.length > 0"
           class="dd-text-body px-3 py-2 dd-rounded space-y-1"
-          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+          :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
           data-testid="group-policies-warnings"
         >
           <div class="font-medium">{{ t('groupPolicyEditor.warningsTitle') }}</div>
@@ -243,7 +243,7 @@ void init();
           v-if="loadError"
           role="alert"
           class="dd-text-body px-3 py-2 dd-rounded flex items-center justify-between gap-3"
-          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+          :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
           data-testid="group-policies-error"
         >
           <span>{{ loadError }}</span>

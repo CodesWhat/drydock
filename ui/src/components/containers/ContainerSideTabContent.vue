@@ -317,7 +317,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                    class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs"
                    :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
                 <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
-                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger-badge);">{{ selectedContainer.registryError }}</span>
               </div>
               <div v-if="selectedContainer.updateKind || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge
@@ -436,7 +436,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                    class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                    :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
                 <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
-                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger-badge);">{{ selectedContainer.registryError }}</span>
               </div>
             </div>
 
@@ -466,7 +466,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      class="flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
                   <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                  <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ warning }}</span>
+                  <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning-badge);">{{ warning }}</span>
                 </div>
               </div>
             </div>
@@ -494,7 +494,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <div v-if="selectedLifecycleHooks.preAbortBehavior"
                    class="mt-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                    :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-                <span style="color: var(--dd-info);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
+                <span style="color: var(--dd-info-badge);">{{ selectedLifecycleHooks.preAbortBehavior }}</span>
               </div>
               <div class="mt-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
@@ -579,7 +579,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               </div>
               <div v-else-if="detailVulnerabilityError"
                    class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                   :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
                 {{ detailVulnerabilityError }}
               </div>
               <div v-else class="space-y-1.5">
@@ -623,7 +623,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 </div>
                 <div v-if="detailSbomError"
                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+                     :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
                   {{ detailSbomError }}
                 </div>
                 <div v-else-if="detailSbomLoading"
@@ -769,7 +769,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div
                   v-if="dryRunTriggerId"
                   class="mt-2 px-3 py-2 dd-rounded text-2xs"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
+                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning-badge)' }"
                   data-test="dry-run-trigger-condition"
                 >
                   {{ t('containerComponents.fullPageActions.dryRunCondition', { trigger: dryRunTriggerId }) }}
@@ -957,7 +957,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   v-if="previewErrorAction"
                   :href="previewErrorAction.href"
                   class="inline-flex min-h-11 items-center px-3 dd-rounded text-2xs-plus font-semibold"
-                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+                  :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
                   data-test="preview-error-action"
                 >
                   {{ previewErrorAction.label }}

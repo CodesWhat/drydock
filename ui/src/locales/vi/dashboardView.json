@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "Phân loại cập nhật",
-      "noUpdates": "Không có cập nhật nào để phân loại"
+      "noUpdates": "Không có cập nhật nào để phân loại",
+      "digestHint": "Cùng thẻ, digest ảnh mới"
     },
     "stats": {
       "containers": "Container",

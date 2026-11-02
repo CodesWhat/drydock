@@ -65,6 +65,9 @@ const updateDialogUpdateEligibility = ref<UpdateEligibility | undefined>(undefin
 
 const chooserSummary = ref<ImageSummary | null>(null);
 
+// Accepted duplication (DR-94): this view collapses on the window width via `windowNarrow` rather
+// than the DataTable width-based card mode the containers table uses. Moving it to the shared
+// card mode is a layout rewrite, not a touch-target fix, and is deferred.
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
 const scanError = ref<string | null>(null);
@@ -608,7 +611,7 @@ onUnmounted(() => {
   <DataViewLayout>
       <div v-if="scanError" role="alert"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ scanError }}
         <AppButton v-if="scanRecoveryNeeded" size="sm" variant="muted" class="ml-2"
                    :disabled="refreshingScanResults" @click="refreshScanResults">
@@ -617,14 +620,14 @@ onUnmounted(() => {
       </div>
       <div v-if="error"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         {{ error }}
       </div>
 
       <div v-if="runtimeError"
            role="alert"
            class="mb-3 px-3 py-2 text-2xs-plus dd-rounded flex flex-wrap items-center gap-2"
-           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
         <span class="min-w-0 break-words">{{ runtimeError }}</span>
         <AppButton v-if="!runtimeStatus"
                    size="sm" variant="text-danger" weight="semibold"
@@ -977,7 +980,9 @@ onUnmounted(() => {
             </div>
 
             <!-- Footer: fixable state + lifecycle actions (resources use their own row above). -->
-            <div class="px-4 py-2.5 flex items-center justify-between"
+            <div v-if="row.fixable > 0 || row.hasUpdate"
+                 data-test="security-card-footer"
+                 class="px-4 py-2.5 flex items-center justify-between"
                  :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <span v-if="row.fixable > 0" class="text-2xs-plus font-semibold"
                     :style="{ color: fixableColor(row.fixable, row.total) }">

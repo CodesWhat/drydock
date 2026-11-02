@@ -243,7 +243,10 @@
         "warn": "Warn",
         "error": "Error",
         "allComponents": "전체 컴포넌트",
-        "resetFilters": "필터 초기화"
+        "resetFilters": "필터 초기화",
+        "levelFilter": "로그 수준으로 필터링",
+        "tailSize": "로그 줄 수",
+        "componentFilter": "구성 요소로 필터링"
       },
       "tail": {
         "50": "Tail 50",
@@ -251,7 +254,8 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "서버 로그 레벨: {level}. 이 레벨 이상의 메시지만 캡처됩니다."
+      "logLevelBadge": "서버 로그 레벨: {level}. 이 레벨 이상의 메시지만 캡처됩니다.",
+      "emptyNoFilters": "아직 로그 항목이 없습니다."
     }
   }
 }

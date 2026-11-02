@@ -1164,7 +1164,7 @@ function handleCardSortChange(event: Event): void {
                   <div v-for="col in cardBodyColumns" :key="col.key"
                        class="field flex items-baseline justify-between gap-3">
                     <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
-                    <dd class="text-2xs-plus dd-text" :class="cellContentClass(col)">
+                    <dd class="flex-1 text-end text-2xs-plus dd-text" :class="cellContentClass(col)">
                       <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="true">
                         {{ row[col.key] }}
                       </slot>
@@ -1286,6 +1286,12 @@ function handleCardSortChange(event: Event): void {
               </td>
             </template>
             <template v-else>
+              <!-- DR-81: align-middle is safe on Android landscape. Checked 2026-11-01 in headless
+                   Chromium (touch, 915x412, 844x390, 740x360; comfortable and compact density):
+                   a row grows to its tallest cell and no cell content overflows the row, apart
+                   from the deliberate clamp-2 overflow mode. Re-run that check before adding a
+                   fixed row height or a new overflow mode. A per-column cellAlign prop was
+                   not needed. -->
               <td v-for="(col, colIndex) in resolvedColumns" :key="col.key"
                   :data-col-key="col.key"
                   class="dd-data-table-cell align-middle"

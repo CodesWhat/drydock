@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "توزيع التحديثات",
-      "noUpdates": "لا توجد تحديثات للتصنيف"
+      "noUpdates": "لا توجد تحديثات للتصنيف",
+      "digestHint": "الوسم نفسه، ملخص صورة جديد"
     },
     "stats": {
       "containers": "الحاويات",

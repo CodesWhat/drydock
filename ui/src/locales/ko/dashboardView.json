@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "업데이트 분류",
-      "noUpdates": "분류할 업데이트 없음"
+      "noUpdates": "분류할 업데이트 없음",
+      "digestHint": "같은 태그, 새 이미지 다이제스트"
     },
     "stats": {
       "containers": "컨테이너",

@@ -87,7 +87,7 @@ function goBack() {
             class="shrink-0 px-1.5 py-0.5 dd-rounded text-3xs font-bold uppercase tracking-wider"
             :style="{
               backgroundColor: containerStatus === 'running' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-              color: containerStatus === 'running' ? 'var(--dd-success)' : 'var(--dd-danger)',
+              color: containerStatus === 'running' ? 'var(--dd-success-badge)' : 'var(--dd-danger-badge)',
             }"
           >{{ containerStatusLabel }}</span>
         </div>
@@ -108,7 +108,7 @@ function goBack() {
     <div
       v-else-if="error"
       class="px-4 py-3 dd-rounded text-2xs-plus"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }"
     >
       {{ error }}
     </div>

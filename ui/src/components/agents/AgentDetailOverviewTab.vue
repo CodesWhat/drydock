@@ -68,8 +68,8 @@ const { t } = useI18n();
           <div class="text-2xs dd-text-muted">{{ t('agentsView.detail.overview.containerTotal') }}</div>
         </div>
         <div class="px-2 py-2 dd-rounded" :style="{ backgroundColor: 'var(--dd-success-muted)' }">
-          <div class="text-lg font-bold" :style="{ color: 'var(--dd-success)' }">{{ props.agent.containers.running }}</div>
-          <div class="text-2xs" :style="{ color: 'var(--dd-success)' }">{{ t('agentsView.detail.overview.containerRunning') }}</div>
+          <div class="text-lg font-bold" :style="{ color: 'var(--dd-success-badge)' }">{{ props.agent.containers.running }}</div>
+          <div class="text-2xs" :style="{ color: 'var(--dd-success-badge)' }">{{ t('agentsView.detail.overview.containerRunning') }}</div>
         </div>
         <div
           class="px-2 py-2 dd-rounded"

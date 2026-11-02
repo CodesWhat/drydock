@@ -125,9 +125,9 @@ function getStatusTone(container: Container) {
               v-tooltip.top="getStatusLabel(selectedContainer)"
               size="lg" />
             <div class="min-w-0">
-              <h1 class="text-base sm:text-lg font-bold truncate dd-text">
+              <h2 class="text-base sm:text-lg font-bold truncate dd-text">
                 {{ selectedContainer.name }}
-              </h1>
+              </h2>
               <div class="flex items-center gap-2 mt-0.5 flex-wrap">
                 <span class="text-2xs-plus sm:text-xs font-mono dd-text-secondary truncate max-w-[180px] sm:max-w-none">
                   {{ selectedContainer.image }}:{{ selectedContainer.currentTag }}
@@ -288,7 +288,7 @@ function getStatusTone(container: Container) {
     <div
       v-if="error"
       class="shrink-0 mb-4 px-4 py-3 dd-rounded-lg flex items-center gap-3 text-xs font-medium"
-      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }">
+      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)', border: '1px solid var(--dd-danger)' }">
       <AppIcon name="warning" :size="14" class="shrink-0" />
       <span class="min-w-0 break-words">{{ error }}</span>
       <AppIconButton icon="x" size="toolbar" variant="plain"

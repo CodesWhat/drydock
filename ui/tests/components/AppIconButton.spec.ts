@@ -48,11 +48,13 @@ describe('AppIconButton', () => {
   });
 
   // 2. Size classes
-  it('applies xs size classes (w-10 h-10)', () => {
+  it('applies xs size classes (44px below md, w-10 h-10 from md)', () => {
     const wrapper = mountButton({ size: 'xs' });
     const button = wrapper.get('button');
-    expect(button.classes()).toContain('w-10');
-    expect(button.classes()).toContain('h-10');
+    expect(button.classes()).toContain('w-11');
+    expect(button.classes()).toContain('h-11');
+    expect(button.classes()).toContain('md:w-10');
+    expect(button.classes()).toContain('md:h-10');
   });
 
   it('applies sm size classes (w-11 h-11)', () => {
@@ -62,11 +64,13 @@ describe('AppIconButton', () => {
     expect(button.classes()).toContain('h-11');
   });
 
-  it('applies toolbar size classes (w-8 h-8)', () => {
+  it('applies toolbar size classes (44px below md, w-8 h-8 from md)', () => {
     const wrapper = mountButton({ size: 'toolbar' });
     const button = wrapper.get('button');
-    expect(button.classes()).toContain('w-8');
-    expect(button.classes()).toContain('h-8');
+    expect(button.classes()).toContain('w-11');
+    expect(button.classes()).toContain('h-11');
+    expect(button.classes()).toContain('md:w-8');
+    expect(button.classes()).toContain('md:h-8');
     expect(button.classes()).toContain('min-w-8');
     expect(button.classes()).toContain('min-h-8');
   });

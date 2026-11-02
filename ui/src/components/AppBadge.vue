@@ -36,7 +36,8 @@ const colorStyle = computed(() => {
   }
   return {
     backgroundColor: `var(--dd-${props.tone}-muted)`,
-    color: `var(--dd-${props.tone})`,
+    // -badge is the tone darkened to 4.5:1 on its own tint in light themes (equal to the tone elsewhere).
+    color: `var(--dd-${props.tone}-badge)`,
   };
 });
 

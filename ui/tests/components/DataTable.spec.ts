@@ -1757,6 +1757,25 @@ describe('DataTable', () => {
         expect(dds[0].classes()).toContain('whitespace-normal');
       });
 
+      it('lets card body values take the remaining width instead of collapsing', async () => {
+        // `@container` (inline-size containment) gives a flex item zero intrinsic width, so a
+        // body value needs flex-1 or it renders blank next to its label (Approvals, mobile).
+        const w = await mountAtWidth(500, {
+          columns: [
+            { key: 'name', label: 'Name' },
+            { key: 'status', label: 'Status' },
+            { key: 'notes', label: 'Notes' },
+          ],
+          rows: [{ id: '1', name: 'Alpha', status: 'running', notes: 'Some notes' }],
+        });
+        const dds = w.findAll('[data-test="dd-card-body"] dd');
+        expect(dds.length).toBeGreaterThan(0);
+        for (const dd of dds) {
+          expect(dd.classes()).toContain('flex-1');
+          expect(dd.classes()).toContain('text-end');
+        }
+      });
+
       it('does not render a body dl when no columns remain after title and subtitle', async () => {
         const twoColumns = [
           { key: 'name', label: 'Name' },

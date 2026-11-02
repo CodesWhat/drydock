@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 test('gauge must be populated when containers are in the store', async () => {
-  store.getContainers = () => [
+  store.getContainersRaw = () => [
     {
       id: 'container-123456789',
       name: 'test',
@@ -80,7 +80,7 @@ test('gauge must be populated when containers are in the store', async () => {
 });
 
 test('gauge must silently ignore labels not in the initial labelset', async () => {
-  store.getContainers = () => [
+  store.getContainersRaw = () => [
     {
       extra: 'extra',
     },
@@ -96,7 +96,7 @@ test('gauge must silently ignore labels not in the initial labelset', async () =
 test('gauge should warn when flattening a container throws', async () => {
   const circular: any = { id: 'broken-container' };
   circular.self = circular;
-  store.getContainers = () => [circular];
+  store.getContainersRaw = () => [circular];
   const spyFlatten = vi.spyOn(containerModel, 'flatten').mockImplementation(() => {
     throw new Error('flatten failed');
   });
@@ -114,7 +114,7 @@ test('gauge should warn when flattening a container throws', async () => {
 });
 
 test('gauge collect should avoid rebuilding from store when unchanged', async () => {
-  const getContainers = vi.fn(() => [
+  const getContainersRaw = vi.fn(() => [
     {
       id: 'container-unchanged',
       name: 'test',
@@ -143,17 +143,17 @@ test('gauge collect should avoid rebuilding from store when unchanged', async ()
       },
     },
   ]);
-  store.getContainers = getContainers;
+  store.getContainersRaw = getContainersRaw;
   const gauge = container.init();
 
   await gauge.collect();
   await gauge.collect();
 
-  expect(getContainers).toHaveBeenCalledTimes(1);
+  expect(getContainersRaw).toHaveBeenCalledTimes(1);
 });
 
 test('event handlers should skip updates while gauge is marked for rebuild', () => {
-  store.getContainers = () => [];
+  store.getContainersRaw = () => [];
   const gauge = container.init();
   const spySet = vi.spyOn(gauge, 'set');
   const spyRemove = vi.spyOn(gauge, 'remove');
@@ -167,7 +167,7 @@ test('event handlers should skip updates while gauge is marked for rebuild', () 
 });
 
 test('event handlers should upsert, replace labels, and remove tracked containers after collect', async () => {
-  store.getContainers = () => [];
+  store.getContainersRaw = () => [];
   const gauge = container.init();
   const spySet = vi.spyOn(gauge, 'set');
   const spyRemove = vi.spyOn(gauge, 'remove');
@@ -195,7 +195,7 @@ test('event handlers should upsert, replace labels, and remove tracked container
 });
 
 test('remove handler should mark gauge for rebuild on invalid or unknown container ids', async () => {
-  store.getContainers = () => [];
+  store.getContainersRaw = () => [];
   const gauge = container.init();
   const spySet = vi.spyOn(gauge, 'set');
   const spyRemove = vi.spyOn(gauge, 'remove');
@@ -221,16 +221,16 @@ test('internal remove should no-op when gauge is not initialized', () => {
 });
 
 test('internal rebuild should no-op when gauge is not initialized', () => {
-  const getContainers = vi.fn(() => []);
-  store.getContainers = getContainers;
+  const getContainersRaw = vi.fn(() => []);
+  store.getContainersRaw = getContainersRaw;
 
   container._rebuildContainerGaugeFromStoreForTests();
 
-  expect(getContainers).not.toHaveBeenCalled();
+  expect(getContainersRaw).not.toHaveBeenCalled();
 });
 
 test('init should replace existing gauge when called multiple times', () => {
-  store.getContainers = () => [];
+  store.getContainersRaw = () => [];
   const firstGauge = container.init();
 
   const secondGauge = container.init();

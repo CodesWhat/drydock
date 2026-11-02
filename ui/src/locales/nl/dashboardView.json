@@ -90,7 +90,8 @@
     },
     "updateBreakdown": {
       "title": "Uitsplitsing bijwerken",
-      "noUpdates": "Geen updates om te categoriseren"
+      "noUpdates": "Geen updates om te categoriseren",
+      "digestHint": "Dezelfde tag, nieuwe image-digest"
     },
     "stats": {
       "containers": "Containers",

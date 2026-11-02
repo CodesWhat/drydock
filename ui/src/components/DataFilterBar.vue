@@ -83,7 +83,7 @@ function viewModeLabel(id: string): string {
         <!-- Right side: count + view mode switcher -->
         <div data-test="data-filter-bar-trailing" class="flex flex-wrap items-center gap-2 ml-auto min-w-0">
           <span class="text-2xs font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
-            {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
+            {{ countLabel ? `${filteredCount}/${totalCount} ${countLabel}` : `${filteredCount}/${totalCount}` }}
           </span>
           <!-- Sort control (card mode only — table mode sorts via column headers) -->
           <slot name="sort" />

@@ -171,7 +171,7 @@ const showSbomDocumentModel = computed({
 
         <div v-if="sbomState.error"
              class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
-             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
+             :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger-badge)' }">
           {{ sbomState.error }}
         </div>
         <div v-else-if="sbomState.loading"
