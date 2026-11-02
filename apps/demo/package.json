@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run src/mocks/handlers.contract.test.ts src/mocks/pages.contract.test.ts src/mocks/ws.contract.test.ts --config vite.config.ts --maxWorkers=1 --fileParallelism=false && npm run test:security",
-    "test:security": "node --test tests/security/*.test.js"
+    "test": "vitest run src/mocks/handlers.contract.test.ts src/mocks/pages.contract.test.ts src/mocks/ws.contract.test.ts --config vite.config.ts --maxWorkers=1 --fileParallelism=false && npm run test:security && npm run test:build",
+    "test:security": "node --test tests/security/*.test.js",
+    "test:build": "node --test tests/build/*.test.js"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
@@ -30,6 +31,7 @@
     "@iconify-json/lucide": "1.2.147",
     "@iconify-json/ph": "1.2.2",
     "@iconify-json/tabler": "1.2.42",
+    "@tailwindcss/node": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "25.9.9",
     "@vitejs/plugin-vue": "6.0.10",
