@@ -611,7 +611,7 @@
         "staleChainTitle": "Łańcuch zależności uległ zmianie",
         "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem.",
         "hiddenMarker": "niewidoczny przy bieżącym filtrze",
-        "hiddenNote": "\n\n{count} kontener w tym łańcuchu jest ukryty przez bieżący filtr i również zostanie zaktualizowany. | \n\n{count} kontenery w tym łańcuchu są ukryte przez bieżący filtr i również zostaną zaktualizowane."
+        "hiddenNote": "{count} kontener w tym łańcuchu jest ukryty przez bieżący filtr i również zostanie zaktualizowany. | {count} kontenery w tym łańcuchu są ukryte przez bieżący filtr i również zostaną zaktualizowane."
       },
       "bulkUpdate": {
         "header": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",

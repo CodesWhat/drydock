@@ -611,7 +611,7 @@
         "staleChainTitle": "La chaîne de dépendances a changé",
         "staleChainDetail": "La chaîne de dépendances pour {name} a changé depuis son dernier aperçu. Rouvrez la boîte de dialogue de mise à jour pour vérifier la chaîne actuelle avant de confirmer.",
         "hiddenMarker": "non affiché par le filtre actuel",
-        "hiddenNote": "\n\n{count} conteneur de cette chaîne est masqué par le filtre actuel et sera aussi mis à jour. | \n\n{count} conteneurs de cette chaîne sont masqués par le filtre actuel et seront aussi mis à jour."
+        "hiddenNote": "{count} conteneur de cette chaîne est masqué par le filtre actuel et sera aussi mis à jour. | {count} conteneurs de cette chaîne sont masqués par le filtre actuel et seront aussi mis à jour."
       },
       "bulkUpdate": {
         "header": "Mettre à jour 1 conteneur | Mettre à jour {count} conteneurs",

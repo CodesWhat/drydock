@@ -611,7 +611,7 @@
         "staleChainTitle": "Bağımlılık zinciri değişti",
         "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın.",
         "hiddenMarker": "geçerli filtre tarafından gösterilmiyor",
-        "hiddenNote": "\n\nBu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve o da güncellenecek. | \n\nBu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve onlar da güncellenecek."
+        "hiddenNote": "Bu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve o da güncellenecek. | Bu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve onlar da güncellenecek."
       },
       "bulkUpdate": {
         "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",

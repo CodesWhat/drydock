@@ -611,7 +611,7 @@
         "staleChainTitle": "Abhängigkeitskette hat sich geändert",
         "staleChainDetail": "Die Abhängigkeitskette für {name} hat sich seit der letzten Vorschau geändert. Öffnen Sie den Update-Dialog erneut, um die aktuelle Kette vor der Bestätigung zu überprüfen.",
         "hiddenMarker": "vom aktuellen Filter nicht angezeigt",
-        "hiddenNote": "\n\n{count} Container dieser Kette wird durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert. | \n\n{count} Container dieser Kette werden durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert."
+        "hiddenNote": "{count} Container dieser Kette wird durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert. | {count} Container dieser Kette werden durch den aktuellen Filter ausgeblendet und ebenfalls aktualisiert."
       },
       "bulkUpdate": {
         "header": "1 Container aktualisieren | {count} Container aktualisieren",

@@ -611,7 +611,7 @@
         "staleChainTitle": "La catena di dipendenze è cambiata",
         "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare.",
         "hiddenMarker": "non mostrato dal filtro attuale",
-        "hiddenNote": "\n\n{count} container di questa catena è nascosto dal filtro attuale e verrà aggiornato anch'esso. | \n\n{count} container di questa catena sono nascosti dal filtro attuale e verranno aggiornati anch'essi."
+        "hiddenNote": "{count} container di questa catena è nascosto dal filtro attuale e verrà aggiornato anch'esso. | {count} container di questa catena sono nascosti dal filtro attuale e verranno aggiornati anch'essi."
       },
       "bulkUpdate": {
         "header": "Aggiorna 1 container | Aggiorna {count} container",

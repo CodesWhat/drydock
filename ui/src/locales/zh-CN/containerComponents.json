@@ -611,7 +611,7 @@
         "staleChainTitle": "依赖链已发生变化",
         "staleChainDetail": "{name} 的依赖链自上次预览后已发生变化。请重新打开更新对话框，在确认前查看当前的依赖链。",
         "hiddenMarker": "当前筛选未显示",
-        "hiddenNote": "\n\n此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。 | \n\n此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。"
+        "hiddenNote": "此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。 | 此依赖链中有 {count} 个容器被当前筛选隐藏，也会一并更新。"
       },
       "bulkUpdate": {
         "header": "更新 1 个容器 | 更新 {count} 个容器",

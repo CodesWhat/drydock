@@ -611,7 +611,7 @@
         "staleChainTitle": "Dependency chain has changed",
         "staleChainDetail": "The dependency chain for {name} changed since it was last previewed. Re-open the update dialog to review the current chain before confirming.",
         "hiddenMarker": "not shown by the current filter",
-        "hiddenNote": "\n\n{count} container in this chain is hidden by the current filter and will be updated too. | \n\n{count} containers in this chain are hidden by the current filter and will be updated too."
+        "hiddenNote": "{count} container in this chain is hidden by the current filter and will be updated too. | {count} containers in this chain are hidden by the current filter and will be updated too."
       },
       "bulkUpdate": {
         "header": "Update 1 container | Update {count} containers",

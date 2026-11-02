@@ -766,9 +766,10 @@ async function confirmDependencyGroupUpdateState(args: {
       });
     }
     if (hiddenCount > 0) {
-      message += args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenNote', {
+      // The separator lives here, not in the catalog: vue-i18n trims each plural branch.
+      message += `\n\n${args.t('containerComponents.confirmDialogs.dependencyGroup.hiddenNote', {
         count: hiddenCount,
-      });
+      })}`;
     }
     if (preview.warnings.cycles.length > 0) {
       message += args.t('containerComponents.confirmDialogs.dependencyGroup.cycleWarning', {

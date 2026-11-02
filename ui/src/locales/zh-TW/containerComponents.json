@@ -611,7 +611,7 @@
         "staleChainTitle": "依賴鏈已變更",
         "staleChainDetail": "{name} 的依賴鏈自上次預覽後已變更。請重新開啟更新對話方塊，在確認前檢視目前的鏈結。",
         "hiddenMarker": "目前篩選未顯示",
-        "hiddenNote": "\n\n此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。 | \n\n此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。"
+        "hiddenNote": "此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。 | 此相依鏈中有 {count} 個容器被目前篩選隱藏，也會一併更新。"
       },
       "bulkUpdate": {
         "header": "更新 1 個容器 | 更新 {count} 個容器",

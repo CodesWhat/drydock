@@ -5634,7 +5634,7 @@ describe('useContainerActions', () => {
       expect(call.message).toContain('2. web, api (restart) (not shown by the current filter)');
       expect(call.message).not.toContain('web (not shown');
       expect(call.message).toContain(
-        '1 container in this chain is hidden by the current filter and will be updated too.',
+        '\n\n1 container in this chain is hidden by the current filter and will be updated too.',
       );
     });
 
@@ -5665,6 +5665,8 @@ describe('useContainerActions', () => {
 
       const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
       expect(call.message).toContain('2 containers in this chain are hidden');
+      // vue-i18n trims plural branches, so the blank line before the note must come from code.
+      expect(call.message).toMatch(/\n\n2 containers in this chain are hidden/);
     });
 
     it('adds no hidden note when every chain member is shown', async () => {

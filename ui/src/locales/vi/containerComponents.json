@@ -611,7 +611,7 @@
         "staleChainTitle": "Chuỗi phụ thuộc đã thay đổi",
         "staleChainDetail": "Chuỗi phụ thuộc cho {name} đã thay đổi kể từ lần xem trước gần nhất. Hãy mở lại hộp thoại cập nhật để xem lại chuỗi hiện tại trước khi xác nhận.",
         "hiddenMarker": "không hiển thị do bộ lọc hiện tại",
-        "hiddenNote": "\n\n{count} container trong chuỗi này bị bộ lọc hiện tại ẩn và cũng sẽ được cập nhật. | \n\n{count} container trong chuỗi này bị bộ lọc hiện tại ẩn và cũng sẽ được cập nhật."
+        "hiddenNote": "{count} container trong chuỗi này bị bộ lọc hiện tại ẩn và cũng sẽ được cập nhật. | {count} container trong chuỗi này bị bộ lọc hiện tại ẩn và cũng sẽ được cập nhật."
       },
       "bulkUpdate": {
         "header": "Cập nhật 1 container | Cập nhật {count} container",
