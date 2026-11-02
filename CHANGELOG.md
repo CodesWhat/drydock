@@ -15,9 +15,6 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Env values under names ending in or containing a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers`, matching the debug dump's rules (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. Stores already cleaned by the earlier pass are cleaned once more on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only).
 
-### Fixed
-
-- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
 ### Changed
 
 - Website redesign: new layout, type and six theme families that match the app, with a whale hero, a capability palette, a git-graph roadmap, a Quick and Secure install toggle and a feature comparison matrix. Docs links now go straight to the current docs version, and the sitemap lists only that version.
@@ -28,6 +25,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
 - The website's `/docs` and unversioned docs redirects are temporary again. They point at the current docs version, which changes every release, so a permanent redirect left browsers with a stale version cached.
 
 ## [1.8.0-rc.10] - 2026-10-31
