@@ -228,13 +228,51 @@ html[data-product="drydock"] body {
   display: none;
   position: relative;
 }
-.website-mobile-panel a {
+.website-mobile-panel a,
+.website-mobile-panel > button {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 8px;
   color: var(--dd-text);
   min-height: 44px;
+}
+.website-mobile-panel > button {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.website-theme-panel--inline {
+  position: static;
+  width: auto;
+  margin-top: 8px;
+  padding: 8px 0 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+.website-sidebar-theme .website-themes > summary {
+  width: 100%;
+}
+.website-sidebar-theme .website-theme-families {
+  grid-template-columns: minmax(0, 1fr);
+}
+.website-sidebar-theme .website-theme-modes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.website-sidebar-theme .website-theme-panel button {
+  min-width: 0;
+  padding: 8px 6px;
+  gap: 6px;
+}
+.website-sidebar-theme .website-theme-panel {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: auto;
 }
 .website-mobile-panel a[aria-current="page"] {
   background: var(--dd-hover-overlay);
