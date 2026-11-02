@@ -10,9 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.5] — 2026-11-01
+
+This is the fifth release candidate for the 1.7.1 maintenance release. It includes all rc.4 changes and redacts env values under `*_KEY` names such as `ENCRYPTION_KEY` (#1523). It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
+
 ### Security
 
-- Env values under names with a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers` (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. The startup scrub runs on every start, so stores cleaned by rc.4 are cleaned again for the new names on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only).
+- Env values under names with a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers` (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. The startup scrub runs on every start, so stores cleaned by rc.4 are cleaned again for the new names on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only). Backups and copies of the store made before the upgrade are not scrubbed. Redaction goes by variable name, so a secret under a name Drydock doesn't recognize can still be stored as plaintext.
 
 ### Fixed
 
@@ -3000,7 +3004,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...HEAD
+[1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
 [1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
 [1.7.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...v1.7.1-rc.3
 [1.7.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...v1.7.1-rc.2
