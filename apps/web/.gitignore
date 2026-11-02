@@ -43,3 +43,7 @@ next-env.d.ts
 
 # playwright mcp
 .playwright-mcp/
+
+# playwright
+/test-results/
+/playwright-report/
