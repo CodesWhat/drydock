@@ -387,6 +387,8 @@ jobs:
           # silently reported as success. Exit explicitly per outcome instead.
           for attempt in 1 2 3; do
             if curl \
+              --connect-timeout 20 \
+              --max-time 60 \
               --fail-with-body \
               --request PUT \
               --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \

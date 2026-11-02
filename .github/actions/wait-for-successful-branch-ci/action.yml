@@ -42,6 +42,7 @@ runs:
 
         workflow_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW_FILE}"
         workflow_json="$(curl -fsSL \
+          --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors \
           -H "Authorization: Bearer ${GH_TOKEN}" \
           -H "Accept: application/vnd.github+json" \
           "${workflow_url}")"
@@ -79,6 +80,7 @@ runs:
           # 100 runs unfiltered and filter client-side via jq for resilience.
           runs_url="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_id}/runs?per_page=100"
           runs_json="$(curl -fsSL \
+            --connect-timeout 20 --max-time 60 --retry 3 --retry-all-errors \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "${runs_url}")"
