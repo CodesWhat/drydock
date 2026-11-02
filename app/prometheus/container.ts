@@ -126,7 +126,7 @@ function rebuildContainerGaugeFromStore() {
   gaugeContainer.reset();
   gaugeContainerLabelsById.clear();
   shouldRebuildGaugeOnCollect = false;
-  storeContainer.getContainers().forEach((container) => {
+  storeContainer.getContainersRaw().forEach((container) => {
     upsertContainerMetric(container);
   });
 }
