@@ -71,7 +71,7 @@ export function CompareSection() {
         <SectionHeading
           eyebrow={`Why ${SITE_CONFIG.name}`}
           title="How we compare"
-          subtitle="How Drydock stacks up against WUD, Diun and Watchtower (archived December 2025). Rows come from the README matrix, including one where WUD wins."
+          subtitle="How Drydock stacks up against WUD, Diun and Watchtower (archived December 2025). Rows come from the README matrix, including one where WUD wins. Competitor details checked November 2026."
           align="right"
         />
 
