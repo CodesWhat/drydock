@@ -3348,7 +3348,7 @@ describe('ContainersView', () => {
 
         const [tree, ungrouped] = vm.renderGroups;
         expect(vm.renderGroups).toHaveLength(2);
-        expect(tree.key).toBe('dependency:c-db');
+        expect(tree.key).toBe('dependency:c-api');
         expect(tree.name).toBe('db');
         expect(tree.dependencyRootId).toBe('c-db');
         expect(tree.containers.map((c: any) => c.name)).toEqual(['db', 'api', 'web']);

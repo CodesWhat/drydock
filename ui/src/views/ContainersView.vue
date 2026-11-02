@@ -1407,7 +1407,9 @@ const dependencyContainers = computed<RenderGroup[]>(() => {
     const containers = component.entries.map((entry) => byId.get(entry.id) as DisplayContainer);
     const rootNames = component.rootIds.map((id) => (byId.get(id) as DisplayContainer).name);
     return {
-      key: `dependency:${component.rootIds[0]}`,
+      // Key on the smallest member id so re-sorting or filtering never re-keys the group
+      // (and so never resets its collapsed state).
+      key: `dependency:${component.entries.map((entry) => entry.id).sort()[0]}`,
       name: rootNames.join(', '),
       ...summarizeContainers(containers),
       dependencyRootId: component.rootIds[0],

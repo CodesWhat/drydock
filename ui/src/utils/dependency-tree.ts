@@ -34,6 +34,7 @@ export function buildDependencyTrees(
   orderedIds: string[],
 ): DependencyTrees {
   const present = new Set(orderedIds);
+  const orderIndex = new Map(orderedIds.map((id, index) => [id, index]));
   const assigned = new Set<string>();
   const components: DependencyTreeComponent[] = [];
   const ungroupedIds: string[] = [];
@@ -59,7 +60,7 @@ export function buildDependencyTrees(
       entries.push({ id, depth });
       const children = (adjacency.childIdsByParent.get(id) ?? [])
         .filter((childId) => present.has(childId) && !visited.has(childId))
-        .sort((left, right) => orderedIds.indexOf(left) - orderedIds.indexOf(right));
+        .sort((left, right) => (orderIndex.get(left) ?? 0) - (orderIndex.get(right) ?? 0));
       for (const childId of children) {
         if (!visited.has(childId)) {
           walk(childId, depth + 1);
