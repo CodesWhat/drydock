@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.10.0-r0`; the repository no longer serves `2.9.0-r0`.
+
 ## [1.8.0-rc.12] - 2026-11-02
 
 > [!WARNING]
