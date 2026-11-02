@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.10.0-r0`; the repository no longer serves `2.9.0-r0`.
+
 ## [1.7.1-rc.5] — 2026-11-01
 
 This is the fifth release candidate for the 1.7.1 maintenance release. It includes all rc.4 changes and redacts env values under `*_KEY` names such as `ENCRYPTION_KEY` (#1523). It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
