@@ -41,7 +41,7 @@ test("root /docs redirect points to the first (current) version slug", async () 
     `/docs/${versions[0].slug}`,
     `root redirect should point to first version: ${versions[0].slug}`,
   );
-  assert.equal(rootRedirect.permanent, false);
+  assert.equal(rootRedirect.permanent, true);
 });
 
 test("deep-link compatibility redirect covers every version slug", async () => {
@@ -70,5 +70,5 @@ test("deep-link redirect destination uses the current version slug", async () =>
     `/docs/${versions[0].slug}/:path`,
     `deep redirect should forward to current version: ${versions[0].slug}`,
   );
-  assert.equal(deepRedirect.permanent, false);
+  assert.equal(deepRedirect.permanent, true);
 });

@@ -14,13 +14,13 @@ const ICON_VERSION = "3";
 
 export const metadata: Metadata = {
   title: {
-    default: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    default: SITE_CONFIG.title,
     template: `%s | ${SITE_CONFIG.name}`,
   },
   description: SITE_CONFIG.description,
   metadataBase: new URL(BASE_URL),
   openGraph: {
-    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    title: SITE_CONFIG.title,
     description: SITE_CONFIG.description,
     url: BASE_URL,
     siteName: SITE_CONFIG.name,
@@ -31,13 +31,13 @@ export const metadata: Metadata = {
         url: SITE_CONFIG.ogImage,
         width: 1200,
         height: 630,
-        alt: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+        alt: SITE_CONFIG.title,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    title: SITE_CONFIG.title,
     description: SITE_CONFIG.description,
     creator: SITE_CONFIG.twitterCreator,
     images: [SITE_CONFIG.ogImage],

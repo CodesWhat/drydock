@@ -5,11 +5,17 @@ import { DiscordIcon } from "@/components/discord-icon";
 import { GithubIcon } from "@/components/github-icon";
 import { TrackedLink } from "@/components/tracked-link";
 import type { AnalyticsCtaId } from "@/lib/analytics-contract";
-import { DEMO_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
+import {
+  DEMO_URL,
+  DOCS_ROOT,
+  GITHUB_RELEASES_URL,
+  GITHUB_URL,
+  SITE_CONFIG,
+} from "@/lib/site-config";
 
 type FooterLink = { label: string; href: string; external?: boolean; ctaId?: AnalyticsCtaId };
 const productLinks: FooterLink[] = [
-  { label: "Documentation", href: "/docs", ctaId: "docs_root" },
+  { label: "Documentation", href: DOCS_ROOT, ctaId: "docs_root" },
   { label: "Live demo", href: DEMO_URL, external: true },
   { label: "Compare", href: "/compare" },
   { label: "Security advisory", href: "/security/trivy-supply-chain-march-2026" },
@@ -38,7 +44,7 @@ const compareLinks: FooterLink[] = [
 ];
 const securityLinks: FooterLink[] = [
   { label: "Trivy supply chain compromise", href: "/security/trivy-supply-chain-march-2026" },
-  { label: "Hardening guide", href: "/docs/guides/security" },
+  { label: "Hardening guide", href: `${DOCS_ROOT}/guides/security` },
 ];
 
 function FooterLinkEl({ link }: { link: FooterLink }) {
@@ -112,7 +118,7 @@ export function Footer({ maxWidthClassName = "" }: { maxWidthClassName?: string 
                 <DiscordIcon className="h-5 w-5" />
               </TrackedLink>
               <TrackedLink
-                href="/docs"
+                href={DOCS_ROOT}
                 ctaId="docs_root"
                 placement="footer"
                 aria-label="Documentation"

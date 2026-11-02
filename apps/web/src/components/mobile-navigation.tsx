@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { GITHUB_URL } from "@/lib/site-config";
+import { DOCS_ROOT, GITHUB_URL } from "@/lib/site-config";
 
 export function MobileNavigation() {
   const menu = useRef<HTMLDetailsElement>(null);
@@ -29,7 +29,7 @@ export function MobileNavigation() {
       <summary aria-label="Open navigation menu">Menu</summary>
       <div className="website-mobile-panel">
         {[
-          ["/docs", "Documentation"],
+          [DOCS_ROOT, "Documentation"],
           ["/compare", "Compare"],
           ["/#features", "Features"],
           ["/#get-started", "Get started"],

@@ -6,7 +6,7 @@ import { MobileNavigation } from "@/components/mobile-navigation";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TrackedLink } from "@/components/tracked-link";
 import { iconButtonCn } from "@/lib/class-names";
-import { GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
+import { DOCS_ROOT, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export function SiteHeader({
   maxWidthClassName = "max-w-6xl",
@@ -32,7 +32,7 @@ export function SiteHeader({
             </>
           )}
           <TrackedLink
-            href="/docs"
+            href={DOCS_ROOT}
             ctaId="docs_root"
             placement="header"
             className="website-nav-link"

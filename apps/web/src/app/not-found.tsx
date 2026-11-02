@@ -4,12 +4,18 @@ import Image from "next/image";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Button } from "@/components/ui/button";
+import { DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Page Not Found",
-  robots: {
-    index: false,
-    follow: false,
+  // No robots entry here: Next adds its own noindex to not-found responses, and
+  // a second one produced two robots tags. openGraph replaces the layout's
+  // object whole, so it carries its own title and image instead of the
+  // homepage's.
+  openGraph: {
+    title: `Page Not Found | ${SITE_CONFIG.name}`,
+    siteName: SITE_CONFIG.name,
+    images: [SITE_CONFIG.ogImage],
   },
 };
 
@@ -39,7 +45,7 @@ export default function NotFound() {
             <Link href="/">Back to Drydock</Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link href="/docs">Docs</Link>
+            <Link href={DOCS_ROOT}>Docs</Link>
           </Button>
           <Button variant="outline" asChild>
             <Link href="/compare">Compare</Link>

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { SectionHeading } from "@/components/section-heading";
 import { TrackedLink } from "@/components/tracked-link";
 import { captureCta } from "@/lib/analytics";
-import { SITE_CONFIG } from "@/lib/site-config";
+import { DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
 
 type Preset = "quick" | "secure";
 
@@ -136,8 +136,8 @@ export function GetStarted() {
       <div className="website-wrap">
         <SectionHeading
           eyebrow="Get running"
-          title="Get started in seconds"
-          subtitle="One command to try it. One compose file to run it right."
+          title="Try it in one command"
+          subtitle="The quick start turns auth off for a local look (DD_ANONYMOUS_AUTH_CONFIRM=true). With no auth setting at all, Drydock refuses requests on purpose. The hardened compose file is the one to run."
           align="right"
         />
 
@@ -199,14 +199,15 @@ export function GetStarted() {
             {preset === "quick" ? (
               <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
-                Mounts the Docker socket directly — fine for a local try, not for production.
+                Mounts the Docker socket directly and runs with anonymous auth. Fine for a local
+                try, not for production.
               </p>
             ) : (
               <p className="flex items-center gap-2 text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
                 <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
                 Drydock never touches the raw socket.{" "}
                 <TrackedLink
-                  href="/docs/guides/security"
+                  href={`${DOCS_ROOT}/guides/security`}
                   ctaId="docs_security"
                   placement="get_started"
                   className="font-medium text-[var(--dd-text)] underline-offset-4 hover:underline dark:text-[var(--dd-text)]"

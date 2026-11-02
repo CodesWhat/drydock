@@ -39,7 +39,7 @@ test("docs redirects keep versioned URLs and map legacy deep links to current do
   assert.deepEqual(rootRedirect, {
     source: "/docs",
     destination: `/docs/${currentVersion}`,
-    permanent: false,
+    permanent: true,
   });
 
   assert.ok(
@@ -47,7 +47,7 @@ test("docs redirects keep versioned URLs and map legacy deep links to current do
       (rule) =>
         rule.source === `/docs/:path((?!assets(?:/|$)|current(?:/|$)|${versionPrefixPattern}).*)` &&
         rule.destination === `/docs/${currentVersion}/:path` &&
-        rule.permanent === false,
+        rule.permanent === true,
     ),
     "expected a deep-link compatibility redirect that excludes static docs assets and /docs/current",
   );

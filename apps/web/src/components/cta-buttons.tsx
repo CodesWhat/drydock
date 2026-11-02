@@ -2,7 +2,7 @@ import { BookOpen } from "lucide-react";
 import { GithubIcon } from "@/components/github-icon";
 import { TrackedLink } from "@/components/tracked-link";
 import { Button } from "@/components/ui/button";
-import { GITHUB_URL } from "@/lib/site-config";
+import { DOCS_ROOT, GITHUB_URL } from "@/lib/site-config";
 
 export function CtaButtons({
   align = "center",
@@ -27,7 +27,7 @@ export function CtaButtons({
         </TrackedLink>
       </Button>
       <Button variant="outline" size="lg" className="w-auto" asChild>
-        <TrackedLink href="/docs" ctaId="docs_root" placement={placement}>
+        <TrackedLink href={DOCS_ROOT} ctaId="docs_root" placement={placement}>
           <BookOpen className="h-4 w-4" />
           Documentation
         </TrackedLink>

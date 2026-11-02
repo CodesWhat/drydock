@@ -44,11 +44,14 @@ const nextConfig = {
       },
     ],
   },
+  // /docs and the unversioned deep links are permanent so link equity moves to
+  // the versioned URLs. /docs/current stays temporary on purpose: it moves
+  // every release.
   redirects: async () => [
     {
       source: "/docs",
       destination: `/docs/${docsCurrentVersion}`,
-      permanent: false,
+      permanent: true,
     },
     {
       source: "/docs/current/:path*",
@@ -58,7 +61,7 @@ const nextConfig = {
     {
       source: `/docs/:path((?!${docsRedirectExclusions}).*)`,
       destination: `/docs/${docsCurrentVersion}/:path`,
-      permanent: false,
+      permanent: true,
     },
   ],
 };
