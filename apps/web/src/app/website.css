@@ -268,7 +268,7 @@ html[data-product="drydock"] body {
   letter-spacing: 0.08em;
 }
 .website-display {
-  font-size: clamp(48px, 5.6vw, 84px);
+  font-size: clamp(40px, 4.6vw, 68px);
   line-height: 0.95;
   letter-spacing: -0.02em;
   margin: 0;
@@ -313,6 +313,11 @@ html[data-product="drydock"] body {
   gap: 8px;
   font-size: 12px;
   text-transform: uppercase;
+  color: var(--tx-sec);
+}
+.website-proof-stats li + li::before {
+  content: "\00b7";
+  margin: 0 9px 0 -9px;
   color: var(--tx-sec);
 }
 .website-proof-stats b {
