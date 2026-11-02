@@ -493,7 +493,7 @@ describe('AgentClient', () => {
       );
     });
 
-    test('should strip sensitive field from env entries before storing', async () => {
+    test('should keep only a true sensitive marker on env entries before storing', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
       const container = {
@@ -505,6 +505,7 @@ describe('AgentClient', () => {
           env: [
             { key: 'NORMAL', value: 'foo', sensitive: false },
             { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
+            { key: 'MY_DSN', value: '[REDACTED]', sensitive: 'yes' },
           ],
         },
       };
@@ -514,7 +515,8 @@ describe('AgentClient', () => {
           details: expect.objectContaining({
             env: [
               { key: 'NORMAL', value: 'foo' },
-              { key: 'API_KEY', value: '[REDACTED]' },
+              { key: 'API_KEY', value: '[REDACTED]', sensitive: true },
+              { key: 'MY_DSN', value: '[REDACTED]' },
             ],
           }),
         }),

@@ -1041,10 +1041,12 @@ export class AgentClient {
     // Traditional agents own registry normalization and results. Controller-owned
     // Docker transport instead applies the controller's configured registry above.
 
-    // Strip redaction metadata (e.g. `sensitive`) that the agent's event
-    // emitter may attach — the controller's Joi schema does not allow it.
+    // Keep only a true `sensitive` marker from the agent's event emitter. A URL
+    // credential arrives as '[REDACTED]' and the marker is the only record of it (#1523).
     if (container.details?.env && Array.isArray(container.details.env)) {
-      container.details.env = container.details.env.map(({ key, value }) => ({ key, value }));
+      container.details.env = container.details.env.map(({ key, value, sensitive }) =>
+        sensitive === true ? { key, value, sensitive } : { key, value },
+      );
     }
 
     if (this.shouldPreserveClearedUpdateAvailable(container)) {

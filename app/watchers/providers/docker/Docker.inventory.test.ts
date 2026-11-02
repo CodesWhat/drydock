@@ -120,7 +120,7 @@ test('forwards inventory recreation and updates separately from ordinary scan li
   expect(frames[0].data.container).toEqual({ id: 'old', replacementExpected: true });
   expect(frames[1].data.container.id).toBe('new');
   expect(frames[1].data.container.details.env).toEqual([
-    { key: 'PASSWORD', value: '[REDACTED]' },
+    { key: 'PASSWORD', value: '[REDACTED]', sensitive: true },
     { key: 'PUBLIC', value: 'value' },
   ]);
   expect(frames[2].data.context).toBeUndefined();
@@ -414,7 +414,7 @@ test('carries retained policy into a confirmed recreation and emits real-store l
       ports: [],
       volumes: [],
       env: [
-        { key: 'PASSWORD', value: '[REDACTED]' },
+        { key: 'PASSWORD', value: '[REDACTED]', sensitive: true },
         { key: 'PUBLIC', value: 'value' },
       ],
     },
