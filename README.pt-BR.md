@@ -502,6 +502,8 @@ Essas três ferramentas são projetadas para serem colocadas em camadas: sockgua
 
 Consulte o [COMPATIBILITY.md do portwing](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) para obter a matriz de compatibilidade completa entre todas as três ferramentas.
 
+Ferramentas pequenas e afiadas de um desenvolvedor e muitos agentes. Mais em [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[Licença MIT](LICENSE)**

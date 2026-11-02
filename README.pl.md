@@ -502,6 +502,8 @@ Te trzy narzędzia zaprojektowano z myślą o nakładaniu warstw: sockguard filt
 
 Zobacz plik [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md), aby zapoznać się z pełną matrycą kompatybilności wszystkich trzech narzędzi.
 
+Małe, ostre narzędzia od jednego programisty i wielu agentów. Więcej na [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[Licencja MIT](LICENSE)**

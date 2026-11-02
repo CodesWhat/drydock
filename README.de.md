@@ -502,6 +502,8 @@ Diese drei Tools sind für die Schichtung konzipiert: sockguard filtert den Sock
 
 Die vollständige Kompatibilitätsmatrix für alle drei Tools finden Sie in [portwings COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md).
 
+Kleine, scharfe Werkzeuge von einem Entwickler und vielen Agenten. Mehr auf [codeswhat.com](https://codeswhat.com).
+
 ---
 
 **[MIT-Lizenz](LICENSE)**
