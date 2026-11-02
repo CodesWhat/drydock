@@ -385,6 +385,21 @@ describe('docker runtime details module', () => {
     ).toBeUndefined();
     expect(normalizeRuntimeDetails({ ports: [], volumes: [], env: [] }).startedAt).toBeUndefined();
   });
+  test('a redacted *_KEY value in the stored copy equals the live value, no false update (#1523)', () => {
+    const stored = {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'ENCRYPTION_KEY', value: '[REDACTED]', sensitive: true }],
+    };
+    const live = {
+      ports: [],
+      volumes: [],
+      env: [{ key: 'ENCRYPTION_KEY', value: 'plain-live-value' }],
+    };
+
+    expect(areRuntimeDetailsEqual(stored as any, live)).toBe(true);
+  });
+
   test('equality compares redacted env so a redacted stored copy matches the live values (#1523)', () => {
     const stored = {
       ports: [],

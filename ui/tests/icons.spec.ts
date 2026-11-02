@@ -16,4 +16,12 @@ describe('icon bundle consistency', () => {
 
     expect(missing).toEqual([]);
   });
+
+  it('resolves the eye icon used by the env reveal and password toggles (#1523)', () => {
+    for (const ref of Object.values(iconMap.eye)) {
+      expect(ref).not.toBe('eye');
+      expect(Object.keys(bundle)).toContain(ref);
+    }
+    expect(iconMap.eye['fa6-solid']).toBe('fa6-solid:eye');
+  });
 });

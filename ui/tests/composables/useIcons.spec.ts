@@ -113,6 +113,11 @@ describe('useIcons', () => {
       expect(resolved).toBe('ph:squares-four-duotone');
     });
 
+    it('resolves eye to a library glyph, not the raw name (#1523)', async () => {
+      const { icon } = await loadUseIcons();
+      expect(icon('eye')).toBe('ph:eye-duotone');
+    });
+
     it('should return raw name for unknown icons', async () => {
       const { icon } = await loadUseIcons();
       expect(icon('nonexistent-icon')).toBe('nonexistent-icon');

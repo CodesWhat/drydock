@@ -36,13 +36,18 @@ const SENSITIVE_KEY_PATTERNS = [
   'CREDENTIAL',
   'AUTH',
   'ACCESS_KEY',
+  'ACCESSKEY',
+  'CLIENTKEY',
+  'SIGNINGKEY',
 ];
 
 // Short tokens that require an exact segment match (split on '_') to prevent
 // substring false positives. For example, 'PASS' would otherwise match
 // 'COMPASS' or 'BYPASS' under a plain .includes() check.
-const SENSITIVE_SEGMENT_PATTERNS = ['PASS', 'PAT'];
-const REDACTED_ENV_VALUE = '[REDACTED]';
+// 'KEY' is here for the same reason ('MONKEY', 'KEYBOARD'): ENCRYPTION_KEY and
+// LITELLM_MASTER_KEY are credentials that no compound pattern above names (#1523).
+const SENSITIVE_SEGMENT_PATTERNS = ['PASS', 'PAT', 'KEY'];
+export const REDACTED_ENV_VALUE = '[REDACTED]';
 
 export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
