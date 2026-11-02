@@ -13,7 +13,7 @@ Registry support|Docker Hub + private via Docker config|23 dedicated registry in
 Trigger integrations|17 services|21 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
-REST API|None (gRPC CLI only)|Full REST API|self
+REST API|Partial (gRPC CLI)|Full REST API|self
 Prometheus metrics|Yes (since v4.32.0)|Full /metrics endpoint + Grafana template|self
 MQTT / Home Assistant|Partial|Yes|self
 Image backup & rollback|No|Pre-update backup with retention + auto rollback|self
