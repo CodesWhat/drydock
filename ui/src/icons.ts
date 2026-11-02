@@ -675,6 +675,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:bolt',
     iconoir: 'iconoir:flash',
   },
+  eye: {
+    'fa6-solid': 'fa6-solid:eye',
+    ph: 'ph:eye',
+    'ph-duotone': 'ph:eye-duotone',
+    lucide: 'lucide:eye',
+    tabler: 'tabler:eye',
+    heroicons: 'heroicons:eye',
+    iconoir: 'iconoir:eye-empty',
+  },
   'eye-slash': {
     'fa6-solid': 'fa6-solid:eye-slash',
     ph: 'ph:eye-slash',

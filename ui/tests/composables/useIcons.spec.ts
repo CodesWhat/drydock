@@ -16,6 +16,14 @@ describe('useIcons', () => {
     return mod.useIcons();
   }
 
+  describe('icon', () => {
+    it('resolves eye to a library glyph, not the raw name (#1523)', async () => {
+      const { icon } = await loadUseIcons();
+      expect(icon('eye')).toBe('ph:eye-duotone');
+      expect(icon('eye-slash')).not.toBe('eye-slash');
+    });
+  });
+
   describe('iconLibrary', () => {
     it('should default to ph-duotone', async () => {
       const { iconLibrary } = await loadUseIcons();
