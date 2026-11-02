@@ -146,6 +146,9 @@ html[data-product="drydock"] body {
   right: 0;
   top: calc(100% + 8px);
   width: min(300px, calc(100vw - 24px));
+  max-height: calc(100dvh - var(--fd-nav-height, 56px) - 16px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   background: var(--dd-bg-card);
   border: 1px solid var(--dd-border-strong);
