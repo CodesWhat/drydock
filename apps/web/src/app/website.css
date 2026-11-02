@@ -332,6 +332,17 @@ html[data-product="drydock"] body {
   color: var(--tx-primary);
   padding-block: 3px;
 }
+.website-proof-note {
+  max-width: 62ch;
+  margin: -6px auto 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tx-sec);
+}
+.website-proof-note b {
+  color: var(--dd-text);
+  font-weight: 600;
+}
 .website-proof-badges {
   list-style: none;
   display: flex;
@@ -408,7 +419,7 @@ html[data-product="drydock"] body {
   padding: 1px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, var(--dd-primary) 15%, transparent);
-  color: var(--dd-primary);
+  color: var(--tx-primary);
   font-family: var(--font-mono, monospace);
   font-size: 10px;
   font-weight: 600;
@@ -416,7 +427,7 @@ html[data-product="drydock"] body {
   text-transform: uppercase;
 }
 .website-matrix-name {
-  color: var(--dd-primary);
+  color: var(--tx-primary);
 }
 .website-footer-bottom {
   display: flex;
@@ -973,7 +984,7 @@ html[data-product="drydock"]:not(.dark) .website-docs #nd-sidebar a[data-active=
 /* Drydock column in the homepage comparison teaser: the theme's primary, like the matrix row. */
 .website-compare-self-head {
   background: color-mix(in srgb, var(--dd-primary) 15%, transparent);
-  color: var(--dd-primary);
+  color: var(--tx-primary);
 }
 .website-compare-self-cell {
   background: color-mix(in srgb, var(--dd-primary) 8%, transparent);

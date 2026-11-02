@@ -33,7 +33,7 @@ Swarm / Kubernetes / Nomad watchers|Partial (watch-only except Nomad)|No|competi
 Scoped API tokens|Yes|Yes|tie
 `,
   highlightsTable: `
-git-branch|Migration Command|A built-in config migrate command previews, then rewrites your WUD_* variables and wud.* labels to DD_* and dd.*.
+git-branch|Migration Command|A built-in config migrate command previews, then rewrites your WUD_* variables and the supported wud.* labels to DD_* and dd.*. Review any wud.* label it leaves in place, such as wud.rollback.enable.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and Update Bouncer to block vulnerable deploys — none of which WUD includes.
 network|Distributed Agents|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard — no need to expose the Docker API over TCP. WUD supports multiple Docker hosts too, but requires the remote Docker API to be exposed over TCP or TLS.
 radio|23 Registry Providers|Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more, each with its own auth. WUD lists 25 providers, so this isn't a count win.
@@ -79,6 +79,6 @@ bell|Trigger Services|21 trigger integrations including Google Chat, Matrix, Mat
   ),
   migrationTitle: "Coming from WUD?",
   migrationDescription:
-    "Run config migrate --dry-run inside the Drydock container to preview how your WUD_* variables and wud.* labels map to DD_* and dd.*, then rewrite them. Since v1.6, Drydock no longer reads WUD_* or wud.* at runtime.",
+    'Mount the folder with your Compose and .env files into a one-off container and preview with: docker run --rm -v "$PWD":/work -w /work --entrypoint node codeswhat/drydock /home/node/app/dist/index.js config migrate --dry-run --file compose.yml (repeat --file for more files). Rerun without --dry-run to rewrite them. It maps WUD_* variables and the supported wud.* labels to DD_* and dd.*; review any wud.* label it leaves in place, such as wud.rollback.enable. Since v1.6, Drydock no longer reads WUD_* or wud.* at runtime.',
   jsonLdName: "WUD vs Drydock — Container Update Monitoring Comparison",
 } satisfies ComparisonRouteRawConfig;

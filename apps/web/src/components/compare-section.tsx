@@ -158,11 +158,16 @@ export function CompareSection() {
             fit.
           </p>
           <p>
-            <b className="text-[var(--dd-text)]">Switching:</b> coming from WUD? Run{" "}
-            <code>docker exec -it drydock node dist/index.js config migrate --dry-run</code> to
-            preview the rewrite of your <code>WUD_*</code> variables and <code>wud.*</code> labels
-            to <code>DD_*</code> and <code>dd.*</code>. Coming from Watchtower, which was archived
-            in December 2025? Read the{" "}
+            <b className="text-[var(--dd-text)]">Switching:</b> coming from WUD? The{" "}
+            <code>config migrate --dry-run --file compose.yml</code> command previews the rewrite of
+            your <code>WUD_*</code> variables and <code>wud.*</code> labels to <code>DD_*</code> and{" "}
+            <code>dd.*</code>, but it only sees files inside the container, so mount your Compose
+            folder first. The{" "}
+            <Link href="/compare/wud" className="underline underline-offset-4">
+              WUD comparison
+            </Link>{" "}
+            has the full command. Coming from Watchtower, which was archived in December 2025? Read
+            the{" "}
             <Link href="/compare/watchtower" className="underline underline-offset-4">
               Watchtower comparison
             </Link>{" "}
