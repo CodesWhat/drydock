@@ -41,6 +41,22 @@ test('stages an agent-bound replacement while retaining the original key', () =>
   expect(() => keys.addRotationKey(old.keyId, 'production', pub())).toThrow('pending');
 });
 
+test('a cancelled staged rotation can be staged again with the same replacement key', () => {
+  const old = owner();
+  const replacement = pub();
+  const first = keys.addRotationKey(old.keyId, 'production', replacement);
+  expect(keys.cancelRotationKey(old.keyId, 'production')).toBe(true);
+  expect(keys.getPendingRotation(old.keyId, 'production')).toBeNull();
+
+  const again = keys.addRotationKey(old.keyId, 'production', replacement);
+
+  expect(again.keyId).toBe(first.keyId);
+  expect(keys.getKey(again.keyId)).toMatchObject({
+    rotationParentId: old.keyId,
+    rotationAgentName: 'production',
+  });
+});
+
 test('successful proof transfers only the intended binding and retires the old key atomically', () => {
   const old = owner();
   const independent = keys.addKey(pub(), 'other');
