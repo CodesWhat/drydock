@@ -119,6 +119,7 @@ import {
   acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
+  getBasicHeaderIdentity,
   initializeLoginLockoutState,
   rejectFailedSecondFactor,
   rejectIfFactorLocked,
@@ -3217,5 +3218,19 @@ describe('acquireLoginAttemptSlot', () => {
 
     second?.();
     third?.();
+  });
+});
+
+describe('getBasicHeaderIdentity', () => {
+  test('returns undefined when the request has no Authorization header', () => {
+    expect(getBasicHeaderIdentity({ headers: {} } as any)).toBeUndefined();
+    expect(getBasicHeaderIdentity({} as any)).toBeUndefined();
+  });
+
+  test('returns the username a Basic header names', () => {
+    const encoded = Buffer.from('alice:secret').toString('base64');
+    expect(getBasicHeaderIdentity({ headers: { authorization: `Basic ${encoded}` } } as any)).toBe(
+      'alice',
+    );
   });
 });
