@@ -15,6 +15,8 @@ function snapshotOf(documents: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/api-keys', () => {
   let db: Database;
 
@@ -31,6 +33,7 @@ describe('store/db/importers/api-keys', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 
@@ -140,8 +143,11 @@ describe('store/db/importers/api-keys', () => {
   });
 
   test('skips a document missing keyId or secretHash', () => {
+    recordSkipped.mockClear();
     expect(run([{ secretHash: 'aGFzaA==' }])).toBe(0);
     expect(run([{ keyId: 'aabbccddeeff' }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledTimes(2);
+    expect(recordSkipped).toHaveBeenCalledWith('api_keys');
     expect(db.prepare('SELECT COUNT(*) AS n FROM api_keys').get()).toEqual({ n: 0 });
   });
 

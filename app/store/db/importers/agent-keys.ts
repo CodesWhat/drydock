@@ -14,13 +14,14 @@ const TARGET_TABLE = 'agent_keys';
 export const agentKeysImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
     );
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.keyId !== 'string' || typeof doc.pubkey !== 'string') {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const label = typeof doc.label === 'string' ? doc.label : '';

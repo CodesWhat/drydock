@@ -28,11 +28,12 @@ const TARGET_TABLE = 'containers';
 export const containersImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     let rows = 0;
     for (const record of snapshot.records(LEGACY_COLLECTION)) {
       const row = buildImportedContainerRow(record);
       if (!row) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       insertImportedContainerRow(db, row);

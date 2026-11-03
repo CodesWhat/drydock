@@ -189,6 +189,46 @@ describe('store/db/import', () => {
       expect(logMock.info).toHaveBeenCalledWith(expect.stringContaining('skipping import'));
     });
 
+    test('counts skipped documents per table and warns once for each', () => {
+      const report = importIntoDatabase({
+        db,
+        snapshot: EMPTY_SNAPSHOT(),
+        sessionDocuments: [],
+        importers: [
+          {
+            collection: 'widgets',
+            table: 'widgets_table',
+            importInto(context): number {
+              context.recordSkipped('widgets_table');
+              context.recordSkipped('widgets_table');
+              return 0;
+            },
+          },
+        ],
+        source: 'dd.json',
+      });
+
+      expect(report.skippedByTable).toEqual({ widgets_table: 2 });
+      expect(logMock.warn).toHaveBeenCalledTimes(1);
+      expect(logMock.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/Skipped 2 .* widgets_table/),
+      );
+    });
+
+    test('reports no skipped tables and no warning when every document imported', () => {
+      logMock.warn.mockClear();
+      const report = importIntoDatabase({
+        db,
+        snapshot: EMPTY_SNAPSHOT(),
+        sessionDocuments: [],
+        importers: [],
+        source: 'dd.json',
+      });
+
+      expect(report).not.toHaveProperty('skippedByTable');
+      expect(logMock.warn).not.toHaveBeenCalled();
+    });
+
     test('hands the resolved session documents to the importers', () => {
       const seen: unknown[] = [];
       importIntoDatabase({
@@ -242,6 +282,7 @@ describe('store/db/import', () => {
           containers: 0,
           sessions: 0,
         },
+        skippedByTable: { sessions: 1 },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);
       expect(fs.readFileSync(`${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`)).toEqual(before);

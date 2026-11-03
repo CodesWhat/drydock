@@ -15,9 +15,13 @@ const TARGET_TABLE = 'app_info';
 export const appImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const [doc] = snapshot.documents(LEGACY_COLLECTION);
-    if (!doc || typeof doc.name !== 'string' || typeof doc.version !== 'string') {
+    if (!doc) {
+      return 0;
+    }
+    if (typeof doc.name !== 'string' || typeof doc.version !== 'string') {
+      recordSkipped(TARGET_TABLE);
       return 0;
     }
     db.prepare('INSERT INTO app_info (id, name, version) VALUES (1, ?, ?)').run(

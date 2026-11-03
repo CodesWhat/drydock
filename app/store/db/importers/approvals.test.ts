@@ -36,6 +36,8 @@ function pendingDocument(overrides: Record<string, unknown> = {}): Record<string
   };
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/approvals', () => {
   let db: Database;
 
@@ -52,6 +54,7 @@ describe('store/db/importers/approvals', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 

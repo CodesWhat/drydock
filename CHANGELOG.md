@@ -18,6 +18,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Behavior change: integrations that send a stale password in a Basic `Authorization` header now trip the same login lockout, so they keep re-locking the account (and, behind a proxy without `DD_SERVER_TRUSTPROXY`, the shared IP). Use API keys for integrations and update them before rotating a password.
 - Basic `Authorization` header checks on API routes now have their own concurrency cap, `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` (default 8), separate from the login form's, so a few dashboard widgets polling with correct credentials no longer get `429` and header traffic can't take the login form's slots.
 - Startup now logs a warning when a legacy `dd.json` sits next to an existing `dd.sqlite`, which the one-time import never reads. The downgrade notes now say to move `dd.sqlite` and its `-wal` and `-shm` files aside before running the older build, and to remove them before upgrading again.
+- The first-start SQLite import now counts the legacy documents it had to skip as unusable, per table, and logs a warning naming each table, instead of dropping them silently. The skipped documents stay in `dd.json` and its `.pre-1.8.bak` backup.
 
 ## [1.8.0-rc.13] - 2026-11-03
 

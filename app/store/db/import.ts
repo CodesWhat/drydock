@@ -64,6 +64,11 @@ export interface ImportContext {
   readonly snapshot: LokiDatabaseSnapshot;
   /** Resolved from the sessions file when present, from `dd.json` otherwise. */
   readonly sessionDocuments: readonly LokiDocument[];
+  /**
+   * Note that a legacy document in this table's collection was unusable and
+   * left out. The import warns per table once it finishes.
+   */
+  recordSkipped(table: string): void;
 }
 
 /**
@@ -84,6 +89,8 @@ export interface CollectionImporter {
 export interface ImportReport {
   imported: boolean;
   rowsByTable: Record<string, number>;
+  /** Documents left out because they were unusable, by table; only when any were. */
+  skippedByTable?: Record<string, number>;
 }
 
 type FirstStartImportStatus = 'imported' | 'database-exists' | 'no-legacy-store';
@@ -94,6 +101,7 @@ export interface FirstStartImportResult {
   /** Set only when this call created the backup. */
   backupPath?: string;
   rowsByTable: Record<string, number>;
+  skippedByTable?: Record<string, number>;
 }
 
 export interface FirstStartImportOptions {
@@ -168,17 +176,32 @@ export function importIntoDatabase(options: ImportIntoDatabaseOptions): ImportRe
   }
 
   return db.transaction(() => {
-    const context: ImportContext = { db, snapshot, sessionDocuments };
+    const skipped: Record<string, number> = {};
+    const context: ImportContext = {
+      db,
+      snapshot,
+      sessionDocuments,
+      recordSkipped: (table) => {
+        skipped[table] = (skipped[table] ?? 0) + 1;
+      },
+    };
     const rowsByTable: Record<string, number> = {};
     for (const importer of importers) {
       rowsByTable[importer.table] = importer.importInto(context);
+    }
+    for (const [table, count] of Object.entries(skipped)) {
+      log.warn(
+        `Skipped ${count} unusable legacy document(s) while importing ${table}; they remain in ${source} and its .pre-1.8.bak backup`,
+      );
     }
     writeStoreMetadata(
       db,
       IMPORT_MARKER_KEY,
       JSON.stringify({ source, importedAt: new Date().toISOString(), rowsByTable }),
     );
-    return { imported: true, rowsByTable };
+    return Object.keys(skipped).length > 0
+      ? { imported: true, rowsByTable, skippedByTable: skipped }
+      : { imported: true, rowsByTable };
   });
 }
 
@@ -249,5 +272,11 @@ export function runFirstStartImport(options: FirstStartImportOptions): FirstStar
   syncDirectory(storeDirectory);
   const backupPath = backupLegacyStore(legacyStorePath);
   syncDirectory(storeDirectory);
-  return { status: 'imported', databasePath, backupPath, rowsByTable: report.rowsByTable };
+  return {
+    status: 'imported',
+    databasePath,
+    backupPath,
+    rowsByTable: report.rowsByTable,
+    ...(report.skippedByTable && { skippedByTable: report.skippedByTable }),
+  };
 }

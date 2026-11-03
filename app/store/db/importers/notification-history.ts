@@ -17,7 +17,7 @@ const TARGET_TABLE = 'notification_history';
 export const notificationHistoryImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO notification_history
          (key, trigger_id, container_identity_key, event_kind, result_hash, notified_at)
@@ -32,6 +32,7 @@ export const notificationHistoryImporter: CollectionImporter = {
         typeof record.eventKind !== 'string' ||
         typeof record.resultHash !== 'string'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const notifiedAt =

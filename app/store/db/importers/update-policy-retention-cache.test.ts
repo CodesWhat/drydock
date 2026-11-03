@@ -20,6 +20,8 @@ function cacheDocument(overrides: Record<string, unknown> = {}): Record<string, 
   };
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/update-policy-retention-cache', () => {
   let db: Database;
 
@@ -36,6 +38,7 @@ describe('store/db/importers/update-policy-retention-cache', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 
