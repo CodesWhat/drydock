@@ -10,7 +10,7 @@ import {
 } from '@/bootstrap/stale-chunk-recovery';
 import { useApiKeyReview } from '@/composables/useApiKeyReview';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { hydrateFromServer } from '@/preferences/sync';
+import { hydrateFromServer, syncAuthenticatedUser } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
 import { ROUTES } from './routes';
 
@@ -127,6 +127,9 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   if (user !== undefined) {
     const reviewPending = user.apiKeyReviewPending === true;
     useApiKeyReview().setApiKeyReviewPending(reviewPending);
+    if (user.username) {
+      syncAuthenticatedUser(user.username);
+    }
     // A recovery-code sign-in owes a look at the API keys before anything else.
     // Logout is a request, not a route, so it stays reachable from here.
     if (reviewPending && !isApiKeyReviewRoute(to)) {

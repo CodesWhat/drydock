@@ -275,6 +275,44 @@ describe('preference sync engine', () => {
     await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
   });
 
+  it('drops the previous user pending edit when another user signs in without hydrating', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    preferences.sync.enabled = true;
+    preferences.layout.sidebarCollapsed = true;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(4);
+
+    sync.syncAuthenticatedUser('anonymous');
+    sync.syncAuthenticatedUser('bob');
+    mocks.updatePreferences.mockClear();
+    mocks.updatePreferences.mockResolvedValue({});
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.updatePreferences).not.toHaveBeenCalled();
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+
+    // Bob's own hydration starts clean.
+    await sync.hydrateFromServer('bob');
+    expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the pending edit when the same user is re-confirmed', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    sync.syncAuthenticatedUser('alice');
+    mocks.updatePreferences.mockResolvedValue({});
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+  });
+
   it('does not stack a second flush when a reconnect lands during an in-flight write', async () => {
     const { sync, preferences } = await load();
     mocks.getPreferences.mockResolvedValue(response(null));

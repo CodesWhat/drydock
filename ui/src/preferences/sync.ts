@@ -112,6 +112,21 @@ function resetSyncSessionState(): void {
 }
 
 /**
+ * Record the authenticated user before any navigation outcome. The API-key
+ * review redirect returns before hydrateFromServer runs, so without this a
+ * sign-in switch through that path would leave the previous user's pending
+ * edit armed to flush under the new user's session on the next SSE reconnect.
+ */
+export function syncAuthenticatedUser(username: string): void {
+  if (username === 'anonymous') {
+    return;
+  }
+  if (currentUsername !== undefined && currentUsername !== username) {
+    resetSyncSessionState();
+  }
+}
+
+/**
  * Merge the server's synced preferences into localStorage. Runs at most once
  * per app session (module-level guard) and never throws — it is intentionally
  * NOT awaited by the router guard (fire-and-forget) so navigation is never
@@ -125,9 +140,7 @@ export async function hydrateFromServer(username: string): Promise<void> {
   // same-tab user switch; without this reset the new user's hydration is
   // skipped by the stale `hydrated` flag and a still-armed flush timer could
   // PATCH the previous user's blob into the new user's server record.
-  if (currentUsername !== undefined && currentUsername !== username) {
-    resetSyncSessionState();
-  }
+  syncAuthenticatedUser(username);
   currentUsername = username;
   if (hydrated) {
     return;
