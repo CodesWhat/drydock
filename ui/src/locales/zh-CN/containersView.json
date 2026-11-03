@@ -37,7 +37,7 @@
       "version": "版本",
       "versionTooltip": "此版本从镜像元数据中检测得出，可能与标签相同；在空间不足时，会在“主机”列之前被隐藏。",
       "update": "更新",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "可用更新类型：major、minor、patch，或相同标签的镜像更新。",
       "status": "状态",
       "host": "主机",
       "registry": "仓库",

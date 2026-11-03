@@ -2,6 +2,7 @@
 import { computed, onScopeDispose, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useOperationStore } from '@/stores/operations';
+import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import AppSplitButton from '../AppSplitButton.vue';
 import DataTable from '../DataTable.vue';
@@ -45,6 +46,7 @@ const {
   filteredContainers,
   renderGroups,
   groupByStack,
+  groupByDependency,
   fleet,
   containerViewMode,
   containerCardReflowForced,
@@ -228,8 +230,49 @@ function pushContainerRow(rows: GroupedTableRow[], container: DisplayContainer, 
   }
 }
 
+const isGrouped = computed(
+  () => groupByStack.value || groupByDependency.value || (fleet && fleet.groupBy.value !== 'none'),
+);
+
+// Indent level per container id, only populated in the dependency view.
+const dependencyDepthById = computed(() => {
+  const depths = new Map<string, number>();
+  if (groupByDependency.value) {
+    for (const group of renderGroups.value) {
+      for (const [id, depth] of Object.entries(group.dependencyDepths ?? {})) {
+        depths.set(id, depth);
+      }
+    }
+  }
+  return depths;
+});
+
+function getNameIndent(containerId: string) {
+  const depth = dependencyDepthById.value.get(containerId) ?? 0;
+  return depth > 0 ? { paddingInlineStart: `${depth * 1.25}rem` } : undefined;
+}
+
+// What the current filter leaves visible. The chain update still covers the
+// whole connected chain, so the confirmation labels members outside this set.
+const shownContainerIds = computed(
+  () => new Set(displayContainers.value.map((container) => container.id)),
+);
+
+// A dependency-view group updates as a chain (previewed, wave-ordered, confirmed);
+// every other group keeps the plain bulk update.
+function handleGroupUpdateAll(group: ContainersViewRenderGroup) {
+  if (group.dependencyRootId) {
+    const root = group.containers.find((container) => container.id === group.dependencyRootId);
+    if (root) {
+      confirmDependencyGroupUpdate(root, shownContainerIds.value);
+      return;
+    }
+  }
+  updateAllInGroup(group);
+}
+
 const tableRows = computed<GroupedTableRow[]>(() => {
-  if (!groupByStack.value && (!fleet || fleet.groupBy.value === 'none')) {
+  if (!isGrouped.value) {
     const flat = renderGroups.value[0]?.containers ?? displayContainers.value;
     const rows: GroupedTableRow[] = [];
     flat.forEach((container) => pushContainerRow(rows, container, '__flat__'));
@@ -648,7 +691,7 @@ onScopeDispose(() => {
             :show-update-controls="updateMode !== 'notify'"
             :show-update-all="!fleet || fleet.groupBy.value === 'none'"
             @toggle="toggleGroupCollapse"
-            @update-all="updateAllInGroup($event)"
+            @update-all="handleGroupUpdateAll($event)"
           />
           <ContainerDependencyRow
             v-else-if="isDependencyTableRow(row)"
@@ -657,7 +700,7 @@ onScopeDispose(() => {
             :cycle="adjacency.cycleMemberIds.has(row.container.id)"
             :group-size="getDependencyComponentIds(adjacency, row.container.id).size"
             :container-actions-enabled="containerActionsEnabled"
-            @update-group="confirmDependencyGroupUpdate($event)"
+            @update-group="confirmDependencyGroupUpdate($event, shownContainerIds)"
           />
         </template>
         <template v-if="containerActionsEnabled" #header-icon>
@@ -711,7 +754,7 @@ onScopeDispose(() => {
         <!-- Container name + image (+ compact actions & badges) -->
         <template #cell-name="{ row: c }">
           <template v-if="isContainerTableRow(c)">
-          <div class="min-w-0">
+          <div class="min-w-0" :style="getNameIndent(c.id)" data-test="container-name-cell">
               <div class="flex items-center gap-2">
                 <AppIconButton
                   v-if="c.dependencyCount || c.dependentCount"
@@ -725,6 +768,46 @@ onScopeDispose(() => {
                   @click.stop="toggleExpanded(c.id)"
                 />
                 <div class="font-medium truncate dd-text flex-1">{{ c.name }}</div>
+                <AppBadge
+                  v-if="c.dependencyCount"
+                  tone="neutral"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-dependency-count"
+                >
+                  {{ t('containerComponents.dependencyGraph.dependsOnCount', { count: c.dependencyCount }) }}
+                </AppBadge>
+                <AppBadge
+                  v-if="c.dependentCount"
+                  tone="info"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-dependent-count"
+                >
+                  {{ t('containerComponents.dependencyGraph.requiredByCount', { count: c.dependentCount }) }}
+                </AppBadge>
+                <AppBadge
+                  v-if="adjacency.cycleMemberIds.has(c.id)"
+                  tone="warning"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-cycle-badge"
+                >
+                  {{ t('containerComponents.dependencyGraph.cycle') }}
+                </AppBadge>
+                <AppBadge
+                  v-if="adjacency.unresolvedTargetsByNodeId.has(c.id)"
+                  tone="warning"
+                  size="xs"
+                  class="shrink-0"
+                  data-test="container-unresolved-badge"
+                >
+                  {{
+                    t('containerComponents.dependencyGraph.unresolved', {
+                      targets: adjacency.unresolvedTargetsByNodeId.get(c.id)?.join(', '),
+                    })
+                  }}
+                </AppBadge>
               </div>
               <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ c.image }}</div>
           </div>

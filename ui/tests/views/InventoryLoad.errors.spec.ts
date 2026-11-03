@@ -17,7 +17,13 @@ function successfulResponse(input: RequestInfo | URL): Response {
   if (input === '/api/v1/settings')
     return Response.json({ updateMode: 'manual', internetlessMode: false });
   if (input === '/api/v1/containers/dependencies')
-    return Response.json({ nodes: [], edges: [], cycles: [] });
+    return Response.json({
+      nodes: [],
+      edges: [],
+      cycles: [],
+      unresolved: [],
+      crossHostIgnored: [],
+    });
   if (
     [
       '/api/v1/containers',

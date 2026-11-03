@@ -403,7 +403,8 @@
       "filterHiddenPinned": "Nascosti: bloccati",
       "filtersLabel": "Filtri",
       "filteredContainers": "Filtrato a {count} container | Filtrati a {count} container",
-      "clearContainerIdFilter": "Cancella filtro ID container"
+      "clearContainerIdFilter": "Cancella filtro ID container",
+      "groupByDependencyTooltip": "Raggruppa per dipendenza"
     },
     "stats": {
       "paused": "In pausa",
@@ -608,7 +609,9 @@
         "failedTitle": "Aggiornamento catena di dipendenze non riuscito",
         "failedDetail": "Impossibile aggiornare la catena di dipendenze per {name}.",
         "staleChainTitle": "La catena di dipendenze è cambiata",
-        "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare."
+        "staleChainDetail": "La catena di dipendenze per {name} è cambiata dall'ultima anteprima. Riapri la finestra di dialogo di aggiornamento per rivedere la catena attuale prima di confermare.",
+        "hiddenMarker": "non mostrato dal filtro attuale",
+        "hiddenNote": "{count} container di questa catena è nascosto dal filtro attuale e verrà aggiornato anch'esso. | {count} container di questa catena sono nascosti dal filtro attuale e verranno aggiornati anch'essi."
       },
       "bulkUpdate": {
         "header": "Aggiorna 1 container | Aggiorna {count} container",
@@ -835,7 +838,11 @@
       "updateGroup": "Aggiorna gruppo di dipendenze ({count})",
       "staleParentsWarning": "{name} dipende da {parents}, che ha anche un aggiornamento in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro un elemento principale obsoleto. | {name} dipende da {parents}, che hanno anche aggiornamenti in sospeso. Aggiornare prima il dipendente potrebbe lasciarlo in esecuzione contro elementi principali obsoleti.",
       "staleParentsOverflow": "e altri {count}",
-      "staleParentsAccept": "Aggiorna comunque"
+      "staleParentsAccept": "Aggiorna comunque",
+      "dependsOnCount": "Dipende da {count}",
+      "requiredByCount": "Richiesto da {count}",
+      "unresolved": "Dipendenza mancante: {targets}",
+      "dependentsNote": "{dependents} dipende da {name} e non viene aggiornato né riavviato con esso. Usa Aggiorna gruppo di dipendenze per aggiornare l'intera catena in ordine. | {dependents} dipendono da {name} e non vengono aggiornati né riavviati con esso. Usa Aggiorna gruppo di dipendenze per aggiornare l'intera catena in ordine."
     },
     "selection": {
       "selectRow": "Seleziona {name}",
