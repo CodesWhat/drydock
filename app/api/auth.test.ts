@@ -141,7 +141,7 @@ import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 import * as authSession from './auth-session.js';
-import { getAuthenticators } from './authenticator-chain.js';
+import { getAuthenticators, markVerifiedCredentialsDeclined } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 import * as sessionPrincipal from './session-principal.js';
@@ -397,6 +397,110 @@ describe('Auth Router', () => {
       await auth.requireAuthentication(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
+    });
+
+    describe('Basic Authorization header lockout', () => {
+      const basicHeader = (user: string, password: string) =>
+        `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
+      const headerRequest = (user: string, password: string, ip = '203.0.113.9'): any => ({
+        ip,
+        headers: { authorization: basicHeader(user, password) },
+      });
+
+      test('locks the account after repeated bad Basic headers and refuses a correct one', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const res = createResponse();
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res as any, vi.fn());
+        }
+
+        mockAuthenticate.mockClear();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+          return authRequest.principal;
+        });
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(
+          headerRequest('admin', 'correct', '198.51.100.7'),
+          lockedRes as any,
+          next,
+        );
+
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(mockAuthenticate).not.toHaveBeenCalled();
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('answers the bare 401 while the attempt does not lock', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+
+        expect(res.statusCode).toBe(401);
+        expect(res.end).toHaveBeenCalledWith('Unauthorized');
+      });
+
+      test('does not count a verified password the authenticator declined', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          markVerifiedCredentialsDeclined(authRequest);
+          return undefined;
+        });
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'right'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('does not count requests without a Basic header', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(
+            { ip: '203.0.113.9', headers: { authorization: 'Digest nope' } } as any,
+            res,
+            vi.fn(),
+          );
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('a successful Basic header forgives earlier failures', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await auth.requireAuthentication(
+            headerRequest('admin', 'bad'),
+            { statusCode: 0, end: vi.fn() } as any,
+            vi.fn(),
+          );
+        }
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+          return authRequest.principal;
+        });
+        const next = vi.fn();
+        await auth.requireAuthentication(
+          headerRequest('admin', 'ok'),
+          createResponse() as any,
+          next,
+        );
+        expect(next).toHaveBeenCalled();
+
+        mockAuthenticate.mockResolvedValue(undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+        expect(res.statusCode).toBe(401);
+      });
     });
 
     test('should not special-case POST /login (handled by route-level middleware)', async () => {

@@ -8,6 +8,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- Wrong passwords sent in an `Authorization: Basic` header to API routes now count toward the same account and IP login lockout as the login form, and a locked account or IP is refused on those routes too.
 ## [1.8.0-rc.13] - 2026-11-03
 
 > [!WARNING]

@@ -796,6 +796,43 @@ export async function authenticateLogin(
   next();
 }
 
+/** Whether the request carries an `Authorization: Basic` header. */
+export function hasBasicAuthorizationHeader(req: AuthRequest): boolean {
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  return (
+    typeof authorization === 'string' && authorization.trim().toLowerCase().startsWith('basic ')
+  );
+}
+
+/** The username a Basic header names, for keying its failure budget. */
+export function getBasicHeaderIdentity(req: AuthRequest): string | undefined {
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  return typeof authorization === 'string'
+    ? getBasicHeaderUsername(authorization.trim())
+    : undefined;
+}
+
+/**
+ * A Basic header on a non-login route failed: it draws on the same account and
+ * IP budgets as a failed login, so the header cannot be used to guess a
+ * password past the lockout. `sendFailure` answers when the attempt did not
+ * lock anything.
+ */
+export function rejectFailedHeaderAuthentication(
+  req: AuthRequest,
+  res: Response,
+  sendFailure: (res: Response) => void,
+): void {
+  rejectFailedAttempt(
+    req,
+    res,
+    getBasicHeaderIdentity(req),
+    'Authentication failed (invalid credentials)',
+    0,
+    sendFailure,
+  );
+}
+
 export function resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();

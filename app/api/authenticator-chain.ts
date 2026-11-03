@@ -57,6 +57,21 @@ export function rejectAuthentication(status = DEFAULT_AUTHENTICATION_FAILURE_STA
   return { rejected: true, status } as const satisfies AuthenticationRejection;
 }
 
+const declinedVerifiedCredentials = new WeakSet<object>();
+
+/**
+ * An authenticator verified the credential on this request and still declined
+ * it (Basic, for a subject whose second factor is due). A correct password is
+ * not a failed guess, so the caller must not count it against a lockout.
+ */
+export function markVerifiedCredentialsDeclined(req: object): void {
+  declinedVerifiedCredentials.add(req);
+}
+
+export function wereVerifiedCredentialsDeclined(req: object): boolean {
+  return declinedVerifiedCredentials.has(req);
+}
+
 export interface Authenticator {
   /** Stable id, used in logs and in registration diagnostics. */
   readonly id: string;

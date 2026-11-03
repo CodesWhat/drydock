@@ -14,7 +14,12 @@ import {
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
   authenticateLogin,
+  clearLoginLockoutsAfterSuccess,
+  getBasicHeaderIdentity,
+  hasBasicAuthorizationHeader,
   initializeLoginLockoutState,
+  rejectFailedHeaderAuthentication,
+  rejectIfLockedOut,
   resetLoginLockoutStateForTests,
 } from './auth-lockout.js';
 import { applyRememberMe, getRememberMePreference, setRememberMe } from './auth-remember-me.js';
@@ -39,6 +44,7 @@ import {
   authenticateRequest,
   getAuthenticationFailureStatus,
   isAuthenticationRejection,
+  wereVerifiedCredentialsDeclined,
 } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
@@ -115,6 +121,13 @@ export async function requireAuthentication(
     return;
   }
 
+  // A Basic header on any route is a password guess, so it draws on the same
+  // account and IP budgets as POST /auth/login and is refused while locked.
+  const basicHeader = hasBasicAuthorizationHeader(req);
+  if (basicHeader && rejectIfLockedOut(req, res, getBasicHeaderIdentity(req))) {
+    return;
+  }
+
   let outcome: AuthenticationOutcome;
   try {
     outcome = await authenticateRequest(req);
@@ -132,8 +145,20 @@ export async function requireAuthentication(
   }
 
   if (outcome === undefined) {
+    // A correct password the authenticator declined (second factor due) is
+    // not a failed guess.
+    if (basicHeader && !wereVerifiedCredentialsDeclined(req)) {
+      rejectFailedHeaderAuthentication(req, res, (response) =>
+        rejectUnauthenticated(req, response as Response),
+      );
+      return;
+    }
     rejectUnauthenticated(req, res);
     return;
+  }
+
+  if (basicHeader && outcome.kind === 'basic') {
+    clearLoginLockoutsAfterSuccess(req, outcome.username);
   }
 
   next();
