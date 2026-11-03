@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Response } from 'express';
+import { isBasicAuthorizationHeader } from '../authentications/providers/basic/basic-authorization.js';
 import log from '../log/index.js';
 import {
   recordAuthAccountLockout,
@@ -290,11 +291,13 @@ function getLoginIdentity(req: AuthRequest): string | undefined {
 }
 
 function getBasicHeaderUsername(authorization: string): string | undefined {
-  if (!authorization.toLowerCase().startsWith('basic ')) {
+  // The scheme test is the Basic provider's own, so a header the provider would
+  // not read as Basic never names an identity here either.
+  if (!isBasicAuthorizationHeader(authorization)) {
     return undefined;
   }
 
-  const encoded = authorization.slice(6).trim();
+  const encoded = authorization.split(' ')[1].trim();
   if (!encoded) {
     return undefined;
   }
@@ -821,9 +824,7 @@ export async function authenticateLogin(
 /** Whether the request carries an `Authorization: Basic` header. */
 export function hasBasicAuthorizationHeader(req: AuthRequest): boolean {
   const authorization = getFirstHeaderValue(req.headers?.authorization);
-  return (
-    typeof authorization === 'string' && authorization.trim().toLowerCase().startsWith('basic ')
-  );
+  return isBasicAuthorizationHeader(authorization?.trim());
 }
 
 /** The username a Basic header names, for keying its failure budget. */

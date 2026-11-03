@@ -15,7 +15,7 @@
  *    effect of this refactor.
  */
 
-const BASIC_SCHEME_PATTERN = /Basic/i;
+const BASIC_SCHEME_PATTERN = /^basic$/i;
 const MALFORMED_AUTHORIZATION_STATUS = 400;
 const CREDENTIAL_FIELD_COUNT = 2;
 
@@ -33,6 +33,20 @@ export type BasicAuthorization =
 
 const ABSENT: BasicAuthorization = { outcome: 'absent' };
 const MALFORMED: BasicAuthorization = { outcome: 'malformed' };
+
+/**
+ * Whether the header names the Basic scheme in a form the parser would act on
+ * (at least two space-separated tokens, the first exactly `basic`). The login
+ * lockout asks this instead of keeping its own idea of the scheme, so it can
+ * never disagree with what actually authenticates.
+ */
+export function isBasicAuthorizationHeader(header: unknown): boolean {
+  if (typeof header !== 'string') {
+    return false;
+  }
+  const parts = header.split(' ');
+  return parts.length >= CREDENTIAL_FIELD_COUNT && BASIC_SCHEME_PATTERN.test(parts[0]);
+}
 
 export function parseBasicAuthorization(header: unknown): BasicAuthorization {
   if (typeof header !== 'string' || header === '') {

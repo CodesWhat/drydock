@@ -114,12 +114,14 @@ vi.mock('./error-response.js', () => ({
   sendErrorResponse: mockSendErrorResponse,
 }));
 
+import { parseBasicAuthorization } from '../authentications/providers/basic/basic-authorization.js';
 import log from '../log/index.js';
 import {
   acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
   getBasicHeaderIdentity,
+  hasBasicAuthorizationHeader,
   initializeLoginLockoutState,
   rejectFailedSecondFactor,
   rejectIfFactorLocked,
@@ -3232,5 +3234,26 @@ describe('getBasicHeaderIdentity', () => {
     expect(getBasicHeaderIdentity({ headers: { authorization: `Basic ${encoded}` } } as any)).toBe(
       'alice',
     );
+  });
+});
+
+describe('Basic scheme agreement with the Basic provider', () => {
+  const encoded = Buffer.from('alice:secret').toString('base64');
+
+  test.each([
+    [`Basic ${encoded}`, true],
+    [`basic ${encoded}`, true],
+    [`BASIC ${encoded}`, true],
+    [`xBasic ${encoded}`, false],
+    [`BasicAuth ${encoded}`, false],
+    [`Basicx ${encoded}`, false],
+    [`Bearer ${encoded}`, false],
+    ['Basic', false],
+    ['', false],
+  ])('%j: lockout and provider agree (basic=%s)', (authorization, isBasic) => {
+    const req = { headers: { authorization } } as any;
+    expect(hasBasicAuthorizationHeader(req)).toBe(isBasic);
+    expect(parseBasicAuthorization(authorization).outcome === 'credentials').toBe(isBasic);
+    expect(getBasicHeaderIdentity(req)).toBe(isBasic ? 'alice' : undefined);
   });
 });
