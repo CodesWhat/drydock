@@ -192,7 +192,7 @@ describe('preference sync engine', () => {
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
   });
 
-  it('debounces enabled local mutations and drops failed writes', async () => {
+  it('debounces enabled local mutations and writes once per debounce', async () => {
     const { preferences } = await load();
     preferences.sync.enabled = true;
     mocks.watchCallbacks[0]();
@@ -201,6 +201,83 @@ describe('preference sync engine', () => {
     expect(mocks.updatePreferences).not.toHaveBeenCalled();
     mocks.updatePreferences.mockRejectedValue(new Error('offline'));
     await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a failed write pending so a reconnect fetch cannot overwrite it, then retries', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    preferences.sync.enabled = true;
+    preferences.layout.sidebarCollapsed = true;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValueOnce(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+
+    const stale = structuredClone(preferences);
+    stale.layout.sidebarCollapsed = false;
+    mocks.getPreferences.mockResolvedValue(response(stale));
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await Promise.resolve();
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+    expect(preferences.layout.sidebarCollapsed).toBe(true);
+
+    mocks.updatePreferences.mockResolvedValue({});
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+  });
+
+  it('stops retrying after the cap but keeps the edit pending until the next edit', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(4);
+
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await Promise.resolve();
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+
+    mocks.updatePreferences.mockResolvedValue({});
+    mocks.watchCallbacks[0]();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not re-mark a failed write when sync was turned off meanwhile', async () => {
+    const { preferences } = await load();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    const write = deferred<unknown>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    preferences.sync.enabled = false;
+    write.reject(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-mark a failed write after the user changed', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    const write = deferred<unknown>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    await sync.hydrateFromServer('bob');
+    write.reject(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
   });
 
@@ -317,6 +394,13 @@ describe('preference sync engine', () => {
       else write.reject(new Error('write failed'));
       await Promise.resolve();
       await Promise.resolve();
+      if (outcome === 'reject') {
+        // The failed edit is still pending, so fetches stay blocked until the retry lands.
+        mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+        expect(mocks.getPreferences).not.toHaveBeenCalled();
+        mocks.updatePreferences.mockResolvedValue(response(preferences));
+        await vi.advanceTimersByTimeAsync(3000);
+      }
       mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
       await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
     },

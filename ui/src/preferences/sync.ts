@@ -12,6 +12,10 @@ import { DEEP_WATCH_SECTIONS, preferences } from './store';
 // middle-of-the-range debounce, no requestIdleCallback complexity needed for a
 // network write (unlike the paint-sensitive localStorage flush in store.ts).
 const SYNC_FLUSH_DEBOUNCE_MS = 3000;
+// A failed write re-arms the same debounce as its backoff. After this many
+// retries the edit stays pending (it still outranks any fetched server state)
+// and goes out with the next local edit instead of looping on a dead server.
+const SYNC_WRITE_MAX_RETRIES = 3;
 
 let hydrated = false;
 let currentUsername: string | undefined;
@@ -19,6 +23,7 @@ let suppressOutboundSync = false;
 let syncDirty = false;
 let syncFlushTimer: ReturnType<typeof setTimeout> | undefined;
 let syncWriteInFlight = false;
+let syncRetryCount = 0;
 
 /**
  * Diff-and-apply the server's migrated blob onto the reactive preferences
@@ -90,6 +95,7 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
 function resetSyncSessionState(): void {
   clearSyncFlushTimer();
   syncDirty = false;
+  syncRetryCount = 0;
   hydrated = false;
   currentUsername = undefined;
 }
@@ -160,11 +166,22 @@ async function flushSyncWrite(): Promise<void> {
   if (!preferences.sync.enabled) {
     return;
   }
+  const writingUsername = currentUsername;
   try {
     syncWriteInFlight = true;
     await updatePreferences(preferences.schemaVersion, preferences);
+    syncRetryCount = 0;
   } catch (error) {
     console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
+    // The edit never reached the server, so it is still pending: keep the
+    // fetch guard up so a reconnect cannot overwrite it with older server state.
+    if (preferences.sync.enabled && writingUsername === currentUsername) {
+      syncDirty = true;
+      if (syncRetryCount < SYNC_WRITE_MAX_RETRIES) {
+        syncRetryCount += 1;
+        scheduleSyncFlush();
+      }
+    }
   } finally {
     syncWriteInFlight = false;
   }
@@ -183,6 +200,7 @@ function markSyncDirty(): void {
     return;
   }
   syncDirty = true;
+  syncRetryCount = 0;
   scheduleSyncFlush();
 }
 
