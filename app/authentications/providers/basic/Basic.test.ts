@@ -682,6 +682,7 @@ describe('Basic Authentication', () => {
 
       expect(authenticator.id).toBe('basic.default');
       expect(authenticator.persistsSession).toBe(false);
+      expect(authenticator.readsBasicHeader).toBe(true);
     });
 
     test('resolves valid credentials to a basic principal', async () => {

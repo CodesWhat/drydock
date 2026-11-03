@@ -115,6 +115,13 @@ export interface Authenticator {
   readonly localSubjectId?: string;
 
   /**
+   * True for the authenticator that reads `Authorization: Basic` headers. A
+   * Basic header only counts as a password guess when one is in the chain;
+   * without it (OIDC-only, say) the header is just a header.
+   */
+  readonly readsBasicHeader?: boolean;
+
+  /**
    * Whether this authenticator's presence means a caller can actually get in.
    *
    * Absent means yes. It is declared false by the two authenticators that can
@@ -141,6 +148,11 @@ export function registerAuthenticator(authenticator: Authenticator): void {
 
 export function getAuthenticators(): readonly Authenticator[] {
   return [...chain];
+}
+
+/** Whether a registered authenticator reads `Authorization: Basic` headers. */
+export function isBasicHeaderAuthenticationRegistered(): boolean {
+  return chain.some((authenticator) => authenticator.readsBasicHeader === true);
 }
 
 /**

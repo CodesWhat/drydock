@@ -324,7 +324,7 @@ describe('Auth Router', () => {
   });
 
   describe('requireAuthentication', () => {
-    function registerChainAuthenticator() {
+    function registerChainAuthenticator(options: { readsBasicHeader?: boolean } = {}) {
       registry.getState.mockReturnValue({
         authentication: {
           'oauth.provider': {
@@ -332,6 +332,7 @@ describe('Auth Router', () => {
             getAuthenticator: vi.fn(() => ({
               id: 'oauth.provider',
               persistsSession: false,
+              readsBasicHeader: options.readsBasicHeader ?? true,
               authenticate: mockAuthenticate,
             })),
             getStrategyDescription: vi.fn(() => ({ type: 'oauth', name: 'provider' })),
@@ -467,6 +468,41 @@ describe('Auth Router', () => {
         await auth.requireAuthentication(headerRequest('admin', 'stale'), lockedRes as any, next);
         expect(lockedRes.status).toHaveBeenCalledWith(423);
         expect(next).not.toHaveBeenCalled();
+      });
+
+      test('counts a wrong Basic header even when anonymous access admits the request', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'anonymous', username: 'anonymous' } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'stale'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(headerRequest('admin', 'stale'), lockedRes as any, next);
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('ignores a Basic header entirely when no Basic authenticator is registered', async () => {
+        registerChainAuthenticator({ readsBasicHeader: false });
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
       });
 
       test('does not count a session-authenticated Basic header the authenticator declined', async () => {

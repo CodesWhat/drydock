@@ -45,6 +45,7 @@ import {
   authenticateRequest,
   getAuthenticationFailureStatus,
   isAuthenticationRejection,
+  isBasicHeaderAuthenticationRegistered,
   wereVerifiedCredentialsDeclined,
 } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
@@ -124,7 +125,9 @@ export async function requireAuthentication(
 
   // A Basic header on any route is a password guess, so it draws on the same
   // account and IP budgets as POST /auth/login and is refused while locked.
-  const basicHeader = hasBasicAuthorizationHeader(req);
+  // With no Basic authenticator in the chain nothing checks the password, so
+  // the header is not a guess and must not feed a lockout.
+  const basicHeader = hasBasicAuthorizationHeader(req) && isBasicHeaderAuthenticationRegistered();
   if (basicHeader && rejectIfLockedOut(req, res, getBasicHeaderIdentity(req))) {
     return;
   }

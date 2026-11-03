@@ -342,6 +342,7 @@ class Basic extends Authentication<BasicConfiguration> {
     return {
       id: this.getId(),
       persistsSession: false,
+      readsBasicHeader: true,
       // Read on use, so it names the account as it is configured now. A factor
       // enrolled under any other subject is orphaned (spec 11.1.2 decision 10).
       get localSubjectId(): string {
