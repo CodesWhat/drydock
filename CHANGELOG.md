@@ -10,6 +10,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- After the event stream reconnects, the containers list now refreshes rows whose only change was a security scan result, update eligibility, icon, trigger include/exclude, label-owned sources, release notes or new digest, instead of leaving them stale.
 - Re-adding a Portwing agent key that was previously revoked, or retrying a cancelled key rotation with the same replacement key, now reactivates the key instead of failing with a database error.
 - Saving a configuration section now says when the config file is read-only or busy (for example a read-only or single-file bind mount), and logs and audits the failure instead of returning a bare error.
 - A preference change that failed to sync to the server is now kept as pending and retried, so reconnecting no longer overwrites it with older server settings.
