@@ -31,6 +31,8 @@ If a lockout value is missing or invalid, drydock falls back to the correspondin
 
 Scripted clients that send an `Authorization: Basic` header with a stale password draw on the same account and IP lockout budget as the login form, and their password checks have a concurrent attempt cap of their own (`DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS`), separate from the login form's.
 
+An integration that keeps sending a stale password keeps re-locking the account every time the lockout expires. Behind a reverse proxy without `DD_SERVER_TRUSTPROXY`, every client shares the proxy's IP, so the same failures also lock out that shared IP, and with it everyone else coming through the proxy. Use API keys for integrations rather than the account password, and update integrations before you rotate a password.
+
 ## Two-factor (TOTP)
 
 Local Basic accounts can add a TOTP second factor through the [two-factor management API](/docs/api#two-factor-management). Enrolling, replacing or removing a factor is only allowed over HTTPS or from loopback, because those responses carry the TOTP secret and the recovery codes.
