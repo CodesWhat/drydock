@@ -47,6 +47,7 @@ const {
   resetColumns,
   tt,
   groupByStack,
+  groupByDependency,
   fleet,
   fleetBulk,
   fleetHealth,
@@ -269,8 +270,14 @@ const activeFilterChips = computed(() => {
           :tooltip="tt(t('containerComponents.listContent.groupByStackTooltip'))"
           :aria-label="t('containerComponents.listContent.groupByStackTooltip')"
           @click="groupByStack = !groupByStack" />
+        <AppIconButton icon="network" size="sm" variant="secondary" class="shrink-0"
+          :class="groupByDependency ? 'dd-text dd-bg-elevated' : ''"
+          :tooltip="tt(t('containerComponents.listContent.groupByDependencyTooltip'))"
+          :aria-label="t('containerComponents.listContent.groupByDependencyTooltip')"
+          data-test="group-by-dependency"
+          @click="groupByDependency = !groupByDependency" />
         <AppButton
-          v-if="groupByStack || (fleet && fleet.groupBy.value !== 'none')"
+          v-if="groupByStack || groupByDependency || (fleet && fleet.groupBy.value !== 'none')"
           size="sm"
           variant="secondary"
           weight="semibold"

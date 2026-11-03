@@ -38,9 +38,6 @@ async function boot() {
     quiet: true,
   });
 
-  // Import demo CSS for Tailwind @source directive
-  await import('./demo.css');
-
   // Default demo theme to 'system' variant so it follows the user's OS
   // light/dark preference, matching the surrounding website.
   if (!localStorage.getItem('dd-preferences')) {

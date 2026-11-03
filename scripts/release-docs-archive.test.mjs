@@ -148,8 +148,8 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
     [...sourceFiles.map(([path]) => path), 'changelog/index.mdx'].sort(),
   );
   const errata = JSON.parse(readFileSync('content/docs/v1.7-errata.json', 'utf8'));
-  assert.equal(errata.changes.length, 15);
-  assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 8);
+  assert.equal(errata.changes.length, 17);
+  assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 9);
   for (const [path, blob] of sourceFiles) {
     const changes = errata.changes.filter((entry) => entry.path === path);
     if (changes.length === 0) {
@@ -165,7 +165,7 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
       lines.splice(change.startLine - 1, change.endLine - change.startLine + 1, change.replacement);
       assert.ok(
         readFileSync(join('content/docs/current', path), 'utf8').includes(
-          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.12\n'),
+          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.13\n'),
         ),
         path,
       );

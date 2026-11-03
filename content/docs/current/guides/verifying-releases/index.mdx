@@ -27,7 +27,11 @@ Everything is keyless — you do NOT need a Drydock-specific public key. Sigstor
 
 ## Verify container images
 
-The release workflow signs every pushed tag (`ghcr.io`, `docker.io`, `quay.io`) with the same identity. Use this policy to verify:
+The release workflow signs every pushed tag (`ghcr.io`, `docker.io`, `quay.io`) with the same identity.
+
+That's one identity for every release line, not one per line: `release-cut.yml@refs/heads/main`. Every cut, including maintenance releases for an older line, runs the same reviewed workflow from protected `main`, so a signature from any line can only come from that workflow on `main`. Pin this identity for `v1.5.0-rc.11` and every release after it, whatever the line: 1.6, 1.7 and 1.8 all use it. Tags before `v1.5.0-rc.11` were signed by older workflows; their identities are [at the bottom of this page](#why-some-older-tags-look-different).
+
+Use this policy to verify:
 
 ```bash
 TAG="v1.5.2"

@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchContext } from "fumadocs-ui/contexts/search";
 import {
   BookOpen,
   GitCompare,
@@ -9,6 +10,7 @@ import {
   Map as MapIcon,
   Menu,
   Play,
+  Search,
   Terminal,
 } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { GithubIcon } from "@/components/github-icon";
 import { DOCS_SECTION, isSectionPath } from "@/components/header-nav";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { DOCS_ROOT, GITHUB_URL } from "@/lib/site-config";
 
 const SPONSOR_URL = "https://github.com/sponsors/CodesWhat";
@@ -29,8 +32,10 @@ const LINKS: { href: string; label: string; icon: LucideIcon; section?: string }
   { href: "/#roadmap", label: "Roadmap", icon: MapIcon },
 ];
 
-export function MobileNavigation() {
+export function MobileNavigation({ variant = "marketing" }: { variant?: "marketing" | "docs" }) {
   const pathname = usePathname();
+  const { setOpenSearch } = useSearchContext();
+  const links = variant === "docs" ? LINKS.filter(({ href }) => href !== "/compare") : LINKS;
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     function closeOutside(event: PointerEvent) {
@@ -57,7 +62,19 @@ export function MobileNavigation() {
         <span>Menu</span>
       </summary>
       <div className="website-mobile-panel">
-        {LINKS.map(({ href, label, icon: Icon, section }) => (
+        {variant === "docs" && (
+          <button
+            type="button"
+            onClick={() => {
+              menu.current?.removeAttribute("open");
+              setOpenSearch(true);
+            }}
+          >
+            <Search size={16} aria-hidden="true" />
+            Search
+          </button>
+        )}
+        {links.map(({ href, label, icon: Icon, section }) => (
           <Link
             key={href}
             href={href}
@@ -86,6 +103,7 @@ export function MobileNavigation() {
           <Heart size={16} aria-hidden="true" />
           Sponsor
         </a>
+        {variant === "docs" && <ThemeToggle inline />}
       </div>
     </details>
   );

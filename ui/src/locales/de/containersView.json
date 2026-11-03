@@ -37,7 +37,7 @@
       "version": "Version",
       "versionTooltip": "Version, die aus den Image-Metadaten erkannt wurde. Sie kann mit dem Tag übereinstimmen und wird bei knappem Platz vor Host ausgeblendet.",
       "update": "Update",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "Art des verfügbaren Updates: Major, Minor, Patch oder Image-Update mit gleichem Tag.",
       "status": "Status",
       "host": "Host",
       "registry": "Registry",

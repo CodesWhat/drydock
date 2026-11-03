@@ -37,7 +37,7 @@
       "version": "Versie",
       "versionTooltip": "Versie gedetecteerd op basis van de image-metadata. Dit kan overeenkomen met de tag en wordt vóór Host verborgen wanneer de ruimte krap is.",
       "update": "Update",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "Type beschikbare update: major, minor, patch of image-update met dezelfde tag.",
       "status": "Status",
       "host": "Host",
       "registry": "Register",

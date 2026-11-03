@@ -5,6 +5,17 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.13 Highlights - November 3, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Dependencies view is back.** The container list's Dependencies view from 1.7.1 is now in 1.8: dependency trees, Depends on / Required by badges, and Update All through the dependency-chain confirmation. Upgrading from 1.7.1 keeps it (#1564).
+- **Docs quick start.** The quick start on the docs index now starts as written, with localhost binding and a sample-credentials warning (#1563).
+- **Translations.** Fixes across all 16 non-English locales (#1563).
+- **Docker builds.** Builds work again with the libexpat 2.10.0-r0 pin (#1561).
+- **Docs layout.** The docs use a wider layout and a slimmer header (#1560).
+- RC13 includes every rc.12 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.12 Highlights - November 2, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>

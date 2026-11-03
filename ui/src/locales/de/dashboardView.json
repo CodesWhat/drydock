@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Dashboard-Daten konnten nicht geladen werden",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
+      "statContainers": "Container",
+      "statUpdates": "Updates verfügbar",
+      "statSecurity": "Sicherheitsprobleme",
       "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "recentUpdates": "Updates verfügbar",
+      "securityOverview": "Sicherheitsübersicht",
+      "resourceUsage": "Ressourcennutzung",
+      "hostStatus": "Host-Status",
+      "updateBreakdown": "Update-Aufschlüsselung",
+      "statApprovals": "Genehmigungen"
     },
     "recentActivity": {
       "title": "Letzte Aktivität",

@@ -36,9 +36,9 @@ Scoped API tokens|Yes|Yes|tie
 git-branch|Migration Command|A built-in config migrate command previews, then rewrites your WUD_* variables and the supported wud.* labels to DD_* and dd.*. Review any wud.* label it leaves in place, such as wud.rollback.enable.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), cosign signature verification, and Update Bouncer to block vulnerable deploys — none of which WUD includes.
 network|Distributed Agents|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard — no need to expose the Docker API over TCP. WUD supports multiple Docker hosts too, but requires the remote Docker API to be exposed over TCP or TLS.
-radio|23 Registry Providers|Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more, each with its own auth. WUD lists 25 providers, so this isn't a count win.
+radio|23 Registry Providers|Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more, each with its own auth. WUD lists 25 providers (as of November 2026), so this isn't a count win.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention, plus automatic rollback on health check failure. WUD also rolls back a failed update on HEALTHCHECK but keeps no image backup.
-bell|Trigger Services|21 trigger integrations including Google Chat, Matrix, Mattermost, and Microsoft Teams (Adaptive Cards). WUD lists 33.
+bell|Trigger Services|21 trigger integrations including Google Chat, Matrix, Mattermost, and Microsoft Teams (Adaptive Cards). WUD lists 33 (as of November 2026).
 `,
   highlightIconMap: {
     "git-branch": GitBranch,

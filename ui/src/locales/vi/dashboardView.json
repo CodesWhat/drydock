@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Không thể tải dữ liệu bảng điều khiển",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "Container",
+      "statUpdates": "Bản cập nhật có sẵn",
+      "statSecurity": "Vấn đề bảo mật",
+      "statRegistries": "Registry",
+      "recentUpdates": "Cập nhật có sẵn",
+      "securityOverview": "Tổng quan bảo mật",
+      "resourceUsage": "Sử dụng tài nguyên",
+      "hostStatus": "Trạng thái máy chủ",
+      "updateBreakdown": "Phân loại cập nhật",
+      "statApprovals": "Phê duyệt"
     },
     "recentActivity": {
       "title": "Hoạt động gần đây",

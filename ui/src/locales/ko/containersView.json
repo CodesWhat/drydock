@@ -37,7 +37,7 @@
       "version": "버전",
       "versionTooltip": "이미지 메타데이터에서 감지된 버전입니다. 태그와 일치할 수 있으며 공간이 부족하면 호스트보다 먼저 숨겨집니다.",
       "update": "업데이트",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "사용 가능한 업데이트 유형: 메이저, 마이너, 패치 또는 같은 태그의 이미지 업데이트.",
       "status": "상태",
       "host": "호스트",
       "registry": "레지스트리",

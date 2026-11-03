@@ -403,7 +403,8 @@
       "filterHiddenPinned": "Ocultos: fixados",
       "filtersLabel": "Filtros",
       "filteredContainers": "Filtrado para {count} contêiner | Filtrado para {count} contêineres",
-      "clearContainerIdFilter": "Limpar filtro de ID do contêiner"
+      "clearContainerIdFilter": "Limpar filtro de ID do contêiner",
+      "groupByDependencyTooltip": "Agrupar por dependência"
     },
     "stats": {
       "paused": "Pausado",
@@ -470,7 +471,7 @@
       "triggerFiltered": "Trigger filtrado",
       "agentMismatch": "Agent diferente",
       "noTrigger": "Sem trigger",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Autoatualização indisponível",
       "liftsLabel": "Libera:"
     },
     "updateStatus": {
@@ -608,7 +609,9 @@
         "failedTitle": "Falha na atualização da cadeia de dependências",
         "failedDetail": "Falha ao atualizar a cadeia de dependências de {name}.",
         "staleChainTitle": "A cadeia de dependências mudou",
-        "staleChainDetail": "A cadeia de dependências de {name} mudou desde a última pré-visualização. Reabra a caixa de diálogo de atualização para revisar a cadeia atual antes de confirmar."
+        "staleChainDetail": "A cadeia de dependências de {name} mudou desde a última pré-visualização. Reabra a caixa de diálogo de atualização para revisar a cadeia atual antes de confirmar.",
+        "hiddenMarker": "não exibido pelo filtro atual",
+        "hiddenNote": "{count} contêiner desta cadeia está oculto pelo filtro atual e também será atualizado. | {count} contêineres desta cadeia estão ocultos pelo filtro atual e também serão atualizados."
       },
       "bulkUpdate": {
         "header": "Atualizar 1 contêiner | Atualizar {count} contêineres",
@@ -835,7 +838,11 @@
       "updateGroup": "Atualizar grupo de dependências ({count})",
       "staleParentsWarning": "{name} depende de {parents}, que também tem uma atualização pendente. Atualizar o dependente primeiro pode deixá-lo em execução contra um item pai desatualizado. | {name} depende de {parents}, que também têm atualizações pendentes. Atualizar o dependente primeiro pode deixá-lo em execução contra itens pai desatualizados.",
       "staleParentsOverflow": "e mais {count}",
-      "staleParentsAccept": "Atualizar mesmo assim"
+      "staleParentsAccept": "Atualizar mesmo assim",
+      "dependsOnCount": "Depende de {count}",
+      "requiredByCount": "Requerido por {count}",
+      "unresolved": "Dependência ausente: {targets}",
+      "dependentsNote": "{dependents} depende de {name} e não é atualizado nem reiniciado junto com ele. Use Atualizar grupo de dependências para atualizar toda a cadeia em ordem. | {dependents} dependem de {name} e não são atualizados nem reiniciados junto com ele. Use Atualizar grupo de dependências para atualizar toda a cadeia em ordem."
     },
     "selection": {
       "selectRow": "Selecionar {name}",

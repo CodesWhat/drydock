@@ -86,6 +86,8 @@ describe('useFleetBulkActions', () => {
       nodes: [],
       edges: [{ from: 'child', to: 'parent' }],
       cycles: [],
+      unresolved: [],
+      crossHostIgnored: [],
     } as any;
     actions.updateAll();
     const plan = input.confirmBulkUpdate.mock.calls[0]![0];

@@ -59,7 +59,7 @@
       }
     },
     "hostStatus": {
-      "title": "Stan gospodarza",
+      "title": "Stan hostów",
       "connected": "Połączono",
       "disconnected": "Rozłączono",
       "containerCount": "Kontenery {running}/{total}"
@@ -89,7 +89,7 @@
       "noVulnerabilities": "Nie zgłoszono żadnych luk"
     },
     "updateBreakdown": {
-      "title": "Aktualizuj podział",
+      "title": "Podział aktualizacji",
       "noUpdates": "Brak aktualizacji do kategoryzacji",
       "digestHint": "Ten sam tag, nowy digest obrazu"
     },
@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Nie udało się załadować danych panelu",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "Kontenery",
+      "statUpdates": "Dostępne aktualizacje",
+      "statSecurity": "Problemy z bezpieczeństwem",
+      "statRegistries": "Rejestry",
+      "recentUpdates": "Dostępne aktualizacje",
+      "securityOverview": "Przegląd zabezpieczeń",
+      "resourceUsage": "Wykorzystanie zasobów",
+      "hostStatus": "Stan hostów",
+      "updateBreakdown": "Podział aktualizacji",
+      "statApprovals": "Zatwierdzenia"
     },
     "recentActivity": {
       "title": "Ostatnia aktywność",
