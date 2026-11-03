@@ -1,5 +1,5 @@
 {
-  "reason": "Replace published sample credentials with explicit placeholders, preserve both Google registry examples and spacing, and move the Google service-account link outside its heading to prevent nested-anchor hydration failure. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs.",
+  "reason": "Replace published sample credentials with explicit placeholders, preserve both Google registry examples and spacing, and move the Google service-account link outside its heading to prevent nested-anchor hydration failure. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs. The index quick start also gains the /store volume and basic auth it needs to start on a fresh install (mirrored from the quick start page).",
   "changes": [
     {
       "path": "configuration/authentications/oidc/index.mdx",
@@ -105,6 +105,20 @@
       "endLine": 57,
       "beforeSha256": "6f1f22c795d86fd89b0b840ced35315b12cad45105b18d9bfeaf16bd4aa59cd9",
       "replacement": "### 1. Go to the Service Account page {#1-go-to-theservice-account-page}\n\n[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).\n"
+    },
+    {
+      "path": "index.mdx",
+      "startLine": 37,
+      "endLine": 38,
+      "beforeSha256": "ef782dbd504a56ef6039c6b182e433a79b76312d4ce7649f098cbdb9bd6c8837",
+      "replacement": "  -v /var/run/docker.sock:/var/run/docker.sock \\\n  -v \"$(pwd)/drydock-store:/store\" \\\n  -e DD_AUTH_BASIC_ADMIN_USER=admin \\\n  -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \\\n  -p 127.0.0.1:3000:3000 \\\n"
+    },
+    {
+      "path": "index.mdx",
+      "startLine": 43,
+      "endLine": 43,
+      "beforeSha256": "3501e0eff60715d70f544cd9b1a985f25636f4bc5206c552b5c32f57a1b714c1",
+      "replacement": "Direct socket access grants the container full control over the Docker daemon. See the [Quick Start guide](/docs/quickstart) for the recommended **socket proxy** setup and other [secure connection options](/docs/configuration/watchers#docker-socket-security).\n\nThe sample login is `admin` / `password` and the port is bound to localhost. Generate your own [password hash](/docs/configuration/authentications/basic) before you expose Drydock beyond this machine.\n"
     }
   ]
 }

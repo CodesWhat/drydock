@@ -37,7 +37,7 @@
       "version": "バージョン",
       "versionTooltip": "イメージのメタデータから検出されたバージョンです。タグと一致する場合があり、表示スペースが不足するとホストの前に非表示になります。",
       "update": "更新",
-      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
+      "updateTooltip": "利用可能な更新の種類: メジャー、マイナー、パッチ、または同じタグのイメージ更新。",
       "status": "ステータス",
       "host": "ホスト",
       "registry": "レジストリ",

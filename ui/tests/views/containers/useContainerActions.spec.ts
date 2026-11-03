@@ -2534,6 +2534,101 @@ describe('useContainerActions', () => {
     );
   });
 
+  describe('dependents note on the single Update confirmation (#219)', () => {
+    function seed(childIds: string[], overrides: Record<string, { displayName?: string }> = {}) {
+      useDependencyGraph().graph.value = {
+        nodes: [
+          { id: 'container-1', name: 'db', displayName: 'db' },
+          ...childIds.map((id) => ({
+            id,
+            name: id,
+            displayName: overrides[id]?.displayName ?? '',
+          })),
+        ],
+        edges: childIds.map((id) => ({
+          from: id,
+          to: 'container-1',
+          action: 'update' as const,
+          source: 'label' as const,
+        })),
+        cycles: [],
+        unresolved: [],
+        crossHostIgnored: [],
+      };
+    }
+
+    async function confirmDb() {
+      const db = makeContainer({ id: 'container-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: db,
+        selectedContainerId: db.id,
+        containerIdMap: { db: 'container-1' },
+        containers: [db],
+      });
+      composable.confirmUpdate('db');
+      return mocks.confirmRequire.mock.calls[0][0] as { message: string; acceptLabel: string };
+    }
+
+    it('lists a single dependent and says it is not updated with the container', async () => {
+      seed(['web']);
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('web depends on db and is not updated or restarted with it');
+      expect(call.message).toContain('Update dependency group');
+      expect(call.acceptLabel).toBe('Update');
+    });
+
+    it('lists several dependents with the plural wording and falls back through display name, name, id', async () => {
+      seed(['web', 'api'], { web: { displayName: 'Web App' } });
+      useDependencyGraph().graph.value = {
+        ...useDependencyGraph().graph.value!,
+        edges: [
+          ...useDependencyGraph().graph.value!.edges,
+          { from: 'ghost', to: 'container-1', action: 'update', source: 'label' },
+        ],
+      };
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('Web App, api, ghost depend on db');
+    });
+
+    it('caps the listed dependents at five and counts the rest', async () => {
+      seed(['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7']);
+
+      const call = await confirmDb();
+
+      expect(call.message).toContain('d1, d2, d3, d4, d5');
+      expect(call.message).not.toContain('d6,');
+      expect(call.message).toContain('and 2 more');
+    });
+
+    it('adds nothing when no container depends on it', async () => {
+      seed([]);
+
+      const call = await confirmDb();
+
+      expect(call.message).not.toContain('Update dependency group');
+    });
+
+    it('adds nothing when the target has no container id', async () => {
+      seed(['web']);
+      const db = makeContainer({ id: 'container-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        selectedContainer: db,
+        selectedContainerId: db.id,
+        containerIdMap: {},
+        containers: [db],
+      });
+
+      composable.confirmUpdate('db');
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).not.toContain('Update dependency group');
+    });
+  });
+
   describe('child-before-parent stale-parent guard (#219)', () => {
     function seedGraph() {
       useDependencyGraph().graph.value = {
@@ -5510,6 +5605,91 @@ describe('useContainerActions', () => {
   });
 
   describe('confirmDependencyGroupUpdate (#219)', () => {
+    it('labels chain members hidden by the current filter and says they will be updated too', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          {
+            index: 1,
+            containers: [
+              { id: 'web-1', name: 'web', actionKind: 'update' },
+              { id: 'api-1', name: 'api', actionKind: 'restart' },
+            ],
+          },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1', 'web-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).toContain('2. web, api (restart) (not shown by the current filter)');
+      expect(call.message).not.toContain('web (not shown');
+      expect(call.message).toContain(
+        '\n\n1 container in this chain is hidden by the current filter and will be updated too.',
+      );
+    });
+
+    it('uses the plural note when several members are hidden', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [
+          { index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] },
+          {
+            index: 1,
+            containers: [
+              { id: 'web-1', name: 'web', actionKind: 'update' },
+              { id: 'api-1', name: 'api', actionKind: 'update' },
+            ],
+          },
+        ],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).toContain('2 containers in this chain are hidden');
+      // vue-i18n trims plural branches, so the blank line before the note must come from code.
+      expect(call.message).toMatch(/\n\n2 containers in this chain are hidden/);
+    });
+
+    it('adds no hidden note when every chain member is shown', async () => {
+      const container = makeContainer({ id: 'db-1', name: 'db' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { db: 'db-1' },
+      });
+      mocks.previewUpdateChain.mockResolvedValueOnce({
+        waves: [{ index: 0, containers: [{ id: 'db-1', name: 'db', actionKind: 'update' }] }],
+        warnings: { cycles: [], unresolved: [] },
+      });
+
+      await composable.confirmDependencyGroupUpdate(
+        { id: 'db-1', identityKey: container.identityKey, name: 'db' },
+        new Set(['db-1']),
+      );
+
+      const call = mocks.confirmRequire.mock.calls[0][0] as { message: string };
+      expect(call.message).not.toContain('not shown');
+      expect(call.message).not.toContain('hidden by the current filter');
+    });
+
     it('previews the update chain and opens a confirm dialog listing the resolved waves', async () => {
       const container = makeContainer({ id: 'db-1', name: 'db' });
       const { composable } = await mountActionsHarness({

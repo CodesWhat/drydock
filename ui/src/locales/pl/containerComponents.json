@@ -313,7 +313,7 @@
       "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}",
       "updateBtnTooltipDefault": "Zaktualizuj",
       "cancelButton": "Anuluj",
-      "blockedButton": "Blocked",
+      "blockedButton": "Zablokowano",
       "updateButton": "Zaktualizuj",
       "moreButton": "Więcej",
       "cancelUpdateTooltip": "Anuluj aktualizację"
@@ -403,7 +403,8 @@
       "filterHiddenPinned": "Ukryty: przypięty",
       "filtersLabel": "Filtry",
       "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}",
-      "clearContainerIdFilter": "Wyczyść filtr ID kontenera"
+      "clearContainerIdFilter": "Wyczyść filtr ID kontenera",
+      "groupByDependencyTooltip": "Grupuj według zależności"
     },
     "stats": {
       "paused": "Wstrzymano",
@@ -470,7 +471,7 @@
       "triggerFiltered": "Wyzwalacz filtrowany",
       "agentMismatch": "Niedopasowanie agenta",
       "noTrigger": "Brak spustu",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Samoaktualizacja niedostępna",
       "liftsLabel": "Windy:"
     },
     "updateStatus": {
@@ -608,7 +609,9 @@
         "failedTitle": "Aktualizacja łańcucha zależności nie powiodła się",
         "failedDetail": "Nie udało się zaktualizować łańcucha zależności dla {name}.",
         "staleChainTitle": "Łańcuch zależności uległ zmianie",
-        "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem."
+        "staleChainDetail": "Łańcuch zależności dla {name} zmienił się od czasu ostatniego podglądu. Otwórz ponownie okno aktualizacji, aby przejrzeć bieżący łańcuch przed potwierdzeniem.",
+        "hiddenMarker": "niewidoczny przy bieżącym filtrze",
+        "hiddenNote": "{count} kontener w tym łańcuchu jest ukryty przez bieżący filtr i również zostanie zaktualizowany. | {count} kontenery w tym łańcuchu są ukryte przez bieżący filtr i również zostaną zaktualizowane."
       },
       "bulkUpdate": {
         "header": "Zaktualizuj 1 kontener | Zaktualizuj {count} kontenerów",
@@ -835,7 +838,11 @@
       "updateGroup": "Zaktualizuj grupę zależności ({count})",
       "staleParentsWarning": "{name} zależy od {parents}, który również ma oczekującą aktualizację. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnego kontenera nadrzędnego. | {name} zależy od {parents}, które również mają oczekujące aktualizacje. Zaktualizowanie zależnego kontenera jako pierwszego może pozostawić go działającym względem nieaktualnych kontenerów nadrzędnych.",
       "staleParentsOverflow": "i {count} więcej",
-      "staleParentsAccept": "Zaktualizuj mimo to"
+      "staleParentsAccept": "Zaktualizuj mimo to",
+      "dependsOnCount": "Zależy od {count}",
+      "requiredByCount": "Wymagany przez {count}",
+      "unresolved": "Brakująca zależność: {targets}",
+      "dependentsNote": "{dependents} zależy od {name} i nie jest aktualizowany ani restartowany razem z nim. Użyj opcji Aktualizuj grupę zależności, aby zaktualizować cały łańcuch po kolei. | {dependents} zależą od {name} i nie są aktualizowane ani restartowane razem z nim. Użyj opcji Aktualizuj grupę zależności, aby zaktualizować cały łańcuch po kolei."
     },
     "selection": {
       "selectRow": "Zaznacz {name}",

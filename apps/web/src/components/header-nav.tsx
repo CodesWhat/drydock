@@ -15,7 +15,7 @@ export function isSectionPath(pathname: string | null, section: string) {
   return pathname === section || Boolean(pathname?.startsWith(`${section}/`));
 }
 
-export function HeaderNavLinks() {
+export function HeaderNavLinks({ showCompare = true }: { showCompare?: boolean }) {
   const pathname = usePathname();
   const onDocs = isSectionPath(pathname, DOCS_SECTION);
   const onCompare = isSectionPath(pathname, "/compare");
@@ -32,14 +32,16 @@ export function HeaderNavLinks() {
         <BookOpen size={14} aria-hidden="true" />
         Docs
       </TrackedLink>
-      <Link
-        href="/compare"
-        className="website-nav-link"
-        aria-current={onCompare ? "page" : undefined}
-      >
-        <GitCompare size={14} aria-hidden="true" />
-        Compare
-      </Link>
+      {showCompare && (
+        <Link
+          href="/compare"
+          className="website-nav-link"
+          aria-current={onCompare ? "page" : undefined}
+        >
+          <GitCompare size={14} aria-hidden="true" />
+          Compare
+        </Link>
+      )}
       <TrackedLink
         href={GITHUB_URL}
         ctaId="github_repository"

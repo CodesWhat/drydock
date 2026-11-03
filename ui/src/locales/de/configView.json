@@ -107,7 +107,7 @@
         "disabledMessage": "Die Webhook-API ist deaktiviert. Setze",
         "disabledHint": "Die Webhook-API ist deaktiviert. Setze {envEnabled} und konfiguriere mindestens ein Token ({envToken} oder {envTokens}), um sie zu aktivieren.",
         "table": {
-          "endpoint": "Endpoint",
+          "endpoint": "Endpunkt",
           "description": "Beschreibung"
         },
         "example": "Beispiel",

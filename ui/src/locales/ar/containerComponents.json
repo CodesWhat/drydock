@@ -403,7 +403,8 @@
       "filterHiddenPinned": "مخفية: مثبّتة",
       "filtersLabel": "الفلاتر",
       "filteredContainers": "تصفية إلى {count} حاوية | تصفية إلى {count} حاوية",
-      "clearContainerIdFilter": "مسح فلتر معرّف الحاوية"
+      "clearContainerIdFilter": "مسح فلتر معرّف الحاوية",
+      "groupByDependencyTooltip": "التجميع حسب التبعية"
     },
     "stats": {
       "paused": "متوقف مؤقتاً",
@@ -470,7 +471,7 @@
       "triggerFiltered": "مُصفَّى بالمشغّل",
       "agentMismatch": "عدم تطابق الوكيل",
       "noTrigger": "لا يوجد مشغّل",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "التحديث الذاتي غير متاح",
       "liftsLabel": "يرفع القيد:"
     },
     "updateStatus": {
@@ -608,7 +609,9 @@
         "failedTitle": "فشل تحديث سلسلة الاعتمادية",
         "failedDetail": "فشل تحديث سلسلة الاعتمادية لـ {name}.",
         "staleChainTitle": "تغيّرت سلسلة الاعتمادية",
-        "staleChainDetail": "تغيّرت سلسلة الاعتمادية لـ {name} منذ آخر معاينة لها. أعد فتح مربع حوار التحديث لمراجعة السلسلة الحالية قبل التأكيد."
+        "staleChainDetail": "تغيّرت سلسلة الاعتمادية لـ {name} منذ آخر معاينة لها. أعد فتح مربع حوار التحديث لمراجعة السلسلة الحالية قبل التأكيد.",
+        "hiddenMarker": "غير ظاهرة في الفلتر الحالي",
+        "hiddenNote": "حاوية واحدة ({count}) في هذه السلسلة مخفية بالفلتر الحالي وسيتم تحديثها أيضًا. | {count} حاويات في هذه السلسلة مخفية بالفلتر الحالي وسيتم تحديثها أيضًا."
       },
       "bulkUpdate": {
         "header": "تحديث حاوية واحدة | تحديث {count} حاويات",
@@ -835,7 +838,11 @@
       "updateGroup": "تحديث مجموعة التبعيات ({count})",
       "staleParentsWarning": "{name} يعتمد على {parents}، الذي لديه أيضًا تحديث معلق. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عنصر أصلي قديم. | {name} يعتمد على {parents}، التي لديها أيضًا تحديثات معلقة. تحديث العنصر التابع أولاً قد يتركه يعمل مقابل عناصر أصلية قديمة.",
       "staleParentsOverflow": "و{count} إضافية",
-      "staleParentsAccept": "التحديث على أي حال"
+      "staleParentsAccept": "التحديث على أي حال",
+      "dependsOnCount": "يعتمد على {count}",
+      "requiredByCount": "مطلوب من {count}",
+      "unresolved": "تبعية مفقودة: {targets}",
+      "dependentsNote": "{dependents} يعتمد على {name} ولا يتم تحديثه أو إعادة تشغيله معه. استخدم تحديث مجموعة التبعيات لتحديث السلسلة كاملة بالترتيب. | {dependents} تعتمد على {name} ولا يتم تحديثها أو إعادة تشغيلها معه. استخدم تحديث مجموعة التبعيات لتحديث السلسلة كاملة بالترتيب."
     },
     "selection": {
       "selectRow": "تحديد {name}",

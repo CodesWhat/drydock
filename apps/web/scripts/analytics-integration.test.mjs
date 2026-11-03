@@ -199,7 +199,7 @@ test("all approved Drydock CTA families have exact annotations", () => {
   const footer = source("src/components/footer.tsx");
 
   const headerNav = source("src/components/header-nav.tsx");
-  assert.match(header, /<HeaderNavLinks \/>/u);
+  assert.match(header, /<HeaderNavLinks showCompare=\{!docs\} \/>/u);
   assert.match(headerNav, /ctaId="docs_root"\s+placement="header"/u);
   assert.match(headerNav, /ctaId="github_repository"\s+placement="header"/u);
   assert.match(buttons, /placement: "hero" \| "comparison"/u);
@@ -212,4 +212,34 @@ test("all approved Drydock CTA families have exact annotations", () => {
   assert.match(footer, /ctaId: "docs_root"/u);
   assert.match(footer, /ctaId: "github_repository"/u);
   assert.match(footer, /ctaId="community_discord"\s+placement="footer"/u);
+});
+
+test("docs header variant is bare; marketing header keeps Compare, theme toggle and search-free nav", () => {
+  const header = source("src/components/site-header.tsx");
+  const headerNav = source("src/components/header-nav.tsx");
+  const mobile = source("src/components/mobile-navigation.tsx");
+  const docsShell = source("src/components/docs-shell.tsx");
+  const marketingShell = source("src/components/marketing-shell.tsx");
+
+  // Docs header: logo, Docs, GitHub only. No Compare, search triggers or theme toggle.
+  assert.match(docsShell, /<SiteHeader[^>]*variant="docs"/u);
+  assert.match(header, /const docs = variant === "docs"/u);
+  assert.match(header, /\{!docs && <ThemeToggle \/>\}/u);
+  assert.match(header, /showCompare=\{!docs\}/u);
+  assert.doesNotMatch(header, /SearchTrigger/u);
+  assert.match(headerNav, /showCompare = true/u);
+  assert.match(headerNav, /\{showCompare && \(/u);
+  assert.match(
+    mobile,
+    /variant === "docs" \? LINKS\.filter\(\(\{ href \}\) => href !== "\/compare"\)/u,
+  );
+
+  // Search and theme move into the docs sidebar; the sidebar search stays enabled.
+  assert.doesNotMatch(docsShell, /searchToggle=\{\{ enabled: false \}\}/u);
+  assert.match(docsShell, /footer:[\s\S]*<ThemeToggle \/>/u);
+
+  // Marketing: default variant keeps Compare in the header and mobile menu.
+  assert.match(marketingShell, /<SiteHeader \/>/u);
+  assert.match(header, /variant = "marketing"/u);
+  assert.match(mobile, /\{ href: "\/compare", label: "Compare"/u);
 });

@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Не удалось загрузить данные панели управления",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "Контейнеры",
+      "statUpdates": "Доступные обновления",
+      "statSecurity": "Проблемы безопасности",
+      "statRegistries": "Реестры",
+      "recentUpdates": "Доступные обновления",
+      "securityOverview": "Обзор безопасности",
+      "resourceUsage": "Использование ресурсов",
+      "hostStatus": "Статус хостов",
+      "updateBreakdown": "Разбивка обновлений",
+      "statApprovals": "Одобрения"
     },
     "recentActivity": {
       "title": "Недавняя активность",

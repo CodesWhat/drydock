@@ -1,6 +1,7 @@
 import type { DependencyGraph, DependencyGraphNode } from '@/types/container';
 import {
   buildDependencyAdjacency,
+  collectTransitiveChildIds,
   collectTransitiveParentIds,
   getDependencyComponentIds,
   getDirectChildren,
@@ -29,6 +30,7 @@ describe('buildDependencyAdjacency', () => {
     expect(adjacency.childIdsByParent.size).toBe(0);
     expect(adjacency.nodeById.size).toBe(0);
     expect(adjacency.cycleMemberIds.size).toBe(0);
+    expect(adjacency.unresolvedTargetsByNodeId.size).toBe(0);
   });
 
   it('returns empty maps for an undefined graph', () => {
@@ -51,6 +53,53 @@ describe('buildDependencyAdjacency', () => {
     expect(adjacency.nodeById.get('app')).toEqual(makeNode('app'));
     expect(adjacency.cycleMemberIds.has('app')).toBe(true);
     expect(adjacency.cycleMemberIds.has('db')).toBe(true);
+  });
+});
+
+describe('unresolved targets', () => {
+  it('groups unresolved targets by the node that declared them', () => {
+    const adjacency = buildDependencyAdjacency(
+      makeGraph({
+        nodes: [makeNode('app')],
+        unresolved: [
+          { nodeId: 'app', missingTarget: 'cache' },
+          { nodeId: 'app', missingTarget: 'queue' },
+        ],
+      }),
+    );
+
+    expect(adjacency.unresolvedTargetsByNodeId.get('app')).toEqual(['cache', 'queue']);
+  });
+});
+
+describe('collectTransitiveChildIds', () => {
+  const edge = (from: string, to: string) => ({
+    from,
+    to,
+    action: 'update' as const,
+    source: 'label' as const,
+  });
+
+  it('collects every transitive child, excluding the start id', () => {
+    const adjacency = buildDependencyAdjacency(
+      makeGraph({ edges: [edge('app', 'db'), edge('web', 'app'), edge('worker', 'db')] }),
+    );
+
+    expect(collectTransitiveChildIds(adjacency, 'db')).toEqual(new Set(['app', 'web', 'worker']));
+  });
+
+  it('terminates on a cycle without including the start id', () => {
+    const adjacency = buildDependencyAdjacency(
+      makeGraph({ edges: [edge('a', 'b'), edge('b', 'a')] }),
+    );
+
+    expect(collectTransitiveChildIds(adjacency, 'a')).toEqual(new Set(['b']));
+  });
+
+  it('returns an empty set for a leaf', () => {
+    const adjacency = buildDependencyAdjacency(makeGraph({ edges: [edge('app', 'db')] }));
+
+    expect(collectTransitiveChildIds(adjacency, 'app').size).toBe(0);
   });
 });
 

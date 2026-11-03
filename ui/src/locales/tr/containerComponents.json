@@ -403,7 +403,8 @@
       "filterHiddenPinned": "Gizli: Sabitlendi",
       "filtersLabel": "Filtreler",
       "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi",
-      "clearContainerIdFilter": "Konteyner kimliği filtresini temizle"
+      "clearContainerIdFilter": "Konteyner kimliği filtresini temizle",
+      "groupByDependencyTooltip": "Bağımlılığa göre grupla"
     },
     "stats": {
       "paused": "Duraklatıldı",
@@ -470,7 +471,7 @@
       "triggerFiltered": "Tetik filtrelendi",
       "agentMismatch": "Temsilci uyumsuzluğu",
       "noTrigger": "Tetikleyici yok",
-      "selfUpdateUnavailable": "Self-update unavailable",
+      "selfUpdateUnavailable": "Kendi kendini güncelleme kullanılamıyor",
       "liftsLabel": "Asansörler:"
     },
     "updateStatus": {
@@ -608,7 +609,9 @@
         "failedTitle": "Bağımlılık zinciri güncellemesi başarısız oldu",
         "failedDetail": "{name} için bağımlılık zinciri güncellenemedi.",
         "staleChainTitle": "Bağımlılık zinciri değişti",
-        "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın."
+        "staleChainDetail": "{name} için bağımlılık zinciri son önizlendiğinden beri değişti. Onaylamadan önce güncel zinciri incelemek için güncelleme iletişim kutusunu yeniden açın.",
+        "hiddenMarker": "geçerli filtre tarafından gösterilmiyor",
+        "hiddenNote": "Bu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve o da güncellenecek. | Bu zincirdeki {count} kapsayıcı geçerli filtre tarafından gizleniyor ve onlar da güncellenecek."
       },
       "bulkUpdate": {
         "header": "1 kapsayıcıyı güncelle | {count} kapsayıcıyı güncelle",
@@ -835,7 +838,11 @@
       "updateGroup": "Bağımlılık grubunu güncelle ({count})",
       "staleParentsWarning": "{name}, bekleyen bir güncellemesi olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan bir üst öğeye karşı çalışır durumda bırakabilir. | {name}, bekleyen güncellemeleri olan {parents} öğesine bağlı. Bağımlı öğeyi önce güncellemek, onu güncel olmayan üst öğelere karşı çalışır durumda bırakabilir.",
       "staleParentsOverflow": "ve {count} tane daha",
-      "staleParentsAccept": "Yine de güncelle"
+      "staleParentsAccept": "Yine de güncelle",
+      "dependsOnCount": "{count} bağımlılığa sahip",
+      "requiredByCount": "{count} kapsayıcı tarafından gerekli",
+      "unresolved": "Eksik bağımlılık: {targets}",
+      "dependentsNote": "{dependents}, {name} kapsayıcısına bağımlıdır ve onunla birlikte güncellenmez veya yeniden başlatılmaz. Tüm zinciri sırayla güncellemek için Bağımlılık grubunu güncelle seçeneğini kullanın. | {dependents}, {name} kapsayıcısına bağımlıdır ve onunla birlikte güncellenmez veya yeniden başlatılmaz. Tüm zinciri sırayla güncellemek için Bağımlılık grubunu güncelle seçeneğini kullanın."
     },
     "selection": {
       "selectRow": "{name} öğesini seç",

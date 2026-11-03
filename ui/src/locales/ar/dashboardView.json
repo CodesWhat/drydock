@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "فشل تحميل بيانات لوحة التحكم",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "الحاويات",
+      "statUpdates": "التحديثات المتاحة",
+      "statSecurity": "مشكلات الأمان",
+      "statRegistries": "السجلات",
+      "recentUpdates": "التحديثات المتاحة",
+      "securityOverview": "نظرة عامة على الأمان",
+      "resourceUsage": "استخدام الموارد",
+      "hostStatus": "حالة المضيف",
+      "updateBreakdown": "توزيع التحديثات",
+      "statApprovals": "الموافقات"
     },
     "recentActivity": {
       "title": "النشاط الأخير",

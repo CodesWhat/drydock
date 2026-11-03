@@ -122,16 +122,16 @@
     },
     "dataLoadFailed": "Не вдалося завантажити дані панелі керування",
     "widgets": {
-      "statContainers": "Containers",
-      "statUpdates": "Updates Available",
-      "statSecurity": "Security Issues",
-      "statRegistries": "Registries",
-      "recentUpdates": "Updates Available",
-      "securityOverview": "Security Overview",
-      "resourceUsage": "Resource Usage",
-      "hostStatus": "Host Status",
-      "updateBreakdown": "Update Breakdown",
-      "statApprovals": "Approvals"
+      "statContainers": "Контейнери",
+      "statUpdates": "Доступні оновлення",
+      "statSecurity": "Проблеми безпеки",
+      "statRegistries": "Реєстри",
+      "recentUpdates": "Доступні оновлення",
+      "securityOverview": "Огляд безпеки",
+      "resourceUsage": "Використання ресурсів",
+      "hostStatus": "Статус хостів",
+      "updateBreakdown": "Розподіл оновлень",
+      "statApprovals": "Схвалення"
     },
     "recentActivity": {
       "title": "Остання активність",

@@ -1,10 +1,30 @@
+import path from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
+
+const uiMainPath = path.resolve(fileURLToPath(new URL('../../ui/src/main.ts', import.meta.url)));
+const demoCssPath = path.resolve(fileURLToPath(new URL('./src/demo.css', import.meta.url)));
+
+// The UI entry imports './style.css'. Serve src/demo.css in its place so the
+// demo has a single Tailwind build that carries the UI theme and scans ui/src.
+function demoStylesheet(): Plugin {
+  return {
+    name: 'drydock-demo-stylesheet',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (source === './style.css' && importer && path.resolve(importer) === uiMainPath) {
+        return demoCssPath;
+      }
+      return null;
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
+    demoStylesheet(),
     vue({
       template: {
         compilerOptions: {
