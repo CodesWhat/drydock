@@ -21,6 +21,7 @@ describe('store/db/importers/secrets', () => {
   let db: Database;
 
   beforeEach(() => {
+    recordSkipped.mockClear();
     db = createMigratedMemoryDatabase();
   });
 
@@ -57,6 +58,23 @@ describe('store/db/importers/secrets', () => {
     expect(db.prepare('SELECT session_secret FROM secrets').get()).toEqual({
       session_secret: 'abc',
     });
+    expect(recordSkipped).toHaveBeenCalledTimes(3);
+    expect(recordSkipped).toHaveBeenCalledWith('secrets');
+  });
+
+  test('keeps the first usable value when a later document is also usable', () => {
+    expect(run([{ sessionSecret: 'first' }, { sessionSecret: 'second' }])).toBe(1);
+    expect(db.prepare('SELECT session_secret FROM secrets').get()).toEqual({
+      session_secret: 'first',
+    });
+    expect(recordSkipped).not.toHaveBeenCalled();
+  });
+
+  test('counts a document without a usable session secret as skipped and writes no row', () => {
+    expect(run([{ sessionSecret: '' }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledTimes(1);
+    expect(recordSkipped).toHaveBeenCalledWith('secrets');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM secrets').get()).toEqual({ n: 0 });
   });
 
   test('writes no row when the store never had a session secret', () => {
