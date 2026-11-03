@@ -377,6 +377,25 @@ describe('store/db/import', () => {
       expect(fs.existsSync(legacyStorePath)).toBe(true);
     });
 
+    test('warns naming both files when a legacy store sits next to an existing database', () => {
+      writeLegacyStore();
+      importOnce();
+      logMock.warn.mockClear();
+      writeLegacyStore();
+
+      expect(importOnce().status).toBe('database-exists');
+      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining(databasePath));
+      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining(legacyStorePath));
+    });
+
+    test('stays quiet when the database exists and no legacy store does', () => {
+      fs.writeFileSync(databasePath, '');
+      logMock.warn.mockClear();
+
+      expect(importOnce().status).toBe('database-exists');
+      expect(logMock.warn).not.toHaveBeenCalled();
+    });
+
     test('does nothing on a fresh install with no legacy store', () => {
       expect(importOnce()).toEqual({ status: 'no-legacy-store', databasePath, rowsByTable: {} });
       expect(fs.existsSync(databasePath)).toBe(false);

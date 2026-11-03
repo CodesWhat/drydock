@@ -230,6 +230,11 @@ function backupLegacyStore(legacyStorePath: string): string | undefined {
 export function runFirstStartImport(options: FirstStartImportOptions): FirstStartImportResult {
   const { storeDirectory, legacyStorePath, databasePath } = options;
   if (fs.existsSync(databasePath)) {
+    if (fs.existsSync(legacyStorePath)) {
+      log.warn(
+        `Both ${databasePath} and the legacy store ${legacyStorePath} exist; using the database and not importing the legacy file. If you rolled back to an older build and back, move the database aside (with its -wal and -shm files) to import the restored legacy store`,
+      );
+    }
     return { status: 'database-exists', databasePath, rowsByTable: {} };
   }
   if (!fs.existsSync(legacyStorePath)) {
