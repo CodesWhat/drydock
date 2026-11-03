@@ -281,6 +281,56 @@ describe('preference sync engine', () => {
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
   });
 
+  it('does not replay a stale write failure after an alice, bob, alice switch', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    const write = deferred<unknown>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    await sync.hydrateFromServer('bob');
+    await sync.hydrateFromServer('alice');
+    write.reject(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards a stale hydration completion after an alice, bob, alice switch', async () => {
+    const { sync, preferences } = await load();
+    const firstFetch = deferred<ReturnType<typeof response>>();
+    mocks.getPreferences.mockReturnValueOnce(firstFetch.promise).mockResolvedValue(response(null));
+    const firstHydration = sync.hydrateFromServer('alice');
+    await sync.hydrateFromServer('bob');
+    await sync.hydrateFromServer('alice');
+    const stale = structuredClone(preferences);
+    stale.sync.enabled = true;
+    stale.appearance.fontSize = 1.3;
+
+    firstFetch.resolve(response(stale));
+    await firstHydration;
+
+    expect(preferences.appearance.fontSize).not.toBe(1.3);
+  });
+
+  it('does not merge a fetched blob over an edit that became pending during the fetch', async () => {
+    const { sync, preferences } = await load();
+    const fetch = deferred<ReturnType<typeof response>>();
+    mocks.getPreferences.mockReturnValueOnce(fetch.promise);
+    const hydration = sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    const server = structuredClone(preferences);
+    server.appearance.fontSize = 1.3;
+
+    fetch.resolve(response(server));
+    await hydration;
+
+    expect(preferences.appearance.fontSize).not.toBe(1.3);
+    expect(mocks.applyFontSize).not.toHaveBeenCalled();
+  });
+
   it('does not schedule writes while disabled', async () => {
     const { preferences } = await load();
     preferences.sync.enabled = false;

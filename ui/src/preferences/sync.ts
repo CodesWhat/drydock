@@ -24,6 +24,9 @@ let syncDirty = false;
 let syncFlushTimer: ReturnType<typeof setTimeout> | undefined;
 let syncWriteInFlight = false;
 let syncRetryCount = 0;
+// Bumped on every session reset. A username compare cannot tell alice -> bob ->
+// alice apart from alice throughout, so async completions compare this instead.
+let syncSessionId = 0;
 
 /**
  * Diff-and-apply the server's migrated blob onto the reactive preferences
@@ -66,11 +69,18 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
   if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
     return;
   }
+  const sessionId = syncSessionId;
   try {
     const response = await getPreferences();
     // A user switch happened while the fetch was in flight — discard the
     // stale completion.
-    if (username !== currentUsername) {
+    if (sessionId !== syncSessionId) {
+      return;
+    }
+    // An edit or a failed write may have become pending while the fetch was in
+    // flight; the pre-fetch guard above cannot see it. The snapshot predates
+    // that edit, so merging it would revert the edit.
+    if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
       return;
     }
     if (!response.preferences) {
@@ -98,6 +108,7 @@ function resetSyncSessionState(): void {
   syncRetryCount = 0;
   hydrated = false;
   currentUsername = undefined;
+  syncSessionId += 1;
 }
 
 /**
@@ -166,7 +177,7 @@ async function flushSyncWrite(): Promise<void> {
   if (!preferences.sync.enabled) {
     return;
   }
-  const writingUsername = currentUsername;
+  const writingSessionId = syncSessionId;
   try {
     syncWriteInFlight = true;
     await updatePreferences(preferences.schemaVersion, preferences);
@@ -175,7 +186,7 @@ async function flushSyncWrite(): Promise<void> {
     console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
     // The edit never reached the server, so it is still pending: keep the
     // fetch guard up so a reconnect cannot overwrite it with older server state.
-    if (preferences.sync.enabled && writingUsername === currentUsername) {
+    if (preferences.sync.enabled && writingSessionId === syncSessionId) {
       syncDirty = true;
       if (syncRetryCount < SYNC_WRITE_MAX_RETRIES) {
         syncRetryCount += 1;
