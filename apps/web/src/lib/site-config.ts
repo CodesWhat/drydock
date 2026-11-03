@@ -17,7 +17,7 @@ export const SITE_CONFIG = {
   /** Brand name shown in the header, footer, and metadata. */
   name: "Drydock",
   /** Current release version shown in the hero badge. */
-  version: "1.8.0-rc.12",
+  version: "1.8.0-rc.13",
   /** Latest stable release, shown next to the RC in the hero. */
   stableVersion: "1.7.0",
   /** Short product tagline used in page titles and OG metadata. */
