@@ -8,6 +8,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.13] - 2026-11-03
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes all v1.8.0-rc.12 changes and upgrade warnings. It brings the 1.7.1 Dependencies view into 1.8, makes the docs index quick start run as written, fixes translations across all 16 non-English locales, restores Docker builds with the libexpat 2.10.0-r0 pin, and widens the docs layout with a slimmer docs header.
+
 ### Fixed
 
 - Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.10.0-r0`; the repository no longer serves `2.9.0-r0`.
@@ -3726,7 +3733,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...HEAD
+[1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
 [1.8.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...v1.8.0-rc.12
 [1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11
 [1.8.0-rc.10]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.9...v1.8.0-rc.10
