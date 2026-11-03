@@ -116,6 +116,7 @@ vi.mock('./error-response.js', () => ({
 
 import log from '../log/index.js';
 import {
+  acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
   initializeLoginLockoutState,
@@ -3189,5 +3190,32 @@ describe('auth-lockout', () => {
         0,
       );
     });
+  });
+});
+
+describe('acquireLoginAttemptSlot', () => {
+  beforeEach(() => {
+    resetLoginLockoutStateForTests();
+  });
+
+  test('releasing a slot twice frees it only once', () => {
+    const req = { body: {}, ip: '203.0.113.20' } as any;
+    const first = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    const second = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    expect(first).toBeTypeOf('function');
+    expect(second).toBeTypeOf('function');
+
+    first?.();
+    first?.();
+
+    // One slot is free again, so exactly one more acquire succeeds before the cap of 2.
+    const third = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    expect(third).toBeTypeOf('function');
+    const blockedRes = createResponse();
+    expect(acquireLoginAttemptSlot(req, blockedRes as any, 'alice')).toBeUndefined();
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+
+    second?.();
+    third?.();
   });
 });
