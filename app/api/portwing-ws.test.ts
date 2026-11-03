@@ -20,8 +20,11 @@ import {
   fillNameBindingsForTesting,
   fillNonceCacheForTesting,
   fillNoncesPerKeyForTesting,
+  hasNonceForTesting,
   injectDrydockVersionForTesting,
   nameBindingsSizeForTesting,
+  nonceCacheSizeForTesting,
+  noncesPerKeySizeForTesting,
   PORTWING_WS_ROUTE_PATTERN,
 } from './portwing-ws.js';
 
@@ -2193,15 +2196,15 @@ describe('startNoncePruning — setInterval callback', () => {
     // Seed an old nonce (timestamp 0 = epoch; will be expired after 60s+)
     fillNonceCacheForTesting(new Map([['oldnonce00000000000000000000000a', 0]]));
     fillNoncesPerKeyForTesting(new Map([['deadbeefdeadbeef', 5]]));
+    expect(hasNonceForTesting('oldnonce00000000000000000000000a')).toBe(true);
+    expect(noncesPerKeySizeForTesting()).toBe(1);
 
     // Advance past 60s to fire the pruning interval
     vi.advanceTimersByTime(61_000);
 
-    // The interval should have run and cleared both caches
-    // No assertion needed beyond "no exceptions thrown"
-    expect(true).toBe(true);
-
-    vi.useRealTimers();
+    expect(hasNonceForTesting('oldnonce00000000000000000000000a')).toBe(false);
+    expect(nonceCacheSizeForTesting()).toBe(0);
+    expect(noncesPerKeySizeForTesting()).toBe(0);
   });
 });
 
@@ -2830,13 +2833,18 @@ describe('startNoncePruning — fresh nonce branch in interval callback', () => 
     // Seed a fresh nonce (timestamp = now; will NOT be evicted after 60s pruning)
     fillNonceCacheForTesting(new Map([['freshnonceaaaaaaaaaaaaaaaaaaaaa0', nowSeconds]]));
 
-    // Advance 60s to trigger the pruning interval
+    // Seed an expired one beside it so the same pass shows both branches
+    fillNonceCacheForTesting(new Map([['expirednonceaaaaaaaaaaaaaaaaaaa0', 0]]));
+    fillNoncesPerKeyForTesting(new Map([['deadbeefdeadbeef', 3]]));
+
+    // Advance 60s to trigger the pruning interval. The expiry window is twice
+    // the 60s clock skew, so a nonce seeded now is 60s old at the sweep.
     vi.advanceTimersByTime(61_000);
 
-    // No exception thrown — the fresh nonce was kept (false branch of expiry check)
-    expect(true).toBe(true);
-
-    vi.useRealTimers();
+    expect(hasNonceForTesting('freshnonceaaaaaaaaaaaaaaaaaaaaa0')).toBe(true);
+    expect(hasNonceForTesting('expirednonceaaaaaaaaaaaaaaaaaaa0')).toBe(false);
+    expect(nonceCacheSizeForTesting()).toBe(1);
+    expect(noncesPerKeySizeForTesting()).toBe(0);
   });
 });
 
