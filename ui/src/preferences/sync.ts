@@ -19,6 +19,9 @@ const SYNC_WRITE_MAX_RETRIES = 3;
 
 let hydrated = false;
 let currentUsername: string | undefined;
+// Who owns the current sync session, recorded at sign-in. Separate from
+// currentUsername, which only becomes set once hydrate runs and gates fetches.
+let sessionOwner: string | undefined;
 let suppressOutboundSync = false;
 let syncDirty = false;
 let syncFlushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -108,6 +111,7 @@ function resetSyncSessionState(): void {
   syncRetryCount = 0;
   hydrated = false;
   currentUsername = undefined;
+  sessionOwner = undefined;
   syncSessionId += 1;
 }
 
@@ -121,9 +125,14 @@ export function syncAuthenticatedUser(username: string): void {
   if (username === 'anonymous') {
     return;
   }
-  if (currentUsername !== undefined && currentUsername !== username) {
+  const owner = sessionOwner ?? currentUsername;
+  const pendingEdit = syncDirty || syncFlushTimer !== undefined;
+  // A different owner, or a pending edit nobody has claimed, must not reach
+  // this user's session.
+  if ((owner !== undefined && owner !== username) || (owner === undefined && pendingEdit)) {
     resetSyncSessionState();
   }
+  sessionOwner = username;
 }
 
 /**

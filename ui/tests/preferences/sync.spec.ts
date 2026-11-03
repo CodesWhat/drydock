@@ -301,6 +301,46 @@ describe('preference sync engine', () => {
     expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
   });
 
+  it('tracks the owner across repeated sign-in switches without hydrating', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    preferences.layout.sidebarCollapsed = true;
+    mocks.watchCallbacks[0]();
+
+    // alice -> bob via the API-key review redirect (no hydrate).
+    sync.syncAuthenticatedUser('bob');
+    // bob edits and the write fails, leaving the edit pending.
+    preferences.layout.sidebarCollapsed = false;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    const bobWrites = mocks.updatePreferences.mock.calls.length;
+
+    // bob -> charlie before bob hydrates: bob's pending edit must be dropped.
+    sync.syncAuthenticatedUser('charlie');
+    mocks.updatePreferences.mockClear();
+    mocks.updatePreferences.mockResolvedValue({});
+    mocks.getPreferences.mockClear();
+    await sync.hydrateFromServer('charlie');
+    expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(bobWrites).toBeGreaterThan(0);
+    expect(mocks.updatePreferences).not.toHaveBeenCalled();
+  });
+
+  it('drops a pending edit of unknown owner when a user signs in', async () => {
+    const { sync, preferences } = await load();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    sync.syncAuthenticatedUser('dave');
+    mocks.updatePreferences.mockResolvedValue({});
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.updatePreferences).not.toHaveBeenCalled();
+  });
+
   it('keeps the pending edit when the same user is re-confirmed', async () => {
     const { sync, preferences } = await load();
     mocks.getPreferences.mockResolvedValue(response(null));
