@@ -8,7 +8,7 @@ export const auditEntries: AuditEntry[] = [
     containerName: 'drydock',
     containerImage: 'codeswhat/drydock',
     status: 'info',
-    details: 'Drydock v1.8.0-rc.13 started',
+    details: 'Drydock v1.8.0-rc.14 started',
   },
   {
     id: 'aud-002',
@@ -326,7 +326,7 @@ export const auditEntries: AuditEntry[] = [
     containerName: 'drydock',
     containerImage: 'codeswhat/drydock',
     status: 'info',
-    details: 'Started watching ghcr.io/codeswhat/drydock:1.8.0-rc.13',
+    details: 'Started watching ghcr.io/codeswhat/drydock:1.8.0-rc.14',
   },
   {
     id: 'aud-031',

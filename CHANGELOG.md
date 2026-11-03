@@ -8,6 +8,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.14] - 2026-11-03
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes every rc.13 change and upgrade warning. It tightens Basic `Authorization` header lockout handling on API routes, keeps unsent preference edits across reconnects, names a read-only config file when a section write fails, fixes re-adding a revoked agent key, warns about a leftover legacy `dd.json` and reports skipped legacy documents during the SQLite import, and refreshes container rows after a resync.
+
 ### Fixed
 
 - After the event stream reconnects, the containers list now refreshes rows whose only change was a security scan result, update eligibility, icon, trigger include/exclude, label-owned sources, release notes or new digest, instead of leaving them stale.
@@ -3746,7 +3753,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...HEAD
+[1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
 [1.8.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...v1.8.0-rc.12
 [1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11

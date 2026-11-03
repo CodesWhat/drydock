@@ -5,6 +5,18 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+## v1.8.0-rc.14 Highlights - November 3, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Basic Authorization failures count toward the lockout.** A wrong password sent in an `Authorization: Basic` header to an API route now counts toward the same account and IP login lockout as the login form, through one anchored scheme parser. Header checks have their own concurrency pool, `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` (default 8), and only apply when a Basic provider is configured. Integrations still sending a stale password will now trip the lockout, so move them to API keys.
+- **Preference sync.** Unsent preference edits are kept and retried on reconnect, and one user's preferences are never written under another user.
+- **Config write errors.** A failed config section write is logged and, when the config file is read-only, says so.
+- **Revoked agent keys.** Re-adding a revoked agent key works again.
+- **SQLite import.** Startup warns when a legacy `dd.json` sits next to the database, and the import reports legacy documents it skipped.
+- **Container rows.** Rows refresh after a resync.
+- RC14 includes every rc.13 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+
 ## v1.8.0-rc.13 Highlights - November 3, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
