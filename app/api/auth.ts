@@ -13,7 +13,7 @@ import {
 } from './api-key-review.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
-  acquireLoginAttemptSlot,
+  acquireHeaderAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
   getBasicHeaderIdentity,
@@ -131,9 +131,9 @@ export async function requireAuthentication(
 
   // Password verification is slow, so the lockout check above passes every
   // request that arrives before the first failure counts. Header attempts
-  // share the login route's concurrency cap to bound that window.
+  // have a concurrency cap of their own to bound that window.
   const releaseSlot = basicHeader
-    ? acquireLoginAttemptSlot(req, res, getBasicHeaderIdentity(req))
+    ? acquireHeaderAttemptSlot(req, res, getBasicHeaderIdentity(req))
     : undefined;
   if (basicHeader && releaseSlot === undefined) {
     return;

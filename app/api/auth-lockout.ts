@@ -50,6 +50,7 @@ const DEFAULT_LOCKOUT_DURATION_MS = DEFAULT_LOCKOUT_DURATION_MINUTES * MS_PER_MI
 const DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS = MS_PER_MINUTE;
 const DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
 const DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS = 2;
+const DEFAULT_MAX_CONCURRENT_HEADER_ATTEMPTS = 8;
 /**
  * Ceiling on the escalating second-factor lock. From the account threshold on,
  * every wrong proof doubles the lock (15 minutes, 30, 60, ... by default) up to
@@ -91,7 +92,6 @@ const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceInitialized = false;
-let activeLoginAttempts = 0;
 
 function countActiveLockouts(lockouts: Map<string, LoginLockoutEntry>, now: number): number {
   let activeLockouts = 0;
@@ -140,6 +140,10 @@ const maxTrackedLockoutIdentities = parsePositiveIntegerEnv(
 const maxConcurrentLoginAttempts = parsePositiveIntegerEnv(
   'DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS',
   DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS,
+);
+const maxConcurrentHeaderAttempts = parsePositiveIntegerEnv(
+  'DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS',
+  DEFAULT_MAX_CONCURRENT_HEADER_ATTEMPTS,
 );
 
 function getLockoutStatePath(): string {
@@ -713,33 +717,62 @@ export function clearLoginLockoutsAfterSuccess(
   }
 }
 
-/**
- * Take one of the shared concurrent credential-verification slots, or answer
- * 429 and return undefined when the cap is reached. The login route and Basic
- * Authorization headers on other routes draw on the same cap, so parallel
- * guesses cannot all pass the lockout check before the first failure counts.
- * The returned release function is idempotent.
- */
-export function acquireLoginAttemptSlot(
+interface AttemptPool {
+  active: number;
+  readonly max: number;
+}
+
+const loginAttemptPool: AttemptPool = { active: 0, max: maxConcurrentLoginAttempts };
+const headerAttemptPool: AttemptPool = { active: 0, max: maxConcurrentHeaderAttempts };
+
+function acquireAttemptSlot(
+  pool: AttemptPool,
   req: AuthRequest,
   res: Response,
   loginIdentity: string | undefined,
 ): (() => void) | undefined {
-  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
+  if (pool.active >= pool.max) {
     setRetryAfterHeader(res, 1);
     recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
     sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
     return undefined;
   }
-  activeLoginAttempts += 1;
+  pool.active += 1;
   let released = false;
   return () => {
     if (released) {
       return;
     }
     released = true;
-    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
+    pool.active = Math.max(0, pool.active - 1);
   };
+}
+
+/**
+ * Take one of the concurrent credential-verification slots for the login
+ * route, or answer 429 and return undefined when the cap is reached, so
+ * parallel guesses cannot all pass the lockout check before the first failure
+ * counts. The returned release function is idempotent.
+ */
+export function acquireLoginAttemptSlot(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  return acquireAttemptSlot(loginAttemptPool, req, res, loginIdentity);
+}
+
+/**
+ * The same cap for Basic Authorization headers on other routes, in a pool of
+ * its own: integrations polling with correct credentials must not starve the
+ * login form, nor the form them.
+ */
+export function acquireHeaderAttemptSlot(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  return acquireAttemptSlot(headerAttemptPool, req, res, loginIdentity);
 }
 
 export async function authenticateLogin(
@@ -859,7 +892,8 @@ export function rejectFailedHeaderAuthentication(
 export function resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();
-  activeLoginAttempts = 0;
+  loginAttemptPool.active = 0;
+  headerAttemptPool.active = 0;
   if (maintenanceTimer) {
     clearInterval(maintenanceTimer);
     maintenanceTimer = undefined;

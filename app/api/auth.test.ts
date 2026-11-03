@@ -548,7 +548,7 @@ describe('Auth Router', () => {
             }),
         );
 
-        const responses = Array.from({ length: 8 }, () => createResponse());
+        const responses = Array.from({ length: 12 }, () => createResponse());
         const calls = responses.map((res, index) =>
           auth.requireAuthentication(
             headerRequest('admin', `guess-${index}`),
@@ -558,12 +558,12 @@ describe('Auth Router', () => {
         );
         await Promise.resolve();
 
-        // Only the cap (2) reached password verification; the rest got 429.
-        expect(mockAuthenticate).toHaveBeenCalledTimes(2);
+        // Only the header cap (8) reached password verification; the rest got 429.
+        expect(mockAuthenticate).toHaveBeenCalledTimes(8);
         const refused = responses.filter((res) =>
           res.status.mock.calls.some(([code]) => code === 429),
         );
-        expect(refused).toHaveLength(6);
+        expect(refused).toHaveLength(4);
         for (const res of refused) {
           expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '1');
         }
@@ -571,12 +571,48 @@ describe('Auth Router', () => {
         pending.splice(0).forEach((settle) => settle());
         await Promise.all(calls);
 
-        // Rejected attempts were never counted: two failures so far, so the
-        // slots are free again and the account is not near its limit of 5.
+        // Rejected attempts were never counted, and every slot is free again: a
+        // different account (the first is locked by its 8 counted failures) is
+        // verified rather than answered 429.
         mockAuthenticate.mockImplementation(async () => undefined);
         const res: any = { statusCode: 0, end: vi.fn() };
-        await auth.requireAuthentication(headerRequest('admin', 'again'), res, vi.fn());
+        await auth.requireAuthentication(headerRequest('other', 'again'), res, vi.fn());
         expect(res.statusCode).toBe(401);
+      });
+
+      test('several concurrent correct Basic headers all succeed', async () => {
+        registerChainAuthenticator();
+        const pending: Array<() => void> = [];
+        mockAuthenticate.mockImplementation(
+          (authRequest) =>
+            new Promise((resolve) => {
+              pending.push(() => {
+                authRequest.principal = {
+                  kind: 'basic',
+                  username: 'admin',
+                  identity: BASIC_IDENTITY,
+                };
+                resolve(authRequest.principal);
+              });
+            }),
+        );
+
+        const nexts = [vi.fn(), vi.fn(), vi.fn()];
+        const calls = nexts.map((next) =>
+          auth.requireAuthentication(
+            headerRequest('admin', 'correct'),
+            Object.assign(createResponse(), { statusCode: 0 }) as any,
+            next,
+          ),
+        );
+        await Promise.resolve();
+        expect(mockAuthenticate).toHaveBeenCalledTimes(3);
+
+        pending.splice(0).forEach((settle) => settle());
+        await Promise.all(calls);
+        for (const next of nexts) {
+          expect(next).toHaveBeenCalledWith();
+        }
       });
 
       test('releases the slot when the authenticator throws', async () => {

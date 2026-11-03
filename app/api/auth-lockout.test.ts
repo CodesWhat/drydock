@@ -117,6 +117,7 @@ vi.mock('./error-response.js', () => ({
 import { parseBasicAuthorization } from '../authentications/providers/basic/basic-authorization.js';
 import log from '../log/index.js';
 import {
+  acquireHeaderAttemptSlot,
   acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
@@ -3220,6 +3221,48 @@ describe('acquireLoginAttemptSlot', () => {
 
     second?.();
     third?.();
+  });
+});
+
+describe('acquireHeaderAttemptSlot', () => {
+  beforeEach(() => {
+    resetLoginLockoutStateForTests();
+  });
+
+  const req = { body: {}, ip: '203.0.113.30' } as any;
+
+  test('allows eight concurrent header attempts and refuses the ninth with 429', () => {
+    const slots = Array.from({ length: 8 }, () =>
+      acquireHeaderAttemptSlot(req, createResponse() as any, 'alice'),
+    );
+    for (const slot of slots) {
+      expect(slot).toBeTypeOf('function');
+    }
+
+    const blockedRes = createResponse();
+    expect(acquireHeaderAttemptSlot(req, blockedRes as any, 'alice')).toBeUndefined();
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+    expect(blockedRes.setHeader).toHaveBeenCalledWith('Retry-After', '1');
+
+    slots[0]?.();
+    slots[0]?.();
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeTypeOf('function');
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeUndefined();
+  });
+
+  test('header attempts cannot consume login form slots, and the reverse', () => {
+    const headerSlots = Array.from({ length: 8 }, () =>
+      acquireHeaderAttemptSlot(req, createResponse() as any, 'alice'),
+    );
+    const loginSlots = [
+      acquireLoginAttemptSlot(req, createResponse() as any, 'alice'),
+      acquireLoginAttemptSlot(req, createResponse() as any, 'alice'),
+    ];
+    expect(loginSlots.every((slot) => typeof slot === 'function')).toBe(true);
+    expect(acquireLoginAttemptSlot(req, createResponse() as any, 'alice')).toBeUndefined();
+
+    headerSlots.forEach((slot) => slot?.());
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeTypeOf('function');
   });
 });
 

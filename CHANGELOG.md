@@ -14,7 +14,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Re-adding a Portwing agent key that was previously revoked, or retrying a cancelled key rotation with the same replacement key, now reactivates the key instead of failing with a database error.
 - Saving a configuration section now says when the config file is read-only or busy (for example a read-only or single-file bind mount), and logs and audits the failure instead of returning a bare error.
 - A preference change that failed to sync to the server is now kept as pending and retried, so reconnecting no longer overwrites it with older server settings.
-- Wrong passwords sent in an `Authorization: Basic` header to API routes now count toward the same account and IP login lockout as the login form, and a locked account or IP is refused on those routes too.
+- Wrong passwords sent in an `Authorization: Basic` header to API routes now count toward the same account and IP login lockout as the login form, and a locked account or IP is refused on those routes too. The lockout and the Basic provider now share one scheme parser, so a header such as `xBasic` or `BasicAuth` is no longer accepted by Basic while skipping the lockout.
+- Basic `Authorization` header checks on API routes now have their own concurrency cap, `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` (default 8), separate from the login form's, so a few dashboard widgets polling with correct credentials no longer get `429` and header traffic can't take the login form's slots.
 
 ## [1.8.0-rc.13] - 2026-11-03
 
