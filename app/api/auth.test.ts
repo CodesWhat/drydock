@@ -445,6 +445,49 @@ describe('Auth Router', () => {
         expect(res.end).toHaveBeenCalledWith('Unauthorized');
       });
 
+      test('counts a wrong Basic header even when a session also authenticates the request', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'session', identity: BASIC_IDENTITY } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'stale'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(headerRequest('admin', 'stale'), lockedRes as any, next);
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('does not count a session-authenticated Basic header the authenticator declined', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          markVerifiedCredentialsDeclined(authRequest);
+          authRequest.principal = { kind: 'session', identity: BASIC_IDENTITY } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'right'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+      });
+
       test('does not count a verified password the authenticator declined', async () => {
         registerChainAuthenticator();
         mockAuthenticate.mockImplementation(async (authRequest) => {

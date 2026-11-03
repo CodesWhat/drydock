@@ -172,6 +172,12 @@ export async function requireAuthentication(
 
   if (basicHeader && outcome.kind === 'basic') {
     clearLoginLockoutsAfterSuccess(req, outcome.username);
+  } else if (basicHeader && !wereVerifiedCredentialsDeclined(req)) {
+    // Something else (a session cookie riding along) authenticated the request,
+    // but the Basic header was still a wrong guess and counts like one. Only a
+    // lockout it trips is answered; otherwise the request carries on.
+    rejectFailedHeaderAuthentication(req, res, () => next());
+    return;
   }
 
   next();
