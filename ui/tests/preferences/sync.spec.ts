@@ -242,15 +242,55 @@ describe('preference sync engine', () => {
     mocks.updatePreferences.mockRejectedValue(new Error('offline'));
     await vi.advanceTimersByTimeAsync(30_000);
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(4);
-
-    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
-    await Promise.resolve();
-    expect(mocks.getPreferences).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(4);
 
     mocks.updatePreferences.mockResolvedValue({});
     mocks.watchCallbacks[0]();
     await vi.advanceTimersByTimeAsync(3000);
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(5);
+  });
+
+  it('retries an exhausted pending write on reconnect, then merges newer server state', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    preferences.sync.enabled = true;
+    preferences.layout.sidebarCollapsed = true;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValue(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(4);
+
+    mocks.updatePreferences.mockResolvedValue({});
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await Promise.resolve();
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(5);
+    expect(mocks.updatePreferences.mock.calls[4][1].layout.sidebarCollapsed).toBe(true);
+
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not stack a second flush when a reconnect lands during an in-flight write', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    const write = deferred<unknown>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    await vi.advanceTimersByTimeAsync(3000);
+    mocks.listeners.get('dd:sse-connected')!(new Event('x'));
+    await Promise.resolve();
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+    write.resolve({});
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
   });
 
   it('does not re-mark a failed write when sync was turned off meanwhile', async () => {

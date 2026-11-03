@@ -233,6 +233,15 @@ function handleSseConnected(): void {
   if (!preferences.sync.enabled || !currentUsername) {
     return;
   }
+  // A write that exhausted its retries leaves the edit pending with no timer,
+  // so the fetch guard would swallow every reconnect until the next local edit.
+  // The server is back: restart the retry budget and push the edit; the merge
+  // happens on the next fetch once it has landed.
+  if (syncDirty && !syncWriteInFlight && syncFlushTimer === undefined) {
+    syncRetryCount = 0;
+    scheduleSyncFlush();
+    return;
+  }
   void fetchAndMergeFromServer(currentUsername);
 }
 
