@@ -1500,6 +1500,22 @@ describe('Config Router', () => {
       mockRecordAuditEvent.mockReset();
     });
 
+    test('answers for a completed write when only the audit event cannot be recorded', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
+      mockRecordAuditEvent.mockImplementationOnce(() => {
+        throw new Error('audit down');
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('audit down'));
+    });
+
     test('a written response satisfies the OpenAPI contract', async () => {
       mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
       configRouter.init();

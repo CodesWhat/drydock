@@ -345,12 +345,19 @@ async function writeConfigurationSection(
     // Audited before the body is sent, matching every other route in this
     // file, and unconditionally — a refusal is as much an "attempt" as a
     // success, exactly as `/reload` audits both `applied` and refused.
-    recordAuditEvent({
-      action: 'config-written',
-      containerName: 'diagnostics',
-      status: outcome.kind === 'written' ? 'info' : 'error',
-      details: describeWrite(outcome),
-    });
+    // An audit store that throws here must not turn a completed write into a
+    // 500 or an error audit: the file is already changed, so log the audit
+    // failure and answer for the outcome.
+    try {
+      recordAuditEvent({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: outcome.kind === 'written' ? 'info' : 'error',
+        details: describeWrite(outcome),
+      });
+    } catch (auditError: unknown) {
+      logger.warn(`Unable to audit configuration write outcome (${getErrorMessage(auditError)})`);
+    }
 
     switch (outcome.kind) {
       case 'written':
