@@ -14,13 +14,14 @@ const TARGET_TABLE = 'name_bindings';
 export const nameBindingsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       'INSERT INTO name_bindings (agent_name, key_id, last_seen_at) VALUES (?, ?, ?)',
     );
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.agentName !== 'string' || typeof doc.keyId !== 'string') {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const lastSeenAt = typeof doc.lastSeenAt === 'number' ? doc.lastSeenAt : 0;

@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     createWebHistory: vi.fn(() => ({ kind: 'history' })),
     getUser: vi.fn(),
     hydrateFromServer: vi.fn(),
+    syncAuthenticatedUser: vi.fn(),
     requestStaleChunkReload: vi.fn(),
     clearStaleChunkReloadGuard: vi.fn(),
   };
@@ -40,7 +41,10 @@ vi.mock('@/services/auth', () => ({
   getUser: mocks.getUser,
   acknowledgeApiKeyReview: vi.fn(),
 }));
-vi.mock('@/preferences/sync', () => ({ hydrateFromServer: mocks.hydrateFromServer }));
+vi.mock('@/preferences/sync', () => ({
+  hydrateFromServer: mocks.hydrateFromServer,
+  syncAuthenticatedUser: mocks.syncAuthenticatedUser,
+}));
 vi.mock('@/bootstrap/stale-chunk-recovery', () => ({
   requestStaleChunkReload: mocks.requestStaleChunkReload,
   clearStaleChunkReloadGuard: mocks.clearStaleChunkReloadGuard,
@@ -53,6 +57,7 @@ describe('router auth guard', () => {
   beforeEach(() => {
     mocks.getUser.mockReset();
     mocks.hydrateFromServer.mockReset();
+    mocks.syncAuthenticatedUser.mockReset();
     mocks.requestStaleChunkReload.mockReset();
     mocks.clearStaleChunkReloadGuard.mockReset();
   });
@@ -128,6 +133,17 @@ describe('router auth guard', () => {
       name: 'login',
       query: { next: '/containers' },
     });
+    expect(mocks.hydrateFromServer).not.toHaveBeenCalled();
+  });
+
+  it('skips preference sync for a user record without a username', async () => {
+    const guard = mocks.getGuard();
+    if (!guard) throw new Error('Missing route guard');
+    mocks.getUser.mockResolvedValue({ id: 'u-2' });
+
+    await guard({ name: 'dashboard', query: {}, path: '/' });
+
+    expect(mocks.syncAuthenticatedUser).not.toHaveBeenCalled();
     expect(mocks.hydrateFromServer).not.toHaveBeenCalled();
   });
 
@@ -215,6 +231,18 @@ describe('router auth guard', () => {
         reviewLocation,
       );
       expect(useApiKeyReview().pending.value).toBe(true);
+    });
+
+    it('tells the preference sync who signed in before redirecting to the review', async () => {
+      const guard = mocks.getGuard();
+      if (!guard) throw new Error('Missing route guard');
+      mocks.getUser.mockResolvedValue({ username: 'bob', apiKeyReviewPending: true });
+
+      await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toEqual(
+        reviewLocation,
+      );
+      expect(mocks.syncAuthenticatedUser).toHaveBeenCalledWith('bob');
+      expect(mocks.hydrateFromServer).not.toHaveBeenCalled();
     });
 
     it('lets the API keys view through and ignores a next path while pending', async () => {

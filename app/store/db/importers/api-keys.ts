@@ -17,7 +17,7 @@ const TARGET_TABLE = 'api_keys';
 export const apiKeysImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insertKey = db.prepare(
       `INSERT INTO api_keys
          (key_id, schema_version, name, secret_hash, created_at, created_by, parent_key_id, expires_at, rate_limit_max, last_used_at, revoked_at, revoked_by)
@@ -27,6 +27,7 @@ export const apiKeysImporter: CollectionImporter = {
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.keyId !== 'string' || typeof doc.secretHash !== 'string') {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const schemaVersion = typeof doc.schemaVersion === 'number' ? doc.schemaVersion : 1;

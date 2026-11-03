@@ -77,7 +77,7 @@ docker run \
 
 ## Downgrade Notes
 
-Rolling back from v1.8 to v1.7 or earlier needs `dd.json` back, not `dd.sqlite`: stop drydock, rename `<DD_STORE_PATH>/<DD_STORE_FILE>.pre-1.8.bak` back to `<DD_STORE_FILE>` (`dd.json.pre-1.8.bak` → `dd.json` with the defaults), then start the older build. It only has what existed at the moment of the v1.8 upgrade's one-time import — anything written afterward (new containers, settings changes, sessions) lived in `dd.sqlite` alone and does not roll back with it.
+Rolling back from v1.8 to v1.7 or earlier needs `dd.json` back, not `dd.sqlite`: stop drydock, rename `<DD_STORE_PATH>/<DD_STORE_FILE>.pre-1.8.bak` back to `<DD_STORE_FILE>` (`dd.json.pre-1.8.bak` → `dd.json` with the defaults), then move the database file (`<DD_STORE_PATH>/<DD_STORE_DB_FILE>`, `dd.sqlite` with the defaults) and its `-wal` and `-shm` files aside before you start the older build. Before upgrading to v1.8 again, remove those moved-aside database files too, so the one-time import runs on the restored `dd.json` instead of finding an existing database. The older build only has what existed at the moment of the v1.8 upgrade's one-time import — anything written afterward (new containers, settings changes, sessions) lived in `dd.sqlite` alone and does not roll back with it.
 
 Keep any pre-upgrade session JSON file with the main JSON snapshot (`dd-sessions.json` with the default filename on v1.6.1 and v1.7.0, including its rc.24 candidate). The importer leaves it in place, but it does not receive session changes made by v1.8.
 

@@ -25,8 +25,13 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired lockout entries from memory and the persisted lockout sidecar file | Positive integer (`> 0`) | `60000` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique account/IP identities tracked before older entries are pruned | Positive integer (`> 0`) | `5000` |
 | `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | ⚪ | Maximum login credential verifications running at once. Excess attempts receive `429` with `Retry-After: 1` before password hashing starts. | Positive integer (`> 0`) | `2` |
+| `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` | ⚪ | Maximum `Authorization: Basic` header credential verifications running at once on routes other than the login form. This pool is separate from the login form's. Excess attempts receive `429` with `Retry-After: 1` before password hashing starts. | Positive integer (`> 0`) | `8` |
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
+
+Scripted clients that send an `Authorization: Basic` header with a stale password draw on the same account and IP lockout budget as the login form, and their password checks have a concurrent attempt cap of their own (`DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS`), separate from the login form's.
+
+An integration that keeps sending a stale password keeps re-locking the account every time the lockout expires. Behind a reverse proxy without `DD_SERVER_TRUSTPROXY`, every client shares the proxy's IP, so the same failures also lock out that shared IP, and with it everyone else coming through the proxy. Use API keys for integrations rather than the account password, and update integrations before you rotate a password.
 
 ## Two-factor (TOTP)
 

@@ -1,6 +1,9 @@
 import { argon2, createHash, timingSafeEqual } from 'node:crypto';
 import type { AuthRequest } from '../../../api/auth-types.js';
-import type { Authenticator } from '../../../api/authenticator-chain.js';
+import {
+  type Authenticator,
+  markVerifiedCredentialsDeclined,
+} from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
 import {
   deriveSubjectId,
@@ -339,6 +342,7 @@ class Basic extends Authentication<BasicConfiguration> {
     return {
       id: this.getId(),
       persistsSession: false,
+      readsBasicHeader: true,
       // Read on use, so it names the account as it is configured now. A factor
       // enrolled under any other subject is orphaned (spec 11.1.2 decision 10).
       get localSubjectId(): string {
@@ -365,7 +369,11 @@ class Basic extends Authentication<BasicConfiguration> {
    */
   async authenticateRequest(req: AuthRequest): Promise<AuthenticatedPrincipal | undefined> {
     const principal = await this.verifyRequestCredentials(req);
-    if (principal === undefined || isSecondFactorRequired(principal.identity.subjectId)) {
+    if (principal === undefined) {
+      return undefined;
+    }
+    if (isSecondFactorRequired(principal.identity.subjectId)) {
+      markVerifiedCredentialsDeclined(req);
       return undefined;
     }
     return principal;

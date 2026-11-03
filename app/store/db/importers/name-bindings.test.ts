@@ -15,6 +15,8 @@ function snapshotOf(documents: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/name-bindings', () => {
   let db: Database;
 
@@ -31,6 +33,7 @@ describe('store/db/importers/name-bindings', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 

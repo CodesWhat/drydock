@@ -27,11 +27,12 @@ const TARGET_TABLE = 'update_operations';
 export const updateOperationsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     let rows = 0;
     for (const record of snapshot.records(LEGACY_COLLECTION)) {
       const row = buildImportedUpdateOperationRow(record);
       if (!row) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       insertImportedUpdateOperationRow(db, row);

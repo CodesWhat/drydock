@@ -48,16 +48,21 @@ function resolveExpiresAt(content: Record<string, unknown>): number | undefined 
 export const sessionsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, sessionDocuments }: ImportContext): number {
+  importInto({ db, sessionDocuments, recordSkipped }: ImportContext): number {
     const insert = db.prepare('INSERT INTO sessions (sid, expires_at, data) VALUES (?, ?, ?)');
     const now = Date.now();
     let rows = 0;
     for (const doc of sessionDocuments) {
       if (typeof doc.sid !== 'string' || doc.sid.length === 0 || !isPlainRecord(doc.content)) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const expiresAt = resolveExpiresAt(doc.content);
-      if (expiresAt === undefined || expiresAt < now) {
+      if (expiresAt === undefined) {
+        recordSkipped(TARGET_TABLE);
+        continue;
+      }
+      if (expiresAt < now) {
         continue;
       }
       insert.run(doc.sid, expiresAt, JSON.stringify(doc.content));

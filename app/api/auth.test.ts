@@ -141,7 +141,7 @@ import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 import * as authSession from './auth-session.js';
-import { getAuthenticators } from './authenticator-chain.js';
+import { getAuthenticators, markVerifiedCredentialsDeclined } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 import * as sessionPrincipal from './session-principal.js';
@@ -324,7 +324,7 @@ describe('Auth Router', () => {
   });
 
   describe('requireAuthentication', () => {
-    function registerChainAuthenticator() {
+    function registerChainAuthenticator(options: { readsBasicHeader?: boolean } = {}) {
       registry.getState.mockReturnValue({
         authentication: {
           'oauth.provider': {
@@ -332,6 +332,7 @@ describe('Auth Router', () => {
             getAuthenticator: vi.fn(() => ({
               id: 'oauth.provider',
               persistsSession: false,
+              readsBasicHeader: options.readsBasicHeader ?? true,
               authenticate: mockAuthenticate,
             })),
             getStrategyDescription: vi.fn(() => ({ type: 'oauth', name: 'provider' })),
@@ -397,6 +398,368 @@ describe('Auth Router', () => {
       await auth.requireAuthentication(req, res, next);
 
       expect(next).toHaveBeenCalledWith(error);
+    });
+
+    describe('Basic Authorization header lockout', () => {
+      const basicHeader = (user: string, password: string) =>
+        `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
+      const headerRequest = (user: string, password: string, ip = '203.0.113.9'): any => ({
+        ip,
+        headers: { authorization: basicHeader(user, password) },
+      });
+
+      test('locks the account after repeated bad Basic headers and refuses a correct one', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const res = createResponse();
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res as any, vi.fn());
+        }
+
+        mockAuthenticate.mockClear();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+          return authRequest.principal;
+        });
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(
+          headerRequest('admin', 'correct', '198.51.100.7'),
+          lockedRes as any,
+          next,
+        );
+
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(mockAuthenticate).not.toHaveBeenCalled();
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('answers the bare 401 while the attempt does not lock', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+
+        expect(res.statusCode).toBe(401);
+        expect(res.end).toHaveBeenCalledWith('Unauthorized');
+      });
+
+      test('counts a wrong Basic header even when a session also authenticates the request', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'session', identity: BASIC_IDENTITY } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'stale'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(headerRequest('admin', 'stale'), lockedRes as any, next);
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('counts a wrong Basic header even when anonymous access admits the request', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'anonymous', username: 'anonymous' } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'stale'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+
+        const lockedRes = createResponse();
+        const next = vi.fn();
+        await auth.requireAuthentication(headerRequest('admin', 'stale'), lockedRes as any, next);
+        expect(lockedRes.status).toHaveBeenCalledWith(423);
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('ignores a Basic header entirely when no Basic authenticator is registered', async () => {
+        registerChainAuthenticator({ readsBasicHeader: false });
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('does not count a session-authenticated Basic header the authenticator declined', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          markVerifiedCredentialsDeclined(authRequest);
+          authRequest.principal = { kind: 'session', identity: BASIC_IDENTITY } as any;
+          return authRequest.principal;
+        });
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'right'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith();
+        }
+      });
+
+      test('does not count a verified password the authenticator declined', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          markVerifiedCredentialsDeclined(authRequest);
+          return undefined;
+        });
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'right'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('does not count requests without a Basic header', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(
+            { ip: '203.0.113.9', headers: { authorization: 'Digest nope' } } as any,
+            res,
+            vi.fn(),
+          );
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('the attempt that crosses the threshold answers 423, not 401', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+
+        const crossing = createResponse();
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), crossing as any, vi.fn());
+        expect(crossing.status).toHaveBeenCalledWith(423);
+      });
+
+      test('locks the IP when every attempt names a different username', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        let last = createResponse();
+        for (let attempt = 0; attempt < 25; attempt += 1) {
+          last = createResponse();
+          (last as any).statusCode = 0;
+          await auth.requireAuthentication(
+            headerRequest(`user-${attempt}`, 'bad'),
+            last as any,
+            vi.fn(),
+          );
+        }
+        expect(last.status).toHaveBeenCalledWith(423);
+
+        mockAuthenticate.mockClear();
+        const refused = createResponse();
+        await auth.requireAuthentication(
+          headerRequest('someone-new', 'bad'),
+          refused as any,
+          vi.fn(),
+        );
+        expect(refused.status).toHaveBeenCalledWith(423);
+        expect(mockAuthenticate).not.toHaveBeenCalled();
+      });
+
+      test('never counts Bearer or API-key requests', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (const authorization of ['Bearer nope', undefined]) {
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            const res: any = { statusCode: 0, end: vi.fn() };
+            await auth.requireAuthentication(
+              {
+                ip: '203.0.113.9',
+                headers: {
+                  ...(authorization ? { authorization } : { 'x-api-key': 'dd_bad' }),
+                },
+              } as any,
+              res,
+              vi.fn(),
+            );
+            expect(res.statusCode).toBe(401);
+          }
+        }
+      });
+
+      test('parallel bad header requests are capped and cannot outrun the budget', async () => {
+        registerChainAuthenticator();
+        const pending: Array<() => void> = [];
+        mockAuthenticate.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              pending.push(() => resolve(undefined));
+            }),
+        );
+
+        const responses = Array.from({ length: 12 }, () => createResponse());
+        const calls = responses.map((res, index) =>
+          auth.requireAuthentication(
+            headerRequest('admin', `guess-${index}`),
+            Object.assign(res, { statusCode: 0 }) as any,
+            vi.fn(),
+          ),
+        );
+        await Promise.resolve();
+
+        // Only the header cap (8) reached password verification; the rest got 429.
+        expect(mockAuthenticate).toHaveBeenCalledTimes(8);
+        const refused = responses.filter((res) =>
+          res.status.mock.calls.some(([code]) => code === 429),
+        );
+        expect(refused).toHaveLength(4);
+        for (const res of refused) {
+          expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '1');
+        }
+
+        pending.splice(0).forEach((settle) => settle());
+        await Promise.all(calls);
+
+        // Rejected attempts were never counted, and every slot is free again: a
+        // different account (the first is locked by its 8 counted failures) is
+        // verified rather than answered 429.
+        mockAuthenticate.mockImplementation(async () => undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+        await auth.requireAuthentication(headerRequest('other', 'again'), res, vi.fn());
+        expect(res.statusCode).toBe(401);
+      });
+
+      test('several concurrent correct Basic headers all succeed', async () => {
+        registerChainAuthenticator();
+        const pending: Array<() => void> = [];
+        mockAuthenticate.mockImplementation(
+          (authRequest) =>
+            new Promise((resolve) => {
+              pending.push(() => {
+                authRequest.principal = {
+                  kind: 'basic',
+                  username: 'admin',
+                  identity: BASIC_IDENTITY,
+                };
+                resolve(authRequest.principal);
+              });
+            }),
+        );
+
+        const nexts = [vi.fn(), vi.fn(), vi.fn()];
+        const calls = nexts.map((next) =>
+          auth.requireAuthentication(
+            headerRequest('admin', 'correct'),
+            Object.assign(createResponse(), { statusCode: 0 }) as any,
+            next,
+          ),
+        );
+        await Promise.resolve();
+        expect(mockAuthenticate).toHaveBeenCalledTimes(3);
+
+        pending.splice(0).forEach((settle) => settle());
+        await Promise.all(calls);
+        for (const next of nexts) {
+          expect(next).toHaveBeenCalledWith();
+        }
+      });
+
+      test('releases the slot when the authenticator throws', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockRejectedValue(new Error('boom'));
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'bad'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith(expect.any(Error));
+        }
+      });
+
+      test('releases the slot after a success and after a declined second factor', async () => {
+        registerChainAuthenticator();
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          mockAuthenticate.mockImplementationOnce(async (authRequest) => {
+            authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+            return authRequest.principal;
+          });
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'ok'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalled();
+
+          mockAuthenticate.mockImplementationOnce(async (authRequest) => {
+            markVerifiedCredentialsDeclined(authRequest);
+            return undefined;
+          });
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'ok'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
+      test('a successful Basic header forgives earlier failures', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await auth.requireAuthentication(
+            headerRequest('admin', 'bad'),
+            { statusCode: 0, end: vi.fn() } as any,
+            vi.fn(),
+          );
+        }
+        mockAuthenticate.mockImplementation(async (authRequest) => {
+          authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+          return authRequest.principal;
+        });
+        const next = vi.fn();
+        await auth.requireAuthentication(
+          headerRequest('admin', 'ok'),
+          createResponse() as any,
+          next,
+        );
+        expect(next).toHaveBeenCalled();
+
+        mockAuthenticate.mockResolvedValue(undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+        expect(res.statusCode).toBe(401);
+      });
     });
 
     test('should not special-case POST /login (handled by route-level middleware)', async () => {

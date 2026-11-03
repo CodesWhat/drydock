@@ -8,6 +8,19 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Fixed
+
+- After the event stream reconnects, the containers list now refreshes rows whose only change was a security scan result, update eligibility, icon, trigger include/exclude, label-owned sources, release notes or new digest, instead of leaving them stale.
+- Re-adding a Portwing agent key that was previously revoked, or retrying a cancelled key rotation with the same replacement key, now reactivates the key instead of failing with a database error.
+- Saving a configuration section now says when the config file is read-only or busy (for example a read-only or single-file bind mount), and logs and audits the failure instead of returning a bare error.
+- A preference change that failed to sync to the server is now kept as pending and retried, so reconnecting no longer overwrites it with older server settings.
+- Wrong passwords sent in an `Authorization: Basic` header to API routes now count toward the same account and IP login lockout as the login form, and a locked account or IP is refused on those routes too. The lockout and the Basic provider now share one scheme parser, so a header such as `xBasic` or `BasicAuth` is no longer accepted by Basic while skipping the lockout.
+- Behavior change: integrations that send a stale password in a Basic `Authorization` header now trip the same login lockout, so they keep re-locking the account (and, behind a proxy without `DD_SERVER_TRUSTPROXY`, the shared IP). Use API keys for integrations and update them before rotating a password.
+- Basic `Authorization` header checks on API routes now have their own concurrency cap, `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` (default 8), separate from the login form's, so a few dashboard widgets polling with correct credentials no longer get `429` and header traffic can't take the login form's slots.
+- A stray `Authorization: Basic` header no longer counts toward the login lockout, or takes a header concurrency slot, when no Basic authentication provider is configured (for example an OIDC-only install).
+- Startup now logs a warning when a legacy `dd.json` sits next to an existing `dd.sqlite`, which the one-time import never reads. The downgrade notes now say to move the configured database file (`DD_STORE_DB_FILE`, `dd.sqlite` by default) and its `-wal` and `-shm` files aside before running the older build, and to remove them before upgrading again.
+- The first-start SQLite import now counts the legacy documents it had to skip as unusable, per table, and logs a warning naming each table, instead of dropping them silently. The skipped documents stay in `dd.json` and its `.pre-1.8.bak` backup.
+
 ## [1.8.0-rc.13] - 2026-11-03
 
 > [!WARNING]

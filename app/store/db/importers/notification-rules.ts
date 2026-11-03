@@ -47,7 +47,7 @@ function resolveBellThreshold(doc: LokiDocument, fallback: string): string {
 export const notificationRulesImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insertRule = db.prepare(
       `INSERT INTO notification_rules (id, name, description, enabled, bell_enabled, bell_threshold)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -62,6 +62,7 @@ export const notificationRulesImporter: CollectionImporter = {
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.id !== 'string' || doc.id.trim() === '') {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const id = doc.id.toLowerCase();

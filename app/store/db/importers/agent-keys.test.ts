@@ -15,6 +15,8 @@ function snapshotOf(documents: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/agent-keys', () => {
   let db: Database;
 
@@ -31,6 +33,7 @@ describe('store/db/importers/agent-keys', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 

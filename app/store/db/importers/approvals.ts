@@ -28,7 +28,7 @@ function optionalNumber(value: unknown): number | null {
 export const approvalsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO approvals
          (id, schema_version, container_id, container_identity_key, container_name, watcher, agent,
@@ -58,6 +58,7 @@ export const approvalsImporter: CollectionImporter = {
         typeof doc.createdAtMs !== 'number' ||
         typeof doc.decision !== 'string'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
 

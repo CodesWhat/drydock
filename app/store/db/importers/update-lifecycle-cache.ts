@@ -61,7 +61,7 @@ function buildLegacyKeyIndex(containers: LokiDocument[]): Map<string, LokiDocume
 export const updateLifecycleCacheImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const legacyKeyIndex = buildLegacyKeyIndex(snapshot.records(CONTAINERS_COLLECTION));
     // A plain INSERT is safe here, unlike the retention-cache importer's: every
     // insert.run() below is gated on `!seenNewKeys.has(newKey)` immediately
@@ -83,6 +83,7 @@ export const updateLifecycleCacheImporter: CollectionImporter = {
         typeof doc.resultSignature !== 'string' ||
         typeof doc.expiresAt !== 'number'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
 

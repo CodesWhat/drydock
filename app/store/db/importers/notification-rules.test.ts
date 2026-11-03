@@ -15,6 +15,8 @@ function snapshotOf(documents: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/notification-rules', () => {
   let db: Database;
 
@@ -31,6 +33,7 @@ describe('store/db/importers/notification-rules', () => {
       db,
       snapshot: snapshotOf(documents),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 
