@@ -28,6 +28,8 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
 
+Scripted clients that send an `Authorization: Basic` header with a stale password draw on the same account and IP lockout budget as the login form, and their password checks share the concurrent login attempt cap.
+
 ## Two-factor (TOTP)
 
 Local Basic accounts can add a TOTP second factor through the [two-factor management API](/docs/api#two-factor-management). Enrolling, replacing or removing a factor is only allowed over HTTPS or from loopback, because those responses carry the TOTP secret and the recovery codes.

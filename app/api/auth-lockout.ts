@@ -710,6 +710,35 @@ export function clearLoginLockoutsAfterSuccess(
   }
 }
 
+/**
+ * Take one of the shared concurrent credential-verification slots, or answer
+ * 429 and return undefined when the cap is reached. The login route and Basic
+ * Authorization headers on other routes draw on the same cap, so parallel
+ * guesses cannot all pass the lockout check before the first failure counts.
+ * The returned release function is idempotent.
+ */
+export function acquireLoginAttemptSlot(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
+    setRetryAfterHeader(res, 1);
+    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
+    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+    return undefined;
+  }
+  activeLoginAttempts += 1;
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
+  };
+}
+
 export async function authenticateLogin(
   req: AuthRequest,
   res: Response,
@@ -720,17 +749,10 @@ export async function authenticateLogin(
     return;
   }
 
-  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
-    setRetryAfterHeader(res, 1);
-    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
-    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+  const finishAttempt = acquireLoginAttemptSlot(req, res, loginIdentity);
+  if (finishAttempt === undefined) {
     return;
   }
-
-  activeLoginAttempts += 1;
-  const finishAttempt = (): void => {
-    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
-  };
 
   const authorization = getFirstHeaderValue(req.headers?.authorization);
   const hasAuthorizationHeader = typeof authorization === 'string' && authorization.trim() !== '';

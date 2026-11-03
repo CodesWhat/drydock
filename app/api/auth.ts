@@ -13,6 +13,7 @@ import {
 } from './api-key-review.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
+  acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
   getBasicHeaderIdentity,
@@ -128,13 +129,25 @@ export async function requireAuthentication(
     return;
   }
 
+  // Password verification is slow, so the lockout check above passes every
+  // request that arrives before the first failure counts. Header attempts
+  // share the login route's concurrency cap to bound that window.
+  const releaseSlot = basicHeader
+    ? acquireLoginAttemptSlot(req, res, getBasicHeaderIdentity(req))
+    : undefined;
+  if (basicHeader && releaseSlot === undefined) {
+    return;
+  }
+
   let outcome: AuthenticationOutcome;
   try {
     outcome = await authenticateRequest(req);
   } catch (error: unknown) {
+    releaseSlot?.();
     next(error);
     return;
   }
+  releaseSlot?.();
 
   // A terminal rejection answers with the status the authenticator named and
   // never consults the rest of the chain, so a bad API key cannot be rescued

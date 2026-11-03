@@ -474,6 +474,150 @@ describe('Auth Router', () => {
         }
       });
 
+      test('the attempt that crosses the threshold answers 423, not 401', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'bad'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+
+        const crossing = createResponse();
+        await auth.requireAuthentication(headerRequest('admin', 'bad'), crossing as any, vi.fn());
+        expect(crossing.status).toHaveBeenCalledWith(423);
+      });
+
+      test('locks the IP when every attempt names a different username', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        let last = createResponse();
+        for (let attempt = 0; attempt < 25; attempt += 1) {
+          last = createResponse();
+          (last as any).statusCode = 0;
+          await auth.requireAuthentication(
+            headerRequest(`user-${attempt}`, 'bad'),
+            last as any,
+            vi.fn(),
+          );
+        }
+        expect(last.status).toHaveBeenCalledWith(423);
+
+        mockAuthenticate.mockClear();
+        const refused = createResponse();
+        await auth.requireAuthentication(
+          headerRequest('someone-new', 'bad'),
+          refused as any,
+          vi.fn(),
+        );
+        expect(refused.status).toHaveBeenCalledWith(423);
+        expect(mockAuthenticate).not.toHaveBeenCalled();
+      });
+
+      test('never counts Bearer or API-key requests', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockResolvedValue(undefined);
+
+        for (const authorization of ['Bearer nope', undefined]) {
+          for (let attempt = 0; attempt < 30; attempt += 1) {
+            const res: any = { statusCode: 0, end: vi.fn() };
+            await auth.requireAuthentication(
+              {
+                ip: '203.0.113.9',
+                headers: {
+                  ...(authorization ? { authorization } : { 'x-api-key': 'dd_bad' }),
+                },
+              } as any,
+              res,
+              vi.fn(),
+            );
+            expect(res.statusCode).toBe(401);
+          }
+        }
+      });
+
+      test('parallel bad header requests are capped and cannot outrun the budget', async () => {
+        registerChainAuthenticator();
+        const pending: Array<() => void> = [];
+        mockAuthenticate.mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              pending.push(() => resolve(undefined));
+            }),
+        );
+
+        const responses = Array.from({ length: 8 }, () => createResponse());
+        const calls = responses.map((res, index) =>
+          auth.requireAuthentication(
+            headerRequest('admin', `guess-${index}`),
+            Object.assign(res, { statusCode: 0 }) as any,
+            vi.fn(),
+          ),
+        );
+        await Promise.resolve();
+
+        // Only the cap (2) reached password verification; the rest got 429.
+        expect(mockAuthenticate).toHaveBeenCalledTimes(2);
+        const refused = responses.filter((res) =>
+          res.status.mock.calls.some(([code]) => code === 429),
+        );
+        expect(refused).toHaveLength(6);
+        for (const res of refused) {
+          expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '1');
+        }
+
+        pending.splice(0).forEach((settle) => settle());
+        await Promise.all(calls);
+
+        // Rejected attempts were never counted: two failures so far, so the
+        // slots are free again and the account is not near its limit of 5.
+        mockAuthenticate.mockImplementation(async () => undefined);
+        const res: any = { statusCode: 0, end: vi.fn() };
+        await auth.requireAuthentication(headerRequest('admin', 'again'), res, vi.fn());
+        expect(res.statusCode).toBe(401);
+      });
+
+      test('releases the slot when the authenticator throws', async () => {
+        registerChainAuthenticator();
+        mockAuthenticate.mockRejectedValue(new Error('boom'));
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'bad'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalledWith(expect.any(Error));
+        }
+      });
+
+      test('releases the slot after a success and after a declined second factor', async () => {
+        registerChainAuthenticator();
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          mockAuthenticate.mockImplementationOnce(async (authRequest) => {
+            authRequest.principal = { kind: 'basic', username: 'admin', identity: BASIC_IDENTITY };
+            return authRequest.principal;
+          });
+          const next = vi.fn();
+          await auth.requireAuthentication(
+            headerRequest('admin', 'ok'),
+            createResponse() as any,
+            next,
+          );
+          expect(next).toHaveBeenCalled();
+
+          mockAuthenticate.mockImplementationOnce(async (authRequest) => {
+            markVerifiedCredentialsDeclined(authRequest);
+            return undefined;
+          });
+          const res: any = { statusCode: 0, end: vi.fn() };
+          await auth.requireAuthentication(headerRequest('admin', 'ok'), res, vi.fn());
+          expect(res.statusCode).toBe(401);
+        }
+      });
+
       test('a successful Basic header forgives earlier failures', async () => {
         registerChainAuthenticator();
         mockAuthenticate.mockResolvedValue(undefined);
