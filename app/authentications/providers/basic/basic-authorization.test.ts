@@ -1,5 +1,6 @@
 import {
   getBasicAuthorizationFailureStatus,
+  isBasicAuthorizationHeader,
   parseBasicAuthorization,
 } from './basic-authorization.js';
 
@@ -65,6 +66,31 @@ describe('parseBasicAuthorization', () => {
       userid: 'alice',
       password: 'sec',
     });
+  });
+});
+
+describe('scheme anchoring', () => {
+  test.each([['xBasic'], ['BasicAuth'], ['Basicx'], ['NotBasic']])(
+    'does not treat %s as the Basic scheme',
+    (scheme) => {
+      expect(parseBasicAuthorization(`${scheme} ${encode('alice:secret')}`)).toEqual({
+        outcome: 'absent',
+      });
+    },
+  );
+
+  test.each([
+    ['Basic abc', true],
+    ['basic abc', true],
+    ['Basic ', true],
+    ['xBasic abc', false],
+    ['BasicAuth abc', false],
+    ['Bearer abc', false],
+    ['Basic', false],
+    ['', false],
+    [undefined, false],
+  ])('isBasicAuthorizationHeader(%j) is %s', (header, expected) => {
+    expect(isBasicAuthorizationHeader(header)).toBe(expected);
   });
 });
 

@@ -15,6 +15,8 @@ function snapshotOf(documents: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/app', () => {
   let db: Database;
 
@@ -27,7 +29,12 @@ describe('store/db/importers/app', () => {
   });
 
   function run(documents: Record<string, unknown>[]): number {
-    return appImporter.importInto({ db, snapshot: snapshotOf(documents), sessionDocuments: [] });
+    return appImporter.importInto({
+      db,
+      snapshot: snapshotOf(documents),
+      sessionDocuments: [],
+      recordSkipped,
+    });
   }
 
   test('is registered', () => {
@@ -48,9 +55,18 @@ describe('store/db/importers/app', () => {
     expect(db.prepare('SELECT COUNT(*) AS n FROM app_info').get()).toEqual({ n: 0 });
   });
 
+  test('records nothing when the collection has no document', () => {
+    recordSkipped.mockClear();
+    expect(run([])).toBe(0);
+    expect(recordSkipped).not.toHaveBeenCalled();
+  });
+
   test('writes no row when the document is missing a name or version', () => {
+    recordSkipped.mockClear();
     expect(run([{ name: 'drydock' }])).toBe(0);
     expect(run([{ version: '1.7.2' }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledTimes(2);
+    expect(recordSkipped).toHaveBeenCalledWith('app_info');
     expect(db.prepare('SELECT COUNT(*) AS n FROM app_info').get()).toEqual({ n: 0 });
   });
 });

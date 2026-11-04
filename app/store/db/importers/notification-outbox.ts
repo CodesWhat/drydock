@@ -16,7 +16,7 @@ const TARGET_TABLE = 'notification_outbox';
 export const notificationOutboxImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO notification_outbox
          (id, event_name, trigger_id, container_id, attempts, max_attempts, next_attempt_at, status, last_error, created_at, delivered_at, failed_at, payload)
@@ -32,6 +32,7 @@ export const notificationOutboxImporter: CollectionImporter = {
         typeof record.nextAttemptAt !== 'string' ||
         typeof record.createdAt !== 'string'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const payload =

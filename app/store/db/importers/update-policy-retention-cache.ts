@@ -36,7 +36,7 @@ const TARGET_TABLE = 'update_policy_retention_cache';
 export const updatePolicyRetentionCacheImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO update_policy_retention_cache (cache_key, update_policy_overrides, expires_at, refresh_order, container_name)
        VALUES (?, ?, ?, ?, ?)
@@ -50,6 +50,7 @@ export const updatePolicyRetentionCacheImporter: CollectionImporter = {
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.cacheKey !== 'string' || typeof doc.expiresAt !== 'number') {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       rows += 1;

@@ -13,8 +13,14 @@ import {
 } from './api-key-review.js';
 import { recordLoginAuditEvent } from './auth-audit.js';
 import {
+  acquireHeaderAttemptSlot,
   authenticateLogin,
+  clearLoginLockoutsAfterSuccess,
+  getBasicHeaderIdentity,
+  hasBasicAuthorizationHeader,
   initializeLoginLockoutState,
+  rejectFailedHeaderAuthentication,
+  rejectIfLockedOut,
   resetLoginLockoutStateForTests,
 } from './auth-lockout.js';
 import { applyRememberMe, getRememberMePreference, setRememberMe } from './auth-remember-me.js';
@@ -39,6 +45,8 @@ import {
   authenticateRequest,
   getAuthenticationFailureStatus,
   isAuthenticationRejection,
+  isBasicHeaderAuthenticationRegistered,
+  wereVerifiedCredentialsDeclined,
 } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
@@ -115,13 +123,34 @@ export async function requireAuthentication(
     return;
   }
 
+  // A Basic header on any route is a password guess, so it draws on the same
+  // account and IP budgets as POST /auth/login and is refused while locked.
+  // With no Basic authenticator in the chain nothing checks the password, so
+  // the header is not a guess and must not feed a lockout.
+  const basicHeader = hasBasicAuthorizationHeader(req) && isBasicHeaderAuthenticationRegistered();
+  if (basicHeader && rejectIfLockedOut(req, res, getBasicHeaderIdentity(req))) {
+    return;
+  }
+
+  // Password verification is slow, so the lockout check above passes every
+  // request that arrives before the first failure counts. Header attempts
+  // have a concurrency cap of their own to bound that window.
+  const releaseSlot = basicHeader
+    ? acquireHeaderAttemptSlot(req, res, getBasicHeaderIdentity(req))
+    : undefined;
+  if (basicHeader && releaseSlot === undefined) {
+    return;
+  }
+
   let outcome: AuthenticationOutcome;
   try {
     outcome = await authenticateRequest(req);
   } catch (error: unknown) {
+    releaseSlot?.();
     next(error);
     return;
   }
+  releaseSlot?.();
 
   // A terminal rejection answers with the status the authenticator named and
   // never consults the rest of the chain, so a bad API key cannot be rescued
@@ -132,7 +161,25 @@ export async function requireAuthentication(
   }
 
   if (outcome === undefined) {
+    // A correct password the authenticator declined (second factor due) is
+    // not a failed guess.
+    if (basicHeader && !wereVerifiedCredentialsDeclined(req)) {
+      rejectFailedHeaderAuthentication(req, res, (response) =>
+        rejectUnauthenticated(req, response as Response),
+      );
+      return;
+    }
     rejectUnauthenticated(req, res);
+    return;
+  }
+
+  if (basicHeader && outcome.kind === 'basic') {
+    clearLoginLockoutsAfterSuccess(req, outcome.username);
+  } else if (basicHeader && !wereVerifiedCredentialsDeclined(req)) {
+    // Something else (a session cookie riding along) authenticated the request,
+    // but the Basic header was still a wrong guess and counts like one. Only a
+    // lockout it trips is answered; otherwise the request carries on.
+    rejectFailedHeaderAuthentication(req, res, () => next());
     return;
   }
 

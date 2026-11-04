@@ -1212,6 +1212,46 @@ describe('ContainersView', () => {
         { tagPrecision: 'specific' as const },
         { imageTagSemver: true },
         { isDigestPinned: true },
+        { securitySummary: { unknown: 0, low: 0, medium: 0, high: 2, critical: 1 } },
+        { updateSecuritySummary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 } },
+        {
+          securityDelta: {
+            fixed: 0,
+            new: 1,
+            unchanged: 0,
+            newCritical: 1,
+            newHigh: 0,
+            fixedCritical: 0,
+            fixedHigh: 0,
+          },
+        },
+        {
+          updateEligibility: {
+            eligible: false,
+            blockers: [
+              {
+                reason: 'security-scan-blocked' as const,
+                message: 'blocked',
+                actionable: false,
+              },
+            ],
+            evaluatedAt: '2026-05-01T00:00:00.000Z',
+          },
+        },
+        { icon: 'sh:other' },
+        { labelOwnedSources: { displayName: 'label' as const } },
+        { triggerInclude: 'slack.ops' },
+        { triggerExclude: 'smtp.mail' },
+        { newDigest: 'sha256:abc' },
+        {
+          releaseNotes: {
+            title: 'v2',
+            body: 'notes',
+            url: 'https://example.test/v2',
+            publishedAt: '2026-05-01T00:00:00.000Z',
+            provider: 'github',
+          },
+        },
       ])('refreshes fleet dimensions when only %j changes', async (patch) => {
         const container = makeContainer({ labels: { team: 'old' } });
         const wrapper = await mountContainersView([container]);

@@ -19,21 +19,24 @@ import type { LokiDocument } from '../loki-json.js';
 const LEGACY_COLLECTION = 'secrets';
 const TARGET_TABLE = 'secrets';
 
-function findSessionSecret(documents: readonly LokiDocument[]): string | undefined {
-  for (const document of documents) {
-    const value = document.sessionSecret;
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
-    }
-  }
-  return undefined;
+function usableSessionSecret(document: LokiDocument): string | undefined {
+  const value = document.sessionSecret;
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 export const secretsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
-    const sessionSecret = findSessionSecret(snapshot.documents(LEGACY_COLLECTION));
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
+    let sessionSecret: string | undefined;
+    for (const document of snapshot.documents(LEGACY_COLLECTION)) {
+      const value = usableSessionSecret(document);
+      if (value === undefined) {
+        recordSkipped(TARGET_TABLE);
+      } else {
+        sessionSecret ??= value;
+      }
+    }
     if (sessionSecret === undefined) {
       return 0;
     }

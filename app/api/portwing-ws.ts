@@ -309,6 +309,21 @@ export function fillNonceCacheForTesting(nonces: Map<string, number>): void {
   }
 }
 
+/** Exposed for tests to check whether a nonce is still held in the replay cache. */
+export function hasNonceForTesting(nonce: string): boolean {
+  return nonceCache.has(nonce);
+}
+
+/** Exposed for tests to read the number of nonces held in the replay cache. */
+export function nonceCacheSizeForTesting(): number {
+  return nonceCache.size;
+}
+
+/** Exposed for tests to read how many keys have a per-key admission counter. */
+export function noncesPerKeySizeForTesting(): number {
+  return noncesPerKey.size;
+}
+
 /** Exposed for tests to set per-key nonce admission counters. */
 export function fillNoncesPerKeyForTesting(perKey: Map<string, number>): void {
   for (const [k, v] of perKey) {

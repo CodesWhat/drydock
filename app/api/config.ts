@@ -19,6 +19,8 @@ import {
 } from '../configuration/file/write.js';
 import { configFileSources, ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import { redactConfigurationTree } from '../debug/redact.js';
+import log from '../log/index.js';
+import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import { validateCandidateConfiguration } from './config-validate.js';
 import { sendErrorResponse } from './error-response.js';
@@ -310,6 +312,27 @@ function refuseConfigurationWrite(req: PrincipalCarrier, res: Response): boolean
   return refuseRecoveryAssuranceSession(req, res, 'change the configuration file');
 }
 
+const logger = log.child({ component: 'api-config' });
+
+const UNWRITABLE_CONFIG_FILE_CODES = new Set(['EBUSY', 'EROFS', 'EACCES', 'EPERM']);
+
+/**
+ * The response for a write that threw. A read-only or single-file bind mount
+ * (EBUSY, EROFS, EACCES, EPERM) is named so the operator can tell it from a
+ * fault in Drydock; nothing from the error itself is echoed, because its
+ * message carries filesystem paths.
+ */
+function describeWriteFailure(error: unknown): { code?: string; message: string } {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  if (typeof code === 'string' && UNWRITABLE_CONFIG_FILE_CODES.has(code)) {
+    return {
+      code,
+      message: `Unable to write the configuration section: the configuration file is read-only or busy (${code}). Check that it is not mounted read-only.`,
+    };
+  }
+  return { message: 'Unable to write the configuration section' };
+}
+
 async function writeConfigurationSection(
   req: Request<{ section: string }>,
   res: Response,
@@ -322,12 +345,19 @@ async function writeConfigurationSection(
     // Audited before the body is sent, matching every other route in this
     // file, and unconditionally — a refusal is as much an "attempt" as a
     // success, exactly as `/reload` audits both `applied` and refused.
-    recordAuditEvent({
-      action: 'config-written',
-      containerName: 'diagnostics',
-      status: outcome.kind === 'written' ? 'info' : 'error',
-      details: describeWrite(outcome),
-    });
+    // An audit store that throws here must not turn a completed write into a
+    // 500 or an error audit: the file is already changed, so log the audit
+    // failure and answer for the outcome.
+    try {
+      recordAuditEvent({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: outcome.kind === 'written' ? 'info' : 'error',
+        details: describeWrite(outcome),
+      });
+    } catch (auditError: unknown) {
+      logger.warn(`Unable to audit configuration write outcome (${getErrorMessage(auditError)})`);
+    }
 
     switch (outcome.kind) {
       case 'written':
@@ -371,8 +401,22 @@ async function writeConfigurationSection(
         );
         return;
     }
-  } catch {
-    sendErrorResponse(res, 500, 'Unable to write the configuration section');
+  } catch (error: unknown) {
+    const failure = describeWriteFailure(error);
+    logger.warn(`Unable to write configuration section (${getErrorMessage(error)})`);
+    try {
+      recordAuditEvent({
+        action: 'config-written',
+        containerName: 'diagnostics',
+        status: 'error',
+        details: failure.code
+          ? `Configuration write failed (${failure.code})`
+          : 'Configuration write failed',
+      });
+    } catch {
+      // The audit store being down must not hide the write failure from the caller.
+    }
+    sendErrorResponse(res, 500, failure.message);
   }
 }
 

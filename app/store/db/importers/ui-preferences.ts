@@ -18,13 +18,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export const uiPreferencesImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       'INSERT INTO ui_preferences (username, schema_version, preferences, updated_at) VALUES (?, ?, ?, ?)',
     );
     let rows = 0;
     for (const doc of snapshot.documents(LEGACY_COLLECTION)) {
       if (typeof doc.username !== 'string' || doc.username.length === 0) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const schemaVersion = typeof doc.schemaVersion === 'number' ? doc.schemaVersion : 1;

@@ -43,7 +43,7 @@ function resolveIdentityKeyByName(db: Database, containerName: string): string |
 export const backupsImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO backups
          (id, container_identity_key, container_name, container_id, image_name, image_tag, image_digest, timestamp, trigger_name)
@@ -61,6 +61,7 @@ export const backupsImporter: CollectionImporter = {
         typeof record.triggerName !== 'string' ||
         typeof record.timestamp !== 'string'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       let identityKey =

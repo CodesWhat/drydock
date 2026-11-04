@@ -8,6 +8,26 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.14] - 2026-11-03
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes every rc.13 change and upgrade warning. It tightens Basic `Authorization` header lockout handling on API routes, keeps unsent preference edits across reconnects, names a read-only config file when a section write fails, fixes re-adding a revoked agent key, warns about a leftover legacy `dd.json` and reports skipped legacy documents during the SQLite import, and refreshes container rows after a resync.
+
+### Fixed
+
+- After the event stream reconnects, the containers list now refreshes rows whose only change was a security scan result, update eligibility, icon, trigger include/exclude, label-owned sources, release notes or new digest, instead of leaving them stale.
+- Re-adding a Portwing agent key that was previously revoked, or retrying a cancelled key rotation with the same replacement key, now reactivates the key instead of failing with a database error.
+- Saving a configuration section now says when the config file is read-only or busy (for example a read-only or single-file bind mount), and logs and audits the failure instead of returning a bare error.
+- A preference change that failed to sync to the server is now kept as pending and retried, so reconnecting no longer overwrites it with older server settings. A pending preference edit is also dropped, not sent, when a different user signs in through repeated sign-in switches before the first one loads their settings.
+- Wrong passwords sent in an `Authorization: Basic` header to API routes now count toward the same account and IP login lockout as the login form, and a locked account or IP is refused on those routes too. The lockout and the Basic provider now share one scheme parser, so a header such as `xBasic` or `BasicAuth` is no longer accepted by Basic while skipping the lockout.
+- Behavior change: integrations that send a stale password in a Basic `Authorization` header now trip the same login lockout, so they keep re-locking the account (and, behind a proxy without `DD_SERVER_TRUSTPROXY`, the shared IP). Use API keys for integrations and update them before rotating a password.
+- Basic `Authorization` header checks on API routes now have their own concurrency cap, `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` (default 8), separate from the login form's, so a few dashboard widgets polling with correct credentials no longer get `429` and header traffic can't take the login form's slots.
+- A stray `Authorization: Basic` header no longer counts toward the login lockout, or takes a header concurrency slot, when no Basic authentication provider is configured (for example an OIDC-only install).
+- Startup now logs a warning when a legacy `dd.json` sits next to an existing `dd.sqlite`, which the one-time import never reads. The downgrade notes now say to move the configured database file (`DD_STORE_DB_FILE`, `dd.sqlite` by default) and its `-wal` and `-shm` files aside before running the older build, and to remove them before upgrading again.
+- The first-start SQLite import now counts the legacy documents it had to skip as unusable, per table, and logs a warning naming each table, instead of dropping them silently. The skipped documents stay in `dd.json` and its `.pre-1.8.bak` backup.
+
 ## [1.8.0-rc.13] - 2026-11-03
 
 > [!WARNING]
@@ -3733,7 +3753,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...HEAD
+[1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
 [1.8.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...v1.8.0-rc.12
 [1.8.0-rc.11]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.10...v1.8.0-rc.11

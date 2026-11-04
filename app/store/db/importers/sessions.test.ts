@@ -10,6 +10,8 @@ vi.mock('../../../log/index.js', () => ({
 
 const EMPTY_SNAPSHOT = () => parseLokiDatabase(JSON.stringify({ collections: [] }), 'test');
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/sessions', () => {
   let db: Database;
 
@@ -26,6 +28,7 @@ describe('store/db/importers/sessions', () => {
       db,
       snapshot: EMPTY_SNAPSHOT(),
       sessionDocuments,
+      recordSkipped,
     });
   }
 
@@ -50,7 +53,10 @@ describe('store/db/importers/sessions', () => {
     const expires = new Date(Date.now() - 60_000).toISOString();
     const content = { cookie: { expires } };
 
+    recordSkipped.mockClear();
     expect(run([{ sid: 'sid-expired', content }])).toBe(0);
+    // An expired session is expected attrition, not an unusable document.
+    expect(recordSkipped).not.toHaveBeenCalled();
     expect(db.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 });
   });
 
@@ -63,9 +69,12 @@ describe('store/db/importers/sessions', () => {
   });
 
   test('skips a document whose content is not a plain record', () => {
+    recordSkipped.mockClear();
     expect(run([{ sid: 'sid-1', content: 'not-an-object' }])).toBe(0);
     expect(run([{ sid: 'sid-1', content: ['array'] }])).toBe(0);
     expect(run([{ sid: 'sid-1' }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledTimes(3);
+    expect(recordSkipped).toHaveBeenCalledWith('sessions');
   });
 
   test('skips a document whose cookie is missing or not a plain record', () => {
@@ -74,9 +83,11 @@ describe('store/db/importers/sessions', () => {
   });
 
   test('skips a document whose cookie.expires is missing or unparseable', () => {
+    recordSkipped.mockClear();
     expect(run([{ sid: 'sid-1', content: { cookie: {} } }])).toBe(0);
     expect(run([{ sid: 'sid-1', content: { cookie: { expires: 'not-a-date' } } }])).toBe(0);
     expect(run([{ sid: 'sid-1', content: { cookie: { expires: 12345 } } }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledTimes(3);
   });
 
   test('imports only the still-live rows out of a mixed batch, preserving each payload', () => {

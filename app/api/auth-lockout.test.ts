@@ -114,10 +114,15 @@ vi.mock('./error-response.js', () => ({
   sendErrorResponse: mockSendErrorResponse,
 }));
 
+import { parseBasicAuthorization } from '../authentications/providers/basic/basic-authorization.js';
 import log from '../log/index.js';
 import {
+  acquireHeaderAttemptSlot,
+  acquireLoginAttemptSlot,
   authenticateLogin,
   clearLoginLockoutsAfterSuccess,
+  getBasicHeaderIdentity,
+  hasBasicAuthorizationHeader,
   initializeLoginLockoutState,
   rejectFailedSecondFactor,
   rejectIfFactorLocked,
@@ -3189,5 +3194,109 @@ describe('auth-lockout', () => {
         0,
       );
     });
+  });
+});
+
+describe('acquireLoginAttemptSlot', () => {
+  beforeEach(() => {
+    resetLoginLockoutStateForTests();
+  });
+
+  test('releasing a slot twice frees it only once', () => {
+    const req = { body: {}, ip: '203.0.113.20' } as any;
+    const first = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    const second = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    expect(first).toBeTypeOf('function');
+    expect(second).toBeTypeOf('function');
+
+    first?.();
+    first?.();
+
+    // One slot is free again, so exactly one more acquire succeeds before the cap of 2.
+    const third = acquireLoginAttemptSlot(req, createResponse() as any, 'alice');
+    expect(third).toBeTypeOf('function');
+    const blockedRes = createResponse();
+    expect(acquireLoginAttemptSlot(req, blockedRes as any, 'alice')).toBeUndefined();
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+
+    second?.();
+    third?.();
+  });
+});
+
+describe('acquireHeaderAttemptSlot', () => {
+  beforeEach(() => {
+    resetLoginLockoutStateForTests();
+  });
+
+  const req = { body: {}, ip: '203.0.113.30' } as any;
+
+  test('allows eight concurrent header attempts and refuses the ninth with 429', () => {
+    const slots = Array.from({ length: 8 }, () =>
+      acquireHeaderAttemptSlot(req, createResponse() as any, 'alice'),
+    );
+    for (const slot of slots) {
+      expect(slot).toBeTypeOf('function');
+    }
+
+    const blockedRes = createResponse();
+    expect(acquireHeaderAttemptSlot(req, blockedRes as any, 'alice')).toBeUndefined();
+    expect(blockedRes.status).toHaveBeenCalledWith(429);
+    expect(blockedRes.setHeader).toHaveBeenCalledWith('Retry-After', '1');
+
+    slots[0]?.();
+    slots[0]?.();
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeTypeOf('function');
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeUndefined();
+  });
+
+  test('header attempts cannot consume login form slots, and the reverse', () => {
+    const headerSlots = Array.from({ length: 8 }, () =>
+      acquireHeaderAttemptSlot(req, createResponse() as any, 'alice'),
+    );
+    const loginSlots = [
+      acquireLoginAttemptSlot(req, createResponse() as any, 'alice'),
+      acquireLoginAttemptSlot(req, createResponse() as any, 'alice'),
+    ];
+    expect(loginSlots.every((slot) => typeof slot === 'function')).toBe(true);
+    expect(acquireLoginAttemptSlot(req, createResponse() as any, 'alice')).toBeUndefined();
+
+    headerSlots.forEach((slot) => slot?.());
+    expect(acquireHeaderAttemptSlot(req, createResponse() as any, 'alice')).toBeTypeOf('function');
+  });
+});
+
+describe('getBasicHeaderIdentity', () => {
+  test('returns undefined when the request has no Authorization header', () => {
+    expect(getBasicHeaderIdentity({ headers: {} } as any)).toBeUndefined();
+    expect(getBasicHeaderIdentity({} as any)).toBeUndefined();
+  });
+
+  test('returns the username a Basic header names', () => {
+    const encoded = Buffer.from('alice:secret').toString('base64');
+    expect(getBasicHeaderIdentity({ headers: { authorization: `Basic ${encoded}` } } as any)).toBe(
+      'alice',
+    );
+  });
+});
+
+describe('Basic scheme agreement with the Basic provider', () => {
+  const encoded = Buffer.from('alice:secret').toString('base64');
+
+  test.each([
+    [`Basic ${encoded}`, true],
+    [`basic ${encoded}`, true],
+    [`BASIC ${encoded}`, true],
+    [`xBasic ${encoded}`, false],
+    [`BasicAuth ${encoded}`, false],
+    [`Basicx ${encoded}`, false],
+    [`Bearer ${encoded}`, false],
+    ['Basic', false],
+    ['', false],
+  ])('%j: lockout and provider agree (basic=%s)', (authorization, isBasic) => {
+    const req = { headers: { authorization } } as any;
+    expect(hasBasicAuthorizationHeader(req)).toBe(isBasic);
+    expect(parseBasicAuthorization(authorization).outcome === 'credentials').toBe(isBasic);
+    expect(getBasicHeaderIdentity(req)).toBe(isBasic ? 'alice' : undefined);
   });
 });

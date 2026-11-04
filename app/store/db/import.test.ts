@@ -189,6 +189,46 @@ describe('store/db/import', () => {
       expect(logMock.info).toHaveBeenCalledWith(expect.stringContaining('skipping import'));
     });
 
+    test('counts skipped documents per table and warns once for each', () => {
+      const report = importIntoDatabase({
+        db,
+        snapshot: EMPTY_SNAPSHOT(),
+        sessionDocuments: [],
+        importers: [
+          {
+            collection: 'widgets',
+            table: 'widgets_table',
+            importInto(context): number {
+              context.recordSkipped('widgets_table');
+              context.recordSkipped('widgets_table');
+              return 0;
+            },
+          },
+        ],
+        source: 'dd.json',
+      });
+
+      expect(report.skippedByTable).toEqual({ widgets_table: 2 });
+      expect(logMock.warn).toHaveBeenCalledTimes(1);
+      expect(logMock.warn).toHaveBeenCalledWith(
+        expect.stringMatching(/Skipped 2 .* widgets_table/),
+      );
+    });
+
+    test('reports no skipped tables and no warning when every document imported', () => {
+      logMock.warn.mockClear();
+      const report = importIntoDatabase({
+        db,
+        snapshot: EMPTY_SNAPSHOT(),
+        sessionDocuments: [],
+        importers: [],
+        source: 'dd.json',
+      });
+
+      expect(report).not.toHaveProperty('skippedByTable');
+      expect(logMock.warn).not.toHaveBeenCalled();
+    });
+
     test('hands the resolved session documents to the importers', () => {
       const seen: unknown[] = [];
       importIntoDatabase({
@@ -242,6 +282,7 @@ describe('store/db/import', () => {
           containers: 0,
           sessions: 0,
         },
+        skippedByTable: { sessions: 1 },
       });
       expect(fs.existsSync(legacyStorePath)).toBe(false);
       expect(fs.readFileSync(`${legacyStorePath}${LEGACY_STORE_BACKUP_SUFFIX}`)).toEqual(before);
@@ -375,6 +416,25 @@ describe('store/db/import', () => {
 
       expect(importOnce()).toEqual({ status: 'database-exists', databasePath, rowsByTable: {} });
       expect(fs.existsSync(legacyStorePath)).toBe(true);
+    });
+
+    test('warns naming both files when a legacy store sits next to an existing database', () => {
+      writeLegacyStore();
+      importOnce();
+      logMock.warn.mockClear();
+      writeLegacyStore();
+
+      expect(importOnce().status).toBe('database-exists');
+      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining(databasePath));
+      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining(legacyStorePath));
+    });
+
+    test('stays quiet when the database exists and no legacy store does', () => {
+      fs.writeFileSync(databasePath, '');
+      logMock.warn.mockClear();
+
+      expect(importOnce().status).toBe('database-exists');
+      expect(logMock.warn).not.toHaveBeenCalled();
     });
 
     test('does nothing on a fresh install with no legacy store', () => {
