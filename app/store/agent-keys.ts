@@ -70,7 +70,7 @@ export function createCollections(database: Database): void {
 }
 
 /**
- * Insert a new authorized key.
+ * Insert a new authorized key, or reactivate a revoked one with the same keyId.
  * Throws if a non-revoked key with the same keyId already exists.
  * @param pubkeyBuffer - raw 32-byte Ed25519 public key
  * @param label - human-readable name
@@ -90,10 +90,11 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
   }
 
   const keyId = deriveKeyId(pubkeyBuffer);
-  const existing = db
-    .prepare('SELECT 1 FROM agent_keys WHERE key_id = ? AND revoked_at IS NULL')
-    .get(keyId);
-  if (existing) {
+  // key_id is the primary key, so a revoked row still owns the id: re-adding
+  // that key (an operator re-authorizing it, or a cancelled rotation retried
+  // with the same replacement) reactivates the row instead of inserting.
+  const existing = db.prepare('SELECT revoked_at FROM agent_keys WHERE key_id = ?').get(keyId);
+  if (existing && existing.revoked_at === null) {
     throw new AgentKeyConflictError(`Key ${keyId} is already active`);
   }
 
@@ -105,9 +106,15 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
     revokedAt: null,
   };
 
-  db.prepare(
-    'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
-  ).run(record.keyId, record.pubkey, record.label, record.createdAt, record.revokedAt);
+  if (existing) {
+    db.prepare(
+      'UPDATE agent_keys SET pubkey = ?, label = ?, created_at = ?, revoked_at = NULL, rotation_parent_id = NULL, rotation_agent_name = NULL WHERE key_id = ?',
+    ).run(record.pubkey, record.label, record.createdAt, record.keyId);
+  } else {
+    db.prepare(
+      'INSERT INTO agent_keys (key_id, pubkey, label, created_at, revoked_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(record.keyId, record.pubkey, record.label, record.createdAt, record.revokedAt);
+  }
   log.info({ keyId, label }, 'Added agent key');
   return record;
 }

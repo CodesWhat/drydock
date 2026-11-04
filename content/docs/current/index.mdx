@@ -5,7 +5,7 @@ description: "Open source container update monitoring built in TypeScript. Auto-
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**v1.8.0-rc.13 is an opt-in test build.** These v1.8 docs pin the candidate image in deployment examples. For production, use [the stable v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. Read [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json) before testing.</Callout>
+<Callout type="warn">**v1.8.0-rc.14 is an opt-in test build.** These v1.8 docs pin the candidate image in deployment examples. For production, use [the stable v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. Read [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json) before testing.</Callout>
 
 ## 🔍 How it works
 
@@ -41,7 +41,7 @@ docker run -d --name drydock \
   -e DD_AUTH_BASIC_ADMIN_USER=admin \
   -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \
   -p 127.0.0.1:3000:3000 \
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 
 <Callout type="warn">

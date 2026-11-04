@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Response } from 'express';
+import { isBasicAuthorizationHeader } from '../authentications/providers/basic/basic-authorization.js';
 import log from '../log/index.js';
 import {
   recordAuthAccountLockout,
@@ -49,6 +50,7 @@ const DEFAULT_LOCKOUT_DURATION_MS = DEFAULT_LOCKOUT_DURATION_MINUTES * MS_PER_MI
 const DEFAULT_LOCKOUT_PRUNE_INTERVAL_MS = MS_PER_MINUTE;
 const DEFAULT_MAX_LOCKOUT_TRACKED_IDENTITIES = 5000;
 const DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS = 2;
+const DEFAULT_MAX_CONCURRENT_HEADER_ATTEMPTS = 8;
 /**
  * Ceiling on the escalating second-factor lock. From the account threshold on,
  * every wrong proof doubles the lock (15 minutes, 30, 60, ... by default) up to
@@ -90,7 +92,6 @@ const ipLoginLockouts = new Map<string, LoginLockoutEntry>();
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined;
 let persistTimer: ReturnType<typeof setTimeout> | undefined;
 let persistenceInitialized = false;
-let activeLoginAttempts = 0;
 
 function countActiveLockouts(lockouts: Map<string, LoginLockoutEntry>, now: number): number {
   let activeLockouts = 0;
@@ -139,6 +140,10 @@ const maxTrackedLockoutIdentities = parsePositiveIntegerEnv(
 const maxConcurrentLoginAttempts = parsePositiveIntegerEnv(
   'DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS',
   DEFAULT_MAX_CONCURRENT_LOGIN_ATTEMPTS,
+);
+const maxConcurrentHeaderAttempts = parsePositiveIntegerEnv(
+  'DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS',
+  DEFAULT_MAX_CONCURRENT_HEADER_ATTEMPTS,
 );
 
 function getLockoutStatePath(): string {
@@ -290,11 +295,13 @@ function getLoginIdentity(req: AuthRequest): string | undefined {
 }
 
 function getBasicHeaderUsername(authorization: string): string | undefined {
-  if (!authorization.toLowerCase().startsWith('basic ')) {
+  // The scheme test is the Basic provider's own, so a header the provider would
+  // not read as Basic never names an identity here either.
+  if (!isBasicAuthorizationHeader(authorization)) {
     return undefined;
   }
 
-  const encoded = authorization.slice(6).trim();
+  const encoded = authorization.split(' ')[1].trim();
   if (!encoded) {
     return undefined;
   }
@@ -710,6 +717,64 @@ export function clearLoginLockoutsAfterSuccess(
   }
 }
 
+interface AttemptPool {
+  active: number;
+  readonly max: number;
+}
+
+const loginAttemptPool: AttemptPool = { active: 0, max: maxConcurrentLoginAttempts };
+const headerAttemptPool: AttemptPool = { active: 0, max: maxConcurrentHeaderAttempts };
+
+function acquireAttemptSlot(
+  pool: AttemptPool,
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  if (pool.active >= pool.max) {
+    setRetryAfterHeader(res, 1);
+    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
+    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+    return undefined;
+  }
+  pool.active += 1;
+  let released = false;
+  return () => {
+    if (released) {
+      return;
+    }
+    released = true;
+    pool.active = Math.max(0, pool.active - 1);
+  };
+}
+
+/**
+ * Take one of the concurrent credential-verification slots for the login
+ * route, or answer 429 and return undefined when the cap is reached, so
+ * parallel guesses cannot all pass the lockout check before the first failure
+ * counts. The returned release function is idempotent.
+ */
+export function acquireLoginAttemptSlot(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  return acquireAttemptSlot(loginAttemptPool, req, res, loginIdentity);
+}
+
+/**
+ * The same cap for Basic Authorization headers on other routes, in a pool of
+ * its own: integrations polling with correct credentials must not starve the
+ * login form, nor the form them.
+ */
+export function acquireHeaderAttemptSlot(
+  req: AuthRequest,
+  res: Response,
+  loginIdentity: string | undefined,
+): (() => void) | undefined {
+  return acquireAttemptSlot(headerAttemptPool, req, res, loginIdentity);
+}
+
 export async function authenticateLogin(
   req: AuthRequest,
   res: Response,
@@ -720,17 +785,10 @@ export async function authenticateLogin(
     return;
   }
 
-  if (activeLoginAttempts >= maxConcurrentLoginAttempts) {
-    setRetryAfterHeader(res, 1);
-    recordLoginAuditEvent(req, 'error', LOGIN_CONCURRENCY_ERROR_MESSAGE, loginIdentity);
-    sendErrorResponse(res, 429, LOGIN_CONCURRENCY_ERROR_MESSAGE);
+  const finishAttempt = acquireLoginAttemptSlot(req, res, loginIdentity);
+  if (finishAttempt === undefined) {
     return;
   }
-
-  activeLoginAttempts += 1;
-  const finishAttempt = (): void => {
-    activeLoginAttempts = Math.max(0, activeLoginAttempts - 1);
-  };
 
   const authorization = getFirstHeaderValue(req.headers?.authorization);
   const hasAuthorizationHeader = typeof authorization === 'string' && authorization.trim() !== '';
@@ -796,10 +854,46 @@ export async function authenticateLogin(
   next();
 }
 
+/** Whether the request carries an `Authorization: Basic` header. */
+export function hasBasicAuthorizationHeader(req: AuthRequest): boolean {
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  return isBasicAuthorizationHeader(authorization?.trim());
+}
+
+/** The username a Basic header names, for keying its failure budget. */
+export function getBasicHeaderIdentity(req: AuthRequest): string | undefined {
+  const authorization = getFirstHeaderValue(req.headers?.authorization);
+  return typeof authorization === 'string'
+    ? getBasicHeaderUsername(authorization.trim())
+    : undefined;
+}
+
+/**
+ * A Basic header on a non-login route failed: it draws on the same account and
+ * IP budgets as a failed login, so the header cannot be used to guess a
+ * password past the lockout. `sendFailure` answers when the attempt did not
+ * lock anything.
+ */
+export function rejectFailedHeaderAuthentication(
+  req: AuthRequest,
+  res: Response,
+  sendFailure: (res: Response) => void,
+): void {
+  rejectFailedAttempt(
+    req,
+    res,
+    getBasicHeaderIdentity(req),
+    'Authentication failed (invalid credentials)',
+    0,
+    sendFailure,
+  );
+}
+
 export function resetLoginLockoutStateForTests(): void {
   accountLoginLockouts.clear();
   ipLoginLockouts.clear();
-  activeLoginAttempts = 0;
+  loginAttemptPool.active = 0;
+  headerAttemptPool.active = 0;
   if (maintenanceTimer) {
     clearInterval(maintenanceTimer);
     maintenanceTimer = undefined;

@@ -60,6 +60,13 @@ vi.mock('express-rate-limit', () => ({
   default: vi.fn((options: unknown) => ({ rateLimiter: options })),
 }));
 
+const mockLogger = vi.hoisted(() => ({
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+  error: vi.fn(),
+}));
+vi.mock('../log/index.js', () => ({ default: { child: () => mockLogger } }));
 const mockRecordAuditEvent = vi.fn();
 vi.mock('./audit-events.js', () => ({
   recordAuditEvent: (...args: any[]) => mockRecordAuditEvent(...args),
@@ -1423,6 +1430,90 @@ describe('Config Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to write the configuration section' });
+    });
+
+    test.each(['EBUSY', 'EROFS', 'EACCES', 'EPERM'])(
+      'names a read-only or busy configuration file (%s), logs it and audits it without leaking the path',
+      async (code) => {
+        mockWriteConfigurationSection.mockRejectedValue(
+          Object.assign(new Error(`${code}: rename '/config/drydock.yml.tmp'`), { code }),
+        );
+        configRouter.init();
+        const handler = getPutHandler('/:section');
+        const res = createResponse();
+
+        await handler({ params: { section: 'notification' }, body: {} }, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        const payload = (res.json as any).mock.calls[0][0];
+        expect(payload.error).toContain('read-only or busy');
+        expect(payload.error).toContain(code);
+        expect(payload.error).not.toContain('/config');
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining(code));
+        expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            action: 'config-written',
+            status: 'error',
+            details: `Configuration write failed (${code})`,
+          }),
+        );
+      },
+    );
+
+    test('logs and audits a generic write failure with the generic message', async () => {
+      mockWriteConfigurationSection.mockRejectedValue(new Error('boom'));
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('boom'));
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'error', details: 'Configuration write failed' }),
+      );
+    });
+
+    test('answers the generic message when the write engine rejects with a non-error', async () => {
+      mockWriteConfigurationSection.mockRejectedValue('boom');
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to write the configuration section' });
+    });
+
+    test('still answers 500 when the audit event cannot be recorded after a write failure', async () => {
+      mockWriteConfigurationSection.mockRejectedValue(new Error('boom'));
+      mockRecordAuditEvent.mockImplementation(() => {
+        throw new Error('audit down');
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      mockRecordAuditEvent.mockReset();
+    });
+
+    test('answers for a completed write when only the audit event cannot be recorded', async () => {
+      mockWriteConfigurationSection.mockResolvedValue(writtenOutcome());
+      mockRecordAuditEvent.mockImplementationOnce(() => {
+        throw new Error('audit down');
+      });
+      configRouter.init();
+      const handler = getPutHandler('/:section');
+      const res = createResponse();
+
+      await handler({ params: { section: 'notification' }, body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('audit down'));
     });
 
     test('a written response satisfies the OpenAPI contract', async () => {

@@ -38,6 +38,8 @@ function containerRecord(overrides: Record<string, unknown> = {}): Record<string
   };
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/update-lifecycle-cache', () => {
   let db: Database;
 
@@ -57,6 +59,7 @@ describe('store/db/importers/update-lifecycle-cache', () => {
       db,
       snapshot: snapshotOf(cacheDocuments, containerRecords),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 

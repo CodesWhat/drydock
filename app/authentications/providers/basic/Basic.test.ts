@@ -57,6 +57,7 @@ vi.mock('../../../prometheus/auth.js', () => ({
 }));
 
 import { argon2Sync, createHash, randomBytes } from 'node:crypto';
+import { wereVerifiedCredentialsDeclined } from '../../../api/authenticator-chain.js';
 import Basic from './Basic.js';
 
 type Argon2Params = { memory: number; passes: number; parallelism: number };
@@ -681,6 +682,7 @@ describe('Basic Authentication', () => {
 
       expect(authenticator.id).toBe('basic.default');
       expect(authenticator.persistsSession).toBe(false);
+      expect(authenticator.readsBasicHeader).toBe(true);
     });
 
     test('resolves valid credentials to a basic principal', async () => {
@@ -714,6 +716,19 @@ describe('Basic Authentication', () => {
         kind: 'basic',
         username: 'testuser',
       });
+    });
+
+    test('flags a declined verified password so it is not counted as a failed guess', async () => {
+      mockIsSecondFactorRequired.mockReturnValue(true);
+      const authenticator = basic.getAuthenticator();
+      const verified = { headers: { authorization: encodeBasic('testuser:password') } } as never;
+      const wrong = { headers: { authorization: encodeBasic('testuser:wrong') } } as never;
+
+      await authenticator.authenticate(verified);
+      await authenticator.authenticate(wrong);
+
+      expect(wereVerifiedCredentialsDeclined(verified)).toBe(true);
+      expect(wereVerifiedCredentialsDeclined(wrong)).toBe(false);
     });
 
     test('names the local subject it signs in, following the configured username', () => {

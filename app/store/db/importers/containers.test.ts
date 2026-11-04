@@ -14,6 +14,8 @@ function snapshotOf(containerRecords: Record<string, unknown>[]) {
   );
 }
 
+const recordSkipped = vi.fn();
+
 describe('store/db/importers/containers', () => {
   let db: Database;
 
@@ -30,6 +32,7 @@ describe('store/db/importers/containers', () => {
       db,
       snapshot: snapshotOf(containerRecords),
       sessionDocuments: [],
+      recordSkipped,
     });
   }
 
@@ -71,7 +74,9 @@ describe('store/db/importers/containers', () => {
   });
 
   test('skips a document that fails container validation', () => {
+    recordSkipped.mockClear();
     expect(run([{ id: 'missing-required-fields' }])).toBe(0);
+    expect(recordSkipped).toHaveBeenCalledWith('containers');
     expect(db.prepare('SELECT COUNT(*) AS n FROM containers').get()).toEqual({ n: 0 });
   });
 

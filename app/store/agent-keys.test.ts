@@ -72,6 +72,23 @@ describe('addKey', () => {
     expect(() => agentKeys.addKey(rawKey, 'second')).toThrow(/already active/);
   });
 
+  test('re-adding a revoked key reactivates it instead of hitting the primary key', () => {
+    agentKeys.createCollections(db);
+
+    const rawKey = generateEd25519RawPublicKey();
+    const first = agentKeys.addKey(rawKey, 'first');
+    expect(agentKeys.revokeKey(first.keyId)).toBe(true);
+    expect(agentKeys.getKey(first.keyId)).toBeNull();
+
+    const again = agentKeys.addKey(rawKey, 'second');
+
+    expect(again.keyId).toBe(first.keyId);
+    expect(again.label).toBe('second');
+    expect(again.revokedAt).toBeNull();
+    expect(agentKeys.getKey(first.keyId)).toEqual(again);
+    expect(() => agentKeys.addKey(rawKey, 'third')).toThrow(/already active/);
+  });
+
   test('throws when collection is not initialized', async () => {
     vi.resetModules();
     const { addKey } = await import('./agent-keys.js');

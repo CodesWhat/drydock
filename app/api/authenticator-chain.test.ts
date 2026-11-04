@@ -15,6 +15,7 @@ import {
   getAuthenticationFailureStatus,
   getAuthenticators,
   isAuthenticationRejection,
+  isBasicHeaderAuthenticationRegistered,
   registerAuthenticator,
   rejectAuthentication,
 } from './authenticator-chain.js';
@@ -65,6 +66,14 @@ describe('authenticator-chain', () => {
       authenticators.length = 0;
 
       expect(getAuthenticators()).toHaveLength(1);
+    });
+
+    test('reports whether a Basic header reader is registered', () => {
+      registerAuthenticator(createAuthenticator('oidc', undefined));
+      expect(isBasicHeaderAuthenticationRegistered()).toBe(false);
+
+      registerAuthenticator(createAuthenticator('basic', undefined, { readsBasicHeader: true }));
+      expect(isBasicHeaderAuthenticationRegistered()).toBe(true);
     });
 
     test('resets to empty', () => {

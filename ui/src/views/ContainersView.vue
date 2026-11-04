@@ -161,10 +161,11 @@ let committedUpdatePolicyMetadataFingerprint = '';
  * excluded — they do not change the grouped table render and would dominate
  * the cost of this walk on every reload. See #301.
  *
- * This is a best-effort dedup, not a correctness primitive: a false-positive
- * (hash collision / missed change) results in a redundant reactive
- * reassignment, i.e. the same work the pre-fingerprint code already did
- * unconditionally.
+ * A field left out of the fingerprint is not harmless: when only that field
+ * changes (a scan finishing or a label override landing while the SSE stream
+ * was down), the reload is judged unchanged, `containers.value` is not
+ * reassigned, and the row keeps stale data until something else touches it.
+ * Anything a row renders or an action reads belongs here.
  */
 function containerRowFingerprint(c: Container): string {
   return [
@@ -184,6 +185,16 @@ function containerRowFingerprint(c: Container): string {
       c.imageTagSemver,
       c.isDigestPinned,
       c.labels,
+      c.updateEligibility,
+      c.securitySummary,
+      c.updateSecuritySummary,
+      c.securityDelta,
+      c.icon,
+      c.labelOwnedSources,
+      c.triggerInclude,
+      c.triggerExclude,
+      c.newDigest,
+      c.releaseNotes,
     ]),
     c.updateKind ?? '',
     c.updateDetectedAt ?? '',

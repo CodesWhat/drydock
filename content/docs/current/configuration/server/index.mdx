@@ -38,6 +38,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
 | `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired auth lockout entries from memory and the persisted lockout sidecar file | integer (`>0`) | `60000` |
 | `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | ⚪ | Maximum login credential verifications running at once. Excess attempts receive `429` before password hashing starts. | integer (`>0`) | `2` |
+| `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` | ⚪ | Maximum Basic header credential verifications running at once outside the login form (separate pool). Excess attempts receive `429` before password hashing starts. | integer (`>0`) | `8` |
 | `DD_SSE_MAX_CLIENTS` | ⚪ | Maximum total concurrent SSE connections across all sessions (global cap; individual sessions are also capped at 10). Connections beyond this limit receive a `429 Too Many Requests` response. | integer (`>0`) | `500` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
@@ -100,7 +101,7 @@ No additional configuration is required — drydock detects the TLS state and ad
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.13
+    image: codeswhat/drydock:1.8.0-rc.14
     ...
     environment:
       - DD_SERVER_ENABLED=false
@@ -112,7 +113,7 @@ services:
 docker run \
   -e DD_SERVER_ENABLED=false \
   ...
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 </Tab>
 </Tabs>
@@ -125,7 +126,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.13
+    image: codeswhat/drydock:1.8.0-rc.14
     ...
     environment:
       - DD_SERVER_PORT=8080
@@ -137,7 +138,7 @@ services:
 docker run \
   -e DD_SERVER_PORT=8080 \
   ...
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 </Tab>
 </Tabs>
@@ -150,7 +151,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.13
+    image: codeswhat/drydock:1.8.0-rc.14
     ...
     environment:
       - DD_SERVER_TLS_ENABLED=true
@@ -166,7 +167,7 @@ docker run \
   -e "DD_SERVER_TLS_KEY=/drydock_certs/server.key" \
   -e "DD_SERVER_TLS_CERT=/drydock_certs/server.crt" \
   ...
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 </Tab>
 </Tabs>
@@ -188,7 +189,7 @@ Set `DD_SERVER_TRUSTPROXY=1` to trust one proxy hop. Use a higher number if you 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.13
+    image: codeswhat/drydock:1.8.0-rc.14
     ...
     environment:
       - DD_SERVER_TRUSTPROXY=1
@@ -200,7 +201,7 @@ services:
 docker run \
   -e DD_SERVER_TRUSTPROXY=1 \
   ...
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 </Tab>
 </Tabs>
@@ -274,7 +275,7 @@ Any `DD_*` environment variable can be loaded from a file by appending `__FILE` 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.13
+    image: codeswhat/drydock:1.8.0-rc.14
     ...
     environment:
       - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
@@ -299,7 +300,7 @@ docker run \
   -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
   -v ./session_secret.txt:/run/secrets/session_secret:ro \
   ...
-  codeswhat/drydock:1.8.0-rc.13
+  codeswhat/drydock:1.8.0-rc.14
 ```
 </Tab>
 </Tabs>

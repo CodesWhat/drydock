@@ -57,6 +57,21 @@ export function rejectAuthentication(status = DEFAULT_AUTHENTICATION_FAILURE_STA
   return { rejected: true, status } as const satisfies AuthenticationRejection;
 }
 
+const declinedVerifiedCredentials = new WeakSet<object>();
+
+/**
+ * An authenticator verified the credential on this request and still declined
+ * it (Basic, for a subject whose second factor is due). A correct password is
+ * not a failed guess, so the caller must not count it against a lockout.
+ */
+export function markVerifiedCredentialsDeclined(req: object): void {
+  declinedVerifiedCredentials.add(req);
+}
+
+export function wereVerifiedCredentialsDeclined(req: object): boolean {
+  return declinedVerifiedCredentials.has(req);
+}
+
 export interface Authenticator {
   /** Stable id, used in logs and in registration diagnostics. */
   readonly id: string;
@@ -100,6 +115,13 @@ export interface Authenticator {
   readonly localSubjectId?: string;
 
   /**
+   * True for the authenticator that reads `Authorization: Basic` headers. A
+   * Basic header only counts as a password guess when one is in the chain;
+   * without it (OIDC-only, say) the header is just a header.
+   */
+  readonly readsBasicHeader?: boolean;
+
+  /**
    * Whether this authenticator's presence means a caller can actually get in.
    *
    * Absent means yes. It is declared false by the two authenticators that can
@@ -126,6 +148,11 @@ export function registerAuthenticator(authenticator: Authenticator): void {
 
 export function getAuthenticators(): readonly Authenticator[] {
   return [...chain];
+}
+
+/** Whether a registered authenticator reads `Authorization: Basic` headers. */
+export function isBasicHeaderAuthenticationRegistered(): boolean {
+  return chain.some((authenticator) => authenticator.readsBasicHeader === true);
 }
 
 /**

@@ -24,7 +24,7 @@ function parseTimestampMs(timestamp: string): number {
 export const auditImporter: CollectionImporter = {
   collection: LEGACY_COLLECTION,
   table: TARGET_TABLE,
-  importInto({ db, snapshot }: ImportContext): number {
+  importInto({ db, snapshot, recordSkipped }: ImportContext): number {
     const insert = db.prepare(
       `INSERT INTO audit
          (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details)
@@ -34,6 +34,7 @@ export const auditImporter: CollectionImporter = {
     for (const document of snapshot.documents(LEGACY_COLLECTION)) {
       const data = document.data;
       if (typeof data !== 'object' || data === null) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
       const entry = data as Record<string, unknown>;
@@ -43,6 +44,7 @@ export const auditImporter: CollectionImporter = {
         typeof entry.containerName !== 'string' ||
         typeof entry.status !== 'string'
       ) {
+        recordSkipped(TARGET_TABLE);
         continue;
       }
 

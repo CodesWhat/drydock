@@ -12,13 +12,24 @@ import { DEEP_WATCH_SECTIONS, preferences } from './store';
 // middle-of-the-range debounce, no requestIdleCallback complexity needed for a
 // network write (unlike the paint-sensitive localStorage flush in store.ts).
 const SYNC_FLUSH_DEBOUNCE_MS = 3000;
+// A failed write re-arms the same debounce as its backoff. After this many
+// retries the edit stays pending (it still outranks any fetched server state)
+// and goes out with the next local edit instead of looping on a dead server.
+const SYNC_WRITE_MAX_RETRIES = 3;
 
 let hydrated = false;
 let currentUsername: string | undefined;
+// Who owns the current sync session, recorded at sign-in. Separate from
+// currentUsername, which only becomes set once hydrate runs and gates fetches.
+let sessionOwner: string | undefined;
 let suppressOutboundSync = false;
 let syncDirty = false;
 let syncFlushTimer: ReturnType<typeof setTimeout> | undefined;
 let syncWriteInFlight = false;
+let syncRetryCount = 0;
+// Bumped on every session reset. A username compare cannot tell alice -> bob ->
+// alice apart from alice throughout, so async completions compare this instead.
+let syncSessionId = 0;
 
 /**
  * Diff-and-apply the server's migrated blob onto the reactive preferences
@@ -61,11 +72,18 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
   if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
     return;
   }
+  const sessionId = syncSessionId;
   try {
     const response = await getPreferences();
     // A user switch happened while the fetch was in flight — discard the
     // stale completion.
-    if (username !== currentUsername) {
+    if (sessionId !== syncSessionId) {
+      return;
+    }
+    // An edit or a failed write may have become pending while the fetch was in
+    // flight; the pre-fetch guard above cannot see it. The snapshot predates
+    // that edit, so merging it would revert the edit.
+    if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
       return;
     }
     if (!response.preferences) {
@@ -90,8 +108,31 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
 function resetSyncSessionState(): void {
   clearSyncFlushTimer();
   syncDirty = false;
+  syncRetryCount = 0;
   hydrated = false;
   currentUsername = undefined;
+  sessionOwner = undefined;
+  syncSessionId += 1;
+}
+
+/**
+ * Record the authenticated user before any navigation outcome. The API-key
+ * review redirect returns before hydrateFromServer runs, so without this a
+ * sign-in switch through that path would leave the previous user's pending
+ * edit armed to flush under the new user's session on the next SSE reconnect.
+ */
+export function syncAuthenticatedUser(username: string): void {
+  if (username === 'anonymous') {
+    return;
+  }
+  const owner = sessionOwner ?? currentUsername;
+  const pendingEdit = syncDirty || syncFlushTimer !== undefined;
+  // A different owner, or a pending edit nobody has claimed, must not reach
+  // this user's session.
+  if ((owner !== undefined && owner !== username) || (owner === undefined && pendingEdit)) {
+    resetSyncSessionState();
+  }
+  sessionOwner = username;
 }
 
 /**
@@ -108,9 +149,7 @@ export async function hydrateFromServer(username: string): Promise<void> {
   // same-tab user switch; without this reset the new user's hydration is
   // skipped by the stale `hydrated` flag and a still-armed flush timer could
   // PATCH the previous user's blob into the new user's server record.
-  if (currentUsername !== undefined && currentUsername !== username) {
-    resetSyncSessionState();
-  }
+  syncAuthenticatedUser(username);
   currentUsername = username;
   if (hydrated) {
     return;
@@ -160,11 +199,22 @@ async function flushSyncWrite(): Promise<void> {
   if (!preferences.sync.enabled) {
     return;
   }
+  const writingSessionId = syncSessionId;
   try {
     syncWriteInFlight = true;
     await updatePreferences(preferences.schemaVersion, preferences);
+    syncRetryCount = 0;
   } catch (error) {
     console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
+    // The edit never reached the server, so it is still pending: keep the
+    // fetch guard up so a reconnect cannot overwrite it with older server state.
+    if (preferences.sync.enabled && writingSessionId === syncSessionId) {
+      syncDirty = true;
+      if (syncRetryCount < SYNC_WRITE_MAX_RETRIES) {
+        syncRetryCount += 1;
+        scheduleSyncFlush();
+      }
+    }
   } finally {
     syncWriteInFlight = false;
   }
@@ -183,6 +233,7 @@ function markSyncDirty(): void {
     return;
   }
   syncDirty = true;
+  syncRetryCount = 0;
   scheduleSyncFlush();
 }
 
@@ -202,6 +253,15 @@ function handleRemotePreferencesUpdated(): void {
 
 function handleSseConnected(): void {
   if (!preferences.sync.enabled || !currentUsername) {
+    return;
+  }
+  // A write that exhausted its retries leaves the edit pending with no timer,
+  // so the fetch guard would swallow every reconnect until the next local edit.
+  // The server is back: restart the retry budget and push the edit; the merge
+  // happens on the next fetch once it has landed.
+  if (syncDirty && !syncWriteInFlight && syncFlushTimer === undefined) {
+    syncRetryCount = 0;
+    scheduleSyncFlush();
     return;
   }
   void fetchAndMergeFromServer(currentUsername);
