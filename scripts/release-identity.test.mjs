@@ -4,7 +4,7 @@ import test from 'node:test';
 import { auditEntries } from '../apps/demo/src/mocks/data/audit.ts';
 
 const BASE_VERSION = '1.7.1';
-const RC_VERSION = '1.7.1-rc.5';
+const RC_VERSION = '1.7.1-rc.6';
 const DEMO_RELEASE_FIXTURES = [
   {
     path: 'apps/demo/src/mocks/data/server.ts',
@@ -61,7 +61,7 @@ test(`demo runtime fixtures identify the exact v${RC_VERSION} candidate`, () => 
 });
 
 test('candidate audit events use the exact changelog release day', () => {
-  const headingPrefix = `## [${RC_VERSION}] — `;
+  const headingPrefix = `## [${RC_VERSION}] - `;
   const releaseHeading = readFileSync('CHANGELOG.md', 'utf8')
     .split('\n')
     .find((line) => line.startsWith(headingPrefix));

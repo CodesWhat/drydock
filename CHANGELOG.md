@@ -10,9 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.6] - 2026-11-10
+
+This security release candidate replaces rc.5. It retains rc.5's application changes and rebuilds with the retained branch's libexpat 2.10.0-r0 fix. It is opt-in testing; v1.7.0 remains stable and the stable channels do not move. A new seven-day soak starts at publication.
+
+### Security
+
+- libexpat is pinned to `2.10.0-r0`, which fixes CVE-2026-113351, CVE-2026-115506, CVE-2026-117610 and CVE-2026-118370. rc.5 contains `2.9.0-r0` and cannot be promoted as the patched image.
+- Add an OpenVEX not-affected statement for CVE-2026-4738, scoped only to the custom `zlib@1.3.2-r2026092401` APK. The optional vulnerable infback9 code is absent from the standard library build and inspected runtime artifacts. The separate gzip-write backport and all scan thresholds remain unchanged.
+
 ### Fixed
 
-- Restore Docker builds on both supported architectures by updating the exact Alpine libexpat pin to `2.10.0-r0`; the repository no longer serves `2.9.0-r0`.
+- Restore Docker builds on both supported architectures: Alpine no longer serves the old exact libexpat pin.
 
 ## [1.7.1-rc.5] — 2026-11-01
 
@@ -3008,7 +3017,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...HEAD
+[1.7.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...v1.7.1-rc.6
 [1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
 [1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
 [1.7.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...v1.7.1-rc.3
