@@ -21,7 +21,7 @@ This security release candidate replaces rc.5. It retains rc.5's application cha
 
 ### Fixed
 
-- Restore Docker builds on both supported architectures: Alpine no longer serves the old exact libexpat pin.
+- Restore Docker builds on both supported architectures: Alpine no longer serves the old exact libexpat or `tzdata=2026e-r0` pins. The timezone package is pinned to the available `2026f-r0` revision.
 
 ## [1.7.1-rc.5] — 2026-11-01
 
