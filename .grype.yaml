@@ -18,3 +18,9 @@
 # CVE-2026-14456 (openssl / libssl3 / libcrypto3) was ignored here from 2026-08-19 until the
 # Dockerfile's `openssl=` pin rolled to 3.5.8-r0 (#881), which carries the upstream fix. A live
 # grype scan of that exact pin confirms zero matches, so the suppression was removed.
+
+# Exact-package OpenVEX evidence for optional infback9 code absent from the runtime.
+# This retains the finding with its not_affected reason; no ignore rules or cutoff changes.
+# Reassess if the package revision or build recipe changes.
+vex-documents:
+  - docker/zlib-infback9.vex.json
