@@ -13,5 +13,8 @@ test('the stop-node advisory classification stays scoped to inspected dependenci
   assert.ok(parser, 'reassess the advisory when parser construction changes');
   assert.doesNotMatch(parser[1], /stopNodes/u);
   const config = read('.qlty/qlty.toml');
-  assert.match(config, /match.rules = \["osv-scanner:CVE-2026-126066"\]\nmatch.file_patterns = \["app\/package-lock.json", "e2e\/package-lock.json"\]/u);
+  assert.match(
+    config,
+    /match.rules = \["osv-scanner:CVE-2026-126066"\]\nmatch.file_patterns = \["app\/package-lock.json", "e2e\/package-lock.json"\]/u,
+  );
 });
