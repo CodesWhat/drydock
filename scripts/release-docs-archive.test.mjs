@@ -118,6 +118,7 @@ test('v1.7 archive preserves the promoted rc.7 source with exact release and cre
   const root = 'content/docs/v1.7';
   assert.equal(record.version, 'v1.7');
   assert.equal(record.sourceTag, 'v1.7.1-rc.7');
+  assert.ok(readFileSync('content/docs/README.md', 'utf8').includes(record.sourceTag));
   for (const locale of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
     const readme = readFileSync(`README${locale}.md`, 'utf8');
     assert.ok(readme.includes(record.sourceTag.slice(1)));

@@ -90,6 +90,9 @@ test('public release surfaces identify the v1.8 release candidate', () => {
 
   const stableVersion = siteConfig.match(/stableVersion: "([^"]+)"/u)?.[1];
   assert.ok(stableVersion);
+  for (const path of ['DEPRECATIONS.md', 'content/docs/current/deprecations/index.mdx']) {
+    assert.ok(read(path).includes(`v${stableVersion} is the latest stable release`));
+  }
   assert.ok(quickstart.includes(`latest stable release (v${stableVersion})`));
   for (const tag of ['1', 'latest']) {
     const row = quickstart.split('\n').find((line) => line.startsWith(`| \`${tag}\` |`));
