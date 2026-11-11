@@ -113,20 +113,25 @@ test('secret-scan exceptions for the immutable archive are exact and commit-inde
   ]);
 });
 
-test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', () => {
+test('v1.7 archive preserves the promoted rc.7 source with exact release and credential errata', () => {
   const record = JSON.parse(readFileSync('content/docs/v1.7-provenance.json', 'utf8'));
   const root = 'content/docs/v1.7';
   assert.equal(record.version, 'v1.7');
-  assert.equal(record.sourceTag, 'v1.7.0-rc.24');
+  assert.equal(record.sourceTag, 'v1.7.1-rc.7');
+  for (const locale of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
+    const readme = readFileSync(`README${locale}.md`, 'utf8');
+    assert.ok(readme.includes(record.sourceTag.slice(1)));
+    assert.ok(!readme.includes('1.7.1-rc.6'));
+  }
   assert.equal(
     record.generatedChangelogSha256,
-    'd949eb0b7e4959dd9f3dd9db8f31f498353049f623ae9af918000aa0af997806',
+    'b49ef67993d891169531af6f8ddef5626771b2e628d832de26d3a404b692313a',
   );
   assert.doesNotMatch(
     readFileSync(join(root, 'changelog/index.mdx'), 'utf8'),
     /^## \[Unreleased\]|^\[Unreleased\]:/mu,
   );
-  assert.equal(record.sourceCommit, '3f29a8ade3675845b62f170a3492faa312d577fb');
+  assert.equal(record.sourceCommit, 'f81d55984c843a930775e9a8719121612ec636ba');
   assert.equal(git('rev-parse', `${record.sourceTag}^{commit}`), record.sourceCommit);
   assert.equal(
     git('rev-parse', `${record.sourceCommit}:content/docs/current`),
@@ -148,8 +153,8 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
     [...sourceFiles.map(([path]) => path), 'changelog/index.mdx'].sort(),
   );
   const errata = JSON.parse(readFileSync('content/docs/v1.7-errata.json', 'utf8'));
-  assert.equal(errata.changes.length, 17);
-  assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 9);
+  assert.equal(errata.changes.length, 22);
+  assert.equal(new Set(errata.changes.map((entry) => entry.path)).size, 11);
   for (const [path, blob] of sourceFiles) {
     const changes = errata.changes.filter((entry) => entry.path === path);
     if (changes.length === 0) {
@@ -163,12 +168,14 @@ test('v1.7 archive preserves rc.24 bytes with exact credential-example errata', 
       const before = lines.slice(change.startLine - 1, change.endLine).join('');
       assert.equal(createHash('sha256').update(before).digest('hex'), change.beforeSha256, path);
       lines.splice(change.startLine - 1, change.endLine - change.startLine + 1, change.replacement);
-      assert.ok(
-        readFileSync(join('content/docs/current', path), 'utf8').includes(
-          change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.14\n'),
-        ),
-        path,
-      );
+      if (change.kind === 'security-example') {
+        assert.ok(
+          readFileSync(join('content/docs/current', path), 'utf8').includes(
+            change.replacement.replaceAll('codeswhat/drydock\n', 'codeswhat/drydock:1.8.0-rc.14\n'),
+          ),
+          path,
+        );
+      }
     }
     assert.equal(readFileSync(join(root, path), 'utf8'), lines.join(''), path);
   }

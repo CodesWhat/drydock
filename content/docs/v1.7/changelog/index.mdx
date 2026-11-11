@@ -11,6 +11,210 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **Fork point:** upstream post-8.1.1 (2025-11-27)
 > **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
 
+## [1.7.1] - 2026-11-11
+
+This maintenance release promotes the exact signed v1.7.1-rc.7 image and source archive. It includes the fixes tested throughout the 1.7.1 candidate series. The application changes completed their soak in rc.5; rc.7 adds the Expat and Git security fixes, the available timezone package and scanner metadata. The owner approved shortening rc.7's additional soak to deliver the security fix. The published release records the candidate's exact age and the override reason.
+
+### Security
+
+- Git `2.54.1-r0` fixes the newly published merge and import advisories, including CVE-2026-105437. The vulnerable Git package in rc.6 is replaced before GA.
+- Redact recognized secret environment values and credential-bearing URLs before storing container records or update snapshots. Startup scrubs the existing JSON store, including names such as `ENCRYPTION_KEY`. This is name-based redaction, not encryption: unrecognized names can still retain plaintext, and old backups are not scrubbed. Environment reveal reads the live container; upgrade traditional agents alongside the controller (#1523).
+- Update the Node.js runtime and vulnerable application dependencies carried through rc.2 to rc.4. The image includes libexpat `2.10.0-r0` for CVE-2026-113351, CVE-2026-115506, CVE-2026-117610 and CVE-2026-118370, plus the libcurl security fix.
+- Record CVE-2026-4738 as not affected only for the inspected custom zlib APK. Optional infback9 code is absent; the existing gzip-write backport and scan thresholds are preserved.
+
+### Fixed
+
+- Keep anonymous volumes and recreate containers that depend on a replaced container's network namespace or volumes. Update services defined in Compose `include:` files.
+- Prevent include-filter recovery from offering older versions as updates (#1499), and recognize locally built images with Docker's containerd image store (#1506).
+- Complete dependency views and update guards, show maturity countdowns across update lists, restore environment/password reveal icons, and finish the candidate series' UI translation and scanner consistency fixes.
+
+### Upgrade notes
+
+- Use `codeswhat/drydock:1.7.1` for an exact version. Stable channels `1.7`, `1` and `latest` move to this image. The image's build identity remains `1.7.1-rc.7` because GA reuses the tested bytes.
+- Back up the store before upgrading. This release keeps the 1.7 JSON store; the SQLite migration belongs to 1.8. Review the earlier candidate entries below for the complete changes, including maintenance-window scope (`scan` remains the 1.7 default), API route deprecations and dashboard additions.
+
+## [1.7.1-rc.7] - 2026-11-11
+
+This security candidate retains rc.6's application code and fixes the Git advisories published during its build. It is prepared for expedited 1.7.1 GA promotion under the owner-approved security soak override. Stable channels stay on 1.7.0 until GA is published.
+
+### Security
+
+- Pin Git to `2.54.1-r0`, including its matching init templates. This fixes CVE-2026-105437 (three-way merge heap overflow) and CVE-2026-111760, CVE-2026-113408, CVE-2026-114466, CVE-2026-114467 and CVE-2026-114469. rc.6 contains vulnerable Git2.54.0; administrator-defined Command actions can reach it when merging untrusted repositories. rc.6 is superseded and will not be promoted.
+- Correct the exact-image rc.6 OpenVEX record to `affected`, with an action statement. A free-text exclusion for custom commands cannot narrow an image-wide `not_affected` assertion. No ignore rule or severity cutoff changes.
+- Record the stop-node XML advisory's inspected configuration: the runtime caller leaves the non-default option disabled; the second dependency is E2E-only. Keep the classification limited to the two reviewed lockfiles, with version/configuration guards and an upgrade follow-up.
+
+## [1.7.1-rc.6] - 2026-11-10
+
+This security release candidate replaces rc.5. It retains rc.5's application changes and rebuilds with the retained branch's libexpat 2.10.0-r0 fix. It is opt-in testing; v1.7.0 remains stable and the stable channels do not move. A new seven-day soak starts at publication.
+
+### Security
+
+- libexpat is pinned to `2.10.0-r0`, which fixes CVE-2026-113351, CVE-2026-115506, CVE-2026-117610 and CVE-2026-118370. rc.5 contains `2.9.0-r0` and cannot be promoted as the patched image.
+- Add an OpenVEX not-affected statement for CVE-2026-4738, scoped only to the custom `zlib@1.3.2-r2026092401` APK. The optional vulnerable infback9 code is absent from the standard library build and inspected runtime artifacts. The separate gzip-write backport and all scan thresholds remain unchanged.
+
+### Fixed
+
+- Restore Docker builds on both supported architectures: Alpine no longer serves the old exact libexpat or `tzdata=2026e-r0` pins. The timezone package is pinned to the available `2026f-r0` revision.
+
+## [1.7.1-rc.5] — 2026-11-01
+
+This is the fifth release candidate for the 1.7.1 maintenance release. It includes all rc.4 changes and redacts env values under `*_KEY` names such as `ENCRYPTION_KEY` (#1523). It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
+
+### Security
+
+- Env values under names with a standalone `KEY` segment (`ENCRYPTION_KEY`, `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`) are now redacted in the container store and in `GET /containers` (#1523). The `CLIENTKEY`, `SIGNINGKEY` and `ACCESSKEY` compound names are covered too. Names like `MONKEY` and `KEYBOARD_LAYOUT` are unaffected. The startup scrub runs on every start, so stores cleaned by rc.4 are cleaned again for the new names on the first start after upgrading, and startup logs `Redacted N sensitive env values in M containers` when it changes anything (counts only). Backups and copies of the store made before the upgrade are not scrubbed. Redaction goes by variable name, so a secret under a name Drydock doesn't recognize can still be stored as plaintext.
+
+### Fixed
+
+- The env value reveal button and the login password toggle no longer render blank: the `eye` icon was missing from the icon map (#1523).
+
+## [1.7.1-rc.4] — 2026-10-31
+
+This is the fourth release candidate for the 1.7.1 maintenance release. It includes all rc.3 changes, fixes four dependency advisories and backports environment redaction for the 1.7 JSON store. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. This candidate starts a new seven-day soak at publication.
+
+### Security
+
+- Redact environment values whose names match the secret patterns, and URLs carrying credentials, before writing containers or update-operation snapshots to Loki JSON. Startup scrubs those fields in the existing store and saves the repair before serving requests (#1523). This is pattern-based redaction: values under unrecognised names can still be stored in plaintext. Copies and backups made before this upgrade are not scrubbed.
+- Environment reveal now inspects the exact live Docker container locally or through its owning agent. Upgrade traditional agents alongside the controller; older agents and edge connections return an explicit unsupported response instead of revealing cached values. Changes only to recognised secret values no longer count as runtime-detail changes.
+- Update joi to 18.3.1 and follow-redirects to 1.16.2, and override minimatch and glob to their fixed majors in backend, UI and E2E tooling. This clears GHSA-4528-x5fx-h6hg, GHSA-mrwp-f3q8-3g9p, GHSA-g3hv-75wg-m249 and GHSA-3g3m-2fjr-6pw4 on the 1.7 maintenance line.
+
+### Changed
+
+- CI jobs now pin `step-security/harden-runner` v2.22.3 (from v2.21.1). On GitHub's `westus2` hosted runners a DNS change made block-mode egress drop connections to allowed hosts, including the runner's own calls to github.com, so jobs finished every step and then sat until their timeout ([step-security/harden-runner#708](https://github.com/step-security/harden-runner/issues/708)).
+
+## [1.7.1-rc.3] — 2026-10-29
+
+This is the third release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.2 changes, the vue-i18n fix for CVE-2026-118257 (high), and backports of the #1499 and #1506 fixes.
+
+### Security
+
+- The image base is now Node.js 24.22.2 (from 24.20.0), which fixes the Node.js advisories Grype flagged in the bundled `node` binary, including the critical CVE-2026-111497.
+- `vue-i18n` is now 11.4.16, which fixes CVE-2026-118257 (high) and CVE-2026-118256 in `vue-i18n` and `@intlify`. `qs` is now 6.16.1 for CVE-2026-110816 and `re2js` 2.8.7 for CVE-2026-116795, which drydock could not reach because it never enables lookbehinds. `deepmerge` 4.3.1 (CVE-2026-93753) has no fixed release and only runs at UI build time, so it is triaged with a recheck date.
+
+### Fixed
+
+- A container whose tag no longer matches `dd.tag.include` is no longer offered older matching tags as updates. The best-effort recovery only offers a tag whose version is newer than the running one, so a `nextcloud:30.0.17` container with `dd.tag.include=^27\.\d+\.\d+$` stops getting a 27.x downgrade, approval and notification (#1499).
+- Locally built images are now recognised as local under Docker's containerd image store, using the image identity Docker reports from API 1.53, so they skip registry lookups and stay in the UI (#1506).
+
+## [1.7.1-rc.2] — 2026-10-26
+
+This is the second release candidate for the 1.7.1 maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. It includes all of the rc.1 changes and pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high), along with the npm advisory updates below.
+
+### Security
+
+- Pin libcurl to 8.23.0-r0 in the image. The 8.22.0-r0 that `git` pulled in carries CVE-2026-92392 (high); v1.7.0 and v1.7.1-rc.1 shipped with it.
+- Update body-parser to 2.4.0, fast-uri to 4.2.3, Nodemailer to 10.1.4 and Undici to 8.12.2 (7.30.1 in UI and E2E tooling). Patch Zod to 4.6.6 in backend/UI tooling and the docs site and serialize-javascript to 7.1.3 in UI tooling. These updates clear the October 24 advisory scan without changing its severity gate.
+
+## [1.7.1-rc.1] — 2026-10-23
+
+This is a release candidate for the maintenance release on the 1.7 line. It is opt-in testing: `v1.7.0` remains the stable release, and `latest` and the `1.7` channel do not move. 1.7.1 fixes data loss and breakage when Drydock recreates a container (anonymous volumes are kept, and containers sharing a network namespace with an updated container are recreated against it), updates services defined in compose `include:` files, and finishes the dependency work 1.7.0 described with a dependency view and update guards in the UI. It also adds an offline indicator that shows last-known data, a `scan` or `install` scope for the maintenance window (`scan` stays the default), maturity countdowns wherever a held update is listed, one pinned Trivy version with scanner versions shown in the Security view, the `/api/v1/actions` and `/api/v1/notification-triggers` routes (with `/api/v1/triggers` deprecated), optional dashboard widgets, translations for the remaining hard-coded UI strings, and a `musl-dev` pin so the image builds again.
+
+### Fixed
+
+- Pin `musl-dev` to `1.2.6-r3` in the healthcheck build stage. Alpine 3.24 retired `1.2.6-r2`, so the image build failed at `apk add`.
+- The update-status panel now shows the Manual and Blocked action policy badges, not only Auto, and the full-page associated-triggers rows carry the per-trigger policy tooltip and Auto badge like the other trigger lists.
+- Translate the remaining hard-coded UI strings and gate against new ones. Seven English literals are now localized in all 17 locales: the yes/no values in the container preview and compose-write rows, the "Page" and "unknown image" search subtitles, the preview-request fallback error, and a missing `containerComponents.groupedViews.updateFailed` key that rendered its raw key path when an update failed over SSE. New i18n specs fail CI when a key used in `ui/src` is absent from the English locale files (including dynamic `t(\`prefix.${x}\`)` keys) and when a user-facing literal reaches a template expression, toast, dialog or label property outside a documented allowlist.
+- **The v1.7.0 dependency promise is now delivered in the UI.** The release notes described a dependency-aware update flow, but only the API and wave ordering shipped. Besides the dependency rows, chain update and parent guard above, updating a single container now lists the containers that depend on it and says they are not updated or restarted with it, and a stack, group or dependency-group Update All that would update a child while its parent has its own pending update outside the batch asks first, naming the children and parents, with "Update anyway" to continue.
+- Keep anonymous volumes when recreating a container. Containers whose image declares a `VOLUME` with no named volume or bind mount, such as a default `postgres` or `mysql` setup, came back from an update with a fresh empty volume while the old one, with the data on it, was left orphaned. The docker and dockercompose actions, and self-update, now reattach the existing volume at the same path, as `docker compose up` does.
+- Containers that share a replaced container's network namespace or volumes now follow it. When Drydock updated a container that others attach to with `network_mode: container:<id>` or `service:<name>` (the Gluetun pattern) or `volumes_from`, those containers kept pointing at the removed container and lost their network, and restarting them failed with "joining network namespace of container: No such container". Drydock now recreates them against the new container, keeping the rest of their configuration.
+- Update images for services defined in included compose files. Compose records only the files named on the command line in the `config_files` label, never the ones pulled in with `include:`, so Drydock could not find a service defined in an included file and skipped the compose file rewrite. Drydock now follows `include:` entries (nested ones too) from the listed files and rewrites the file that defines the service. Services that inherit their image through `extends` are still left alone.
+- Show the maturity countdown wherever a held update is listed. A candidate held by `maturityMode: mature` now shows the time left and its local unlock date and time in the container list and card tooltips, in a compact label next to the clock icon, and on the Updates Available dashboard widget, ticking once a minute from one shared clock. Previously only the container detail panels had it.
+- The default Docker scanner worker image and the release SBOM job now use the same pinned Trivy as the bundled image (0.73.0). They had stayed on 0.72.0 after the Dockerfile moved. A test now fails if the three digests differ, and Renovate bumps them in one PR.
+- The Security view now shows the scanner version, image digest, and vulnerability database or cache update time in each scanner's tooltip, using the asset details the API already returned.
+
+### Added
+
+- Prometheus lockout counters `drydock_auth_account_lockout_total` and `drydock_auth_ip_lockout_total`, labelled by provider, increment once each time a login lockout starts. The existing `drydock_auth_account_locked_total` and `drydock_auth_ip_locked_total` gauges only show lockouts active at scrape time. The monitoring docs list the new counters and add an alert example and dashboard panel.
+- Category-specific trigger API routes that match the `DD_ACTION_*` / `DD_NOTIFICATION_*` split: `/api/v1/actions` (`docker`, `dockercompose`, `command`) and `/api/v1/notification-triggers` (every other provider). They list, get and run triggers with the same auth and response shapes as `/api/v1/triggers`, and a trigger of the other category returns 404. `/api/v1/notifications` stays the notification rules collection. The UI trigger service now uses the new routes, and the OpenAPI spec and API docs cover them.
+- **Optional dashboard cards and a Recent Activity widget.** The dashboard Customize panel now lists Images, Triggers and Watchers stat cards and a Recent Activity widget, all hidden by default so saved layouts look exactly as before. Images counts distinct images and how many have updates, Triggers splits configured actions from notifications, and Watchers shows the count with a red state when an agent-backed watcher is disconnected. Each card links to its view. Recent Activity shows the latest 10 audit entries (time, actor, action, target), links each row to the Audit view filtered to that container, fetches only while shown, and refreshes on container and update events plus a 60 second interval. Preferences schema moves to version 13 to hide the new widgets once for existing layouts.
+- The UI now shows a banner when the browser is offline or the Drydock server is unreachable, and clears it and refreshes the open views when the connection returns. While it's up, the dashboard and container views render the last known data with a "last updated" time, and update, start/stop, policy, rollback and delete actions are disabled with a tooltip. A 502, 503 or 504 from a reverse proxy counts as unreachable once a confirming request agrees, so one transient 503 doesn't flash the banner. The saved copy covers only a short list of safe read endpoints, is used only after the server can't be reached, expires after 24 hours, and is wiped on sign-out, sign-in and any 401. Also adds the missing `apple-mobile-web-app-status-bar-style` meta tag for the installed iOS app.
+- **The container list now shows dependencies and guards child-before-parent updates, which v1.7.0 described but never shipped in the UI ([#219](https://github.com/CodesWhat/drydock/discussions/219)).** A container with dependencies gets a chevron next to its name; expanding it lists what it depends on, what requires it, a cycle marker, and an "Update dependency group" button that previews the chain in wave order and asks for confirmation before dispatching it. Updating one container whose dependency also has a pending update now warns first, names the parents, and offers "Update anyway". The confirm dialog also renders multi-line messages as separate lines, so the wave list no longer runs together.
+- **A Dependencies view groups the container list into dependency trees.** The new toolbar toggle, next to Group by stack, lists each connected set of containers as one group with parents first and their dependents indented beneath them, marks cycles and unresolved dependency targets, and leaves containers with no dependency edges in an unnamed group at the end. The group's Update All previews the chain in wave order and asks for confirmation before dispatching, the same path as the row's "Update dependency group" button. Stack and dependency grouping are exclusive, and the choice is remembered.
+- **Rows show "Depends on N" and "Required by N" badges.** v1.7.0 already put `dependencyCount` and `dependentCount` on every container but nothing in the UI displayed them.
+- **`DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_SCOPE` lets the maintenance window hold back installs only.** The default stays `scan`, so nothing changes unless you opt in: the window keeps gating the whole scheduled scan, as in every earlier release. Set it to `install` and the scheduled scan keeps running on the watcher's own `CRON` outside the window, so new containers still appear, container state stays current and update notifications go out when the update is found. Only the automatic action is deferred, every action trigger rather than only the image-installing ones (`command` included), and it runs as soon as the window opens; a digest-mode trigger flushes what it deferred when the window opens instead of waiting for its next `DIGESTCRON`. Manual UI and API updates are unaffected. Containers watched by a remote agent are not deferred by the controller yet. `dd_watcher_maintenance_deferred_updates_total{type,name}` counts what the window held back, while `dd_watcher_maintenance_skip_total` keeps its one-per-skipped-scan meaning and only moves under `scan`. Batch and digest action triggers no longer record a window-deferred container as notified, so a `once=true` trigger cannot swallow the rescan that runs when the window opens ([Discussion #946](https://github.com/CodesWhat/drydock/discussions/946)).
+
+### Deprecated
+
+- `/api/v1/triggers` is deprecated in favor of `/api/v1/actions` and `/api/v1/notification-triggers`. It keeps working and now sends `Deprecation: true` and a `Link: <successor>; rel="successor-version"` header, and logs a one-time warning per process. Removal is planned no earlier than v1.9.0 (see DEPRECATIONS.md).
+
+### Security
+
+- Bump `nodemailer` to 10.0.10 (GHSA-39m8-27wv-hr27, used by the SMTP notification trigger) and the `ip-address` override to 10.7.4 (GHSA-rxp7-6hxx-x8q5), and the website's `dompurify` to 3.4.17 (GHSA-c6gr-qvv4-5v3f, GHSA-mrv2-3pqr-j5jr).
+- Bump the website and docs app to `next` 16.4.2 for GHSA-p3m5-59mp-jv5r and GHSA-2464-fhr4-w9xw (website only, not in the Drydock image).
+- Override the e2e-only `http-cache-semantics` to 4.3.0 and `argparse` to 2.0.1 so the load-test harness no longer resolves the vulnerable `http-cache-semantics` 4.2.0 or `sprintf-js` 1.0.3 (GHSA-ch52-4w7c-c8xp, GHSA-hp3w-g68c-fv3c). Neither is in the shipped image. `argparse` is only used by js-yaml's CLI, which Artillery doesn't call.
+- Bump `vite` to 8.2.4 (app, ui) and 7.3.7 (demo), and vitest and `@vitest/coverage-v8` to 4.1.12, for GHSA-587h-7wmj-h5pm, GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-9jrq-w75r-8gcw, GHSA-rq7h-c2jc-7f22, GHSA-vfpm-58rq-9qcg (vite) and GHSA-qxg6-89mg-rqv8, GHSA-xp26-3454-mjgp (`@vitest/mocker`). Dev dependencies only, not in the image. The app lockfile also moves `follow-redirects` to 1.16.1 for GHSA-8r9p-f939-6h3c and GHSA-q3jh-wrc6-jgq8.
+
+### Changed
+
+- Prepare retained v1.7 release-metadata CI with available exact Alpine libexpat/cosign pins and the reviewed scanner configuration from the active train. The published v1.7.0-rc.24 image, source, artifacts and soak are unchanged; GA promotes that image.
+
+## [1.7.0] — 2026-10-19
+
+Consolidates the `1.7.0-rc.1` … `1.7.0-rc.24` prereleases. Users upgrading from
+`1.6.x` get everything below; users already on `1.7.0-rc.24` receive no additional
+runtime changes.
+
+### Added
+
+- **Container dependency ordering** ([discussion #219](https://github.com/CodesWhat/drydock/discussions/219)). `dd.depends_on` and `dd.depends_on.action` labels, plus Compose-derived `depends_on` detection (including when drydock runs in a container), feed a dependency graph. Accepted bulk updates run wave by wave, restart-only dependents are marked, and a dependency-group bulk update needs destructive-action confirmation and binds to its own preview. The container list carries `dependencyCount` and `dependentCount` for the UI badges.
+- **Action-policy resolution on the API and UI.** `GET /api/v1/containers` and the SSE container payloads include an `actionPolicy` object (`blocked`, `manual` or `auto`), shown as a localized badge with tooltips.
+- **Installable PWA, clickable port links, container uptime and keyboard shortcuts.** `/` focuses search, `Escape` closes it and `?` opens a shortcut reference.
+- **Debounced container discovery.** Docker's transient rename aliases during a recreate are no longer registered as containers ([#156](https://github.com/CodesWhat/drydock/issues/156)).
+- **Portwing improvements.** `DD_PORTWING_POLL_INTERVAL` sets the Edge refresh interval ([#688](https://github.com/CodesWhat/drydock/issues/688)), edge tunnels carry non-JSON Docker response bodies, and edge exec completion reasons reach the controller ([#635](https://github.com/CodesWhat/drydock/issues/635)).
+- **`release-cut.yml` can cut a maintenance patch from a retired dev branch** through the optional `source_ref` input, without touching the cosign signing identity.
+
+### Changed
+
+- **BREAKING: Home Assistant MQTT topics include an `agent/<name>` segment by default for agent-owned containers.** Announced in v1.5.x. Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=false` to keep the old layout temporarily. Old retained discovery entities are not cleaned up and need removing by hand.
+- **BREAKING: `trigger-excluded` and `trigger-not-included` are hard blockers.** This ends the v1.5.0 to v1.6.x soft-severity grace period (see `DEPRECATIONS.md`).
+- **A stable release shows its own version.** A GA image is the last release candidate promoted unchanged, so it now reports the base version in the UI, the API and Home Assistant, and keeps the full build identity in `build`. Release-gated store migrations compare against the base version.
+- **Faster login screen.** The oversized logo asset is no longer inlined into the entry chunk.
+- **Turning on security scanning no longer disconnects open browser tabs each scan cycle.** The container SSE events no longer carry the per-CVE arrays.
+- **Release and CI hardening.** The cut checks base image pins and published image architecture before signing, DAST and workflow-lint gates fail closed, ZAP alerts are keyed per scanned site, the weekly DAST scans can finish, and README badges read live. None of this changes the shipped image.
+- **Dropped the trivy qlty plugin in favor of Grype**, and documented the container SBOM attestation in the release-verification guide.
+
+### Removed
+
+- **BREAKING: the `DD_TRIGGER_*` environment prefix and the `dd.trigger.include` and `dd.trigger.exclude` labels.** Deprecated in v1.5.0, they now fail startup. Use `DD_ACTION_*`, `DD_NOTIFICATION_*` and the `dd.action.*` and `dd.notification.*` labels.
+- **`curl` is gone from the image.** The image healthcheck has used the compiled `/bin/healthcheck` binary since v1.5.0, so only user-defined HEALTHCHECK overrides that call `curl` are affected.
+- **The unversioned `GET /api/auth/methods` alias.** It returns 410 like the rest of the unversioned `/api/*` surface. Use `GET /api/v1/auth/status`.
+
+### Fixed
+
+- **Update checks and registry lookups report their real result.** A failed digest check surfaces as unknown instead of "Up to date", nested OCI image indexes resolve to the real manifest, bare build-number tags no longer outrank real versions, and digest watching is re-derived every scan so older rows stop sitting at Current. Tag family matching requires the variant suffix to match, older LinuxServer builds are no longer offered, and repositories with more than 1000 tags page correctly, including on AWS ECR Public.
+- **Notifications fire once per update.** Cron scans are single-flight, a `once=true` trigger no longer re-fires when a rate-limited digest lookup changes the history hash, a manual check during a scan can't double-notify, and an unsettled reservation no longer holds its key for the life of the process ([#972](https://github.com/CodesWhat/drydock/issues/972)). Monthly and longer schedules no longer expire scans after 1 ms.
+- **Updates and rollbacks deploy what was verified.** Docker and Compose updates pin the pulled image by digest for verification, scanning and the replacement create. Compose runs its security gate before it stops anything, rollbacks restore the recorded digest or backup image, and a rolled-back container no longer picks up an entrypoint or command from the newer image.
+- **A same-tag update no longer leaves the old image's defaults on the new container,** and an entrypoint or command the image left unchanged is no longer pinned as explicit ([#1351](https://github.com/CodesWhat/drydock/issues/1351)). A disabled healthcheck no longer health-gates an update ([#1284](https://github.com/CodesWhat/drydock/issues/1284)).
+- **Update policy survives agent and controller handoffs, recreation and self-update.** Pruning clears policy only when it should, policy is stashed by Docker id when a container moves to an agent, and one failing local watcher no longer deletes another's records ([#1280](https://github.com/CodesWhat/drydock/issues/1280), [#565](https://github.com/CodesWhat/drydock/issues/565)).
+- **Agents and Portwing.** A healthy agent with a large inventory can reconnect, one malformed container no longer zeroes an inventory sync, a disconnected agent's in-flight setup can't replace its reconnected owner, and duplicate agent keys return 409 instead of a server error.
+- **Store and startup.** The session store no longer shares `/store/dd.json` with the main store and erases its data, startup no longer crashes with `EPERM` when the volume forbids `chmod`, and `DD_AGENT_ALLOW_INSECURE_SECRET` is no longer parsed as an agent named `allow`.
+- **Self-update and recovery.** A self-update no longer restarts the controller mid-update of another container, a health-verified replacement is no longer rolled back or destroyed, and startup recovery no longer marks an untouched container as updated.
+- **Bulk vulnerability scans finish and report accurately,** including large fleets, a failing notification, and a large Trivy report (`DD_SECURITY_TRIVY_MAXOUTPUTBYTES`, default 64 MB) ([#1356](https://github.com/CodesWhat/drydock/discussions/1356)).
+- **WebSocket and proxy.** Log-stream upgrades behind a TLS-terminating proxy no longer 403 when `X-Forwarded-Proto` is absent, and `ws` or `wss` is accepted. OIDC login no longer bounces back to the login page.
+- **Home Assistant.** Agent entities receive state when MQTT agent topic segmentation is on ([#1139](https://github.com/CodesWhat/drydock/pull/1139)).
+- **Images.** The arm64 image published for rc.4 through rc.10 was an x86-64 image with an arm64 label. The base pins now name multi-platform indexes and the cut checks each platform's binaries ([#1021](https://github.com/CodesWhat/drydock/issues/1021)). The shipped image carries the correct source revision.
+- **UI.** Row selection highlights in seven views, status indicators have accessible names, the notification outbox shows the selected tab, removing a container from its full-page view no longer blanks the screen, the dashboard no longer shows a Local Docker host when none is configured, and the 16 non-English locales are properly translated.
+- **Input validation.** Non-numeric or empty `tail` and `since` on the log endpoints and numeric-prefix `limit` and `offset` on the audit endpoint are rejected instead of misread.
+- **Website and demo.** Docs pages that returned 500 render again, docs search no longer returns every archived version at once, and the Get Started snippets deploy an instance that becomes healthy.
+
+### Security
+
+- **Agent ownership is enforced everywhere.** Bulk and incremental ingestion, the prune ahead of it, update and removal all verify that the reporting agent owns the container id it names ([#922](https://github.com/CodesWhat/drydock/pull/922), [#904](https://github.com/CodesWhat/drydock/pull/904)).
+- **Image lifecycle hook labels are not run or carried over.** `dd.hook.*` labels only take effect when set on the container itself, and a recreated container leaves out hook labels that match its image.
+- **Credential exposure closed.** The debug dump, container action responses, error responses, the HTTP trigger log and preview errors redact secrets, including `*_PAT` values and credentials in URLs. The dump requires audit and a rate limit and no longer serves raw environment variables. Registries no longer match lookalike hostnames, thirteen registries use their configured `auth` for pulls, and the compose action can't be pointed at another repository's `image:`.
+- **Login and sessions.** Lockout keys on the credentials presented, concurrent password verification is capped, and basic-auth requests without a cookie no longer persist unreaped 30-day session rows.
+- **Command trigger and input limits.** The env sanitizer blocks argument injection, bulk scan requests are capped, and a slow SSE client can't make drydock retain unbounded bytes.
+- **Image and package patches.** Alpine zlib is patched for CVE-2026-85091, libexpat is 2.8.5-r0 for CVE-2026-93990, OpenSSL is 3.5.9-r0, and the base images are rolled to clear six HIGH OpenSSL CVEs.
+- **Dependency and website updates.** Undici, Nodemailer 10, gRPC, Moment, Joi, compression, fast-uri, ip-address, brace-expansion, DOMPurify and `fflate` are updated for published advisories, and the website moves to Next.js 16.3.8. The demo site sends a full Content-Security-Policy and security-header set.
+
+### Accessibility
+
+- **Dark themes meet the WCAG 2.2 contrast minimum for normal text.** Secondary text, tone colors, accents, toasts, update-status rows and primary button labels were raised to at least 4.5:1 ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865)).
+
+### Documentation
+
+- **Docs audited against the code.** README, `DEPRECATIONS.md`, configuration, API, monitoring and agents pages were corrected, the feature comparison was refreshed, and the agents page now covers per-agent registry configuration and TLS examples.
+
 ## [1.7.0-rc.24] — 2026-10-12
 
 ### Changed
@@ -2840,6 +3044,15 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
+[1.7.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1
+[1.7.1-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...v1.7.1-rc.7
+[1.7.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...v1.7.1-rc.6
+[1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
+[1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
+[1.7.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.2...v1.7.1-rc.3
+[1.7.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.1...v1.7.1-rc.2
+[1.7.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1-rc.1
+[1.7.0]: https://github.com/CodesWhat/drydock/compare/v1.6.0...v1.7.0
 [1.7.0-rc.24]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.23...v1.7.0-rc.24
 [1.7.0-rc.23]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.22...v1.7.0-rc.23
 [1.7.0-rc.22]: https://github.com/CodesWhat/drydock/compare/v1.7.0-rc.21...v1.7.0-rc.22

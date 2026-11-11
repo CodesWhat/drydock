@@ -5,7 +5,7 @@ description: "Open source container update monitoring built in TypeScript. Auto-
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**v1.8.0-rc.14 is an opt-in test build.** These v1.8 docs pin the candidate image in deployment examples. For production, use [the stable v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. Read [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json) before testing.</Callout>
+<Callout type="warn">**v1.8.0-rc.14 is an opt-in test build.** It needs a Git security update before GA. The published image contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r). Avoid untrusted three-way Git operations in Command actions, including merge, rebase, cherry-pick and merge-tree. These v1.8 docs pin the candidate image in deployment examples. For production, use [the stable v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. Read [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json) before testing.</Callout>
 
 ## 🔍 How it works
 
