@@ -9,8 +9,8 @@ test('the Git assessment identifies only the promoted images and exact vulnerabl
   assert.equal(document.statements.length, 1);
   const [statement] = document.statements;
   assert.equal(statement.vulnerability.name, 'CVE-2026-105437');
-  assert.equal(statement.status, 'not_affected');
-  assert.equal(statement.justification, 'vulnerable_code_not_in_execute_path');
+  assert.equal(statement.status, 'affected');
+  assert.equal(statement.justification, undefined);
   assert.equal(statement.products.length, 3);
   for (const product of statement.products) {
     assert.match(product['@id'], /^pkg:oci\/drydock@sha256:[a-f0-9]{64}$/u);
@@ -19,9 +19,6 @@ test('the Git assessment identifies only the promoted images and exact vulnerabl
       { '@id': 'pkg:apk/alpine/git-init-template@2.54.0-r0' },
     ]);
   }
-  assert.match(statement.impact_statement, /custom commands/iu);
-  assert.match(
-    statement.impact_statement,
-    /No claim is made that the packaged Git binary is patched/u,
-  );
+  assert.match(statement.action_statement, /custom commands/iu);
+  assert.match(statement.action_statement, /Git 2.54.0.*vulnerable/u);
 });

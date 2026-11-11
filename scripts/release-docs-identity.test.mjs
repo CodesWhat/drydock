@@ -2,9 +2,8 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const RC_VERSION = '1.7.1';
-const BUILD_VERSION = '1.7.1-rc.6';
-const PREV_RC_VERSION = '1.7.0';
+const RC_VERSION = '1.7.1-rc.7';
+const PREV_RC_VERSION = '1.7.1-rc.6';
 const RC_DATE = '2026-11-11';
 const RC_DISPLAY_DATE = 'November 11, 2026';
 const DOC_ROOTS = ['content/docs/current', 'content/docs/v1.6', 'content/docs/v1.5'];
@@ -111,8 +110,8 @@ test('public release surfaces identify the v1.7 release candidate', () => {
       `${name} API examples must not show a prerelease as the version`,
     );
   }
-  assert.match(portwingApi, new RegExp(`"version": "${escapeRegExp(BUILD_VERSION)}"`, 'u'));
-  assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapeRegExp(BUILD_VERSION)}"`, 'u'));
+  assert.match(portwingApi, new RegExp(`"version": "${escapedRcVersion}"`, 'u'));
+  assert.match(portwingApi, new RegExp(`"drydockVersion": "${escapedRcVersion}"`, 'u'));
   assert.match(
     quickstart,
     new RegExp(`Use \`${escapeRegExp(RC_VERSION.split('.').slice(0, 2).join('.'))}-rc\` only`, 'u'),
@@ -262,7 +261,7 @@ test('security policy names maintained v1.7 and active v1.8 without supporting o
   const security = read('SECURITY.md');
   assert.ok(
     security.includes(
-      `| Latest stable release (v${RC_VERSION}, GA ${RC_DATE}) | :white_check_mark: |`,
+      `| Latest v1.7 maintenance release candidate (v${RC_VERSION}, opt-in testing) | :white_check_mark: |`,
     ),
   );
   assert.ok(
@@ -271,7 +270,7 @@ test('security policy names maintained v1.7 and active v1.8 without supporting o
     ),
   );
   assert.ok(
-    !security.includes('| Latest stable release (v1.7.0, GA 2026-10-19) | :white_check_mark: |'),
+    security.includes('| Latest stable release (v1.7.0, GA 2026-10-19) | :white_check_mark: |'),
   );
   assert.ok(security.includes('| Older stable or prerelease versions | :x: |'));
   assert.match(security, /Older release candidates are not patched/u);

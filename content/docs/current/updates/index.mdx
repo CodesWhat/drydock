@@ -5,11 +5,11 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
-## v1.7.1 Highlights - November 11, 2026
+## v1.7.1-rc.7 Highlights - November 11, 2026
 
-1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.
+This security candidate keeps rc.6's application code and replaces vulnerable Git2.54.0 with fixed Git2.54.1. The newly published merge advisory can be reached by administrator-configured Command actions, so rc.6 will not be promoted. The earlier environment-redaction, container recreation and Expat fixes are retained.
 
-GA promotes the exact signed rc.6 image. Its Expat fix ships with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.6` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).
+rc.7 is prepared for expedited 1.7.1 promotion using the approved security soak override. It remains an opt-in candidate until GA; stable channels do not move at this cut. See [the candidate release](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1-rc.7) for publication details.
 
 ## v1.7.1-rc.6 Highlights - November 10, 2026
 

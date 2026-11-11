@@ -10,27 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.7.1] - 2026-11-11
+## [1.7.1-rc.7] - 2026-11-11
 
-This maintenance release promotes the exact signed v1.7.1-rc.6 image and source archive. It includes the fixes tested throughout the 1.7.1 candidate series. The application changes completed their soak in rc.5; rc.6 adds the Expat security fix, the available timezone package and a scoped scanner assessment. The owner approved shortening rc.6's additional soak to deliver the security fix. The published release records the candidate's exact age and the override reason.
+This security candidate retains rc.6's application code and fixes the Git advisories published during its build. It is prepared for expedited 1.7.1 GA promotion under the owner-approved security soak override. Stable channels stay on 1.7.0 until GA is published.
 
 ### Security
 
-- Redact recognized secret environment values and credential-bearing URLs before storing container records or update snapshots. Startup scrubs the existing JSON store, including names such as `ENCRYPTION_KEY`. This is name-based redaction, not encryption: unrecognized names can still retain plaintext, and old backups are not scrubbed. Environment reveal reads the live container; upgrade traditional agents alongside the controller (#1523).
-- Update the Node.js runtime and vulnerable application dependencies carried through rc.2 to rc.4. The image includes libexpat `2.10.0-r0` for CVE-2026-113351, CVE-2026-115506, CVE-2026-117610 and CVE-2026-118370, plus the libcurl security fix.
-- Record CVE-2026-4738 as not affected only for the inspected custom zlib APK. Optional infback9 code is absent; the existing gzip-write backport and scan thresholds are preserved.
-
-### Fixed
-
-- Keep anonymous volumes and recreate containers that depend on a replaced container's network namespace or volumes. Update services defined in Compose `include:` files.
-- Prevent include-filter recovery from offering older versions as updates (#1499), and recognize locally built images with Docker's containerd image store (#1506).
-- Complete dependency views and update guards, show maturity countdowns across update lists, restore environment/password reveal icons, and finish the candidate series' UI translation and scanner consistency fixes.
-
-### Upgrade notes
-
-- The promoted image contains Git `2.54.0-r0`, which has CVE-2026-105437 in three-way merges. Drydock does not execute Git repository merges. Administrator-defined Command actions that merge untrusted repositories are outside that assessment and require patched Git or the upstream mitigation. A digest-scoped assessment accompanies the release. Future source builds pin fixed Git `2.54.1-r0`; the promoted image is unchanged.
-- Use `codeswhat/drydock:1.7.1` for an exact version. Stable channels `1.7`, `1` and `latest` move to this image. The image's build identity remains `1.7.1-rc.6` because GA reuses the tested bytes.
-- Back up the store before upgrading. This release keeps the 1.7 JSON store; the SQLite migration belongs to 1.8. Review the earlier candidate entries below for the complete changes, including maintenance-window scope (`scan` remains the 1.7 default), API route deprecations and dashboard additions.
+- Pin Git to `2.54.1-r0`, including its matching init templates. This fixes CVE-2026-105437 (three-way merge heap overflow) and CVE-2026-111760, CVE-2026-113408, CVE-2026-114466, CVE-2026-114467 and CVE-2026-114469. rc.6 contains vulnerable Git2.54.0; administrator-defined Command actions can reach it when merging untrusted repositories. rc.6 is superseded and will not be promoted.
+- Correct the exact-image rc.6 OpenVEX record to `affected`, with an action statement. A free-text exclusion for custom commands cannot narrow an image-wide `not_affected` assertion. No ignore rule or severity cutoff changes.
+- Record the stop-node XML advisory's inspected configuration: the runtime caller leaves the non-default option disabled; the second dependency is E2E-only. Keep the classification limited to the two reviewed lockfiles, with version/configuration guards and an upgrade follow-up.
 
 ## [1.7.1-rc.6] - 2026-11-10
 
@@ -3039,8 +3027,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1...HEAD
-[1.7.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.7...HEAD
+[1.7.1-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...v1.7.1-rc.7
 [1.7.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...v1.7.1-rc.6
 [1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
 [1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
