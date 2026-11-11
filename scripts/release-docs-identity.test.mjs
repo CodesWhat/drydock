@@ -61,6 +61,10 @@ test('public release surfaces identify the v1.7 release candidate', () => {
   // version (e.g. 1.6.0). Both shapes drive every assertion below directly from the
   // constant — no shape-specific literal is hand-maintained, and no shape throws.
   const rcSuffixMatch = /^(.*-rc\.)(\d+)$/u.exec(RC_VERSION);
+  if (!rcSuffixMatch) {
+    const promotedCandidate = BUILD_VERSION.replace(/^.*-/u, '');
+    assert.ok(readme.includes(`GA reuses ${promotedCandidate}`));
+  }
 
   // The README version badge reads live from shields' github/v/release endpoint,
   // so there is no static badge string to assert against RC_VERSION — but the
