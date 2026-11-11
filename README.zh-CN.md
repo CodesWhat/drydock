@@ -42,6 +42,8 @@
 > [!WARNING]
 > **正在升级到 1.6.0-rc.3 或更高版本？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
 
+**稳定维护版本：[v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1)。** 包含容器重建修复、环境变量敏感值脱敏和安全更新。使用 `codeswhat/drydock:1.7.1` 固定版本。正式版直接采用候选版镜像，因此构建标识仍为 `1.7.1-rc.6`。升级前请备份存储目录，并将传统代理与控制器一同升级。
+
 <h2 align="center">内容</h2>
 
 - [文档](#documentation)
