@@ -42,6 +42,8 @@
 > [!WARNING]
 > **Aktualizujesz do 1.6.0-rc.3 lub nowszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. Wyzwalacze powiadomień HTTP, webhook Hass i pobieranie ikon rejestrów rozwiązują teraz nazwy hostów za pomocą chronionego wyszukiwania DNS, które blokuje cele metadanych chmurowych i adresy link-local oraz nigdy nie podąża za przekierowaniami — ustaw `allowmetadata=true` dla konkretnego wyzwalacza `DD_NOTIFICATION_HTTP_*` tylko wtedy, gdy rzeczywiście jest to potrzebne. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
 
+**Stabilne wydanie poprawkowe: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Zawiera poprawki odtwarzania kontenerów, ukrywanie sekretów środowiska i aktualizacje bezpieczeństwa. Użyj `codeswhat/drydock:1.7.1`, aby przypiąć wersję. Promowany obraz zachowuje identyfikator kompilacji `1.7.1-rc.7`. Przed aktualizacją wykonaj kopię magazynu danych i zaktualizuj klasyczne agenty razem z kontrolerem.
+
 <h2 align="center">Spis treści</h2>
 
 - [Dokumentacja](#documentation)
