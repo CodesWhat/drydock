@@ -120,7 +120,7 @@ test('v1.7 archive preserves the promoted rc.6 source with exact release and cre
   assert.equal(record.sourceTag, 'v1.7.1-rc.6');
   assert.equal(
     record.generatedChangelogSha256,
-    '9969df89aef145a99c4378c4a677c34a90347633460267ea70165620f01f6959',
+    'd52e279e34df27045760dfe3efe83a5cde28fee0cd7ea3816b02a94c6f2662ad',
   );
   assert.doesNotMatch(
     readFileSync(join(root, 'changelog/index.mdx'), 'utf8'),

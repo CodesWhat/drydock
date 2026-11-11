@@ -29,6 +29,7 @@ This maintenance release promotes the exact signed v1.7.1-rc.6 image and source 
 
 ### Upgrade notes
 
+- The promoted image contains Git `2.54.0-r0`, which has CVE-2026-105437 in three-way merges. Drydock does not execute Git repository merges. Administrator-defined Command actions that merge untrusted repositories are outside that assessment and require patched Git or the upstream mitigation. A digest-scoped assessment accompanies the release. Future source builds pin fixed Git `2.54.1-r0`; the promoted image is unchanged.
 - Use `codeswhat/drydock:1.7.1` for an exact version. Stable channels `1.7`, `1` and `latest` move to this image. The image's build identity remains `1.7.1-rc.6` because GA reuses the tested bytes.
 - Back up the store before upgrading. This release keeps the 1.7 JSON store; the SQLite migration belongs to 1.8. Review the earlier candidate entries below for the complete changes, including maintenance-window scope (`scan` remains the 1.7 default), API route deprecations and dashboard additions.
 
