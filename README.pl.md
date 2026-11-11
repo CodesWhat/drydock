@@ -35,12 +35,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 to opcjonalne wydanie testowe.** Przed próbą zatrzymaj Drydock i wykonaj kopię całego katalogu danych. Pierwsze uruchomienie importuje dane JSON do SQLite. Powrót do starszej wersji wymaga przywrócenia kopii sprzed aktualizacji; zmiany zapisane tylko w SQLite nie są przenoszone z powrotem. Zobacz [migrację i wycofywane funkcje](DEPRECATIONS.md).
+> **v1.8.0-rc.14 to opcjonalne wydanie testowe.** Przed próbą zatrzymaj Drydock i wykonaj kopię całego katalogu danych. Pierwsze uruchomienie importuje dane JSON do SQLite. Powrót do starszej wersji wymaga przywrócenia kopii sprzed aktualizacji; zmiany zapisane tylko w SQLite nie są przenoszone z powrotem. Zobacz [migrację i wycofywane funkcje](DEPRECATIONS.md). Przed GA rc.14 wymaga aktualizacji bezpieczeństwa Git. Zobacz [ostrzeżenie dotyczące kandydata](https://getdrydock.com/docs/updates).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Aktualizujesz z 1.5.x lub starszej wersji?** Dodatkowe zabezpieczenia obowiązują bez okresu przejściowego. Instancja bez skonfigurowanego uwierzytelniania albo z włączonym, lecz niepotwierdzonym dostępem anonimowym po aktualizacji działa teraz w trybie zamkniętym, tak samo jak nowa instalacja: kontener działa, chronione żądania API zwracają `401`, publiczne trasy wykrywania i stanu uwierzytelniania pozostają dostępne, a `/health` zwraca `503`. Powłoka SPA może się załadować, ale nie odczyta chronionych danych. Przed aktualizacją ustaw `DD_ANONYMOUS_AUTH_CONFIRM=true` lub skonfiguruj `DD_AUTH_BASIC_*`/OIDC. Nazwa cookie sesji zmienia się z `connect.sid` na `drydock.sid`, co jednorazowo wyloguje użytkowników. Wyzwalacze powiadomień HTTP, webhook Hass i pobieranie ikon rejestrów rozwiązują teraz nazwy hostów za pomocą chronionego wyszukiwania DNS, które blokuje cele metadanych chmurowych i adresy link-local oraz nigdy nie podąża za przekierowaniami — ustaw `allowmetadata=true` dla konkretnego wyzwalacza `DD_NOTIFICATION_HTTP_*` tylko wtedy, gdy rzeczywiście jest to potrzebne. Pełne wskazówki zawiera **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
+
+**Stabilne wydanie poprawkowe: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Zawiera poprawki odtwarzania kontenerów, ukrywanie sekretów środowiska i aktualizacje bezpieczeństwa. Użyj `codeswhat/drydock:1.7.1`, aby przypiąć wersję. Promowany obraz zachowuje identyfikator kompilacji `1.7.1-rc.7`. Przed aktualizacją wykonaj kopię magazynu danych i zaktualizuj klasyczne agenty razem z kontrolerem. Zobacz [uwagi dotyczące aktualizacji stabilnej wersji](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Spis treści</h2>
 
@@ -434,7 +436,7 @@ Tylko motywy ogólne; szczegóły poszczególnych wersji zawiera [CHANGELOG.md](
 | **v1.9.0** | Głębia polityk i ekosystem | **Planowane:** kandydaci według typu aktualizacji i limity działającej wersji, dojrzałość per wersja z awaryjnym wariantem, filtry include/exclude watchera, aktor i eksport audytu, lista dozwolonych logowania OIDC, alerty o stanie kontenerów, wycofanie bez healthchecka, harmonogramowa polityka czyszczenia, integracje z Home Assistant i Homepage, hooki cyklu życia v2, etapowe wdrożenie na wielu hostach. |
 | **v2.0+** | Rozszerzanie platformy i nie tylko | Obserwatorzy roju/Kubernetes, synchronizacja GitOps, przeglądarka woluminów, lokalnie zbudowane obrazy monitorowane względem zadeklarowanej bazy upstream ([#897](https://github.com/CodesWhat/drydock/discussions/897)), bramki kondycji, wdrożenia Canary, terminal webowy, RBAC, LDAP/AD, podstawowe wsparcie dla Podman za pośrednictwem jego interfejsu API zgodnego z Dockerem, CLI, wzmocniony obraz Wolfi, proxy gniazda |
 
-**Status wydań i aktualizacji:** v1.7.0 to najnowsze wydanie stabilne (GA 19.10.2026, awansowane z v1.7.0-rc.24). v1.8.0-rc.14 służy do dobrowolnych testów, a opublikowana dokumentacja 1.7 jest przechowywana osobno od aktywnej dokumentacji 1.8.
+**Status wydań i aktualizacji:** v1.7.1 to najnowsze wydanie stabilne (GA 11.11.2026, awansowane z v1.7.1-rc.7). v1.8.0-rc.14 służy do dobrowolnych testów, a opublikowana dokumentacja 1.7 jest przechowywana osobno od aktywnej dokumentacji 1.8.
 
 **Zgodność:** v1.7 usuwa starsze dane wejściowe wyzwalaczy, curl i `/api/auth/methods`. v1.8 zmienia tożsamość encji MQTT i starą odpowiedź `/auth/strategies`. `PUT /api/v1/settings` pozostaje dostępne do API v2; jego data `Sunset` nie zezwala na usunięcie metody ze zamrożonego API v1. `/api/auth/status` pozostaje obsługiwane.
 
