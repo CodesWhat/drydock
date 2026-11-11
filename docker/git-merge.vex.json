@@ -1,0 +1,52 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/CodesWhat/drydock/security/git-merge-1.7.1",
+  "author": "https://github.com/CodesWhat",
+  "timestamp": "2026-11-11T15:25:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-105437"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/drydock@sha256:dfc6357e6bb35bd735b7cd6bffd93266adb0984893db5e406d9e856e2cb2a74a",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/drydock@sha256:b983def1ed8abc4f62a16fa2e0c561d73eaf87d63ee5af4102b15d15a540d612",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/drydock@sha256:ced8bf52086d4007b608af09762017e95b002dbea83d8dbee373c041af0528f7",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "This assessment covers only the identified Drydock rc.6/1.7.1 image digests. Git 2.54.0 itself contains the vulnerable three-way merge implementation. Drydock does not clone, merge, rebase, cherry-pick or run merge-tree on repositories: release notes use HTTP APIs, and scanner backends scan container images or local filesystems, not Git repositories. The authenticated Command action can execute administrator-configured commands; custom commands that merge untrusted repositories are outside this assessment and require upgrading Git or applying the upstream mitigation. No claim is made that the packaged Git binary is patched. Future source builds use the fixed package; this statement does not cover another image digest or CVE. Upstream advisory: https://github.com/advisories/GHSA-m7r7-8v36-j77r."
+    }
+  ]
+}
