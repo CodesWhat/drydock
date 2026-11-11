@@ -196,3 +196,16 @@ set.ignored = true
 [[triage]]
 match.rules = ["osv-scanner:CVE-2026-33894"]
 set.ignored = true
+
+# CVE-2026-126066 / GHSA-474x-hrwr-fgx4 requires non-default stopNodes.
+# app/api/icons/svg.ts does not set it; fast-xml-parser defaults to [].
+# The e2e copy is under Artillery > Azure storage, never in the runtime image.
+# Upstream rates this Low (availability only). No application path enables the
+# affected option. Keep the two inspected lockfiles scoped here; regression tests
+# guard the versions and parser option. Upgrade on the next unreleased line and
+# remove this classification by 2026-12-11 or if callers/options change.
+# https://github.com/advisories/GHSA-474x-hrwr-fgx4
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-126066"]
+match.file_patterns = ["app/package-lock.json", "e2e/package-lock.json"]
+set.ignored = true
