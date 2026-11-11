@@ -35,14 +35,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 es una compilación de prueba opcional.** Detén Drydock y guarda una copia de todo el directorio de datos antes de probarla. El primer inicio importa los datos JSON a SQLite. Volver a una versión anterior exige restaurar la copia previa; los cambios realizados solo en SQLite no se transfieren. Consulta [migración y funciones obsoletas](DEPRECATIONS.md).
+> **v1.8.0-rc.14 es una compilación de prueba opcional.** Detén Drydock y guarda una copia de todo el directorio de datos antes de probarla. El primer inicio importa los datos JSON a SQLite. Volver a una versión anterior exige restaurar la copia previa; los cambios realizados solo en SQLite no se transfieren. Consulta [migración y funciones obsoletas](DEPRECATIONS.md). Antes de GA, rc.14 necesita una actualización de seguridad de Git. Consulta el [aviso de seguridad del candidato](https://getdrydock.com/docs/updates).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **¿Actualizando desde 1.5.x o anterior?** Se aplican más refuerzos de seguridad sin período de gracia. Una instancia sin autenticación configurada, o con autenticación anónima habilitada pero no confirmada, ahora se cierra de forma segura al actualizar, igual que una instalación nueva: el contenedor sigue ejecutándose; las solicitudes protegidas de la API devuelven `401`; las rutas públicas de descubrimiento y estado de autenticación siguen disponibles; y `/health` devuelve `503`. La interfaz SPA puede cargar, pero no puede leer datos protegidos. Configure `DD_ANONYMOUS_AUTH_CONFIRM=true` o `DD_AUTH_BASIC_*`/OIDC antes de actualizar. La cookie de sesión cambia de `connect.sid` a `drydock.sid`, cerrando una vez todas las sesiones existentes. Los activadores HTTP, el webhook de Hass y las descargas de iconos de registros ahora resuelven nombres mediante una consulta DNS protegida que bloquea destinos de metadatos de nube y link-local, y nunca sigue redirecciones. Use `allowmetadata=true` solo en un activador `DD_NOTIFICATION_HTTP_*` que realmente lo necesite. Consulte **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** para ver la guía completa.
 
-**Versión estable de mantenimiento: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Incluye correcciones al recrear contenedores, ocultación de secretos del entorno y actualizaciones de seguridad. Usa `codeswhat/drydock:1.7.1` para fijar la versión. La imagen promovida conserva la identidad de compilación `1.7.1-rc.7`. Haz una copia de seguridad del almacenamiento y actualiza los agentes tradicionales junto con el controlador.
+**Versión estable de mantenimiento: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Incluye correcciones al recrear contenedores, ocultación de secretos del entorno y actualizaciones de seguridad. Usa `codeswhat/drydock:1.7.1` para fijar la versión. La imagen promovida conserva la identidad de compilación `1.7.1-rc.7`. Haz una copia de seguridad del almacenamiento y actualiza los agentes tradicionales junto con el controlador. Consulta las [notas de actualización estable](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Contenidos</h2>
 

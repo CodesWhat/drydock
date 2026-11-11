@@ -35,14 +35,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 est une version de test facultative.** Arrêtez Drydock et sauvegardez tout le répertoire de stockage avant de la tester. Le premier démarrage importe les données JSON dans SQLite. Revenir à une ancienne version exige de restaurer la sauvegarde préalable ; les changements effectués uniquement dans SQLite ne sont pas repris. Voir [migration et dépréciations](DEPRECATIONS.md).
+> **v1.8.0-rc.14 est une version de test facultative.** Arrêtez Drydock et sauvegardez tout le répertoire de stockage avant de la tester. Le premier démarrage importe les données JSON dans SQLite. Revenir à une ancienne version exige de restaurer la sauvegarde préalable ; les changements effectués uniquement dans SQLite ne sont pas repris. Voir [migration et dépréciations](DEPRECATIONS.md). Avant la GA, rc.14 nécessite une mise à jour de sécurité de Git. Voir l’[avertissement de sécurité du candidat](https://getdrydock.com/docs/updates).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Mise à niveau depuis 1.5.x ou une version antérieure ?** Des renforcements de sécurité supplémentaires s'appliquent sans délai de grâce. Une instance sans authentification configurée, ou avec l'accès anonyme activé mais non confirmé, échoue désormais en mode fermé lors d'une mise à niveau comme lors d'une nouvelle installation : le conteneur fonctionne, les requêtes API protégées renvoient `401`, les routes publiques de découverte et d'état d'authentification restent disponibles et `/health` renvoie `503`. L'interface SPA peut se charger, mais ne peut pas lire les données protégées. Définissez `DD_ANONYMOUS_AUTH_CONFIRM=true` ou configurez `DD_AUTH_BASIC_*`/OIDC avant la mise à niveau. Le cookie de session passe de `connect.sid` à `drydock.sid`, ce qui déconnecte une fois tous les utilisateurs. Les déclencheurs HTTP, le webhook Hass et les téléchargements d'icônes de registre utilisent désormais une résolution DNS protégée qui bloque les cibles de métadonnées cloud et link-local et ne suit jamais les redirections. Réservez `allowmetadata=true` à un déclencheur `DD_NOTIFICATION_HTTP_*` qui en a réellement besoin. Consultez **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** pour la procédure complète.
 
-**Version stable de maintenance : [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Corrige la recréation des conteneurs, masque les secrets des variables d’environnement et apporte des mises à jour de sécurité. Utilisez `codeswhat/drydock:1.7.1` pour fixer la version. L’image promue conserve l’identifiant de compilation `1.7.1-rc.7`. Sauvegardez le stockage et mettez à jour les agents classiques avec le contrôleur.
+**Version stable de maintenance : [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Corrige la recréation des conteneurs, masque les secrets des variables d’environnement et apporte des mises à jour de sécurité. Utilisez `codeswhat/drydock:1.7.1` pour fixer la version. L’image promue conserve l’identifiant de compilation `1.7.1-rc.7`. Sauvegardez le stockage et mettez à jour les agents classiques avec le contrôleur. Voir les [notes de mise à niveau stable](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Contenu</h2>
 
