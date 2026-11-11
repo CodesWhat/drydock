@@ -99,6 +99,18 @@ test('public release surfaces identify the v1.8 release candidate', () => {
     assert.ok(row?.includes(`\`${stableVersion}\``));
   }
 
+  if (RC_VERSION === '1.8.0-rc.14') {
+    for (const path of [
+      'content/docs/current/index.mdx',
+      'content/docs/current/updates/index.mdx',
+    ]) {
+      const warning = read(path);
+      assert.ok(warning.includes('CVE-2026-111760'));
+      assert.ok(warning.includes('Avoid all Git operations on untrusted repositories or objects'));
+      assert.ok(warning.includes('recursive clones'));
+    }
+  }
+
   const escapedRcVersion = escapeRegExp(RC_VERSION);
   // RC_VERSION is either a prerelease (e.g. 1.6.0-rc.6) or, at the GA cut, the plain base
   // version (e.g. 1.6.0). Both shapes drive every assertion below directly from the
