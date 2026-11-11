@@ -113,20 +113,25 @@ test('secret-scan exceptions for the immutable archive are exact and commit-inde
   ]);
 });
 
-test('v1.7 archive preserves the promoted rc.6 source with exact release and credential errata', () => {
+test('v1.7 archive preserves the promoted rc.7 source with exact release and credential errata', () => {
   const record = JSON.parse(readFileSync('content/docs/v1.7-provenance.json', 'utf8'));
   const root = 'content/docs/v1.7';
   assert.equal(record.version, 'v1.7');
-  assert.equal(record.sourceTag, 'v1.7.1-rc.6');
+  assert.equal(record.sourceTag, 'v1.7.1-rc.7');
+  for (const locale of ['', '.de', '.es', '.fr', '.pl', '.pt-BR', '.zh-CN']) {
+    const readme = readFileSync(`README${locale}.md`, 'utf8');
+    assert.ok(readme.includes(record.sourceTag.slice(1)));
+    assert.ok(!readme.includes('1.7.1-rc.6'));
+  }
   assert.equal(
     record.generatedChangelogSha256,
-    'd52e279e34df27045760dfe3efe83a5cde28fee0cd7ea3816b02a94c6f2662ad',
+    'b49ef67993d891169531af6f8ddef5626771b2e628d832de26d3a404b692313a',
   );
   assert.doesNotMatch(
     readFileSync(join(root, 'changelog/index.mdx'), 'utf8'),
     /^## \[Unreleased\]|^\[Unreleased\]:/mu,
   );
-  assert.equal(record.sourceCommit, '7e9d155fcd0fb7d390209d411a78867de19ade9b');
+  assert.equal(record.sourceCommit, 'f81d55984c843a930775e9a8719121612ec636ba');
   assert.equal(git('rev-parse', `${record.sourceTag}^{commit}`), record.sourceCommit);
   assert.equal(
     git('rev-parse', `${record.sourceCommit}:content/docs/current`),

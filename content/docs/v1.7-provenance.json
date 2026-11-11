@@ -1,8 +1,8 @@
 {
   "version": "v1.7",
-  "sourceTag": "v1.7.1-rc.6",
-  "sourceCommit": "7e9d155fcd0fb7d390209d411a78867de19ade9b",
-  "sourceDocsTree": "29860eab5a3ef3f7f7a8db33c9961256deda6386",
-  "sourceChangelogBlob": "3cb95d9f212164da870ea2adbb54e76c86aee41b",
-  "generatedChangelogSha256": "d52e279e34df27045760dfe3efe83a5cde28fee0cd7ea3816b02a94c6f2662ad"
+  "sourceTag": "v1.7.1-rc.7",
+  "sourceCommit": "f81d55984c843a930775e9a8719121612ec636ba",
+  "sourceDocsTree": "35beb05647266e2d5505d4a680ca9f4f9839141e",
+  "sourceChangelogBlob": "091af15ebc6017ebea92a25d9adfcd46ca3368c0",
+  "generatedChangelogSha256": "b49ef67993d891169531af6f8ddef5626771b2e628d832de26d3a404b692313a"
 }

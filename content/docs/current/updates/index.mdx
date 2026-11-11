@@ -5,6 +5,8 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.14 contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r), and needs a patched candidate before GA. Avoid untrusted three-way Git operations in Command actions, including merge, rebase, cherry-pick and merge-tree. Its elapsed soak does not clear this finding.</Callout>
+
 ## v1.8.0-rc.14 Highlights - November 3, 2026
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
@@ -15,7 +17,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 - **Revoked agent keys.** Re-adding a revoked agent key works again.
 - **SQLite import.** Startup warns when a legacy `dd.json` sits next to the database, and the import reports legacy documents it skipped.
 - **Container rows.** Rows refresh after a resync.
-- RC14 includes every rc.13 change below. It starts its own soak when published. v1.7.0 remains the latest stable release.
+- RC14 includes every rc.13 change below. It starts its own soak when published. For production, use the stable [v1.7.1 maintenance release](/docs/v1.7/updates).
 
 ## v1.8.0-rc.13 Highlights - November 3, 2026
 

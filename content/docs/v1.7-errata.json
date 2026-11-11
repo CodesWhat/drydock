@@ -1,5 +1,5 @@
 {
-  "reason": "Advance stable 1.7 docs to the exact rc.6 source promoted as 1.7.1, with explicit GA release metadata and retained credential-example corrections. The generated changelog includes the reviewed GA summary; historical candidate records are preserved. No application behavior changes.",
+  "reason": "Stable 1.7.1 documentation derives from the exact promoted rc.7 source, with reviewed GA metadata and retained security-example corrections. The generated changelog includes the GA summary.",
   "changes": [
     {
       "path": "configuration/authentications/oidc/index.mdx",
@@ -157,7 +157,7 @@
       "path": "quickstart/index.mdx",
       "startLine": 111,
       "endLine": 112,
-      "beforeSha256": "2007520fa90fc852b7aa3c65b9a8de128f9a2597196bb06ab5d9fe4759cf5183",
+      "beforeSha256": "3d7aec121a65864924ce843bc03f15db1a474d6b48a425b12c5be36f3e2cace7",
       "replacement": "| `1.7.1` | Immutable exact GA release; best for reproducible deployments |\n",
       "kind": "release-metadata"
     },
@@ -166,7 +166,7 @@
       "startLine": 118,
       "endLine": 118,
       "beforeSha256": "23ac323b07a2539bd2e8cdbdc20ca53e52cad504868b16276fbb584b68c25f2f",
-      "replacement": "Use the exact version tag when reporting a regression. The 1.7.1 GA image retains the `1.7.1-rc.6` build identity because promotion reuses the tested image. Use `1.7-rc` only when you intentionally want each candidate cut without editing your Compose file.\n",
+      "replacement": "Use the exact version tag when reporting a regression. The 1.7.1 GA image retains the `1.7.1-rc.7` build identity because promotion reuses the tested image. Use `1.7-rc` only when you intentionally want each candidate cut without editing your Compose file.\n",
       "kind": "release-metadata"
     },
     {
@@ -174,7 +174,7 @@
       "startLine": 7,
       "endLine": 6,
       "beforeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "replacement": "\n## v1.7.1 Highlights - November 11, 2026\n\n1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.\n\nGA promotes the exact signed rc.6 image. Its Expat fix ships with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.6` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).\n",
+      "replacement": "\n## v1.7.1 Highlights - November 11, 2026\n\n1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.\n\nGA promotes the exact signed rc.7 image. Its Expat and Git fixes ship with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.7` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).\n",
       "kind": "release-metadata"
     }
   ]
