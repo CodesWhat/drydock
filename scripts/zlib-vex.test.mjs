@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { parse } from 'yaml';
 
 test('the infback9 classification is limited to the inspected Alpine zlib revision', () => {
   const document = JSON.parse(
@@ -19,6 +20,7 @@ test('the infback9 classification is limited to the inspected Alpine zlib revisi
 
 test('Grype loads the scoped document without package or location ignore rules', () => {
   const configuration = readFileSync(new URL('../.grype.yaml', import.meta.url), 'utf8');
-  assert.match(configuration, /^vex-documents:\n  - docker\/zlib-infback9\.vex\.json$/mu);
-  assert.doesNotMatch(configuration, /^ignore:/mu);
+  const policy = parse(configuration);
+  assert.deepEqual(policy['vex-documents'], ['docker/zlib-infback9.vex.json']);
+  assert.equal(policy.ignore, undefined);
 });

@@ -21,7 +21,7 @@ HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_E
 # baked into the image; Drydock runs them from pinned worker images (app/configuration/index.ts).
 RUN apk add --no-cache \
     bash=5.3.9-r1 \
-    git=2.54.0-r0 \
+    git=2.54.1-r0 \
     jq=1.8.2-r0 \
     libcurl=8.23.0-r0 \
     libexpat=2.10.0-r0 \

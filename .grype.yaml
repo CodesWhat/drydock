@@ -20,7 +20,8 @@
 # grype scan of that exact pin confirms zero matches, so the suppression was removed.
 
 # Exact-package OpenVEX evidence for optional infback9 code absent from the runtime.
-# This retains the finding with its not_affected reason; no ignore rules or cutoff changes.
+# not_affected findings move to JSON ignoredMatches and are omitted from SARIF.
+# No ignore rules or severity cutoffs change.
 # Reassess if the package revision or build recipe changes.
 vex-documents:
   - docker/zlib-infback9.vex.json
