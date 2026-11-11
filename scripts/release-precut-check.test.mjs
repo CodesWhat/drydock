@@ -384,14 +384,10 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 test('cli exits 0 with warning when tracker file does not exist', () => {
   const trackerPath = join(tmpDir, 'missing.md');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.1'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.7.1'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
 
   assert.equal(result.status, 0);
   assert.match(result.stderr, /Tracker not found at/u);
@@ -419,14 +415,10 @@ test('cli exits 0 and prints success when tracker has no pending replies', () =>
   const trackerPath = join(tmpDir, 'clear.md');
   writeFileSync(trackerPath, TRACKER_ALL_CLEAR, 'utf8');
 
-  const result = spawnSync(
-    process.execPath,
-    [scriptPath, '--tracker', trackerPath, 'v1.7.1'],
-    {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-    },
-  );
+  const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.7.1'], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  });
 
   assert.equal(result.status, 0);
   assert.match(result.stdout, /No pending discussion replies/u);
