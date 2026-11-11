@@ -42,6 +42,8 @@
 > [!WARNING]
 > **正在从 1.5.x 或更早版本升级？** 更多安全强化措施会立即生效，没有宽限期。未配置身份验证，或已启用但尚未确认匿名身份验证的实例，在升级后会像新安装一样以故障关闭方式运行：容器保持运行，受保护的 API 请求返回 `401`，公共身份验证发现和状态路由仍可访问，`/health` 返回 `503`。SPA 外壳仍可能加载，但无法读取受保护的数据。升级前请设置 `DD_ANONYMOUS_AUTH_CONFIRM=true`，或配置 `DD_AUTH_BASIC_*`/OIDC。会话 cookie 从 `connect.sid` 更名为 `drydock.sid`，因此所有现有用户会被注销一次。HTTP 通知触发器、Hass webhook 和注册表图标获取现在通过受保护的 DNS 查询解析主机名，阻止云元数据和 link-local 目标，并且绝不跟随重定向。仅在确实需要时为特定 `DD_NOTIFICATION_HTTP_*` 触发器设置 `allowmetadata=true`。完整迁移说明请参阅 **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**。
 
+**稳定维护版本：[v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1)。** 包含容器重建修复、环境变量敏感值脱敏和安全更新。使用 `codeswhat/drydock:1.7.1` 固定版本。正式版直接采用候选版镜像，因此构建标识仍为 `1.7.1-rc.6`。升级前请备份存储目录，并将传统代理与控制器一同升级。
+
 <h2 align="center">内容</h2>
 
 - [文档](#documentation)
@@ -434,7 +436,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 | **v1.9.0** | 策略深度与生态 | **计划中：** 按更新类型选择候选版本并设置运行版本上限、按版本的成熟度及回退、监视器包含/排除过滤器、审计操作者与导出、OIDC 登录允许列表、容器状态告警、无需 healthcheck 的回滚、定时清理策略、Home Assistant 和 Homepage 集成、生命周期钩子 v2、分阶段多主机发布。 |
 | **v2.0+** | 平台扩展及其他 | Swarm/Kubernetes 观察者、GitOps 同步、卷浏览器、根据声明的上游基础监控本地构建的镜像（[#897](https://github.com/CodesWhat/drydock/discussions/897)）、健康门、金丝雀部署、Web 终端、RBAC、LDAP/AD、通过其 Docker 兼容 API 提供的基础 Podman 支持、CLI、Wolfi 强化映像、套接字代理 |
 
-**发布与升级状态：** v1.7.0 是最新稳定版（2026-10-19 GA，由 v1.7.0-rc.24 晋升）。v1.8.0-rc.14 供自愿测试，已发布的 1.7 文档与当前的 1.8 文档分开保存。
+**发布与升级状态：** v1.7.1 是最新稳定版（2026-11-11 GA，由 v1.7.1-rc.6 晋升）。v1.8.0-rc.14 供自愿测试，已发布的 1.7 文档与当前的 1.8 文档分开保存。
 
 **兼容性：** v1.7 移除了旧版触发器输入、curl 和 `/api/auth/methods`。v1.8 更改了 MQTT 实体标识和旧的 `/auth/strategies` 响应。`PUT /api/v1/settings` 在 API v2 之前保持可用；其 `Sunset` 日期不允许从冻结的 v1 API 中移除方法。`/api/auth/status` 仍受支持。
 
