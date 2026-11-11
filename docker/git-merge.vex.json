@@ -1,0 +1,51 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/CodesWhat/drydock/security/git-merge-1.7.1",
+  "author": "https://github.com/CodesWhat",
+  "timestamp": "2026-11-11T16:35:00Z",
+  "version": 3,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-105437"
+      },
+      "products": [
+        {
+          "@id": "pkg:oci/drydock@sha256:dfc6357e6bb35bd735b7cd6bffd93266adb0984893db5e406d9e856e2cb2a74a",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/drydock@sha256:b983def1ed8abc4f62a16fa2e0c561d73eaf87d63ee5af4102b15d15a540d612",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:oci/drydock@sha256:ced8bf52086d4007b608af09762017e95b002dbea83d8dbee373c041af0528f7",
+          "subcomponents": [
+            {
+              "@id": "pkg:apk/alpine/git@2.54.0-r0"
+            },
+            {
+              "@id": "pkg:apk/alpine/git-init-template@2.54.0-r0"
+            }
+          ]
+        }
+      ],
+      "status": "affected",
+      "action_statement": "These exact rc.6 image digests contain Git 2.54.0, which is vulnerable to CVE-2026-105437. Administrator-configured Command actions can execute the packaged Git. Avoid all untrusted three-way merge operations in these images, including git merge, git rebase, git cherry-pick and git merge-tree. Upgrade to the fixed Git2.54.1 candidate or apply the upstream conflict-marker-size=7 mitigation in each affected repository until an upgraded image is available. rc.6 is superseded and will not be promoted. No finding should be suppressed by this record. Upstream: https://github.com/advisories/GHSA-m7r7-8v36-j77r."
+    }
+  ]
+}

@@ -5,6 +5,12 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1-rc.7 Highlights - November 11, 2026
+
+This security candidate keeps rc.6's application code and replaces vulnerable Git2.54.0 with fixed Git2.54.1. The newly published merge advisory can be reached by administrator-configured Command actions, so rc.6 will not be promoted. The earlier environment-redaction, container recreation and Expat fixes are retained.
+
+rc.7 is prepared for expedited 1.7.1 promotion using the approved security soak override. It remains an opt-in candidate until GA; stable channels do not move at this cut. See [the candidate release](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1-rc.7) for publication details.
+
 ## v1.7.1-rc.6 Highlights - November 10, 2026
 
 This security candidate replaces rc.5 and includes its fixes. It rebuilds with libexpat 2.10.0-r0 for four security advisories, and records the artifact-verified zlib infback9 non-applicability in a narrowly scoped VEX statement. No routine dependency updates are included.

@@ -10,6 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1-rc.7] - 2026-11-11
+
+This security candidate retains rc.6's application code and fixes the Git advisories published during its build. It is prepared for expedited 1.7.1 GA promotion under the owner-approved security soak override. Stable channels stay on 1.7.0 until GA is published.
+
+### Security
+
+- Pin Git to `2.54.1-r0`, including its matching init templates. This fixes CVE-2026-105437 (three-way merge heap overflow) and CVE-2026-111760, CVE-2026-113408, CVE-2026-114466, CVE-2026-114467 and CVE-2026-114469. rc.6 contains vulnerable Git2.54.0; administrator-defined Command actions can reach it when merging untrusted repositories. rc.6 is superseded and will not be promoted.
+- Correct the exact-image rc.6 OpenVEX record to `affected`, with an action statement. A free-text exclusion for custom commands cannot narrow an image-wide `not_affected` assertion. No ignore rule or severity cutoff changes.
+- Record the stop-node XML advisory's inspected configuration: the runtime caller leaves the non-default option disabled; the second dependency is E2E-only. Keep the classification limited to the two reviewed lockfiles, with version/configuration guards and an upgrade follow-up.
+
 ## [1.7.1-rc.6] - 2026-11-10
 
 This security release candidate replaces rc.5. It retains rc.5's application changes and rebuilds with the retained branch's libexpat 2.10.0-r0 fix. It is opt-in testing; v1.7.0 remains stable and the stable channels do not move. A new seven-day soak starts at publication.
@@ -3017,7 +3027,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.7...HEAD
+[1.7.1-rc.7]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...v1.7.1-rc.7
 [1.7.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...v1.7.1-rc.6
 [1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
 [1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
