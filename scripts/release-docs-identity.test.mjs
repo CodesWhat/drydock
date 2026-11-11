@@ -88,6 +88,14 @@ test('public release surfaces identify the v1.8 release candidate', () => {
   const quickstart = read('content/docs/current/quickstart/index.mdx');
   const changelog = read('CHANGELOG.md');
 
+  const stableVersion = siteConfig.match(/stableVersion: "([^"]+)"/u)?.[1];
+  assert.ok(stableVersion);
+  assert.ok(quickstart.includes(`latest stable release (v${stableVersion})`));
+  for (const tag of ['1', 'latest']) {
+    const row = quickstart.split('\n').find((line) => line.startsWith(`| \`${tag}\` |`));
+    assert.ok(row?.includes(`\`${stableVersion}\``));
+  }
+
   const escapedRcVersion = escapeRegExp(RC_VERSION);
   // RC_VERSION is either a prerelease (e.g. 1.6.0-rc.6) or, at the GA cut, the plain base
   // version (e.g. 1.6.0). Both shapes drive every assertion below directly from the
