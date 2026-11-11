@@ -2,8 +2,8 @@
   "@context": "https://openvex.dev/ns/v0.2.0",
   "@id": "https://github.com/CodesWhat/drydock/security/git-merge-1.7.1",
   "author": "https://github.com/CodesWhat",
-  "timestamp": "2026-11-11T15:55:00Z",
-  "version": 2,
+  "timestamp": "2026-11-11T16:35:00Z",
+  "version": 3,
   "statements": [
     {
       "vulnerability": {
@@ -45,7 +45,7 @@
         }
       ],
       "status": "affected",
-      "action_statement": "These exact rc.6 image digests contain Git 2.54.0, which is vulnerable to CVE-2026-105437. Administrator-configured Command actions can execute the packaged Git, so custom commands that merge untrusted repositories are affected. Do not use these images for untrusted Git merges. Upgrade to the fixed Git2.54.1 candidate or apply upstream conflict-marker-size=7 mitigation to each affected repository until an upgraded image is available. rc.6 is superseded and will not be promoted. No finding should be suppressed by this record. Upstream: https://github.com/advisories/GHSA-m7r7-8v36-j77r."
+      "action_statement": "These exact rc.6 image digests contain Git 2.54.0, which is vulnerable to CVE-2026-105437. Administrator-configured Command actions can execute the packaged Git. Avoid all untrusted three-way merge operations in these images, including git merge, git rebase, git cherry-pick and git merge-tree. Upgrade to the fixed Git2.54.1 candidate or apply the upstream conflict-marker-size=7 mitigation in each affected repository until an upgraded image is available. rc.6 is superseded and will not be promoted. No finding should be suppressed by this record. Upstream: https://github.com/advisories/GHSA-m7r7-8v36-j77r."
     }
   ]
 }

@@ -19,6 +19,9 @@ test('the Git assessment identifies only the promoted images and exact vulnerabl
       { '@id': 'pkg:apk/alpine/git-init-template@2.54.0-r0' },
     ]);
   }
-  assert.match(statement.action_statement, /custom commands/iu);
+  for (const command of ['git merge', 'git rebase', 'git cherry-pick', 'git merge-tree']) {
+    assert.ok(statement.action_statement.includes(command), command);
+  }
+  assert.match(statement.action_statement, /all untrusted three-way merge operations/iu);
   assert.match(statement.action_statement, /Git 2.54.0.*vulnerable/u);
 });
