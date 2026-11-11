@@ -5,6 +5,12 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1 Highlights - November 11, 2026
+
+1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.
+
+GA promotes the exact signed rc.6 image. Its Expat fix ships with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.6` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).
+
 ## v1.7.1-rc.6 Highlights - November 10, 2026
 
 This security candidate replaces rc.5 and includes its fixes. It rebuilds with libexpat 2.10.0-r0 for four security advisories, and records the artifact-verified zlib infback9 non-applicability in a narrowly scoped VEX statement. No routine dependency updates are included.

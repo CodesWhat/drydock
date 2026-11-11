@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-11
+
+This maintenance release promotes the exact signed v1.7.1-rc.6 image and source archive. It includes the fixes tested throughout the 1.7.1 candidate series. The application changes completed their soak in rc.5; rc.6 adds the Expat security fix, the available timezone package and a scoped scanner assessment. The owner approved shortening rc.6's additional soak to deliver the security fix. The published release records the candidate's exact age and the override reason.
+
+### Security
+
+- Redact recognized secret environment values and credential-bearing URLs before storing container records or update snapshots. Startup scrubs the existing JSON store, including names such as `ENCRYPTION_KEY`. This is name-based redaction, not encryption: unrecognized names can still retain plaintext, and old backups are not scrubbed. Environment reveal reads the live container; upgrade traditional agents alongside the controller (#1523).
+- Update the Node.js runtime and vulnerable application dependencies carried through rc.2 to rc.4. The image includes libexpat `2.10.0-r0` for CVE-2026-113351, CVE-2026-115506, CVE-2026-117610 and CVE-2026-118370, plus the libcurl security fix.
+- Record CVE-2026-4738 as not affected only for the inspected custom zlib APK. Optional infback9 code is absent; the existing gzip-write backport and scan thresholds are preserved.
+
+### Fixed
+
+- Keep anonymous volumes and recreate containers that depend on a replaced container's network namespace or volumes. Update services defined in Compose `include:` files.
+- Prevent include-filter recovery from offering older versions as updates (#1499), and recognize locally built images with Docker's containerd image store (#1506).
+- Complete dependency views and update guards, show maturity countdowns across update lists, restore environment/password reveal icons, and finish the candidate series' UI translation and scanner consistency fixes.
+
+### Upgrade notes
+
+- Use `codeswhat/drydock:1.7.1` for an exact version. Stable channels `1.7`, `1` and `latest` move to this image. The image's build identity remains `1.7.1-rc.6` because GA reuses the tested bytes.
+- Back up the store before upgrading. This release keeps the 1.7 JSON store; the SQLite migration belongs to 1.8. Review the earlier candidate entries below for the complete changes, including maintenance-window scope (`scan` remains the 1.7 default), API route deprecations and dashboard additions.
+
 ## [1.7.1-rc.6] - 2026-11-10
 
 This security release candidate replaces rc.5. It retains rc.5's application changes and rebuilds with the retained branch's libexpat 2.10.0-r0 fix. It is opt-in testing; v1.7.0 remains stable and the stable channels do not move. A new seven-day soak starts at publication.
@@ -3017,7 +3038,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.6...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/CodesWhat/drydock/compare/v1.7.0...v1.7.1
 [1.7.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.5...v1.7.1-rc.6
 [1.7.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.4...v1.7.1-rc.5
 [1.7.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.7.1-rc.3...v1.7.1-rc.4
