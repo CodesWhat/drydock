@@ -5,7 +5,7 @@
 | Version | Supported |
 | --- | --- |
 | Latest v1.8 release candidate (v1.8.0-rc.14, opt-in testing) | :white_check_mark: |
-| Latest stable release (v1.7.0, GA 2026-10-19) | :white_check_mark: |
+| Latest stable release (v1.7.1, GA 2026-11-11) | :white_check_mark: |
 | Older stable or prerelease versions | :x: |
 
 The v1.7 stable line and the v1.8 candidate train are both supported during the overlap. A v1.8 RC does not replace the stable release.

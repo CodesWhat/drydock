@@ -35,12 +35,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 ist ein freiwilliger Testbuild.** Drydock vor dem Test stoppen und das gesamte Store-Verzeichnis sichern. Beim ersten Start werden JSON-Daten in SQLite importiert. Für ein Downgrade muss die Sicherung vor dem Upgrade wiederhergestellt werden; Änderungen nur in SQLite werden nicht zurückübertragen. Siehe [Migration und veraltete Funktionen](DEPRECATIONS.md).
+> **v1.8.0-rc.14 ist ein freiwilliger Testbuild.** Drydock vor dem Test stoppen und das gesamte Store-Verzeichnis sichern. Beim ersten Start werden JSON-Daten in SQLite importiert. Für ein Downgrade muss die Sicherung vor dem Upgrade wiederhergestellt werden; Änderungen nur in SQLite werden nicht zurückübertragen. Siehe [Migration und veraltete Funktionen](DEPRECATIONS.md). Vor GA braucht rc.14 ein Git-Sicherheitsupdate. Siehe [Sicherheitshinweis zum Testbuild](https://getdrydock.com/docs/updates).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Aktualisierung von 1.5.x oder älter?** Weitere Sicherheitsverschärfungen gelten ohne Übergangsfrist. Eine Instanz ohne konfigurierte Authentifizierung oder mit aktivierter, aber unbestätigter anonymer Authentifizierung schlägt beim Upgrade jetzt genauso geschlossen fehl wie eine Neuinstallation: Der Container läuft, geschützte API-Anfragen geben `401` zurück, öffentliche Routen für Authentifizierungserkennung und -status bleiben erreichbar und `/health` gibt `503` zurück. Die SPA-Shell kann weiterhin laden, aber keine geschützten Anwendungsdaten lesen. Setzen Sie vor dem Upgrade `DD_ANONYMOUS_AUTH_CONFIRM=true` oder konfigurieren Sie `DD_AUTH_BASIC_*`/OIDC. Das Sitzungscookie wird von `connect.sid` in `drydock.sid` umbenannt, wodurch alle bestehenden Benutzer einmalig abgemeldet werden. HTTP-Benachrichtigungstrigger sowie der Hass-Webhook und Registry-Icon-Abrufe lösen Hostnamen jetzt über eine geschützte DNS-Suche auf, die Cloud-Metadaten- und Link-Local-Ziele blockiert und Weiterleitungen nie folgt. Setzen Sie `allowmetadata=true` nur für einen bestimmten `DD_NOTIFICATION_HTTP_*`-Trigger, wenn dies wirklich erforderlich ist. Vollständige Migrationshinweise finden Sie in **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)**.
+
+**Stabile Wartungsversion: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Enthält Korrekturen beim Neuerstellen von Containern, die Schwärzung geheimer Umgebungswerte und Sicherheitsupdates. Für eine feste Version `codeswhat/drydock:1.7.1` verwenden. Das unverändert übernommene Image behält die Build-Kennung `1.7.1-rc.7`. Vor dem Upgrade den Datenspeicher sichern und klassische Agents zusammen mit dem Controller aktualisieren. Siehe [Upgrade-Hinweise zur stabilen Version](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Inhalt</h2>
 
@@ -434,7 +436,7 @@ Nur übergeordnete Themen; Details pro Version finden Sie in [CHANGELOG.md](CHAN
 | **v1.9.0** | Richtlinientiefe und Ökosystem | **Geplant:** Kandidaten je Update-Typ und Obergrenzen für die laufende Version, Reifegrad je Version mit Fallback, Include-/Exclude-Filter für Watcher, Audit-Akteur und -Export, OIDC-Anmelde-Allowlist, Warnungen bei Container-Statusänderungen, Rollback ohne Healthcheck, geplante Cleanup-Richtlinie, Home-Assistant- und Homepage-Integrationen, Lifecycle-Hooks v2, gestaffelter Multi-Host-Rollout. |
 | **v2.0+** | Plattformerweiterung und darüber hinaus | Swarm/Kubernetes-Watcher, GitOps-Synchronisierung, Volume-Browser, lokal erstellte Images, die gegen eine deklarierte Upstream-Basis überwacht werden ([#897](https://github.com/CodesWhat/drydock/discussions/897)), Health Gates, Canary Deployments, Webterminal, RBAC, LDAP/AD, grundlegende Podman-Unterstützung über dessen Docker-kompatible API, CLI, gehärtetes Wolfi-Image, Socket-Proxy |
 
-**Release- und Upgrade-Status:** v1.7.0 ist die aktuelle stabile Version (GA am 19.10.2026, aus v1.7.0-rc.24 übernommen). v1.8.0-rc.14 ist zum freiwilligen Testen gedacht; die veröffentlichten 1.7-Docs bleiben getrennt von den aktiven 1.8-Docs erhalten.
+**Release- und Upgrade-Status:** v1.7.1 ist die aktuelle stabile Version (GA am 11.11.2026, aus v1.7.1-rc.7 übernommen). v1.8.0-rc.14 ist zum freiwilligen Testen gedacht; die veröffentlichten 1.7-Docs bleiben getrennt von den aktiven 1.8-Docs erhalten.
 
 **Kompatibilität:** v1.7 entfernt veraltete Trigger-Eingaben, curl und `/api/auth/methods`. v1.8 ändert die MQTT-Entity-Identität und die alte `/auth/strategies`-Antwort. `PUT /api/v1/settings` bleibt bis API v2 verfügbar; das `Sunset`-Datum erlaubt nicht, eine Methode aus der eingefrorenen v1-API zu entfernen. `/api/auth/status` bleibt unterstützt.
 
