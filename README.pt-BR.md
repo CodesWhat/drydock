@@ -35,12 +35,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 é uma versão de teste opcional.** Pare o Drydock e faça uma cópia de todo o diretório de dados antes de testar. A primeira inicialização importa os dados JSON para SQLite. Voltar a uma versão anterior exige restaurar a cópia prévia; alterações feitas apenas no SQLite não são transferidas de volta. Consulte [migração e descontinuações](DEPRECATIONS.md).
+> **v1.8.0-rc.14 é uma versão de teste opcional.** Pare o Drydock e faça uma cópia de todo o diretório de dados antes de testar. A primeira inicialização importa os dados JSON para SQLite. Voltar a uma versão anterior exige restaurar a cópia prévia; alterações feitas apenas no SQLite não são transferidas de volta. Consulte [migração e descontinuações](DEPRECATIONS.md). Antes do GA, rc.14 precisa de uma atualização de segurança do Git. Veja o [aviso de segurança do candidato](https://getdrydock.com/docs/updates).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Atualizando da 1.5.x ou anterior?** Mais reforços de segurança entram em vigor sem período de carência. Uma instância sem autenticação configurada, ou com autenticação anônima ativada mas não confirmada, agora falha de forma fechada após a atualização, assim como uma instalação nova: o contêiner continua em execução, solicitações protegidas da API retornam `401`, as rotas públicas de descoberta e status de autenticação permanecem disponíveis e `/health` retorna `503`. A interface SPA pode carregar, mas não lê dados protegidos. Defina `DD_ANONYMOUS_AUTH_CONFIRM=true` ou configure `DD_AUTH_BASIC_*`/OIDC antes de atualizar. O cookie da sessão muda de `connect.sid` para `drydock.sid`, desconectando todos os usuários uma vez. Gatilhos HTTP, o webhook Hass e buscas de ícones de registro agora usam DNS protegido, bloqueiam destinos de metadados de nuvem e link-local e nunca seguem redirecionamentos. Use `allowmetadata=true` somente no gatilho `DD_NOTIFICATION_HTTP_*` específico que realmente precisar. Consulte **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** para a orientação completa.
+
+**Versão estável de manutenção: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Inclui correções na recriação de contêineres, ocultação de segredos do ambiente e atualizações de segurança. Use `codeswhat/drydock:1.7.1` para fixar a versão. A imagem promovida mantém a identificação de compilação `1.7.1-rc.7`. Faça backup do armazenamento e atualize os agentes tradicionais junto com o controlador. Veja as [notas de atualização estável](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Conteúdo</h2>
 
@@ -434,7 +436,7 @@ Apenas temas gerais; consulte [CHANGELOG.md](CHANGELOG.md) para detalhes de cada
 | **v1.9.0** | Profundidade de políticas e ecossistema | **Planejado:** candidatos por tipo de atualização e limites da versão em execução, maturidade por versão com alternativa, filtros de inclusão/exclusão do watcher, ator e exportação de auditoria, lista de permissões de login OIDC, alertas de estado de contêiner, reversão sem healthcheck, política de limpeza agendada, integrações com Home Assistant e Homepage, hooks de ciclo de vida v2, implantação escalonada em vários hosts. |
 | **v2.0+** | Expansão da plataforma e muito mais | Observadores Swarm/Kubernetes, sincronização GitOps, navegador de volume, imagens criadas localmente monitoradas em relação a uma base upstream declarada ([#897](https://github.com/CodesWhat/drydock/discussions/897)), gates de saúde, implementações canary, terminal web, RBAC, LDAP/AD, suporte básico ao Podman por meio de sua API compatível com Docker, CLI, imagem reforçada Wolfi, proxy de soquete |
 
-**Status de versões e atualização:** a v1.7.0 é a versão estável mais recente (GA em 19/10/2026, promovida da v1.7.0-rc.24). A v1.8.0-rc.14 é para testes opcionais, e a documentação 1.7 publicada é mantida separada da documentação 1.8 ativa.
+**Status de versões e atualização:** a v1.7.1 é a versão estável mais recente (GA em 11/11/2026, promovida da v1.7.1-rc.7). A v1.8.0-rc.14 é para testes opcionais, e a documentação 1.7 publicada é mantida separada da documentação 1.8 ativa.
 
 **Compatibilidade:** a v1.7 remove entradas legadas de triggers, o curl e `/api/auth/methods`. A v1.8 altera a identidade das entidades MQTT e a resposta antiga de `/auth/strategies`. `PUT /api/v1/settings` continua disponível até a API v2; sua data `Sunset` não autoriza remover um método da API v1 congelada. `/api/auth/status` continua com suporte.
 
