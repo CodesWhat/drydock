@@ -42,6 +42,8 @@
 > [!WARNING]
 > **Atualizando para 1.6.0-rc.3 ou posterior?** Mais reforços de segurança entram em vigor sem período de carência. Uma instância sem autenticação configurada, ou com autenticação anônima ativada mas não confirmada, agora falha de forma fechada após a atualização, assim como uma instalação nova: o contêiner continua em execução, solicitações protegidas da API retornam `401`, as rotas públicas de descoberta e status de autenticação permanecem disponíveis e `/health` retorna `503`. A interface SPA pode carregar, mas não lê dados protegidos. Defina `DD_ANONYMOUS_AUTH_CONFIRM=true` ou configure `DD_AUTH_BASIC_*`/OIDC antes de atualizar. O cookie da sessão muda de `connect.sid` para `drydock.sid`, desconectando todos os usuários uma vez. Gatilhos HTTP, o webhook Hass e buscas de ícones de registro agora usam DNS protegido, bloqueiam destinos de metadados de nuvem e link-local e nunca seguem redirecionamentos. Use `allowmetadata=true` somente no gatilho `DD_NOTIFICATION_HTTP_*` específico que realmente precisar. Consulte **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** para a orientação completa.
 
+**Versão estável de manutenção: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Inclui correções na recriação de contêineres, ocultação de segredos do ambiente e atualizações de segurança. Use `codeswhat/drydock:1.7.1` para fixar a versão. A imagem promovida mantém a identificação de compilação `1.7.1-rc.7`. Faça backup do armazenamento e atualize os agentes tradicionais junto com o controlador.
+
 <h2 align="center">Conteúdo</h2>
 
 - [Documentação](#documentation)
