@@ -1,7 +1,7 @@
 # Versioned docs content
 
 - `current/`: active/default v1.8 RC docs, served as `v1.8`
-- `v1.7/`: retained docs for the v1.7 line, released as v1.7.0 on 2026-10-19
+- `v1.7/`: retained docs for the v1.7 line, updated for v1.7.1 GA on 2026-11-11; the line first went GA as v1.7.0 on 2026-10-19
 - `v1.6/`: frozen 1.6 documentation, initialized from the published v1.6.0 docs and corrected only for version-compatible errata; final release is v1.6.1
 - `v1.5/`, `v1.4/`, `v1.3/`: archived documentation
 
@@ -15,7 +15,7 @@ Versioned docs preserve the behavior and release identity of their source versio
 
 The v1.5 tree differs from the published v1.5.2 source only for its generated changelog and reviewed documentation errata: sanitized ACR, GAR, Telegram, Gotify, and Rocket.Chat credential examples; corrected API/action/authentication/SBOM/self-update behavior; fixed IMGSET regex and Compose Argon2 escaping; corrected deprecation, security, verification, quickstart, and illustrative timestamp copy. These are documentation-only corrections and do not change the archived product behavior.
 
-The v1.7 tree is bound to the published rc.24 tag by `v1.7-provenance.json`. `v1.7-errata.json` records exact source-bound placeholder corrections, mirrored into current docs. The archive contract verifies every other byte, including its generated changelog.
+The v1.7 tree is bound to the published `v1.7.1-rc.7` tag, promoted unchanged to `v1.7.1`, by `v1.7-provenance.json`. `v1.7-errata.json` records the reviewed source-bound security-example and release-metadata corrections. The archive contract reconstructs those exact corrections and verifies the generated GA changelog hash.
 
 The v1.6 tree is initialized from the `v1.6.0` release commit on `main`, whose source tree records the GA identity while the promoted `v1.6.0` image tag retains the exact `v1.6.0-rc.13` candidate tree. Its generated changelog and any reviewed documentation corrections follow the same policy.
 

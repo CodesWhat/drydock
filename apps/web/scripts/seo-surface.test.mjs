@@ -163,6 +163,7 @@ test("roadmap does not claim static-image monitoring shipped and matches the REA
   const { roadmap } = await import("../src/lib/site-content.ts");
   const v17 = roadmap.find((m) => m.version === "v1.7.0");
   assert.doesNotMatch(v17.items.join(" "), /static-image|Image cleanup/i);
+  assert.doesNotMatch(v17.title, /latest stable/i);
   assert.ok(roadmap.some((m) => m.version === "v1.9.0" && m.status === "planned"));
   assert.ok(roadmap.some((m) => m.version === "v2.0+"));
   for (const gone of ["v2.1.0", "v2.2.0", "v2.3.0", "v2.4.0", "v3.0.0", "v3.1.0"]) {
