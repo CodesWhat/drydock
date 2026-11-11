@@ -28,8 +28,8 @@ RUN apk add --no-cache \
     openssl=3.5.9-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
-    tzdata=2026e-r0 \
-    zlib=1.3.2-r1 \
+    tzdata=2026f-r0 \
+    zlib=1.4-r0 \
     && apk upgrade --no-cache libcrypto3 libssl3 \
     && mkdir -m 0700 /store && chown node:node /store
 

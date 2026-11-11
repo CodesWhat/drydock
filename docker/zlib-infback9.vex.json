@@ -1,0 +1,22 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/CodesWhat/drydock/security/zlib-infback9-1.3.2-r1",
+  "author": "https://github.com/CodesWhat",
+  "timestamp": "2026-11-10T19:50:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-4738"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/zlib@1.3.2-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The vulnerable code is optional contrib/infback9/inftree9.c, not the standard libz implementation. The Alpine zlib 1.3.2-r1 runtime shared library does not compile this optional Deflate64 code. Immutable v1.8.0-rc.14 images were inspected on linux/amd64 and linux/arm64: all layer hashes verified, no infback9/inftree9 paths or GDAL library, no inflateBack9/inflate_table9 symbols in libz, with ordinary zlib symbols present as controls. No other APK revision or vulnerability is covered. Artifact digests and evidence: https://github.com/CodesWhat/drydock/pull/1544#issuecomment-6713748413. Upstream scope: https://github.com/madler/zlib/pull/1235."
+    }
+  ]
+}
