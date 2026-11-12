@@ -5,7 +5,7 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.14 contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r), and needs a patched candidate before GA. Avoid untrusted three-way Git operations in Command actions, including merge, rebase, cherry-pick and merge-tree. Its elapsed soak does not clear this finding.</Callout>
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.14 contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r), and needs a patched candidate before GA. It is also affected by [recursive-clone remote code execution (CVE-2026-111760)](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr). Avoid all Git operations on untrusted repositories or objects, including recursive clones, merge, rebase, cherry-pick and merge-tree. Its elapsed soak does not clear this finding.</Callout>
 
 ## v1.8.0-rc.14 Highlights - November 3, 2026
 
