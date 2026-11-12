@@ -5,6 +5,82 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Unreleased
 
+## v1.7.1 Highlights - November 11, 2026
+
+1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.
+
+GA promotes the exact signed rc.7 image. Its Expat and Git fixes ship with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.7` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).
+
+## v1.7.1-rc.7 Highlights - November 11, 2026
+
+This security candidate keeps rc.6's application code and replaces vulnerable Git2.54.0 with fixed Git2.54.1. The newly published merge advisory can be reached by administrator-configured Command actions, so rc.6 will not be promoted. The earlier environment-redaction, container recreation and Expat fixes are retained.
+
+rc.7 is prepared for expedited 1.7.1 promotion using the approved security soak override. It remains an opt-in candidate until GA; stable channels do not move at this cut. See [the candidate release](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1-rc.7) for publication details.
+
+## v1.7.1-rc.6 Highlights - November 10, 2026
+
+This security candidate replaces rc.5 and includes its fixes. It rebuilds with libexpat 2.10.0-r0 for four security advisories, and records the artifact-verified zlib infback9 non-applicability in a narrowly scoped VEX statement. No routine dependency updates are included.
+
+It is opt-in testing. v1.7.0 remains stable; the stable channels do not move. The new candidate starts a full seven-day soak at publication. See [the candidate changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.6/CHANGELOG.md) for details.
+
+## v1.7.1-rc.5 Highlights — November 1, 2026
+
+The fifth release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- Redact env values under `*_KEY` names such as `ENCRYPTION_KEY` and `LITELLM_MASTER_KEY`. Existing stores are rescrubbed on the first start after upgrading. Backups made before the upgrade are not scrubbed, and a secret under an unrecognized name can still be stored as plaintext (#1523).
+- Fix the env value reveal button and the login password toggle rendering blank (#1523).
+- It includes everything in rc.4 and starts a new seven-day soak at publication. The stable `latest` and `1.7` channels do not move.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.5/CHANGELOG.md#171-rc5--2026-11-01) for the full release notes.
+
+## v1.7.1-rc.4 Highlights — October 31, 2026
+
+The fourth release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- Update joi to 18.3.1 and follow-redirects to 1.16.2 for the new high-severity advisories. Update minimatch and glob overrides to their fixed majors in development and build tooling.
+- Redact recognised secret environment names and credential-bearing URLs in the JSON store, including saved update-operation snapshots. Startup scrubs and saves the active store before serving requests. Unknown secret names can still be stored in plaintext, and older copies and backups are not scrubbed (#1523).
+- Reveal environment values from the exact live Docker container. Upgrade traditional agents with the controller; older agents and edge connections cannot reveal env. Changes only to recognised secret values no longer count as runtime-detail changes.
+- Pin `step-security/harden-runner` v2.22.3 for the hosted-runner DNS fix.
+- It includes everything in rc.3 and starts a new seven-day soak at publication. The stable `latest` and `1.7` channels do not move.
+
+See [CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.4/CHANGELOG.md#171-rc4--2026-10-31) for the full release notes.
+
+## v1.7.1-rc.3 Highlights — October 29, 2026
+
+The third release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- `vue-i18n` 11.4.16 fixes CVE-2026-118257 (high) and CVE-2026-118256. `v1.7.0` and the earlier 1.7.1 candidates ship 11.4.12. `qs` and `re2js` advisory updates are included.
+- A container whose tag sits outside `dd.tag.include` is no longer offered older matching tags as updates (#1499).
+- Locally built images are recognised as local under Docker's containerd image store and skip registry lookups (#1506).
+- It includes everything in rc.2, starts its own soak when published, and `v1.7.0` remains the latest stable release.
+
+See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.3/CHANGELOG.md#171-rc3--2026-10-29)
+for the full release notes.
+
+## v1.7.1-rc.2 Highlights — October 26, 2026
+
+The second release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release.
+
+- The image pins libcurl to 8.23.0-r0 for CVE-2026-92392 (high). `v1.7.0` and `v1.7.1-rc.1` shipped 8.22.0-r0. The npm advisory updates (body-parser, fast-uri, Nodemailer, Undici, Zod, serialize-javascript) are included.
+- It includes everything in rc.1, starts its own soak when published, and `v1.7.0` remains the latest stable release.
+
+See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.2/CHANGELOG.md#171-rc2--2026-10-26)
+for the full release notes.
+
+## v1.7.1-rc.1 Highlights — October 23, 2026
+
+The first release candidate for 1.7.1, the maintenance release on the 1.7 line. It is opt-in testing, and `v1.7.0` remains the stable release. Updates keep anonymous volumes when they recreate a container, and containers that share a network namespace with an updated container are recreated against it. Services defined in compose `include:` files are updated. The UI gets an offline indicator with last-known data, a dependency view, and maturity countdowns wherever a held update is listed. `DD_WATCHER_{name}_MAINTENANCE_WINDOW_SCOPE` can hold back installs only, and `scan` stays the default. The image and scanner worker use one pinned Trivy, the Security view shows scanner versions, `/api/v1/actions` and `/api/v1/notification-triggers` replace `/api/v1/triggers` (deprecated), and the dashboard has optional widgets. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.1-rc.1/CHANGELOG.md#171-rc1--2026-10-23)
+for the full release notes.
+
+## v1.7.0 Highlights — October 19, 2026
+
+Consolidates the `1.7.0-rc.1` … `1.7.0-rc.24` prereleases into one GA release. The main themes: dependency-aware update ordering, per-action update policy, an installable PWA with keyboard shortcuts and uptime, agent ownership and policy handoff fixes, updates and rollbacks that deploy the image that was verified, a dark-theme contrast pass, and security patches across the image, dependencies and website. The `DD_TRIGGER_*` prefix, `curl` in the image and the unversioned `/api/auth/methods` alias are removed, and the Home Assistant MQTT topic layout now includes an agent segment by default. Users already on `1.7.0-rc.24` receive no additional runtime changes. See
+[CHANGELOG.md](https://github.com/CodesWhat/drydock/blob/v1.7.0/CHANGELOG.md#170--2026-10-19)
+for the full release notes.
+
 ## v1.7.0-rc.24 Highlights — October 12, 2026
 
 This candidate is rc.23 plus development and test dependency updates, and nothing else. The root and e2e workspaces pick up newer Biome, lefthook, Vite, `@types/node` and `@dotenvx/dotenvx`, with a handful of matching override bumps. None of it ships. The image is built from `app` and `ui`, so its runtime dependencies are the same as rc.23.
