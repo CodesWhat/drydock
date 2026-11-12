@@ -36,12 +36,14 @@
 <hr>
 
 > [!WARNING]
-> **v1.8.0-rc.14 is an opt-in test build.** Stop Drydock and back up the complete store directory before trying it. First startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite are not carried back. See [migration and deprecations](DEPRECATIONS.md).
+> **v1.8.0-rc.14 is an opt-in test build.** It needs a Git security update before GA; see the [candidate security warning](https://getdrydock.com/docs/updates). Stop Drydock and back up the complete store directory before trying it. First startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite are not carried back. See [migration and deprecations](DEPRECATIONS.md).
 
 <!-- separate release and upgrade alerts -->
 
 > [!WARNING]
 > **Updating from 1.5.x or earlier?** More security-hardening fixes land with no grace period. An instance with no authentication configured — or with anonymous auth enabled but unconfirmed — now **fails closed** on upgrade, exactly like a fresh install: the container runs; protected API requests return `401`; authentication discovery/status routes remain public; and `/health` returns `503`. The SPA shell may still load, but it cannot read protected application data. Set `DD_ANONYMOUS_AUTH_CONFIRM=true` or configure `DD_AUTH_BASIC_*`/OIDC before upgrading. The session cookie is renamed `connect.sid` → `drydock.sid`, signing every existing user out once. HTTP notification triggers (plus the Hass webhook and registry icon fetches) now resolve hostnames through a guarded DNS lookup that blocks cloud-metadata/link-local targets and never follow redirects — set `allowmetadata=true` on a specific `DD_NOTIFICATION_HTTP_*` trigger if you legitimately need one. See **[DEPRECATIONS.md](DEPRECATIONS.md#enforced-security-changes-no-deprecation-window)** for full migration guidance.
+
+**Stable maintenance release: [v1.7.1](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).** Includes container recreation fixes, environment-secret redaction and runtime security updates. Pin `codeswhat/drydock:1.7.1`, back up your store and upgrade traditional agents alongside the controller. GA reuses rc.7 and keeps its `1.7.1-rc.7` build identity. See the [stable upgrade notes](https://getdrydock.com/docs/v1.7/updates).
 
 <h2 align="center">Contents</h2>
 
@@ -437,7 +439,7 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | **v1.9.0** | Policy depth & Ecosystem | **Planned:** per-update-type candidates and running-version ceilings, per-version maturity with fallback, watcher include/exclude filters, audit actor and export, OIDC sign-in allowlist, container state alerts, rollback without a healthcheck, scheduled cleanup policy, Home Assistant and Homepage integrations, lifecycle hooks v2, staged multi-host rollout. |
 | **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps sync, volume browser, locally-built images watched against a declared upstream base ([#897](https://github.com/CodesWhat/drydock/discussions/897)), health gates, canary deploys, web terminal, RBAC, LDAP/AD, basic Podman support over its Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
 
-**Release and upgrade status:** v1.7.0 is the latest stable release (GA 2026-10-19, promoted from v1.7.0-rc.24). v1.8.0-rc.14 is for opt-in testing, with the published 1.7 docs preserved separately from the active 1.8 docs.
+**Release and upgrade status:** v1.7.1 is the latest stable maintenance release (GA 2026-11-11, promoted from v1.7.1-rc.7). It includes container recreation fixes, environment-secret redaction and runtime security updates. Pin `codeswhat/drydock:1.7.1`, back up your store and upgrade traditional agents alongside the controller. The image retains its `1.7.1-rc.7` build identity because promotion reuses the tested bytes. v1.8.0-rc.14 is for opt-in testing, with the published 1.7 docs preserved separately from the active 1.8 docs.
 
 **Compatibility:** v1.7 removes legacy trigger inputs, curl and `/api/auth/methods`. v1.8 changes MQTT entity identity and the old `/auth/strategies` response. `PUT /api/v1/settings` remains available until API v2; its `Sunset` date does not authorize removing a method from the frozen v1 API. `/api/auth/status` remains supported.
 

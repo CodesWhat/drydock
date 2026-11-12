@@ -8,6 +8,11 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Build maintenance
+
+- Fresh source builds use the available Alpine `tzdata=2026f-r0` and `zlib=1.4-r0` pins after the old exact revisions left the repository. This does not rebuild or alter any published candidate.
+- Record the artifact-verified CVE-2026-4738 non-applicability for exactly `zlib@1.3.2-r1` in OpenVEX. Other packages and CVEs remain gated at the existing severity cutoff.
+
 ## [1.8.0-rc.14] - 2026-11-03
 
 > [!WARNING]

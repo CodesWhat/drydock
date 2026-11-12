@@ -1,124 +1,181 @@
 {
-  "reason": "Replace published sample credentials with explicit placeholders, preserve both Google registry examples and spacing, and move the Google service-account link outside its heading to prevent nested-anchor hydration failure. Product behavior and release identity are unchanged. The same corrections are mirrored into current docs. The index quick start also gains the /store volume and basic auth it needs to start on a fresh install (mirrored from the quick start page).",
+  "reason": "Stable 1.7.1 documentation derives from the exact promoted rc.7 source, with reviewed GA metadata and retained security-example corrections. The generated changelog includes the GA summary.",
   "changes": [
     {
       "path": "configuration/authentications/oidc/index.mdx",
       "startLine": 55,
       "endLine": 57,
       "beforeSha256": "798b04e1d39bb431ab752155cffc025c26a9111ca0673aa91a324d8eebbb63ce",
-      "replacement": "      YOUR_OIDC_SIGNING_PRIVATE_KEY\n"
-    },
-    {
-      "path": "configuration/registries/gcr/index.mdx",
-      "startLine": 40,
-      "endLine": 51,
-      "beforeSha256": "c64d48df4365c1366948bd244952e07c200f5ea0abc3efb86efe221cbcf859c5",
-      "replacement": "      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY \n```\n\n</Tab>\n<Tab value=\"Docker\">\n```bash\ndocker run \\\n  -e DD_REGISTRY_GCR_PRIVATE_CLIENTEMAIL=\"johndoe@mysuperproject.iam.gserviceaccount.com\" \\\n  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=\"YOUR_SERVICE_ACCOUNT_PRIVATE_KEY\" \\\n  ...\n  codeswhat/drydock\n```\n\n"
-    },
-    {
-      "path": "configuration/registries/docr/index.mdx",
-      "startLine": 85,
-      "endLine": 85,
-      "beforeSha256": "5577c8f627c3c70153396e544e4c8312d482a8391b5feabfa7b3f0477132956f",
-      "replacement": "      \"auth\": \"YOUR_BASE64_AUTH\"\n"
-    },
-    {
-      "path": "configuration/registries/docr/index.mdx",
-      "startLine": 95,
-      "endLine": 95,
-      "beforeSha256": "b51348b3c69e02170f57e2bd24d393ef881224e44a9101f866bdefe83d405d77",
-      "replacement": "  -e \"DD_REGISTRY_DOCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+      "replacement": "      YOUR_OIDC_SIGNING_PRIVATE_KEY\n",
+      "kind": "security-example"
     },
     {
       "path": "configuration/registries/alicr/index.mdx",
       "startLine": 60,
       "endLine": 60,
       "beforeSha256": "87c5e4f69e078337624a3cd3606000315643b6421a8d392d5632e1c7a047af92",
-      "replacement": "      - DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
+      "replacement": "      - DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n",
+      "kind": "security-example"
     },
     {
       "path": "configuration/registries/alicr/index.mdx",
       "startLine": 67,
       "endLine": 67,
       "beforeSha256": "7a2953b3795345b6ff8d70a24bbdab7294d4e64a09ca6303d7d846b524b47672",
-      "replacement": "  -e \"DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
-    },
-    {
-      "path": "configuration/registries/ibmcr/index.mdx",
-      "startLine": 86,
-      "endLine": 86,
-      "beforeSha256": "8551d908d6f4f407fb7228e39b0677770080dced9bebf1186c443a7c730e9956",
-      "replacement": "      - DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
-    },
-    {
-      "path": "configuration/registries/ibmcr/index.mdx",
-      "startLine": 93,
-      "endLine": 93,
-      "beforeSha256": "50422c469dccbe8633a96dcd287941e4e5eb2f1600c96fab878a4a13db1401df",
-      "replacement": "  -e \"DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+      "replacement": "  -e \"DD_REGISTRY_ALICR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
     },
     {
       "path": "configuration/registries/dhi/index.mdx",
       "startLine": 68,
       "endLine": 68,
       "beforeSha256": "65cdd15216fd65befee838da15484ae3d35ab13085d97c2f59bb745be0d45011",
-      "replacement": "      - DD_REGISTRY_DHI_PUBLIC_AUTH=YOUR_BASE64_AUTH\n"
+      "replacement": "      - DD_REGISTRY_DHI_PUBLIC_AUTH=YOUR_BASE64_AUTH\n",
+      "kind": "security-example"
     },
     {
       "path": "configuration/registries/dhi/index.mdx",
       "startLine": 75,
       "endLine": 75,
       "beforeSha256": "29c60f2f09acf5ceb0517522f5a6173be7f7c21e66fb239c134432a126011b4e",
-      "replacement": "  -e DD_REGISTRY_DHI_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n"
+      "replacement": "  -e DD_REGISTRY_DHI_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
     },
     {
-      "path": "configuration/registries/ocir/index.mdx",
-      "startLine": 60,
-      "endLine": 60,
-      "beforeSha256": "9974d6c26098f0536d151c8c081b3786638f0f31c9d4e672c0165fd88640b2e1",
-      "replacement": "      - DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n"
+      "path": "configuration/registries/docr/index.mdx",
+      "startLine": 85,
+      "endLine": 85,
+      "beforeSha256": "5577c8f627c3c70153396e544e4c8312d482a8391b5feabfa7b3f0477132956f",
+      "replacement": "      \"auth\": \"YOUR_BASE64_AUTH\"\n",
+      "kind": "security-example"
     },
     {
-      "path": "configuration/registries/ocir/index.mdx",
-      "startLine": 67,
-      "endLine": 67,
-      "beforeSha256": "a0bcebc257d3071ae4e77748d1c6a2679bfac0cb9ed7ab513184ccc2050e4f92",
-      "replacement": "  -e \"DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n"
+      "path": "configuration/registries/docr/index.mdx",
+      "startLine": 95,
+      "endLine": 95,
+      "beforeSha256": "b51348b3c69e02170f57e2bd24d393ef881224e44a9101f866bdefe83d405d77",
+      "replacement": "  -e \"DD_REGISTRY_DOCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
     },
     {
-      "path": "configuration/registries/hub/index.mdx",
-      "startLine": 102,
-      "endLine": 102,
-      "beforeSha256": "1aa5f911810958ebc8bcc00b448789a502e64f473b3335c26613bbe15a603f56",
-      "replacement": "      - DD_REGISTRY_HUB_PUBLIC_AUTH=YOUR_BASE64_AUTH\n"
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 40,
+      "endLine": 40,
+      "beforeSha256": "e3ac91859561fefd251685c2afe5b6cf5e2524b438ed9168e608eaefe264f7a1",
+      "replacement": "      - DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=YOUR_SERVICE_ACCOUNT_PRIVATE_KEY \n",
+      "kind": "security-example"
     },
     {
-      "path": "configuration/registries/hub/index.mdx",
-      "startLine": 109,
-      "endLine": 109,
-      "beforeSha256": "b6d96bd9757e6818edbd54913888b41df18cec024e31bf22f9575ab9c33c8b95",
-      "replacement": "  -e DD_REGISTRY_HUB_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n"
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 48,
+      "endLine": 48,
+      "beforeSha256": "8d7e38185e7edc745aff4d1fb4c2a2e2ac6f3d1274e3bdd01ab422669e17ce03",
+      "replacement": "  -e DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=\"YOUR_SERVICE_ACCOUNT_PRIVATE_KEY\" \\\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/gcr/index.mdx",
+      "startLine": 52,
+      "endLine": 51,
+      "beforeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "replacement": "\n",
+      "kind": "security-example"
     },
     {
       "path": "configuration/registries/gcr/index.mdx",
       "startLine": 57,
       "endLine": 57,
       "beforeSha256": "6f1f22c795d86fd89b0b840ced35315b12cad45105b18d9bfeaf16bd4aa59cd9",
-      "replacement": "### 1. Go to the Service Account page {#1-go-to-theservice-account-page}\n\n[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).\n"
+      "replacement": "### 1. Go to the Service Account page {#1-go-to-theservice-account-page}\n\n[Open the Service Account page](https://console.cloud.google.com/iam-admin/serviceaccounts).\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/hub/index.mdx",
+      "startLine": 102,
+      "endLine": 102,
+      "beforeSha256": "1aa5f911810958ebc8bcc00b448789a502e64f473b3335c26613bbe15a603f56",
+      "replacement": "      - DD_REGISTRY_HUB_PUBLIC_AUTH=YOUR_BASE64_AUTH\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/hub/index.mdx",
+      "startLine": 109,
+      "endLine": 109,
+      "beforeSha256": "b6d96bd9757e6818edbd54913888b41df18cec024e31bf22f9575ab9c33c8b95",
+      "replacement": "  -e DD_REGISTRY_HUB_PUBLIC_AUTH=\"YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/ibmcr/index.mdx",
+      "startLine": 86,
+      "endLine": 86,
+      "beforeSha256": "8551d908d6f4f407fb7228e39b0677770080dced9bebf1186c443a7c730e9956",
+      "replacement": "      - DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/ibmcr/index.mdx",
+      "startLine": 93,
+      "endLine": 93,
+      "beforeSha256": "50422c469dccbe8633a96dcd287941e4e5eb2f1600c96fab878a4a13db1401df",
+      "replacement": "  -e \"DD_REGISTRY_IBMCR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/ocir/index.mdx",
+      "startLine": 60,
+      "endLine": 60,
+      "beforeSha256": "9974d6c26098f0536d151c8c081b3786638f0f31c9d4e672c0165fd88640b2e1",
+      "replacement": "      - DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "configuration/registries/ocir/index.mdx",
+      "startLine": 67,
+      "endLine": 67,
+      "beforeSha256": "a0bcebc257d3071ae4e77748d1c6a2679bfac0cb9ed7ab513184ccc2050e4f92",
+      "replacement": "  -e \"DD_REGISTRY_OCIR_PRIVATE_AUTH=YOUR_BASE64_AUTH\" \\\n",
+      "kind": "security-example"
     },
     {
       "path": "index.mdx",
-      "startLine": 37,
+      "startLine": 38,
       "endLine": 38,
-      "beforeSha256": "ef782dbd504a56ef6039c6b182e433a79b76312d4ce7649f098cbdb9bd6c8837",
-      "replacement": "  -v /var/run/docker.sock:/var/run/docker.sock \\\n  -v \"$(pwd)/drydock-store:/store\" \\\n  -e DD_AUTH_BASIC_ADMIN_USER=admin \\\n  -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \\\n  -p 127.0.0.1:3000:3000 \\\n"
+      "beforeSha256": "496093c0ecc3b0b1a4645b65a62cb17c247578caa228496c0718f2ebd01156f6",
+      "replacement": "  -v \"$(pwd)/drydock-store:/store\" \\\n  -e DD_AUTH_BASIC_ADMIN_USER=admin \\\n  -e 'DD_AUTH_BASIC_ADMIN_HASH=argon2id$65536$3$4$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw==' \\\n  -p 127.0.0.1:3000:3000 \\\n",
+      "kind": "security-example"
     },
     {
       "path": "index.mdx",
-      "startLine": 43,
+      "startLine": 44,
       "endLine": 43,
-      "beforeSha256": "3501e0eff60715d70f544cd9b1a985f25636f4bc5206c552b5c32f57a1b714c1",
-      "replacement": "Direct socket access grants the container full control over the Docker daemon. See the [Quick Start guide](/docs/quickstart) for the recommended **socket proxy** setup and other [secure connection options](/docs/configuration/watchers#docker-socket-security).\n\nThe sample login is `admin` / `password` and the port is bound to localhost. Generate your own [password hash](/docs/configuration/authentications/basic) before you expose Drydock beyond this machine.\n"
+      "beforeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "replacement": "\nThe sample login is `admin` / `password` and the port is bound to localhost. Generate your own [password hash](/docs/configuration/authentications/basic) before you expose Drydock beyond this machine.\n",
+      "kind": "security-example"
+    },
+    {
+      "path": "quickstart/index.mdx",
+      "startLine": 111,
+      "endLine": 112,
+      "beforeSha256": "3d7aec121a65864924ce843bc03f15db1a474d6b48a425b12c5be36f3e2cace7",
+      "replacement": "| `1.7.1` | Immutable exact GA release; best for reproducible deployments |\n",
+      "kind": "release-metadata"
+    },
+    {
+      "path": "quickstart/index.mdx",
+      "startLine": 118,
+      "endLine": 118,
+      "beforeSha256": "23ac323b07a2539bd2e8cdbdc20ca53e52cad504868b16276fbb584b68c25f2f",
+      "replacement": "Use the exact version tag when reporting a regression. The 1.7.1 GA image retains the `1.7.1-rc.7` build identity because promotion reuses the tested image. Use `1.7-rc` only when you intentionally want each candidate cut without editing your Compose file.\n",
+      "kind": "release-metadata"
+    },
+    {
+      "path": "updates/index.mdx",
+      "startLine": 7,
+      "endLine": 6,
+      "beforeSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "replacement": "\n## v1.7.1 Highlights - November 11, 2026\n\n1.7.1 is the stable maintenance release for the 1.7 line. It keeps anonymous volumes during updates, reconnects dependent containers, handles Compose includes, prevents include-filter downgrades and recognizes local images with Docker's containerd store. It also redacts recognized environment secrets in the JSON store and includes the runtime and dependency security fixes from the candidate series.\n\nGA promotes the exact signed rc.7 image. Its Expat and Git fixes ship with an owner-approved shorter soak; the release notes record the reason and candidate age. The image still reports `1.7.1-rc.7` as its build identity. Back up the store and upgrade traditional agents alongside the controller. This stays on JSON storage; SQLite arrives in 1.8. See [the full changelog](https://github.com/CodesWhat/drydock/blob/v1.7.1/CHANGELOG.md) and [release notes](https://github.com/CodesWhat/drydock/releases/tag/v1.7.1).\n",
+      "kind": "release-metadata"
     }
   ]
 }

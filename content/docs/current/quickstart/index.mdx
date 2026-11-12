@@ -6,7 +6,7 @@ description: "Deploy Drydock with Docker using a socket proxy or direct mount."
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-<Callout type="warn">**v1.8.0-rc.14 is an opt-in test build.** These versioned examples pin that RC. For production, use the latest stable release (v1.7.0) and its [v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
+<Callout type="warn">**v1.8.0-rc.14 is an opt-in test build.** These versioned examples pin that RC. It needs a Git security update before GA; see the [candidate security warning](/docs/updates). For production, use the latest stable release (v1.7.1) and its [v1.7 docs](/docs/v1.7/quickstart). Stop Drydock and back up the complete store directory before upgrading: first startup imports JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot and cannot carry back changes made only in SQLite. See [storage migration and downgrade guidance](/docs/configuration/storage#upgrade-from-json).</Callout>
 
 ## Run the Docker image
 
@@ -112,14 +112,15 @@ Release tags use the same channel names in every registry:
 | --- | --- |
 | `1.8.0-rc.14` | Immutable release candidate; best for reproducible testing |
 | `1.8-rc` | Rolling release-candidate channel; moves to the newest `1.8.0-rc.N` |
-| `1.7.0-rc.24` | Final 1.7 candidate, promoted to the 1.7.0 GA on 2026-10-19 |
+| `1.7.0-rc.24` | Final 1.7.0 candidate, promoted to the 1.7.0 GA on 2026-10-19 |
 | `1.7-rc` | Separate rolling 1.7 candidate channel |
-| `1.7.0` | Immutable exact GA release, promoted unchanged from `1.7.0-rc.24`; best for reproducible deployments |
-| `1.7` | Rolling stable minor channel for the current stable line; published only for GA releases |
+| `1.7.1` | Immutable exact GA release, promoted unchanged from `1.7.1-rc.7`; best for reproducible deployments |
+| `1.7.0` | Earlier immutable GA release, superseded by the 1.7.1 security maintenance release |
+| `1.7` | Rolling stable minor channel for the current stable line; resolves to `1.7.1`; published only for GA releases |
 | `1.6.1` | Immutable exact GA release; final release of the frozen previous stable line |
 | `1.6` | Rolling channel for the frozen previous stable line; it no longer moves |
-| `1` | Rolling stable major channel; resolves to `1.7.0`; published only for GA releases |
-| `latest` | Newest GA release; resolves to `1.7.0` and never points at a prerelease |
+| `1` | Rolling stable major channel; resolves to `1.7.1`; published only for GA releases |
+| `latest` | Newest GA release; resolves to `1.7.1` and never points at a prerelease |
 
 Use the exact RC tag when reporting a regression. Use `1.8-rc` only when you intentionally want each candidate cut without editing your Compose file.
 

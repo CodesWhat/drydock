@@ -19,7 +19,7 @@ export const SITE_CONFIG = {
   /** Current release version shown in the hero badge. */
   version: "1.8.0-rc.14",
   /** Latest stable release, shown next to the RC in the hero. */
-  stableVersion: "1.7.0",
+  stableVersion: "1.7.1",
   /** Short product tagline used in page titles and OG metadata. */
   tagline: "Container Update Monitoring",
   /** Default page title: carries the search-intent phrase ("Docker", "self-hosted"). */
