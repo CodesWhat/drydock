@@ -18,7 +18,9 @@ This candidate includes every rc.14 change and upgrade warning. It patches the G
 ### Fixed
 
 - Newly discovered Portwing containers retain their owning agent, so updates select the agent's Docker action instead of looking for a controller-local action (#1583).
-- Portwing added and updated events refresh image details before digest comparison. They use the running image ID even if its local tag moved, retain a prior digest verdict only for the same image reference when refresh fails, and do not inherit cached digest facts after an image change (#1584).
+- Portwing added and updated events refresh image details before digest comparison. They use the running image ID even if its local tag moved, retain a prior digest verdict only for the same image reference when refresh fails, and clear old update results and local candidate-age markers after an image change (#1584).
+- The existing Docker watcher's Swarm service-label inheritance also applies during Portwing event refreshes. A failed service inspection preserves the prior digest verdict instead of replacing it with a result based on missing service labels.
+- Correct the current Portwing rotation compatibility notes against its published v1.2.0 guide. Stable Portwing v1.x from v1.0 supports the documented opt-in pairing with the Drydock v1.8 candidates; managed storage and mode-specific configuration/capabilities remain required.
 
 ### Security
 

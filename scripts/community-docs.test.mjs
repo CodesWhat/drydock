@@ -61,7 +61,11 @@ test('the roadmap preserves unfinished community requests', () => {
   }
   assert.match(section, /not implemented/u);
   assert.match(section, /DD_DEFAULTS_WATCH_DIGEST/u);
-  assert.match(section, /available for testing in v1\.8\.0-rc\.15/u);
+  const candidate = readFileSync('apps/web/src/lib/site-config.ts', 'utf8').match(
+    /^\s*version: "([^"]+)"/mu,
+  )?.[1];
+  assert.ok(candidate, 'the site must identify the current candidate');
+  assert.ok(section.includes(`available for testing in v${candidate}`));
 });
 
 test('the current translation guide matches the UI-only Crowdin mapping', () => {

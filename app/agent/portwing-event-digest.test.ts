@@ -4,6 +4,7 @@
 import { EventEmitter } from 'node:events';
 import Dockerode from 'dockerode';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import * as configuration from '../configuration/index.js';
 import type { Container } from '../model/container.js';
 import Hub from '../registries/providers/hub/Hub.js';
 import * as registry from '../registry/index.js';
@@ -165,8 +166,11 @@ test('a dd:container_updated event keeps the detected digest update', async () =
   await nativeWatcher.watch();
   expect(stored().updateAvailable).toBe(true);
 
+  vi.mocked(Dockerode.prototype.getImage).mockClear();
+
   // Portwing sends this on any status or health change of the container.
   await frame('dd:container_updated', { container: portwingRecord() });
+  expect(Dockerode.prototype.getImage).toHaveBeenCalledWith(IMAGE_ID);
 
   expect(stored().updateAvailable).toBe(true);
   expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
@@ -204,11 +208,13 @@ test('an unavailable Docker image does not erase the detected digest update', as
   await frame('dd:container_sync', { containers: [portwingRecord()] });
   await nativeWatcher.watch();
   expect(stored().updateAvailable).toBe(true);
+  vi.mocked(Dockerode.prototype.getImage).mockClear();
   vi.mocked(Dockerode.prototype.getImage).mockImplementationOnce((() => ({
     inspect: vi.fn().mockRejectedValue(new Error('image unavailable')),
   })) as never);
 
   await frame('dd:container_updated', { container: portwingRecord() });
+  expect(Dockerode.prototype.getImage).toHaveBeenCalledWith(IMAGE_ID);
 
   expect(stored().updateAvailable).toBe(true);
   expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
@@ -218,9 +224,14 @@ test('an event whose container disappeared does not erase the detected digest up
   await frame('dd:container_sync', { containers: [portwingRecord()] });
   await nativeWatcher.watch();
   expect(stored().updateAvailable).toBe(true);
+  vi.mocked(Dockerode.prototype.listContainers).mockClear();
   vi.mocked(Dockerode.prototype.listContainers).mockResolvedValueOnce([]);
 
   await frame('dd:container_updated', { container: portwingRecord() });
+  expect(Dockerode.prototype.listContainers).toHaveBeenCalledWith({
+    all: true,
+    filters: { id: [ID] },
+  });
 
   expect(stored().updateAvailable).toBe(true);
   expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
@@ -244,6 +255,7 @@ test.each(['id', 'name', 'tag', 'registry'])(
   async (field) => {
     await frame('dd:container_sync', { containers: [portwingRecord()] });
     await nativeWatcher.watch();
+    expect(stored().firstSeenAt).toBeDefined();
     const changed = portwingRecord();
     if (field === 'id') changed.image.id = `sha256:${'f'.repeat(64)}`;
     if (field === 'name') changed.image.name = 'library/nginx';
@@ -252,6 +264,10 @@ test.each(['id', 'name', 'tag', 'registry'])(
 
     await frame('dd:container_sync', { containers: [changed] });
 
+    expect(stored().result).toBeUndefined();
+    expect(stored().updateAvailable).toBe(false);
+    expect(stored().updateDetectedAt).toBeUndefined();
+    expect(stored().firstSeenAt).toBeUndefined();
     expect(stored().image.digest.repo).toBeUndefined();
     expect(stored().image.digest.value).toBeUndefined();
     expect(stored().image.digest.repoDigests).toBeUndefined();
@@ -291,6 +307,54 @@ test('event image facts come from the running image when a local tag has moved',
 
   expect(stored().image.id).toBe(IMAGE_ID);
   expect(stored().image.digest.value).toBe(RUNNING_DIGEST);
+  expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
+  expect(stored().updateAvailable).toBe(true);
+});
+
+function configureSwarmDigestService() {
+  vi.spyOn(configuration, 'getDefaultDigestWatch').mockReturnValue(false);
+  const swarmLabels = { ...labels, 'com.docker.swarm.service.id': 'digest-service' };
+  vi.mocked(Dockerode.prototype.listContainers).mockResolvedValue([
+    {
+      Id: ID,
+      Names: ['/target'],
+      Image: REF,
+      ImageID: IMAGE_ID,
+      State: 'running',
+      Labels: swarmLabels,
+      Ports: [],
+      Mounts: [],
+    },
+  ] as never);
+  const inspect = vi.fn().mockResolvedValue({ Spec: { Labels: { 'dd.watch.digest': 'true' } } });
+  vi.spyOn(Dockerode.prototype, 'getService').mockImplementation((() => ({ inspect })) as never);
+  return { inspect, record: { ...portwingRecord(), labels: swarmLabels } };
+}
+
+test('an added event resolves digest watching from Swarm deploy labels', async () => {
+  const { inspect, record } = configureSwarmDigestService();
+
+  await frame('dd:container_added', { container: record });
+
+  expect(inspect).toHaveBeenCalled();
+  expect(stored().image.digest.watch).toBe(true);
+  expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
+  expect(stored().updateAvailable).toBe(true);
+});
+
+test('failed Swarm service inspection preserves the prior digest verdict before image enrichment', async () => {
+  const { inspect, record } = configureSwarmDigestService();
+  await frame('dd:container_sync', { containers: [record] });
+  await nativeWatcher.watch();
+  expect(stored().updateAvailable).toBe(true);
+  inspect.mockClear().mockRejectedValueOnce(new Error('service unavailable'));
+  vi.mocked(Dockerode.prototype.getImage).mockClear();
+
+  await frame('dd:container_updated', { container: record });
+
+  expect(inspect).toHaveBeenCalled();
+  expect(Dockerode.prototype.getImage).not.toHaveBeenCalled();
+  expect(stored().image.digest.watch).toBe(true);
   expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
   expect(stored().updateAvailable).toBe(true);
 });

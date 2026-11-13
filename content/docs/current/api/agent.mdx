@@ -73,12 +73,13 @@ curl http://drydock:3000/api/v1/agents/roster
 { "data": [{ "name": "agent1" }], "total": 1 }
 ```
 
-### Rotate a Portwing signing key (Drydock RC, Portwing development) {#rotate-a-portwing-signing-key-development}
+### Rotate a Portwing signing key (Drydock v1.8 RC) {#rotate-a-portwing-signing-key-development}
 
 Controller-assisted Ed25519 rotation first shipped in Drydock v1.8.0-rc.1
-and remains available in v1.8.0-rc.15 with compatible Portwing development
-builds. Published Portwing v1.0.0-rc.1 does not include the companion feature;
-no compatible published Portwing version is assigned yet.
+and remains available in v1.8.0-rc.15. The [published Portwing v1.2.0
+compatibility guide](https://github.com/CodesWhat/portwing/blob/v1.2.0/COMPATIBILITY.md#controller-assisted-rotation) lists stable Portwing v1.x, from v1.0, with
+Drydock v1.8.0-rc.1+ on the v1.8 line. Managed storage and the mode-specific
+configuration/capabilities are required.
 See [Agent configuration](/docs/configuration/agents#controller-assisted-key-rotation-development)
 for storage and recovery requirements.
 
