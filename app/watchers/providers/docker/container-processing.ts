@@ -12,6 +12,7 @@ import { getErrorMessage } from './docker-helpers.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
 
 export interface DockerContainerWatchOptions {
+  refreshImageDetails?: boolean;
   emitBatchEvent?: boolean;
   useRegistryPollCache?: boolean;
   collectReleaseMaturity?: boolean;
