@@ -1137,6 +1137,14 @@ export class AgentClient {
       return container;
     }
 
+    const imageChanged = Boolean(
+      container.image &&
+        existing.image &&
+        (container.image.id !== existing.image.id ||
+          container.image.name !== existing.image.name ||
+          container.image.tag.value !== existing.image.tag.value ||
+          container.image.registry.url !== existing.image.registry.url),
+    );
     const controllerOwnedFields: (keyof Container)[] = [
       'result',
       'error',
@@ -1181,22 +1189,18 @@ export class AgentClient {
     if (existing.image?.digest) {
       const mergedImage = merged.image as Container['image'] | undefined;
       if (mergedImage) {
-        const sameImage =
-          mergedImage.id === existing.image.id &&
-          mergedImage.name === existing.image.name &&
-          mergedImage.tag.value === existing.image.tag.value &&
-          mergedImage.registry.url === existing.image.registry.url;
         merged.image = {
           ...mergedImage,
           digest: {
             ...mergedImage.digest,
-            ...(sameImage ? existing.image.digest : {}),
+            ...(imageChanged ? {} : existing.image.digest),
             watch: existing.image.digest.watch,
           },
         };
       }
     }
-    return merged as unknown as Container;
+    const enriched = merged as unknown as Container;
+    return imageChanged ? clearDetectedUpdateState(enriched) : enriched;
   }
 
   private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {

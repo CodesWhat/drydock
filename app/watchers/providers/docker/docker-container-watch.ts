@@ -8,6 +8,7 @@ type DockerContainerWatcher = Pick<
   | 'dockerApi'
   | 'ensureLogger'
   | 'ensureRemoteAuthHeaders'
+  | 'getEffectiveContainerLabels'
   | 'addImageDetailsToContainer'
   | 'findNewVersion'
   | 'mapContainerToContainerReport'
@@ -30,7 +31,11 @@ export async function watchDockerContainer(
     const summary = summaries.find((candidate) => candidate.Id === container.id);
     if (!summary) throw new Error(`Container ${container.id} is no longer available`);
     const enriched = await watcher.addImageDetailsToContainer(
-      { ...summary, Image: summary.Image && (summary.ImageID || container.image.id) },
+      {
+        ...summary,
+        Labels: await watcher.getEffectiveContainerLabels({ ...summary }, new Map(), true),
+        Image: summary.Image && (summary.ImageID || container.image.id),
+      },
       {},
       { requireImageDetails: true },
     );
