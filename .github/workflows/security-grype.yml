@@ -79,7 +79,7 @@ jobs:
         # Code scanning uploads need a public repo or GHAS. Drydock is public,
         # so this runs; the guard keeps the job green on a fork/private mirror.
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
         with:
           sarif_file: ${{ steps.grype-deps.outputs.sarif }}
           category: grype-deps
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload Grype SARIF to code scanning
         if: always() && github.event.repository.visibility == 'public'
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d  # v4.38.3
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
           category: grype-image
