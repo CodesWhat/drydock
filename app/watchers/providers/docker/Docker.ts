@@ -1389,6 +1389,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    * @returns {Promise<*>}
    */
   async watchContainer(container: Container, options: DockerContainerWatchOptions = {}) {
+    if (options.refreshImageDetails) {
+      await this.ensureRemoteAuthHeaders();
+      const summaries = await this.dockerApi.listContainers({
+        all: true,
+        filters: { id: [container.id] },
+      });
+      const summary = summaries.find((candidate) => candidate.Id === container.id);
+      if (!summary) throw new Error(`Container ${container.id} is no longer available`);
+      const enriched = await addImageDetailsToContainerOrchestration(
+        this.asDockerImageDetailsWatcher(),
+        { ...summary, Image: summary.ImageID || summary.Image },
+        {},
+        this.getDockerImageDetailsHelpers(),
+        { requireImageDetails: true },
+      );
+      if (!enriched)
+        throw new Error(`Unable to resolve image details for container ${container.id}`);
+      container = enriched;
+    }
     const {
       emitBatchEvent = false,
       useRegistryPollCache = false,

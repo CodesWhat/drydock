@@ -1176,13 +1176,21 @@ export class AgentClient {
     // `controllerOwnedFields`), so without this, a later Portwing report
     // wholesale-replaces the store's `image` and silently turns digest
     // watching back off (DR-38).
+    // The availability getter needs the running digest as well as the result.
+    // Reuse those facts only while the complete image reference still matches.
     if (existing.image?.digest) {
       const mergedImage = merged.image as Container['image'] | undefined;
       if (mergedImage) {
+        const sameImage =
+          mergedImage.id === existing.image.id &&
+          mergedImage.name === existing.image.name &&
+          mergedImage.tag.value === existing.image.tag.value &&
+          mergedImage.registry.url === existing.image.registry.url;
         merged.image = {
           ...mergedImage,
           digest: {
             ...mergedImage.digest,
+            ...(sameImage ? existing.image.digest : {}),
             watch: existing.image.digest.watch,
           },
         };
@@ -1890,7 +1898,7 @@ export class AgentClient {
       | {
           watchContainer?: (
             target: Container,
-            options?: { emitBatchEvent?: boolean },
+            options?: { emitBatchEvent?: boolean; refreshImageDetails?: boolean },
           ) => Promise<ContainerReport>;
         }
       | undefined;
@@ -1902,7 +1910,7 @@ export class AgentClient {
     }
 
     try {
-      await watcher.watchContainer(container, { emitBatchEvent: true });
+      await watcher.watchContainer(container, { emitBatchEvent: true, refreshImageDetails: true });
     } catch (error: unknown) {
       // The Portwing event already refreshed runtime state. Preserve that
       // useful update and retry enrichment on the next event/scheduled poll.
