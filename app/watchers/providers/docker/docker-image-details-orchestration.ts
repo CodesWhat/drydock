@@ -274,6 +274,7 @@ interface ResolveContainerImageStateContext {
 }
 
 interface RefreshStoredContainerImageFieldsContext {
+  requireImageDetails?: boolean;
   watcher: DockerImageDetailsWatcher;
   container: DockerContainerSummary;
   dockerContainerName: string;
@@ -520,7 +521,8 @@ async function refreshStoredContainerImageFields(
         containerInStore.sourceRepo = backfilledResolution.sourceRepo;
       }
     }
-  } catch {
+  } catch (error) {
+    if (context.requireImageDetails) throw error;
     // Degrade gracefully to cached values.
   }
 }
@@ -638,6 +640,7 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   const statusChanged = containerInStore.status !== statusBeforeReconcile;
 
   await refreshStoredContainerImageFields({
+    requireImageDetails: context.requireImageDetails,
     watcher,
     container,
     dockerContainerName,
@@ -977,6 +980,7 @@ export async function addImageDetailsToContainerOrchestration(
   container: DockerContainerSummary,
   labelOverrides: ContainerLabelOverrides = {},
   helpers: DockerImageDetailsHelpers,
+  options: { requireImageDetails?: boolean } = {},
 ): Promise<Container | undefined> {
   const containerId = container.Id;
   const dockerContainerName = getContainerName(container);
@@ -998,6 +1002,7 @@ export async function addImageDetailsToContainerOrchestration(
   const containerInStore = storeContainer.getContainer(containerId);
   if (containerInStore !== undefined) {
     return refreshContainerAlreadyInStore({
+      requireImageDetails: options.requireImageDetails,
       watcher,
       container,
       dockerContainerName,
@@ -1075,6 +1080,7 @@ export async function buildDiscoveredContainer(
     status: container.State,
     health: normalizeContainerHealth(containerInspect?.State?.Health?.Status),
     watcher: watcher.name,
+    agent: watcher.agent,
     includeTags: resolvedConfig.includeTags,
     excludeTags: resolvedConfig.excludeTags,
     transformTags: resolvedConfig.transformTags,
