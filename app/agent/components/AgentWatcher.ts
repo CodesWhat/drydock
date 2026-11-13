@@ -112,7 +112,7 @@ class AgentWatcher extends Watcher {
    */
   async watchContainer(
     container: Container,
-    _options?: { emitBatchEvent?: boolean },
+    _options?: { emitBatchEvent?: boolean; refreshImageDetails?: boolean },
   ): Promise<ContainerReport> {
     if (this.controllerWatcher) {
       return this.controllerWatcher.watchContainer(container, _options);

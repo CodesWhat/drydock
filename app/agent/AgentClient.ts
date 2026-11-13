@@ -1137,6 +1137,14 @@ export class AgentClient {
       return container;
     }
 
+    const imageChanged = Boolean(
+      container.image &&
+        existing.image &&
+        (container.image.id !== existing.image.id ||
+          container.image.name !== existing.image.name ||
+          container.image.tag.value !== existing.image.tag.value ||
+          container.image.registry.url !== existing.image.registry.url),
+    );
     const controllerOwnedFields: (keyof Container)[] = [
       'result',
       'error',
@@ -1176,6 +1184,8 @@ export class AgentClient {
     // `controllerOwnedFields`), so without this, a later Portwing report
     // wholesale-replaces the store's `image` and silently turns digest
     // watching back off (DR-38).
+    // The availability getter needs the running digest as well as the result.
+    // Reuse those facts only while the complete image reference still matches.
     if (existing.image?.digest) {
       const mergedImage = merged.image as Container['image'] | undefined;
       if (mergedImage) {
@@ -1183,12 +1193,14 @@ export class AgentClient {
           ...mergedImage,
           digest: {
             ...mergedImage.digest,
+            ...(imageChanged ? {} : existing.image.digest),
             watch: existing.image.digest.watch,
           },
         };
       }
     }
-    return merged as unknown as Container;
+    const enriched = merged as unknown as Container;
+    return imageChanged ? clearDetectedUpdateState(enriched) : enriched;
   }
 
   private setControllerDockerTransportWatchers(descriptors: AgentComponentDescriptor[]): void {
@@ -1890,7 +1902,7 @@ export class AgentClient {
       | {
           watchContainer?: (
             target: Container,
-            options?: { emitBatchEvent?: boolean },
+            options?: { emitBatchEvent?: boolean; refreshImageDetails?: boolean },
           ) => Promise<ContainerReport>;
         }
       | undefined;
@@ -1902,7 +1914,7 @@ export class AgentClient {
     }
 
     try {
-      await watcher.watchContainer(container, { emitBatchEvent: true });
+      await watcher.watchContainer(container, { emitBatchEvent: true, refreshImageDetails: true });
     } catch (error: unknown) {
       // The Portwing event already refreshed runtime state. Preserve that
       // useful update and retry enrichment on the next event/scheduled poll.

@@ -10500,7 +10500,7 @@ describe('AgentClient', () => {
           image: { id: 'sha256:changed' },
           labels: { 'com.example.channel': 'stable' },
         }),
-        { emitBatchEvent: true },
+        { emitBatchEvent: true, refreshImageDetails: true },
       );
     });
 
@@ -10555,7 +10555,7 @@ describe('AgentClient', () => {
             },
           }),
         }),
-        { emitBatchEvent: true },
+        { emitBatchEvent: true, refreshImageDetails: true },
       );
     });
 
