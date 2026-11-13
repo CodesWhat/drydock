@@ -8,10 +8,29 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.15] - 2026-11-13
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes every rc.14 change and upgrade warning. It patches the Git dependency, fixes Portwing ownership and digest-event handling, and incorporates reviewed dependency and build updates. Its soak starts when this candidate is published.
+
+### Fixed
+
+- Newly discovered Portwing containers retain their owning agent, so updates select the agent's Docker action instead of looking for a controller-local action (#1583).
+- Portwing added and updated events refresh image details before digest comparison. They use the running image ID even if its local tag moved, retain a prior digest verdict only for the same image reference when refresh fails, and do not inherit cached digest facts after an image change (#1584).
+
+### Security
+
+- Pin Git to `2.54.1-r0`, replacing the affected `2.54.0` in rc.14 and addressing CVE-2026-105437 and CVE-2026-111760.
+- Update fast-xml-parser to `5.12.0` and remove the temporary CVE-2026-126066 scanner waiver.
+
 ### Build maintenance
 
-- Fresh source builds use the available Alpine `tzdata=2026f-r0` and `zlib=1.4-r0` pins after the old exact revisions left the repository. This does not rebuild or alter any published candidate.
+- This candidate uses the available Alpine `tzdata=2026f-r0` and `zlib=1.4-r0` pins after the old exact revisions left the repository. Previously published candidates are unchanged.
 - Record the artifact-verified CVE-2026-4738 non-applicability for exactly `zlib@1.3.2-r1` in OpenVEX. Other packages and CVEs remain gated at the existing severity cutoff.
+- Refresh reviewed runtime and development dependencies, Playwright 1.65.0 and its matching browser image, and verified GitHub Action pins. Keep the standalone OpenTelemetry Core 3 override out until its SDK/exporter graph is upgraded together.
+- Update the German agent labels for operating system and live status.
 
 ## [1.8.0-rc.14] - 2026-11-03
 
@@ -3758,7 +3777,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...HEAD
+[1.8.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...v1.8.0-rc.15
 [1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
 [1.8.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.11...v1.8.0-rc.12

@@ -5,9 +5,21 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.14 contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r), and needs a patched candidate before GA. It is also affected by [recursive-clone remote code execution (CVE-2026-111760)](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr). Avoid all Git operations on untrusted repositories or objects, including recursive clones, merge, rebase, cherry-pick and merge-tree. Its elapsed soak does not clear this finding.</Callout>
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.15 is an opt-in testing candidate with Git `2.54.1-r0` and fast-xml-parser `5.12.0`. It begins its own soak when published; it is not v1.8 GA.</Callout>
+
+## v1.8.0-rc.15 Highlights - November 13, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
+
+- **Portwing ownership.** Newly discovered agent containers keep their owning agent, so updates use that agent's Docker action (#1583).
+- **Portwing digest events.** Added and updated events refresh image details before checking digests. A moving local tag no longer replaces the running image baseline, and a failed refresh preserves a prior verdict only for the same image reference (#1584).
+- **Security dependencies.** Git is pinned to `2.54.1-r0`, replacing the affected `2.54.0` in rc.14. fast-xml-parser is updated to `5.12.0`, and its temporary scanner waiver is removed.
+- **Build maintenance.** Alpine tzdata and zlib pins use available revisions. Reviewed dependency updates include Playwright 1.65.0 with its matching browser image, action pins and German agent labels. The standalone OpenTelemetry Core 3 override is deferred pending a coordinated SDK/exporter upgrade.
+- RC15 includes every rc.14 change below. Its soak starts at publication. For production, use [v1.7.1](/docs/v1.7/updates).
 
 ## v1.8.0-rc.14 Highlights - November 3, 2026
+
+<Callout type="warn">**Historical rc.14 security warning:** v1.8.0-rc.14 contains Git `2.54.0`, affected by [CVE-2026-105437](https://github.com/advisories/GHSA-m7r7-8v36-j77r), and needs a patched candidate before GA. It is also affected by [recursive-clone remote code execution (CVE-2026-111760)](https://github.com/git/git/security/advisories/GHSA-vp2w-7xxj-jvxr). Avoid all Git operations on untrusted repositories or objects, including recursive clones, merge, rebase, cherry-pick and merge-tree. Its elapsed soak does not clear this finding.</Callout>
 
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading restores the intended pre-upgrade snapshot only; SQLite-only changes do not carry back. A fresh v1.8 install has no JSON snapshot. Read [storage migration](/docs/configuration/storage#upgrade-from-json) and [deprecations](/docs/deprecations) first.</Callout>
 
