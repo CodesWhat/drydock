@@ -62,13 +62,13 @@ import {
 import {
   type DockerContainerWatchOptions,
   mapContainerToContainerReport as mapContainerToContainerReportState,
-  watchContainer as watchContainerState,
 } from './container-processing.js';
 import { warnIfCurlHealthcheckOverride } from './curl-healthcheck-warning.js';
 import {
   endDigestCachePollCycleForRegistries,
   startDigestCachePollCycleForRegistries,
 } from './digest-cache-lifecycle.js';
+import { watchDockerContainer } from './docker-container-watch.js';
 import {
   type CronWatchDeadlineHandle,
   type CronWatchOptions,
@@ -1389,47 +1389,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    * @returns {Promise<*>}
    */
   async watchContainer(container: Container, options: DockerContainerWatchOptions = {}) {
-    if (options.refreshImageDetails) {
-      await this.ensureRemoteAuthHeaders();
-      const summaries = await this.dockerApi.listContainers({
-        all: true,
-        filters: { id: [container.id] },
-      });
-      const summary = summaries.find((candidate) => candidate.Id === container.id);
-      if (!summary) throw new Error(`Container ${container.id} is no longer available`);
-      const enriched = await addImageDetailsToContainerOrchestration(
-        this.asDockerImageDetailsWatcher(),
-        { ...summary, Image: summary.ImageID || summary.Image },
-        {},
-        this.getDockerImageDetailsHelpers(),
-        { requireImageDetails: true },
-      );
-      if (!enriched)
-        throw new Error(`Unable to resolve image details for container ${container.id}`);
-      container = enriched;
-    }
-    const {
-      emitBatchEvent = false,
-      useRegistryPollCache = false,
-      collectReleaseMaturity,
-      scanGeneration,
-    } = options;
-    this.ensureLogger();
-    return watchContainerState(container, {
-      ensureLogger: () => this.ensureLogger(),
-      log: this.log,
-      findNewVersion: (containerToCheck, logContainer) =>
-        this.findNewVersion(containerToCheck, logContainer, {
-          useRegistryPollCache,
-          collectReleaseMaturity,
-        }),
-      mapContainerToContainerReport: (containerWithResult, watchStartedAtMs) =>
-        this.mapContainerToContainerReport(containerWithResult, watchStartedAtMs),
-      emitBatchEvent,
-      isScanStale:
-        scanGeneration === undefined ? undefined : () => scanGeneration !== this.scanGeneration,
-      isRenamedPredecessorOfReplacement: storeContainer.isRenamedPredecessorOfReplacement,
-    });
+    return watchDockerContainer(
+      this as unknown as Parameters<typeof watchDockerContainer>[0],
+      container,
+      options,
+    );
   }
 
   refreshInventory = createDockerInventoryRefresh(
@@ -1718,12 +1682,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async addImageDetailsToContainer(
     container: DockerImageDetailsContainer,
     labelOverrides: ContainerLabelOverrides = {},
+    options: { requireImageDetails?: boolean } = {},
   ) {
     return addImageDetailsToContainerOrchestration(
       this.asDockerImageDetailsWatcher(),
       container,
       labelOverrides,
       this.getDockerImageDetailsHelpers(),
+      options,
     );
   }
 

@@ -180,6 +180,26 @@ test('a container that first appears through dd:container_added gets a digest ch
   expect(stored().updateAvailable).toBe(true);
 });
 
+test('an event without a Docker summary ImageID inspects the reported running image', async () => {
+  vi.mocked(Dockerode.prototype.listContainers).mockResolvedValueOnce([
+    {
+      Id: ID,
+      Names: ['/target'],
+      Image: REF,
+      State: 'running',
+      Labels: { ...labels },
+      Ports: [],
+      Mounts: [],
+    },
+  ] as never);
+
+  await frame('dd:container_added', { container: portwingRecord() });
+
+  expect(Dockerode.prototype.getImage).toHaveBeenCalledWith(IMAGE_ID);
+  expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
+  expect(stored().updateAvailable).toBe(true);
+});
+
 test('an unavailable Docker image does not erase the detected digest update', async () => {
   await frame('dd:container_sync', { containers: [portwingRecord()] });
   await nativeWatcher.watch();
@@ -241,12 +261,14 @@ test.each(['id', 'name', 'tag', 'registry'])(
 test('an untrackable Docker summary does not erase the detected digest update', async () => {
   await frame('dd:container_sync', { containers: [portwingRecord()] });
   await nativeWatcher.watch();
+  vi.mocked(Dockerode.prototype.getImage).mockClear();
   vi.mocked(Dockerode.prototype.listContainers).mockResolvedValueOnce([
     { Id: ID, Names: ['/target'], Image: '', State: 'running', Labels: labels },
   ] as never);
 
   await frame('dd:container_updated', { container: portwingRecord() });
 
+  expect(Dockerode.prototype.getImage).not.toHaveBeenCalled();
   expect(stored().updateAvailable).toBe(true);
   expect(stored().result?.digest).toBe(REGISTRY_DIGEST);
 });
