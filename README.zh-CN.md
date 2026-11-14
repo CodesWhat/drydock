@@ -440,7 +440,7 @@ Drydock v1.6 不再在运行时加载 `WUD_*` 环境变量或 `wud.*` 标签。�
 
 **兼容性：** v1.7 移除了旧版触发器输入、curl 和 `/api/auth/methods`。v1.8 更改了 MQTT 实体标识和旧的 `/auth/strategies` 响应。`PUT /api/v1/settings` 在 API v2 之前保持可用；其 `Sunset` 日期不允许从冻结的 v1 API 中移除方法。`/api/auth/status` 仍受支持。
 
-**Portwing 轮换：** Drydock 控制器自 v1.8.0-rc.1 起支持分阶段轮换。[Portwing v1.2.0 已发布的兼容性指南](https://github.com/CodesWhat/portwing/blob/v1.2.0/COMPATIBILITY.md#controller-assisted-rotation)列出了稳定版 Portwing v1.x（从 v1.0 起）与 Drydock v1.8 系列中 v1.8.0-rc.1 及以上版本的配合使用要求。必须配置托管密钥存储，并满足相应连接模式的配置和能力要求。边缘端返回 `202` 表示等待重新连接，并非轮换已完成。 新的 Standard 注册应使用 Portwing v1.x 系列中的 v1.0.1 或更高版本。
+**Portwing 轮换：** Drydock 控制器自 v1.8.0-rc.1 起支持分阶段轮换。[Portwing v1.2.0 已发布的兼容性指南](https://github.com/CodesWhat/portwing/blob/v1.2.0/COMPATIBILITY.md#controller-assisted-rotation)列出了稳定版 Portwing v1.x（从 v1.0 起）与 Drydock v1.8 系列中 v1.8.0-rc.1 及以上版本的配合使用要求。必须配置托管密钥存储，并满足相应连接模式的配置和能力要求。边缘端返回 `202` 表示等待重新连接，并非轮换已完成。 新的 Standard 注册应使用 [安全策略](https://github.com/CodesWhat/portwing/security/policy)中列出的、仍受支持的最新 Portwing v1.x 版本。注册问题的修复首次发布于 v1.0.1。
 
 **尚未完成的社区需求：** 跨主机依赖更新和重启（[#219](https://github.com/CodesWhat/drydock/discussions/219)）尚未实现。基于发布数量的成熟度判断（[#558](https://github.com/CodesWhat/drydock/discussions/558)）的版本家族核心逻辑已在 v1.8.0-rc.15 中提供测试，包括可选的按时间回退以及对带版本别名的有限摘要验证；无版本通道的历史摘要计数仍待实现。同一主机上的依赖排序不满足远程主机需求。本地构建检测和安全重新构建仍是未来工作（[#897](https://github.com/CodesWhat/drydock/discussions/897)）。进程级摘要检查默认设置（[#657](https://github.com/CodesWhat/drydock/discussions/657)）已在 v1.8.0-rc.15 中提供测试，通过 `DD_DEFAULTS_WATCH_DIGEST` 使用，每个代理需单独配置。这些条目均不承诺具体发布日期。
 
