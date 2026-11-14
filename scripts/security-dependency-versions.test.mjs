@@ -331,11 +331,11 @@ test('September floor check skips lockfile entries without a version', () => {
   );
 });
 
-test('minimatch tooling resolutions include the wildcard compilation fix', () => {
+test('minimatch tooling resolutions include the wildcard and cache fixes', () => {
   for (const workspace of ['app', 'ui', 'e2e']) {
     const manifest = readJson(`${workspace}/package.json`);
     const minimum = manifest.overrides.minimatch.replace(/^\^/u, '');
-    assert.ok(compareSemver(minimum, '11.0.7') >= 0, `${workspace} override floor`);
+    assert.ok(compareSemver(minimum, '11.0.8') >= 0, `${workspace} override floor`);
     let resolutions = 0;
     for (const [path, entry] of Object.entries(
       readJson(`${workspace}/package-lock.json`).packages,
@@ -343,8 +343,8 @@ test('minimatch tooling resolutions include the wildcard compilation fix', () =>
       if (!path.endsWith('node_modules/minimatch')) continue;
       resolutions += 1;
       assert.ok(
-        compareSemver(entry.version, '11.0.7') >= 0,
-        `${workspace}/${path} ${entry.version} predates GHSA-cf2h-pxjq-68xw fix`,
+        compareSemver(entry.version, '11.0.8') >= 0,
+        `${workspace}/${path} ${entry.version} predates GHSA-hqmv-qgp3-jx75 fix`,
       );
     }
     assert.ok(resolutions > 0, `${workspace} expected minimatch tooling resolution`);

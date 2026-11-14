@@ -10,7 +10,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
-- Pin minimatch in development and test tooling to `11.0.7` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
+- Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
 
 ### Documentation
 
