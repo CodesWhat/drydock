@@ -82,8 +82,10 @@ Drydock v1.8.0-rc.1+ on the v1.8 line. Managed storage and the mode-specific
 configuration/capabilities are required.
 See [Agent configuration](/docs/configuration/agents#controller-assisted-key-rotation-development)
 for storage and recovery requirements.
-For new Standard enrollments, use Portwing v1.0.1 or later in the v1.x line;
-v1.0.1 fixes enrollment when only `authorized_keys` is writable. See the
+For new Standard enrollments, use the latest supported Portwing v1.x release
+listed in its [security policy](https://github.com/CodesWhat/portwing/security/policy).
+The enrollment fix first shipped in v1.0.1: enrollment works when `authorized_keys`
+is writable but its parent directory isn't. See the
 [published enrollment fix](https://github.com/CodesWhat/portwing/pull/418).
 
 `GET /api/v1/agents/:name/key-rotation` returns public credential status for a
