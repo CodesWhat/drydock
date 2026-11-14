@@ -554,8 +554,10 @@ not establish rotation support.
 Drydock v1.7 and earlier do not provide this controller API.
 Rotation is off by default and does not rewrite deployment-owned bootstrap
 credentials.
-For new Standard enrollments, use Portwing v1.0.1 or later in the v1.x line;
-v1.0.1 fixes enrollment when only `authorized_keys` is writable. See the
+For new Standard enrollments, use the latest supported Portwing v1.x release
+listed in its [security policy](https://github.com/CodesWhat/portwing/security/policy).
+The enrollment fix first shipped in v1.0.1: enrollment works when `authorized_keys`
+is writable but its parent directory isn't. See the
 [published enrollment fix](https://github.com/CodesWhat/portwing/pull/418).
 
 On Portwing, set `KEY_ROTATION_DIR` to persistent private storage with mode
