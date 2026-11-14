@@ -8,6 +8,14 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- Pin minimatch in development and test tooling to `11.0.7` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
+
+### Documentation
+
+- Recommend the latest supported Portwing v1.x release for new Standard enrollments, with a link to its security policy. Preserve v1.0.1 as the historical enrollment-fix minimum.
+
 ## [1.8.0-rc.15] - 2026-11-13
 
 > [!WARNING]
