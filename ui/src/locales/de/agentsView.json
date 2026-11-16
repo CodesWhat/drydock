@@ -78,7 +78,7 @@
         "os": "Betriebssystem",
         "architecture": "Architektur",
         "agent": "Agent",
-        "host": "Host",
+        "host": "Gastgeber",
         "agentVersion": "Agent-Version",
         "agentBuild": "Agent-Build",
         "logLevel": "Log-Level",
