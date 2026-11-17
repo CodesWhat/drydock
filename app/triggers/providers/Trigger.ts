@@ -126,6 +126,10 @@ type NotificationRuleId =
   | 'agent-disconnect'
   | 'agent-reconnect'
   | 'container-unhealthy'
+  | 'container-stopped'
+  | 'container-exited'
+  | 'container-oom-killed'
+  | 'container-restart-loop'
   | 'maturity-cleared'
   | 'update-pending-approval';
 
@@ -137,6 +141,10 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'agent-disconnect',
   'agent-reconnect',
   'container-unhealthy',
+  'container-stopped',
+  'container-exited',
+  'container-oom-killed',
+  'container-restart-loop',
   'maturity-cleared',
   'update-pending-approval',
 ]);
@@ -228,6 +236,14 @@ interface ContainerUnhealthyNotificationEvent {
   previousHealth?: string;
 }
 
+interface ContainerStateNotificationEvent {
+  kind: event.ContainerStateAlertKind;
+  exitCode?: number;
+  reason?: string;
+  restartCount?: number;
+  windowSeconds?: number;
+}
+
 interface MaturityGateClearedNotificationEvent {
   kind: 'maturity-cleared';
   pendingSince?: string;
@@ -250,6 +266,7 @@ type TriggerNotificationEvent =
   | AgentDisconnectedNotificationEvent
   | AgentReconnectedNotificationEvent
   | ContainerUnhealthyNotificationEvent
+  | ContainerStateNotificationEvent
   | MaturityGateClearedNotificationEvent
   | UpdatePendingApprovalNotificationEvent;
 
@@ -409,6 +426,14 @@ const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('
 const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is unhealthy`;
 const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
+const CONTAINER_STOPPED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} stopped`;
+const CONTAINER_STOPPED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} stopped${buildLiteralTemplateExpression('event.reason ? " (" + event.reason + ")" : ""')}`;
+const CONTAINER_EXITED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} exited unexpectedly`;
+const CONTAINER_EXITED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} exited with a non-zero exit code${buildLiteralTemplateExpression('event.exitCode ? " (" + event.exitCode + ")" : ""')}`;
+const CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} was OOM killed`;
+const CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} was killed for running out of memory${buildLiteralTemplateExpression('event.exitCode ? " (exit code " + event.exitCode + ")" : ""')}`;
+const CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is in a restart loop`;
+const CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} crashed ${buildLiteralTemplateExpression('event.restartCount')} times in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds${buildLiteralTemplateExpression('event.exitCode ? " (last exit code " + event.exitCode + ")" : ""')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update awaiting approval for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
@@ -422,6 +447,10 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
+  'container-stopped': CONTAINER_STOPPED_SIMPLE_TITLE_TEMPLATE,
+  'container-exited': CONTAINER_EXITED_SIMPLE_TITLE_TEMPLATE,
+  'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE,
+  'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE,
 };
@@ -434,6 +463,10 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
+  'container-stopped': CONTAINER_STOPPED_SIMPLE_BODY_TEMPLATE,
+  'container-exited': CONTAINER_EXITED_SIMPLE_BODY_TEMPLATE,
+  'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE,
+  'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE,
 };
@@ -444,6 +477,10 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
   'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
+  'container-stopped': `${buildLiteralTemplateExpression('containers.length')} containers stopped`,
+  'container-exited': `${buildLiteralTemplateExpression('containers.length')} containers exited unexpectedly`,
+  'container-oom-killed': `${buildLiteralTemplateExpression('containers.length')} containers were OOM killed`,
+  'container-restart-loop': `${buildLiteralTemplateExpression('containers.length')} containers are in a restart loop`,
   'maturity-cleared': `${buildLiteralTemplateExpression('containers.length')} updates ready to apply`,
   'update-pending-approval': `${buildLiteralTemplateExpression('containers.length')} updates awaiting approval`,
 };
@@ -622,6 +659,26 @@ function getContainerUnhealthyNotificationEvent(
   };
 }
 
+const CONTAINER_STATE_ALERT_KINDS: ReadonlySet<unknown> = new Set<event.ContainerStateAlertKind>([
+  'container-stopped',
+  'container-exited',
+  'container-oom-killed',
+  'container-restart-loop',
+]);
+
+function getContainerStateNotificationEvent(
+  kind: event.ContainerStateAlertKind,
+  notificationEvent: unknown,
+): ContainerStateNotificationEvent {
+  return {
+    kind,
+    exitCode: getFiniteNumber(notificationEvent, 'exitCode'),
+    reason: getNonEmptyString(notificationEvent, 'reason'),
+    restartCount: getFiniteNumber(notificationEvent, 'restartCount'),
+    windowSeconds: getFiniteNumber(notificationEvent, 'windowSeconds'),
+  };
+}
+
 function getMaturityGateClearedNotificationEvent(
   notificationEvent: unknown,
 ): MaturityGateClearedNotificationEvent {
@@ -695,6 +752,13 @@ export function getNotificationEvent(
 
   if (kind === 'container-unhealthy') {
     return getContainerUnhealthyNotificationEvent(notificationEvent);
+  }
+
+  if (CONTAINER_STATE_ALERT_KINDS.has(kind)) {
+    return getContainerStateNotificationEvent(
+      kind as event.ContainerStateAlertKind,
+      notificationEvent,
+    );
   }
 
   if (kind === 'maturity-cleared') {
@@ -779,6 +843,7 @@ class Trigger<
   private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerHealthTransition?: () => void;
+  private unregisterContainerStateAlert?: () => void;
   private unregisterMaturityGateCleared?: () => void;
   private unregisterApprovalPendingNotification?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
@@ -1697,6 +1762,25 @@ class Trigger<
       : undefined;
 
     await this.dispatchContainerForEvent('container-unhealthy', notificationContainer, {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+      skipThreshold: true,
+    });
+  }
+
+  async handleContainerStateAlertEvent(payload: event.ContainerStateAlertEventPayload) {
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: payload.kind,
+          exitCode: payload.exitCode,
+          reason: payload.reason,
+          restartCount: payload.restartCount,
+          windowSeconds: payload.windowSeconds,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent(payload.kind, notificationContainer, {
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
       skipThreshold: true,
@@ -3778,6 +3862,14 @@ class Trigger<
       },
     );
 
+    this.unregisterContainerStateAlert = event.registerContainerStateAlert(
+      async (payload) => this.handleContainerStateAlertEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
       this.unregisterContainerUpdateAppliedForResolution = event.registerContainerUpdateApplied(
@@ -3824,6 +3916,9 @@ class Trigger<
 
     this.unregisterContainerHealthTransition?.();
     this.unregisterContainerHealthTransition = undefined;
+
+    this.unregisterContainerStateAlert?.();
+    this.unregisterContainerStateAlert = undefined;
 
     this.unregisterMaturityGateCleared?.();
     this.unregisterMaturityGateCleared = undefined;
@@ -4472,17 +4567,28 @@ class Trigger<
                 ? { kind: ruleId, agentName: 'preview-agent' }
                 : ruleId === 'container-unhealthy'
                   ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
-                  : ruleId === 'maturity-cleared'
-                    ? { kind: ruleId, pendingSince: '2026-01-01T00:00:00.000Z', minAgeDays: 7 }
-                    : ruleId === 'update-pending-approval'
-                      ? {
-                          kind: ruleId,
-                          approvalId: 'preview-approval',
-                          approvalUrl: 'https://drydock.example.com/approvals?id=preview-approval',
-                          fromRef: '1.0.0',
-                          toRef: '1.1.0',
-                        }
-                      : { kind: ruleId };
+                  : ruleId === 'container-stopped' || ruleId === 'container-exited'
+                    ? { kind: ruleId, exitCode: ruleId === 'container-exited' ? 1 : 0 }
+                    : ruleId === 'container-oom-killed'
+                      ? { kind: ruleId, exitCode: 137, reason: 'out of memory' }
+                      : ruleId === 'container-restart-loop'
+                        ? { kind: ruleId, exitCode: 1, restartCount: 3, windowSeconds: 300 }
+                        : ruleId === 'maturity-cleared'
+                          ? {
+                              kind: ruleId,
+                              pendingSince: '2026-01-01T00:00:00.000Z',
+                              minAgeDays: 7,
+                            }
+                          : ruleId === 'update-pending-approval'
+                            ? {
+                                kind: ruleId,
+                                approvalId: 'preview-approval',
+                                approvalUrl:
+                                  'https://drydock.example.com/approvals?id=preview-approval',
+                                fromRef: '1.0.0',
+                                toRef: '1.1.0',
+                              }
+                            : { kind: ruleId };
 
     return {
       id: 'drydock-preview',

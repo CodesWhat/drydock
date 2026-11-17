@@ -468,3 +468,18 @@ describe('getNotificationRules caching', () => {
     expect(countRuleTableReads()).toBe(readsBeforeGetAfterWrite + 1);
   });
 });
+
+describe('container state alert default rules', () => {
+  test.each([
+    'container-stopped',
+    'container-exited',
+    'container-oom-killed',
+    'container-restart-loop',
+  ])('%s ships disabled with no bell so existing users see no new alerts', (id) => {
+    const rule = notification.DEFAULT_NOTIFICATION_RULES.find((item) => item.id === id);
+    expect(rule).toBeDefined();
+    expect(rule?.enabled).toBe(false);
+    expect(rule?.bellEnabled).toBe(false);
+    expect(rule?.triggers).toEqual([]);
+  });
+});

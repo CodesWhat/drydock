@@ -68,6 +68,12 @@ import {
   type DockerContainerWatchOptions,
   mapContainerToContainerReport as mapContainerToContainerReportState,
 } from './container-processing.js';
+import {
+  type ContainerStateAlertTracker,
+  createContainerStateAlertTracker,
+  getRestartLoopConfigurationSchema,
+  type RestartLoopConfiguration,
+} from './container-state-alerts.js';
 import { warnIfCurlHealthcheckOverride } from './curl-healthcheck-warning.js';
 import {
   endDigestCachePollCycleForRegistries,
@@ -179,6 +185,7 @@ export interface DockerWatcherConfiguration
   host?: string;
   protocol?: 'http' | 'https';
   port: number;
+  restartloop?: RestartLoopConfiguration;
   auth?: {
     type?: 'basic' | 'bearer' | 'oidc';
     user?: string;
@@ -386,6 +393,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public cronWatchRescanReason?: string;
   public cronWatchRescanIgnoreMaintenanceWindow: boolean = false;
   public cronWatchDeadlineHandle?: CronWatchDeadlineHandle;
+  private containerStateAlertTracker?: ContainerStateAlertTracker;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
@@ -452,6 +460,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         .valid(...MAINTENANCE_WINDOW_SCOPES)
         .default(DEFAULT_MAINTENANCE_WINDOW_SCOPE),
       ...getDockerMaturityConfigurationSchema(this.joi),
+      restartloop: getRestartLoopConfigurationSchema(this.joi),
       discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
@@ -1055,6 +1064,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    this.containerStateAlertTracker?.dispose();
+    this.containerStateAlertTracker = undefined;
     // See scanGeneration's declaration: invalidates any scan already in
     // flight so it discards its results instead of emitting them (DR-72).
     this.scanGeneration++;
@@ -1191,6 +1202,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   }
 
   processDockerEvent(dockerEvent: unknown, streamGeneration?: number) {
+    if (!this.isWatcherDeregistered) {
+      this.containerStateAlertTracker ??= createContainerStateAlertTracker(this);
+      this.containerStateAlertTracker.observe(dockerEvent);
+    }
     return processDockerEventOrchestration(
       this.asDockerEventsWatcher(),
       dockerEvent,

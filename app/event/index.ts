@@ -213,6 +213,26 @@ export interface ContainerHealthTransitionEventPayload {
   health: 'unhealthy';
 }
 
+export type ContainerStateAlertKind =
+  | 'container-stopped'
+  | 'container-exited'
+  | 'container-oom-killed'
+  | 'container-restart-loop';
+
+export interface ContainerStateAlertEventPayload {
+  kind: ContainerStateAlertKind;
+  containerName: string;
+  container?: Container;
+  /** Exit code of the process that died (absent for a restart loop with no known code). */
+  exitCode?: number;
+  /** Human-readable reason, e.g. `exit code 1`, `out of memory`, `stopped`. */
+  reason?: string;
+  /** Restart loop only: crashes counted inside the window. */
+  restartCount?: number;
+  /** Restart loop only: window length in seconds. */
+  windowSeconds?: number;
+}
+
 export interface MaturityGateClearedEventPayload {
   container: Container;
   clearedAt: string;
@@ -318,6 +338,10 @@ const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertE
 const containerHealthTransitionHandlers = new Map<
   number,
   OrderedEventHandler<ContainerHealthTransitionEventPayload>
+>();
+const containerStateAlertHandlers = new Map<
+  number,
+  OrderedEventHandler<ContainerStateAlertEventPayload>
 >();
 const maturityGateClearedHandlers = new Map<
   number,
@@ -569,6 +593,27 @@ export function registerSecurityAlert(
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(securityAlertHandlers, handler, options);
+}
+
+/**
+ * Emit ContainerStateAlert event (stopped, exited non-zero, OOM-killed, restart loop).
+ * @param payload
+ */
+export async function emitContainerStateAlert(
+  payload: ContainerStateAlertEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(containerStateAlertHandlers, payload);
+}
+
+/**
+ * Register to ContainerStateAlert event.
+ * @param handler
+ */
+export function registerContainerStateAlert(
+  handler: OrderedEventHandlerFn<ContainerStateAlertEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(containerStateAlertHandlers, handler, options);
 }
 
 /**
@@ -938,6 +983,7 @@ export function clearAllListenersForTests(): void {
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
   containerHealthTransitionHandlers.clear();
+  containerStateAlertHandlers.clear();
   maturityGateClearedHandlers.clear();
   approvalPendingNotificationHandlers.clear();
   securityScanCycleCompleteHandlers.clear();
