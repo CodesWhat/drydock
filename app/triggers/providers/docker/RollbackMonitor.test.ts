@@ -265,4 +265,137 @@ describe('RollbackMonitor', () => {
       }),
     );
   });
+
+  describe('liveness watch', () => {
+    const noHealthcheckSpec = { Id: 'new-container-id', RestartCount: 2, State: { Running: true } };
+
+    function createLivenessMonitor(spec: unknown) {
+      const startHealthMonitor = vi.fn();
+      const monitor = createMonitor({
+        getCurrentContainer: vi.fn().mockResolvedValue({ id: 'new-container' }),
+        inspectContainer: vi.fn().mockResolvedValue(spec),
+        startHealthMonitor,
+      });
+      return { monitor, startHealthMonitor };
+    }
+
+    test('getConfig reads the liveness label and falls back to the action option', () => {
+      const monitor = createMonitor();
+
+      expect(monitor.getConfig(createContainer()).livenessWindow).toBeUndefined();
+      expect(monitor.getConfig(createContainer(), 45_000).livenessWindow).toBe(45_000);
+      expect(
+        monitor.getConfig(createContainer({ labels: { 'dd.rollback.liveness': '30000' } }), 45_000)
+          .livenessWindow,
+      ).toBe(30_000);
+      expect(
+        monitor.getConfig(createContainer({ labels: { 'dd.rollback.liveness': '0' } }), 45_000)
+          .livenessWindow,
+      ).toBe(0);
+    });
+
+    test('getConfig warns and uses the action option for a malformed liveness label', () => {
+      const warn = vi.fn();
+      const monitor = createMonitor({ getLogger: () => ({ child: () => ({ warn }) }) });
+
+      const config = monitor.getConfig(
+        createContainer({ labels: { 'dd.rollback.liveness': 'soon' } }),
+        45_000,
+      );
+
+      expect(config.livenessWindow).toBe(45_000);
+      expect(warn).toHaveBeenCalledWith(
+        'Invalid rollback liveness label value — using the action default',
+      );
+    });
+
+    test('starts a liveness watch for a container without a healthcheck', async () => {
+      const info = vi.fn();
+      const { monitor, startHealthMonitor } = createLivenessMonitor(noHealthcheckSpec);
+
+      await monitor.start(
+        {},
+        createContainer(),
+        {
+          autoRollback: false,
+          rollbackWindow: 300_000,
+          rollbackInterval: 5_000,
+          livenessWindow: 30_000,
+        },
+        { info, warn: vi.fn() },
+      );
+
+      expect(startHealthMonitor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerId: 'new-container-id',
+          window: 30_000,
+          interval: 5_000,
+          mode: 'liveness',
+          baselineRestartCount: 2,
+        }),
+      );
+      expect(info).toHaveBeenCalledWith(expect.stringContaining('liveness watch (window=30000ms'));
+    });
+
+    test('leaves a container with a healthcheck alone when only liveness is enabled', async () => {
+      const { monitor, startHealthMonitor } = createLivenessMonitor({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'starting' } },
+      });
+
+      await monitor.start(
+        {},
+        createContainer(),
+        {
+          autoRollback: false,
+          rollbackWindow: 300_000,
+          rollbackInterval: 5_000,
+          livenessWindow: 30_000,
+        },
+        { info: vi.fn(), warn: vi.fn() },
+      );
+
+      expect(startHealthMonitor).not.toHaveBeenCalled();
+    });
+
+    test('keeps the health monitor for a healthcheck container even with liveness set', async () => {
+      const { monitor, startHealthMonitor } = createLivenessMonitor({
+        Id: 'new-container-id',
+        State: { Health: { Status: 'starting' } },
+      });
+
+      await monitor.start(
+        {},
+        createContainer(),
+        {
+          autoRollback: true,
+          rollbackWindow: 300_000,
+          rollbackInterval: 5_000,
+          livenessWindow: 30_000,
+        },
+        { info: vi.fn(), warn: vi.fn() },
+      );
+
+      const call = startHealthMonitor.mock.calls[0][0];
+      expect(call.window).toBe(300_000);
+      expect(call.mode).toBeUndefined();
+    });
+
+    test('still skips a no-healthcheck container when liveness is unset', async () => {
+      const warn = vi.fn();
+      const { monitor, startHealthMonitor } = createLivenessMonitor(noHealthcheckSpec);
+
+      await monitor.start(
+        {},
+        createContainer(),
+        { autoRollback: true, rollbackWindow: 300_000, rollbackInterval: 5_000, livenessWindow: 0 },
+        { info: vi.fn(), warn },
+      );
+
+      expect(startHealthMonitor).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        'Auto-rollback enabled but container has no HEALTHCHECK defined — skipping health monitoring',
+      );
+    });
+  });
 });

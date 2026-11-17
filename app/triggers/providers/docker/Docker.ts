@@ -831,6 +831,12 @@ class Docker<
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
+      livenesswindow: this.joi
+        .number()
+        .integer()
+        .min(0)
+        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
+        .optional(),
       concurrency: this.joi.number().integer().positive().optional(),
     });
   }
@@ -2706,7 +2712,10 @@ class Docker<
   }
 
   getRollbackConfig(container) {
-    return this.rollbackMonitor.getConfig(container);
+    return this.rollbackMonitor.getConfig(
+      container,
+      (this.configuration as { livenesswindow?: number } | undefined)?.livenesswindow,
+    );
   }
 
   async maybeStartAutoRollbackMonitor(dockerApi, container, rollbackConfig, logContainer) {

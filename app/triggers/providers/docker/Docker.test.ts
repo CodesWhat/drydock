@@ -536,6 +536,32 @@ test('validateConfiguration should return validated configuration when valid', a
   expect(validatedConfiguration).toStrictEqual(configurationValid);
 });
 
+test('validateConfiguration accepts a liveness window and rejects a negative one', async () => {
+  expect(
+    docker.validateConfiguration({ ...configurationValid, livenesswindow: 30000 }).livenesswindow,
+  ).toBe(30000);
+  expect(() => docker.validateConfiguration({ ...configurationValid, livenesswindow: -1 })).toThrow(
+    joi.ValidationError,
+  );
+});
+
+test('getRollbackConfig passes the action liveness window to the rollback monitor', () => {
+  const originalRollbackMonitor = docker.rollbackMonitor;
+  const originalConfiguration = docker.configuration;
+  const getConfig = vi.fn().mockReturnValue({});
+  docker.rollbackMonitor = { getConfig };
+  docker.configuration = { ...originalConfiguration, livenesswindow: 20000 };
+  const container = createTriggerContainer();
+
+  try {
+    docker.getRollbackConfig(container);
+    expect(getConfig).toHaveBeenCalledWith(container, 20000);
+  } finally {
+    docker.rollbackMonitor = originalRollbackMonitor;
+    docker.configuration = originalConfiguration;
+  }
+});
+
 test('validateConfiguration should throw error when invalid', async () => {
   const configuration = {
     url: 'git://xxx.com',
@@ -6062,7 +6088,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = docker.getRollbackConfig(container);
 
-      expect(getConfig).toHaveBeenCalledWith(container);
+      expect(getConfig).toHaveBeenCalledWith(container, undefined);
       expect(result).toEqual({
         autoRollback: true,
         rollbackWindow: 45_000,

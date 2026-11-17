@@ -1517,4 +1517,123 @@ describe('HealthMonitor', () => {
 
     abortController.abort();
   });
+
+  describe('liveness mode (no HEALTHCHECK)', () => {
+    const backup = {
+      id: 'backup-1',
+      containerId: 'container-123',
+      containerName: 'test-container',
+      imageName: 'registry/test-image',
+      imageTag: '1.0.0',
+      timestamp: new Date().toISOString(),
+      triggerName: 'docker.update',
+    };
+
+    function startLiveness(inspectResults: unknown[], overrides = {}) {
+      const log = createMockLog();
+      const triggerInstance = createMockTriggerInstance();
+      const inspect = vi.fn();
+      for (const result of inspectResults.slice(0, -1)) {
+        inspect.mockResolvedValueOnce(result);
+      }
+      inspect.mockResolvedValue(inspectResults[inspectResults.length - 1]);
+      const dockerApi = { getContainer: vi.fn().mockReturnValue({ inspect }) };
+      mockGetBackupsByName.mockReturnValue([backup]);
+      const abortController = startHealthMonitor({
+        dockerApi,
+        container: createMonitoredContainer(),
+        containerId: 'container-123',
+        containerName: 'test-container',
+        backupImageTag: '2.0.0',
+        backupScope: { containerName: 'test-container' },
+        window: 60_000,
+        interval: 10_000,
+        mode: 'liveness',
+        baselineRestartCount: 0,
+        triggerInstance,
+        log,
+        ...overrides,
+      });
+      return { log, triggerInstance, abortController };
+    }
+
+    test('rolls back and audits when the container exits inside the window', async () => {
+      const { log, triggerInstance, abortController } = startLiveness([
+        { RestartCount: 0, State: { Running: true } },
+        { RestartCount: 0, State: { Running: false, ExitCode: 137 } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('exited with exit code 137'));
+      expect(triggerInstance.recreateContainer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'registry/test-image:1.0.0',
+        expect.objectContaining({ id: 'container-123' }),
+        log,
+      );
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auto-rollback',
+          status: 'success',
+          details: expect.stringContaining('liveness failure'),
+        }),
+      );
+      abortController.abort();
+    });
+
+    test('rolls back when the restart count rises above the baseline', async () => {
+      const { log, triggerInstance, abortController } = startLiveness(
+        [{ RestartCount: 3, State: { Running: true } }],
+        { baselineRestartCount: 2 },
+      );
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('restart count 2 -> 3'));
+      expect(triggerInstance.recreateContainer).toHaveBeenCalled();
+      abortController.abort();
+    });
+
+    test('rolls back when the container was OOM-killed', async () => {
+      const { log, triggerInstance, abortController } = startLiveness([
+        { RestartCount: 0, State: { Running: true, OOMKilled: true } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('was OOM-killed'));
+      expect(triggerInstance.recreateContainer).toHaveBeenCalled();
+      abortController.abort();
+    });
+
+    test('keeps the update when the container stays up for the whole window', async () => {
+      const { log, triggerInstance } = startLiveness([
+        { RestartCount: 0, State: { Running: true } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(log.info).toHaveBeenCalledWith(
+        expect.stringContaining('Liveness watch window expired'),
+      );
+      expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('does not treat a missing Health state as the end of monitoring', async () => {
+      const { log, abortController } = startLiveness([
+        { RestartCount: 0, State: { Running: true } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining('no HEALTHCHECK'));
+      abortController.abort();
+    });
+  });
 });
