@@ -11,12 +11,17 @@ import { getErrorMessage } from '../../../util/error.js';
 import { recordControllerLocalEnumeration } from '../../controller-local-container-ids.js';
 import { isRecreatedContainerAlias } from './container-event-update.js';
 import {
+  buildContainerWatchFilter,
+  type ContainerWatchFilter,
+  shouldWatchContainer,
+} from './container-filter.js';
+import {
   filterRecreatedContainerAliases,
   getDockerWatcherSourceKey,
   getLabel,
 } from './container-init.js';
 import type { DockerWatcherConfiguration } from './Docker.js';
-import { canonicalizeContainerName, isContainerToWatch } from './docker-helpers.js';
+import { canonicalizeContainerName } from './docker-helpers.js';
 import {
   buildDiscoveredContainer,
   type DockerContainerInspectPayload,
@@ -111,6 +116,7 @@ function refreshDockerInventoryForWatcher(
     update: (container, inspect) => watcher.updateContainerFromInspect(container, inspect, context),
     recordEnumeration: (ids) => recordControllerLocalEnumeration(watcher, ids),
     watchByDefault: watcher.configuration.watchbydefault,
+    watchFilter: buildContainerWatchFilter(watcher.configuration),
   });
 }
 
@@ -129,6 +135,7 @@ interface InventoryDependencies {
   update: (container: Container, inspect: DockerContainerInspectPayload) => void;
   recordEnumeration: (ids: string[]) => void;
   watchByDefault: boolean;
+  watchFilter?: ContainerWatchFilter;
 }
 
 type Observation = {
@@ -274,7 +281,15 @@ async function refreshDockerInventory(
       continue;
     }
     inspected = { ...inspected, Config: { ...inspected.Config, Labels: labels } };
-    if (!isContainerToWatch(getLabel(labels, ddWatch), deps.watchByDefault)) {
+    if (
+      !shouldWatchContainer(
+        getLabel(labels, ddWatch),
+        deps.watchByDefault,
+        deps.watchFilter,
+        [String(inspected.Name || summary?.Names?.[0] || '')],
+        labels,
+      )
+    ) {
       if (prior) observations.push({ id, previous: prior, remove: true });
       continue;
     }

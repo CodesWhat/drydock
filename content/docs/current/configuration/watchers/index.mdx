@@ -57,11 +57,15 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER`, `OIDC` | auto-detected from provided credentials |
 | `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
 | `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_CONTAINERS_EXCLUDE` | ⚪ | Never watch containers whose name matches this regex (unless the container has `dd.watch=true`), see [Container filters](#container-filters) | [RE2 regex](https://github.com/google/re2/wiki/Syntax) matched against the container name | |
+| `DD_WATCHER_{watcher_name}_CONTAINERS_INCLUDE` | ⚪ | Watch only containers whose name matches this regex, replacing `WATCHBYDEFAULT`, see [Container filters](#container-filters) | [RE2 regex](https://github.com/google/re2/wiki/Syntax) matched against the container name | |
 | `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
 | `DD_WATCHER_{watcher_name}_DISCOVERY_SETTLE_MS` | ⚪ | How long a newly-discovered container must remain visible before drydock registers it (store/triggers/UI) — rides out Docker's brief rename-alias window during container recreation. `0` disables settling entirely | integer ms (`>= 0`) | `30000` (30 seconds) |
 | `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
 | `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_LABELS_EXCLUDE` | ⚪ | Never watch containers with a matching label (unless the container has `dd.watch=true`), see [Container filters](#container-filters) | `key` or `key=valueRegex` | |
+| `DD_WATCHER_{watcher_name}_LABELS_INCLUDE` | ⚪ | Watch only containers with a matching label, replacing `WATCHBYDEFAULT`, see [Container filters](#container-filters) | `key` or `key=valueRegex` | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Schedule during which drydock may install updates on its own (manual updates are never gated). Matched per minute, so use `*` in the minute field, see [Maintenance window](#maintenance-window) | [Valid CRON expression](https://crontab.guru/) | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_SCOPE` | ⚪ | What the window holds back: only automatic installs, or the whole scheduled scan, see [Maintenance window](#maintenance-window) | `install`, `scan` | `install` |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
@@ -82,6 +86,33 @@ and label-backed settings are not made editable by this four-field feature.
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
 <Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6 and remain rejected. Use the `dd.watch.digest` container label for per-container digest watching or the new process-wide default below; startup scans are always scheduled.</Callout>
+
+### Container filters {#container-filters}
+
+`CONTAINERS_INCLUDE`, `CONTAINERS_EXCLUDE`, `LABELS_INCLUDE` and `LABELS_EXCLUDE` choose which containers a watcher looks at without labeling each one. They apply before any registry lookup, so a filtered-out container costs no registry calls.
+
+- **Name filters** are regexes matched (unanchored, so use `^` and `$` to pin) against each of the container's names, without the leading `/`.
+- **Label filters** take `key` (the label exists) or `key=valueRegex` (the label exists and its value matches the regex). The key is matched exactly. Everything after the first `=` is the regex.
+- All regexes use RE2, the same engine as `dd.tag.include`. Lookaheads and backreferences are not supported. An invalid regex stops startup with a message naming the pattern.
+
+Precedence, highest first:
+
+1. The container's `dd.watch` label, when set to `true` or `false`. It overrides every filter in both directions.
+2. An exclude filter (name or label) that matches. Exclude always wins over include.
+3. When any include filter is set, the container is watched only if an include filter (name or label) matches. This replaces `WATCHBYDEFAULT`, so `WATCHBYDEFAULT=false` plus `CONTAINERS_INCLUDE` still watches the matching containers.
+4. Otherwise `WATCHBYDEFAULT` decides, as before.
+
+`WATCHALL` is independent and still controls which container states Docker returns.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_WATCHER_LOCAL_CONTAINERS_INCLUDE=^(web|api)-
+      - DD_WATCHER_LOCAL_CONTAINERS_EXCLUDE=-canary$
+      - DD_WATCHER_LOCAL_LABELS_EXCLUDE=team=^sandbox
+```
 
 ### Digest-watch default {#digest-watch-default}
 

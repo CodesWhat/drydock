@@ -45,6 +45,12 @@ import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-f
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
+  buildContainerWatchFilter,
+  type ContainerWatchFilterConfiguration,
+  getContainerFilterConfigurationSchema,
+  shouldWatchContainer,
+} from './container-filter.js';
+import {
   type AliasFilterDecision,
   applyEffectiveDockerConfigFromLabels,
   filterRecreatedContainerAliases,
@@ -105,7 +111,6 @@ import {
   getOldContainers,
   getSemverTagFromInspectPath,
   getStillInWatchScopeContainerIds,
-  isContainerToWatch,
   normalizeConfigNumberValue,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
@@ -164,7 +169,9 @@ import {
 import { detectPodmanCompatibility } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
 
-export interface DockerWatcherConfiguration extends ComponentConfiguration {
+export interface DockerWatcherConfiguration
+  extends ComponentConfiguration,
+    ContainerWatchFilterConfiguration {
   socket: string;
   host?: string;
   protocol?: 'http' | 'https';
@@ -450,6 +457,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
+      ...getContainerFilterConfigurationSchema(this.joi),
       watchevents: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
@@ -1485,8 +1493,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }));
 
     // Filter on containers to watch
+    const watchFilter = buildContainerWatchFilter(this.configuration);
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
-      isContainerToWatch(getLabel(container.Labels, ddWatch), this.configuration.watchbydefault),
+      shouldWatchContainer(
+        getLabel(container.Labels, ddWatch),
+        this.configuration.watchbydefault,
+        watchFilter,
+        container.Names,
+        container.Labels,
+      ),
     );
     const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,
