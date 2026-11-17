@@ -501,6 +501,26 @@ describe('HTTP Trigger', () => {
     );
   });
 
+  test('should keep the raw proxy credential when it has a malformed escape', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'https://example.com/webhook',
+      proxy: 'http://user%zz:pw%@proxy.local:3128',
+    });
+
+    await http.trigger({ name: 'test' });
+    expect(axios).toHaveBeenCalledWith(
+      expect.objectContaining({
+        proxy: {
+          host: 'proxy.local',
+          port: 3128,
+          auth: { username: 'user%zz', password: 'pw%' },
+        },
+      }),
+    );
+  });
+
   test('should send proxy auth with an empty password when only a user is given', async () => {
     const { default: axios } = await import('axios');
     axios.mockResolvedValue({ data: {} });

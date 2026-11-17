@@ -213,6 +213,18 @@ interface HttpConfiguration extends TriggerConfiguration {
 }
 
 /**
+ * Percent-decode a proxy URL credential, keeping the raw component when it
+ * holds a malformed escape (for example "%zz") instead of throwing.
+ */
+function decodeProxyCredential(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
  * HTTP Trigger implementation
  */
 class Http extends Trigger<HttpConfiguration> {
@@ -232,8 +244,8 @@ class Http extends Trigger<HttpConfiguration> {
     };
     if (proxyUrl.username || proxyUrl.password) {
       proxyConfiguration.auth = {
-        username: decodeURIComponent(proxyUrl.username),
-        password: decodeURIComponent(proxyUrl.password),
+        username: decodeProxyCredential(proxyUrl.username),
+        password: decodeProxyCredential(proxyUrl.password),
       };
     }
     return proxyConfiguration;
