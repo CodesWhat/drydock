@@ -39,8 +39,14 @@
       "approveDisabledNotify": "Aktualisierungsmodus ist notify; Genehmigen ist deaktiviert",
       "reject": "Ablehnen",
       "rejectAriaLabel": "Aktualisierung ablehnen",
+      "rejectScopeAriaLabel": "Umfang der Ablehnung",
       "defer": "Zurückstellen",
       "deferAriaLabel": "Aktualisierung zurückstellen"
+    },
+    "rejectScope": {
+      "tag": "Nur diese Version",
+      "minor": "Ganze Minor-Linie",
+      "major": "Ganze Major-Linie"
     },
     "detail": {
       "loading": "Details werden geladen…",
@@ -65,6 +71,7 @@
       "reject": {
         "header": "Aktualisierung ablehnen",
         "message": "Aktualisierung von {name} auf {toRef} ablehnen? Sie wird nicht automatisch angewendet.",
+        "messageLine": "Update für {name} auf {toRef} ablehnen und alle {line}.x-Versionen überspringen? Neuere Linien werden weiterhin angeboten.",
         "acceptLabel": "Ablehnen"
       },
       "defer": {

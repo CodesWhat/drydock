@@ -509,7 +509,7 @@ describe('decision preconditions', () => {
   test.each([
     ['/:id/approve', { until: '2999-01-01T00:00:00.000Z' }, 'note'],
     ['/:id/approve', { days: 3 }, 'note'],
-    ['/:id/reject', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'note'],
+    ['/:id/reject', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'note, scope'],
     ['/:id/defer', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'until, days, note'],
     ['/:id/defer', { ids: ['approval-2'] }, 'until, days, note'],
   ])('%s rejects %o as a property it does not take', async (path, body, allowed) => {
@@ -795,6 +795,58 @@ describe('POST /:id/reject', () => {
     );
   });
 
+  test.each(['minor', 'major'] as const)(
+    'skips the whole %s line when the scope says so and records it in the audit entry',
+    async (scope) => {
+      const container = createContainer();
+      mockGetContainer.mockReturnValue(container);
+
+      const { status } = await callDecision('/:id/reject', { body: { scope } });
+
+      expect(status).toBe(200);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(container, 'skip-current', {
+        scope,
+      });
+      expect(getAuditDetails()).toMatchObject({ decision: 'rejected', scope });
+    },
+  );
+
+  test('treats an explicit tag scope as the default exact skip', async () => {
+    const container = createContainer();
+    mockGetContainer.mockReturnValue(container);
+
+    const { status } = await callDecision('/:id/reject', { body: { scope: 'tag' } });
+
+    expect(status).toBe(200);
+    expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(
+      container,
+      'skip-current',
+      {},
+    );
+    expect(getAuditDetails()).not.toHaveProperty('scope');
+  });
+
+  test.each([['patch'], [3], [null]])('rejects scope %j with 400', async (scope) => {
+    const { status, body } = await callDecision('/:id/reject', { body: { scope } });
+
+    expect(status).toBe(400);
+    expect(body).toStrictEqual({ error: 'Invalid scope; expected tag, minor, or major' });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+  });
+
+  test('puts the row back when a line scope is refused for a digest or non-semver update', async () => {
+    mockApplyContainerUpdatePolicyAction.mockReturnValue({
+      error: 'Only a tag update can be skipped by major line',
+    });
+
+    const { status, body } = await callDecision('/:id/reject', { body: { scope: 'major' } });
+
+    expect(status).toBe(400);
+    expect(body).toStrictEqual({ error: 'Only a tag update can be skipped by major line' });
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+  });
+
   test('puts the row back when the policy layer refuses the skip', async () => {
     mockApplyContainerUpdatePolicyAction.mockReturnValue({
       error: 'No current update available to skip',
@@ -1019,6 +1071,43 @@ describe('POST /bulk', () => {
       const { next } = runGuard(undefined);
 
       expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('reject scope', () => {
+    test('passes the scope to every rejected row', async () => {
+      const { status, body } = await callBulk({
+        ids: ['approval-1', 'approval-2'],
+        action: 'reject',
+        scope: 'major',
+      });
+
+      expect(status).toBe(200);
+      expect(body.accepted).toHaveLength(2);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledTimes(2);
+      for (const call of mockApplyContainerUpdatePolicyAction.mock.calls) {
+        expect(call.slice(1)).toStrictEqual(['skip-current', { scope: 'major' }]);
+      }
+    });
+
+    test.each(['approve', 'defer'])('refuses a scope on %s', async (action) => {
+      const { status, body } = await callBulk({ ids: ['approval-1'], action, scope: 'major' });
+
+      expect(status).toBe(400);
+      expect(body).toStrictEqual({
+        error: 'Invalid request body; scope is only valid with action reject',
+      });
+    });
+
+    test('refuses an unknown scope', async () => {
+      const { status, body } = await callBulk({
+        ids: ['approval-1'],
+        action: 'reject',
+        scope: 'patch',
+      });
+
+      expect(status).toBe(400);
+      expect(body).toStrictEqual({ error: 'Invalid scope; expected tag, minor, or major' });
     });
   });
 

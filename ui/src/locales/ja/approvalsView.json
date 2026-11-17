@@ -39,8 +39,14 @@
       "approveDisabledNotify": "更新モードが notify のため、承認は無効です",
       "reject": "拒否",
       "rejectAriaLabel": "更新を拒否",
+      "rejectScopeAriaLabel": "却下の範囲",
       "defer": "延期",
       "deferAriaLabel": "更新を延期"
+    },
+    "rejectScope": {
+      "tag": "このバージョンのみ",
+      "minor": "マイナーライン全体",
+      "major": "メジャーライン全体"
     },
     "detail": {
       "loading": "詳細を読み込み中…",
@@ -65,6 +71,7 @@
       "reject": {
         "header": "更新を拒否",
         "message": "{name} の {toRef} への更新を拒否しますか？この更新は自動的には適用されなくなります。",
+        "messageLine": "{name} の {toRef} への更新を却下し、{line}.x のすべてのバージョンをスキップしますか？より新しいラインは引き続き提案されます。",
         "acceptLabel": "拒否"
       },
       "defer": {

@@ -2296,4 +2296,77 @@ describe('include-filter recovery never offers downgrades (#1499)', () => {
 
     expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('greater=1'));
   });
+
+  describe('rejected major/minor lines', () => {
+    const log = () => ({ warn: vi.fn(), debug: vi.fn() });
+    const tags = ['2.0.1', '2.0.2', '2.1.0', '3.0.0', '3.1.0', '4.0.0', '4.1.0'];
+
+    test('a rejected major leaves older patches and the next newer line on offer', () => {
+      const container = createContainer({
+        image: { tag: { value: '2.0.0', semver: true } },
+        updatePolicy: { skipTags: ['major:3'] },
+      });
+
+      const result = getTagCandidates(container, tags, log());
+
+      expect(result.tags).toEqual(['4.1.0', '4.0.0', '2.1.0', '2.0.2', '2.0.1']);
+    });
+
+    test('a rejected minor drops only that X.Y line', () => {
+      const container = createContainer({
+        image: { tag: { value: '2.0.0', semver: true } },
+        updatePolicy: { skipTags: ['minor:3.0'] },
+      });
+
+      const result = getTagCandidates(container, tags, log());
+
+      expect(result.tags).toEqual(['4.1.0', '4.0.0', '3.1.0', '2.1.0', '2.0.2', '2.0.1']);
+    });
+
+    test('offers nothing newer when the only newer line is rejected', () => {
+      const container = createContainer({
+        image: { tag: { value: '3.0.0', semver: true } },
+        updatePolicy: { skipTags: ['major:3', 'major:4'] },
+      });
+
+      expect(getTagCandidates(container, tags, log()).tags).toEqual([]);
+    });
+
+    test('judges lines on the transformed tag', () => {
+      const container = createContainer({
+        image: { tag: { value: 'rel-2.0.0', semver: true } },
+        transformTags: '^rel-(.*)$ => $1',
+        updatePolicy: { skipTags: ['major:3'] },
+      });
+
+      const result = getTagCandidates(
+        container,
+        ['rel-2.0.1', 'rel-3.0.0', 'rel-4.0.0', 'latest'],
+        log(),
+      );
+
+      expect(result.tags).toEqual(['rel-4.0.0', 'rel-2.0.1']);
+    });
+
+    test('exact skip entries still do not change which candidate is selected', () => {
+      const container = createContainer({
+        image: { tag: { value: '2.0.0', semver: true } },
+        updatePolicy: { skipTags: ['4.1.0'] },
+      });
+
+      expect(getTagCandidates(container, tags, log()).tags[0]).toBe('4.1.0');
+    });
+
+    test('non-semver current tags with an include filter ignore line entries on non-semver tags', () => {
+      const container = createContainer({
+        image: { tag: { value: 'stable', semver: false } },
+        includeTags: '^\\d',
+        updatePolicy: { skipTags: ['major:3'] },
+      });
+
+      const result = getTagCandidates(container, ['2.0.0', '3.0.0', '3.1.0'], log());
+
+      expect(result.tags).toEqual(['2.0.0']);
+    });
+  });
 });

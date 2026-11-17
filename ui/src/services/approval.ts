@@ -13,6 +13,8 @@ type ApprovalResolution =
 type ApprovalOutcome = 'applied' | 'rolled-back' | 'failed';
 type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
 type ApprovalSemverDiff = 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
+/** How much a rejection skips: the exact tag, its whole X.Y line, or its whole X line. */
+export type RejectScope = 'tag' | 'minor' | 'major';
 export type ApprovalStatusFilter = 'pending' | 'deferred' | 'decided' | 'all';
 
 export interface ApprovalRecord {
@@ -243,12 +245,15 @@ async function approveApproval(
 
 async function rejectApproval(
   id: string,
-  options: { note?: string } = {},
+  options: { note?: string; scope?: RejectScope } = {},
 ): Promise<ApprovalDecisionResponse> {
+  const body: Record<string, unknown> = {};
+  if (options.note !== undefined) body.note = options.note;
+  if (options.scope !== undefined) body.scope = options.scope;
   return postDecision<ApprovalDecisionResponse>(
     id,
     'reject',
-    options.note !== undefined ? { note: options.note } : undefined,
+    Object.keys(body).length > 0 ? body : undefined,
     'Reject approval API',
     'approvalsView.httpErrors.rejectFailed',
   );

@@ -8,7 +8,7 @@ import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
-import { getDockerMaturityConfigurationSchema } from './update-policy.js';
+import { getDockerMaturityConfigurationSchema, withStoredSkipTags } from './update-policy.js';
 
 type DebounceFn = <T extends (...args: any[]) => void>(
   fn: T,
@@ -1670,7 +1670,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.configuration.tag,
       (image) => this.getMatchingImgsetConfiguration(image),
     );
-    return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
+    // The watcher enumerates containers fresh from Docker, so a rejected major/minor line
+    // lives only in the stored policy; fold it in so candidate selection can skip the line.
+    const watchedContainer = withStoredSkipTags(
+      { ...container, tagFamily: tagPolicy.tagFamily },
+      storeContainer.getContainer(container.id)?.updatePolicy?.skipTags,
+    );
+    return findNewVersionState(watchedContainer, logContainer, {
       ...options,
       pinInfoEnabled: tagPolicy.tagPinInfo,
     });

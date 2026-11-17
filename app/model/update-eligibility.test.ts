@@ -657,6 +657,24 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.actionable).toBe(true);
     });
 
+    test.each([
+      ['major', 'major:1'],
+      ['minor', 'minor:1.1'],
+    ])('emits blocker when a rejected %s line covers the remote tag', (_scope, entry) => {
+      const container = makeContainerWithTagUpdate({ updatePolicy: { skipTags: [entry] } });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'skip-tag');
+      expect(blocker?.details?.skippedTag).toBe('1.1.0');
+    });
+
+    test('no blocker when the rejected line is a different one', () => {
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: { skipTags: ['major:2', 'minor:1.2'] },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
+    });
+
     test('no blocker when remote tag is not in skipTags', () => {
       const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate({

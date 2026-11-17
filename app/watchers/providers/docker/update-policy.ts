@@ -121,3 +121,23 @@ export function applyDockerDeclarativeUpdatePolicy(
     resolveDockerDeclarativeUpdatePolicy(labels, defaults, options),
   );
 }
+
+/**
+ * Return the container with `storedSkipTags` unioned into its skip list, or the container
+ * itself when the store has nothing to add.
+ */
+export function withStoredSkipTags(
+  container: Container,
+  storedSkipTags: string[] | undefined,
+): Container {
+  if (!storedSkipTags?.length) {
+    return container;
+  }
+  return {
+    ...container,
+    updatePolicy: {
+      ...container.updatePolicy,
+      skipTags: [...new Set([...(container.updatePolicy?.skipTags ?? []), ...storedSkipTags])],
+    },
+  };
+}

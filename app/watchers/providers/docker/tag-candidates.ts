@@ -2,6 +2,7 @@ import { RE2JS } from 're2js';
 import semver from 'semver';
 
 import type { Container, ContainerResult } from '../../../model/container.js';
+import { filterLineSkippedTags } from '../../../model/skip-scope.js';
 import { isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
 import {
   diff as diffSemver,
@@ -981,10 +982,16 @@ export function getTagCandidates(
   logContainer: TagCandidatesLogger,
   computeInsight = true,
 ): TagCandidatesResult {
-  const { filteredTags: baseTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
+  const { filteredTags: includedTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
     container,
     tags,
     logContainer,
+  );
+  // Rejected major/minor lines never compete, so the next eligible tag is the one offered.
+  const baseTags = filterLineSkippedTags(
+    includedTags,
+    container.updatePolicy?.skipTags,
+    container.transformTags,
   );
 
   if (!container.image.tag.semver && !container.includeTags) {

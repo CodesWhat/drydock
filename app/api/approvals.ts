@@ -14,7 +14,8 @@
  *   409, which is why the queue can show a row it cannot approve without the API ever
  *   pretending otherwise;
  * - reject writes the container's existing `skipTags`/`skipDigests` policy, the same
- *   operation as the container panel's Skip button;
+ *   operation as the container panel's Skip button. An optional `scope` (`tag`, the
+ *   default, `minor` or `major`) widens a tag rejection to the whole line;
  * - defer writes the container's existing snooze, and mirrors the expiry onto the row so
  *   the queue and the `snoozed` soft blocker cannot disagree.
  *
@@ -48,6 +49,7 @@ import {
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
 import { daysToMs } from '../model/maturity-policy.js';
+import { isRejectScope, type RejectScope } from '../model/skip-scope.js';
 import { computeUpdateEligibility, getSoftBlockers } from '../model/update-eligibility.js';
 import {
   type ApprovalPatch,
@@ -101,7 +103,11 @@ const BULK_DEFER_ONLY_MESSAGE =
 const BULK_PROCESSED_MESSAGE = 'Approval decisions processed';
 const BULK_APPROVE_CONFIRMATION = 'approvals-bulk-approve';
 const DECISION_BODY_FIELDS = ['note'] as const;
-const BULK_BODY_FIELDS = ['ids', 'action', 'until', 'days', 'note'] as const;
+const REJECT_BODY_FIELDS = ['note', 'scope'] as const;
+const BULK_BODY_FIELDS = ['ids', 'action', 'until', 'days', 'note', 'scope'] as const;
+const INVALID_SCOPE_MESSAGE = 'Invalid scope; expected tag, minor, or major';
+const BULK_REJECT_ONLY_SCOPE_MESSAGE =
+  'Invalid request body; scope is only valid with action reject';
 const DEFER_BODY_FIELDS = ['until', 'days', 'note'] as const;
 // A full RFC 3339 instant: date, time to the second, explicit offset. `new Date()` accepts
 // far more than that — a bare `2026-09-09` is midnight in whatever zone the process runs
@@ -508,6 +514,7 @@ function completeDecision(
   action: AuditEntry['action'],
   container: Container,
   record: ApprovalRecord,
+  scope?: RejectScope,
 ): void {
   recordAuditEvent({
     action,
@@ -523,6 +530,7 @@ function completeDecision(
       ...(record.decisionNote !== undefined ? { note: record.decisionNote } : {}),
       ...(record.deferredUntil !== undefined ? { deferredUntil: record.deferredUntil } : {}),
       ...(record.operationId !== undefined ? { operationId: record.operationId } : {}),
+      ...(scope !== undefined && scope !== 'tag' ? { scope } : {}),
     }),
   });
   announceApprovalEvent('decided', record);
@@ -567,22 +575,33 @@ async function approveOne(
  * Reject one queued update by writing the container's existing skip policy. This is the
  * same operation as the container panel's Skip button, one source of truth, undoable from
  * the update-policy panel — and visible there, which is a thing the confirmation copy has
- * to say out loud.
+ * to say out loud. A `minor` or `major` scope skips the whole line, and refuses (rolling
+ * the reservation back) for a digest update or a tag with no semver line.
  * @param id
  * @param decidedBy
  * @param note
+ * @param scope
  */
-function rejectOne(id: string, decidedBy: string, note: string | undefined): DecisionOutcome {
+function rejectOne(
+  id: string,
+  decidedBy: string,
+  note: string | undefined,
+  scope: RejectScope = 'tag',
+): DecisionOutcome {
   const reserved = reserveApproval(id, decidedBy, { decision: 'rejected' }, note);
   if (isFailure(reserved)) {
     return reserved;
   }
-  const policyFailure = writeDecisionPolicy(reserved, 'skip-current', {});
+  const policyFailure = writeDecisionPolicy(
+    reserved,
+    'skip-current',
+    scope === 'tag' ? {} : { scope },
+  );
   if (policyFailure !== undefined) {
     return policyFailure;
   }
 
-  completeDecision('update-rejected', reserved.container, reserved.record);
+  completeDecision('update-rejected', reserved.container, reserved.record, scope);
   return { kind: 'decided', record: reserved.record };
 }
 
@@ -652,14 +671,20 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
  * @param res
  */
 function rejectApproval(req: DecisionRequest, res: Response): void {
-  const request = readDecisionRequest(res, req.body, DECISION_BODY_FIELDS);
+  const request = readDecisionRequest(res, req.body, REJECT_BODY_FIELDS);
   if (request === undefined) {
+    return;
+  }
+
+  const scope = request.body.scope === undefined ? 'tag' : request.body.scope;
+  if (!isRejectScope(scope)) {
+    sendErrorResponse(res, 400, INVALID_SCOPE_MESSAGE);
     return;
   }
 
   sendDecisionOutcome(
     res,
-    rejectOne(getPathParamValue(req.params.id), getDecidedBy(req), request.note),
+    rejectOne(getPathParamValue(req.params.id), getDecidedBy(req), request.note, scope),
   );
 }
 
@@ -747,6 +772,15 @@ async function bulkDecideApprovals(
     sendErrorResponse(res, 400, BULK_DEFER_ONLY_MESSAGE);
     return;
   }
+  if (action !== 'reject' && request.body.scope !== undefined) {
+    sendErrorResponse(res, 400, BULK_REJECT_ONLY_SCOPE_MESSAGE);
+    return;
+  }
+  const scope = request.body.scope === undefined ? 'tag' : request.body.scope;
+  if (!isRejectScope(scope)) {
+    sendErrorResponse(res, 400, INVALID_SCOPE_MESSAGE);
+    return;
+  }
   if (action === 'approve' && !areContainerActionsEnabled()) {
     sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
@@ -771,7 +805,7 @@ async function bulkDecideApprovals(
     if (action === 'approve') {
       outcome = await approveOne(id, decidedBy, request.note);
     } else if (action === 'reject') {
-      outcome = rejectOne(id, decidedBy, request.note);
+      outcome = rejectOne(id, decidedBy, request.note, scope);
     } else {
       outcome = deferOne(id, decidedBy, request.note, deferredUntil);
     }

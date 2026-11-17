@@ -26,6 +26,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
+import { isTagSkipped } from './skip-scope.js';
 
 const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
@@ -789,7 +790,7 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     updateKind.remoteValue &&
     Array.isArray(updatePolicy.skipTags)
   ) {
-    return updatePolicy.skipTags.includes(updateKind.remoteValue);
+    return isTagSkipped(updateKind.remoteValue, updatePolicy.skipTags, container.transformTags);
   }
 
   if (
