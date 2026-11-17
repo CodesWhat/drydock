@@ -801,3 +801,20 @@ test('the aggregating job merges shard coverage and fails closed on any shard re
     expect(getWorkflowStep('test', name)?.['continue-on-error']).toBe(true);
   }
 });
+
+test('web readiness probe outwaits the server-side live stats timeout', () => {
+  const liveStatsSource = readFileSync(
+    fileURLToPath(new URL('../../apps/web/src/lib/live-stats.ts', import.meta.url)),
+    'utf8',
+  );
+  const statsTimeoutMs = Number(
+    /LIVE_STATS_TIMEOUT_MS\s*=\s*(\d+)/.exec(liveStatsSource)?.[1] ?? Number.NaN,
+  );
+  const probe = getWorkflowStep('web', 'Start production site');
+  const probeSeconds = Number(
+    /curl --silent --fail --max-time (\d+)/.exec(probe?.run ?? '')?.[1] ?? Number.NaN,
+  );
+
+  expect(statsTimeoutMs).toBeGreaterThan(0);
+  expect(probeSeconds * 1000).toBeGreaterThan(statsTimeoutMs);
+});
