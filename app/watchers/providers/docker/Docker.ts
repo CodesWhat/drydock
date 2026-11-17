@@ -6,7 +6,6 @@ const joi = JoiCronExpression(Joi);
 
 import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getDockerMaturityConfigurationSchema, withStoredSkipTags } from './update-policy.js';
 
@@ -168,6 +167,10 @@ import {
 } from './oidc.js';
 import { detectPodmanCompatibility } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
+import {
+  allSettledWithDockerWatchConcurrency,
+  mapWithDockerWatchConcurrency,
+} from './watch-concurrency.js';
 
 export interface DockerWatcherConfiguration
   extends ComponentConfiguration,
@@ -214,23 +217,6 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
-const DOCKER_WATCH_CONCURRENCY = 10;
-
-function mapWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.all(items.map((item, index) => limit(() => mapper(item, index))));
-}
-
-function allSettledWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
-}
 
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
