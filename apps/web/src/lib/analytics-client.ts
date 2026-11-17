@@ -53,16 +53,45 @@ type PostHogOptions = {
   before_send: ReturnType<typeof createBeforeSend>;
 };
 
+type PrivacySignalSource = {
+  doNotTrack?: unknown;
+  msDoNotTrack?: unknown;
+  globalPrivacyControl?: unknown;
+};
+
+// Do Not Track and Global Privacy Control both opt the visitor out. posthog-js
+// 1.449.2 ignores respect_dnt in cookieless_mode "always", so we check the
+// signals ourselves. Older browsers expose DNT on window or as msDoNotTrack.
+export function hasPrivacySignal(
+  nav: PrivacySignalSource | null | undefined,
+  win?: { doNotTrack?: unknown } | null,
+): boolean {
+  if (nav?.globalPrivacyControl === true) return true;
+  return nav?.doNotTrack === "1" || nav?.msDoNotTrack === "1" || win?.doNotTrack === "1";
+}
+
+export function readPrivacySignal(): boolean {
+  return hasPrivacySignal(
+    typeof navigator === "undefined" ? null : (navigator as PrivacySignalSource),
+    typeof window === "undefined" ? null : (window as { doNotTrack?: unknown }),
+  );
+}
+
 type QueuedCapture = [event: string, properties: AnalyticsProperties];
 
 type AnalyticsRuntimeOptions = {
   env: AnalyticsEnvironment;
   routes: ReadonlySet<string>;
-  getDoNotTrack: () => string | null | undefined;
+  hasPrivacySignal: () => boolean;
   loadPostHog: () => Promise<PostHogClient>;
 };
 
-export function createPostHogOptions(token: string, routes: ReadonlySet<string>): PostHogOptions {
+export function createPostHogOptions(
+  token: string,
+  routes: ReadonlySet<string>,
+  privacySignalSet: () => boolean = readPrivacySignal,
+): PostHogOptions {
+  const sanitize = createBeforeSend(token, routes);
   return {
     api_host: POSTHOG_API_HOST,
     ui_host: POSTHOG_UI_HOST,
@@ -96,14 +125,15 @@ export function createPostHogOptions(token: string, routes: ReadonlySet<string>)
       web_vitals_allowed_metrics: ["CLS", "FCP", "INP", "LCP"],
       web_vitals_attribution: false,
     },
-    before_send: createBeforeSend(token, routes),
+    // Second line of defence: drop everything if the signal appears after init.
+    before_send: (input) => (privacySignalSet() ? null : sanitize(input)),
   };
 }
 
 export function createAnalyticsRuntime({
   env,
   routes,
-  getDoNotTrack,
+  hasPrivacySignal: privacySignalSet,
   loadPostHog,
 }: AnalyticsRuntimeOptions) {
   let state: "idle" | "loading" | "ready" | "disabled" = "idle";
@@ -112,6 +142,10 @@ export function createAnalyticsRuntime({
   const queue: QueuedCapture[] = [];
 
   function dispatch(event: string, properties: AnalyticsProperties) {
+    if (privacySignalSet()) {
+      queue.length = 0;
+      return;
+    }
     if (state === "ready" && client !== null) {
       client.capture(event, properties);
     } else if (state === "loading") {
@@ -147,7 +181,7 @@ export function createAnalyticsRuntime({
     }
 
     const config = getAnalyticsConfig(env);
-    if (config === null || getDoNotTrack() === "1") {
+    if (config === null || privacySignalSet()) {
       state = "disabled";
       initialization = Promise.resolve();
       return initialization;
@@ -156,11 +190,14 @@ export function createAnalyticsRuntime({
     state = "loading";
     initialization = loadPostHog()
       .then((loadedClient) => {
-        loadedClient.init(config.token, createPostHogOptions(config.token, routes));
+        loadedClient.init(
+          config.token,
+          createPostHogOptions(config.token, routes, privacySignalSet),
+        );
         client = loadedClient;
         state = "ready";
         for (const [event, properties] of queue.splice(0)) {
-          client.capture(event, properties);
+          if (!privacySignalSet()) client.capture(event, properties);
         }
       })
       .catch(() => {

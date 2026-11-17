@@ -1,4 +1,4 @@
-import { createAnalyticsRuntime } from "./analytics-client.ts";
+import { createAnalyticsRuntime, readPrivacySignal } from "./analytics-client.ts";
 import { ANALYTICS_ROUTES } from "./analytics-routes.generated.ts";
 
 const runtime = createAnalyticsRuntime({
@@ -8,7 +8,7 @@ const runtime = createAnalyticsRuntime({
     NEXT_PUBLIC_POSTHOG_UI_HOST: process.env.NEXT_PUBLIC_POSTHOG_UI_HOST,
   },
   routes: ANALYTICS_ROUTES,
-  getDoNotTrack: () => (typeof navigator === "undefined" ? null : navigator.doNotTrack),
+  hasPrivacySignal: readPrivacySignal,
   loadPostHog: async () => (await import("posthog-js")).default,
 });
 
