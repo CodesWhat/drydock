@@ -10,7 +10,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- HTTP trigger proxy URLs that carry credentials (for example `http://user:pass@proxy.local:3128`) no longer appear in registration logs, trigger API responses, debug dumps or the configuration endpoint. The userinfo is replaced with `[REDACTED]` where the proxy URL is shown, and the lower-scope trigger views redact the whole value. A value that cannot be parsed as a URL is redacted entirely.
+
 - Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
+
+### Fixed
+
+- HTTP trigger proxy credentials in the proxy URL are now sent to the proxy. Previously only the host and port were used, so an authenticated proxy rejected the request.
 
 ### Documentation
 
