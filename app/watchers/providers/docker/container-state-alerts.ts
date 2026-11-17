@@ -173,11 +173,9 @@ export class ContainerStateAlertTracker {
   }
 
   private async settle(containerId: string): Promise<void> {
-    const entry = this.pending.get(containerId);
+    // The timer only exists while the entry does, and dispose() clears every timer.
+    const entry = this.pending.get(containerId) as PendingStateEvent;
     this.pending.delete(containerId);
-    if (!entry || this.disposed) {
-      return;
-    }
     try {
       await this.classify(containerId, entry);
     } catch (e: unknown) {

@@ -118,6 +118,15 @@ describe('ContainerStateAlertTracker', () => {
     expect(emit).toHaveBeenCalledWith(expect.objectContaining({ kind: 'container-exited' }));
   });
 
+  test('an exit with no code anywhere is still reported, with a generic reason', async () => {
+    const { tracker, emit } = build();
+    tracker.observe(dockerEvent('die'));
+    await settle();
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'container-exited', exitCode: undefined, reason: 'exited' }),
+    );
+  });
+
   test('containers Drydock does not watch never alert', async () => {
     const { tracker, emit, deps } = build({ getContainer: vi.fn(() => undefined) });
     tracker.observe(dockerEvent('die', { exitCode: '1' }));
@@ -305,6 +314,22 @@ describe('createContainerStateAlertTracker', () => {
     );
     tracker.dispose();
   });
+});
+
+test('the wired tracker logs evaluation failures through the watcher logger', async () => {
+  mockGetContainer.mockReturnValue(container);
+  mockGetOperations.mockReturnValue([]);
+  mockEmit.mockRejectedValue(new Error('emit failed'));
+  const debug = vi.fn();
+  const tracker = createContainerStateAlertTracker({
+    dockerApi: { getContainer: () => ({ inspect: vi.fn().mockResolvedValue({}) }) },
+    log: { debug },
+    configuration: {},
+  });
+  tracker.observe(dockerEvent('die', { exitCode: '1' }));
+  await settle();
+  expect(debug).toHaveBeenCalledWith(expect.stringContaining('emit failed'));
+  tracker.dispose();
 });
 
 test('restart loop configuration schema enforces sane bounds', async () => {
