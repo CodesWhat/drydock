@@ -1625,6 +1625,29 @@ describe('HealthMonitor', () => {
       expect(mockInsertAudit).not.toHaveBeenCalled();
     });
 
+    test('keeps watching when the inspection carries no State', async () => {
+      const { triggerInstance, abortController } = startLiveness([{}]);
+
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+      abortController.abort();
+    });
+
+    test('reports an exit without an exit code', async () => {
+      const { log, triggerInstance, abortController } = startLiveness([
+        { State: { Running: false } },
+      ]);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'Container test-container exited — initiating automatic rollback',
+      );
+      expect(triggerInstance.recreateContainer).toHaveBeenCalled();
+      abortController.abort();
+    });
+
     test('does not treat a missing Health state as the end of monitoring', async () => {
       const { log, abortController } = startLiveness([
         { RestartCount: 0, State: { Running: true } },

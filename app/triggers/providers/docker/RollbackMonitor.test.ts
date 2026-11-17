@@ -337,6 +337,29 @@ describe('RollbackMonitor', () => {
       expect(info).toHaveBeenCalledWith(expect.stringContaining('liveness watch (window=30000ms'));
     });
 
+    test('baselines the restart count at 0 when the inspection omits it', async () => {
+      const { monitor, startHealthMonitor } = createLivenessMonitor({
+        Id: 'new-container-id',
+        State: { Running: true },
+      });
+
+      await monitor.start(
+        {},
+        createContainer(),
+        {
+          autoRollback: false,
+          rollbackWindow: 300_000,
+          rollbackInterval: 5_000,
+          livenessWindow: 30_000,
+        },
+        { info: vi.fn(), warn: vi.fn() },
+      );
+
+      expect(startHealthMonitor).toHaveBeenCalledWith(
+        expect.objectContaining({ baselineRestartCount: 0 }),
+      );
+    });
+
     test('leaves a container with a healthcheck alone when only liveness is enabled', async () => {
       const { monitor, startHealthMonitor } = createLivenessMonitor({
         Id: 'new-container-id',
