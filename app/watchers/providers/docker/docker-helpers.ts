@@ -546,18 +546,6 @@ export function getSemverTagFromInspectPath(
   return parsedTag?.version;
 }
 
-/**
- * Return true if container must be watched.
- * @param watchLabelValue the value of the dd.watch label
- * @param watchByDefault true if containers must be watched by default
- * @returns {boolean}
- */
-export function isContainerToWatch(watchLabelValue: string, watchByDefault: boolean) {
-  return watchLabelValue !== undefined && watchLabelValue !== ''
-    ? watchLabelValue.toLowerCase() === 'true'
-    : watchByDefault;
-}
-
 function isDockerHubDomain(domain?: string) {
   if (!domain || domain === '') {
     return true;
