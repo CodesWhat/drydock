@@ -21,6 +21,13 @@ describe('enforceOidcAccessPolicy', () => {
     expect(() => enforceOidcAccessPolicy(config, { email: 'x@EXAMPLE.com' })).not.toThrow();
   });
 
+  test('denies an email claim with no domain part against a domain list', () => {
+    const config = { allowedemaildomains: 'example.com' };
+    expect(() => enforceOidcAccessPolicy(config, { email: 'example.com' })).toThrow(
+      'email is not on the allowlist',
+    );
+  });
+
   test('email and domain lists are alternatives', () => {
     const config = { allowedemails: 'a@one.test', allowedemaildomains: 'two.test' };
     expect(() => enforceOidcAccessPolicy(config, { email: 'a@one.test' })).not.toThrow();
