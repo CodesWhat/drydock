@@ -182,6 +182,17 @@ set.ignored = true
 match.rules = ["osv-scanner:CVE-2026-93753"]
 set.ignored = true
 
+# picomatch@4.0.7 (CVE-2026-112366 / GHSA-fc5q-39xc-vjpf, ReDoS through
+# single-branch repeated extglobs). The advisory covers everything through 4.0.7,
+# the latest release, and no fixed version exists as of 2026-11-17. It arrives only
+# through build and test tooling (vite, vitest, knip, tinyglobby, workbox-build,
+# fumadocs) matching glob patterns from in-repo config. Nothing from it is bundled
+# into the UI, the website or the image, and no request data reaches it. Recheck
+# on 2026-12-17 or as soon as picomatch publishes a fix, and drop this entry then.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-112366"]
+set.ignored = true
+
 # checkov CKV_GHA_7 asserts "workflow_dispatch inputs MUST be empty" and fires on
 # the mere presence of any input — confirmed against a controlled probe, where all
 # four of required/optional x with/without-default trip it identically. Its premise
