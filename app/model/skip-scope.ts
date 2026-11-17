@@ -16,7 +16,7 @@ const { parse: parseSemver, transform: transformTag } = tag;
 
 export type RejectScope = 'tag' | 'minor' | 'major';
 
-export const REJECT_SCOPES: readonly RejectScope[] = ['tag', 'minor', 'major'];
+const REJECT_SCOPES: readonly RejectScope[] = ['tag', 'minor', 'major'];
 
 const LINE_ENTRY_PATTERN = /^(major|minor):(\d+)(?:\.(\d+))?$/;
 
