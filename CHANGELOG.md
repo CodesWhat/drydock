@@ -12,6 +12,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
 
+### Fixed
+
+- The getdrydock.com site now honors Do Not Track and Global Privacy Control. When either signal is set the browser never loads PostHog, and any event that would still reach it is dropped. PostHog ignored its own `respect_dnt` setting in cookieless mode, so the check now lives in the site code.
+
 ### Documentation
 
 - Recommend the latest supported Portwing v1.x release for new Standard enrollments, with a link to its security policy. Preserve v1.0.1 as the historical enrollment-fix minimum.
