@@ -1106,8 +1106,11 @@ jobs:
         run: |
           set -euo pipefail
           nohup node browser-tests/serve.mjs > "$RUNNER_TEMP/web-serve.log" 2>&1 &
+          # `/` renders per request and waits up to LIVE_STATS_TIMEOUT_MS (4 s) for
+          # third-party stats, which hang under the blocked egress, so the probe
+          # has to outwait that timeout or it never sees an answer.
           for _ in $(seq 1 60); do
-            if curl --silent --fail --max-time 2 --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/"; then
+            if curl --silent --fail --max-time 10 --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/"; then
               # Build the docs search index once so the first search spec doesn't pay the cold start.
               { curl --silent --max-time 60 --output /dev/null "http://127.0.0.1:${WEB_E2E_PORT}/api/search?query=docker" || true; }
               exit 0
