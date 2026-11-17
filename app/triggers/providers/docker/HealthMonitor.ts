@@ -85,9 +85,18 @@ interface HealthMonitorOptions {
   backupScope: ContainerBackupScope;
   window: number;
   interval: number;
+  /**
+   * `liveness` is for containers without a HEALTHCHECK: roll back when the
+   * replacement exits, is OOM-killed or restarts (restart count rises above
+   * `baselineRestartCount`) inside the window. Defaults to `health`.
+   */
+  mode?: MonitorMode;
+  baselineRestartCount?: number;
   triggerInstance: unknown;
   log: unknown;
 }
+
+type MonitorMode = 'health' | 'liveness';
 
 /**
  * The watcher-discovered container the update ran against. Carried whole
@@ -124,6 +133,7 @@ interface RollbackContext {
   backupImageTag: string;
   backupImageDigest?: string;
   backupScope: ContainerBackupScope;
+  mode: MonitorMode;
   log: LoggerLike;
 }
 
@@ -134,6 +144,8 @@ interface HealthPollContext {
   signal: AbortSignal;
   cleanup: () => void;
   onUnhealthy: () => Promise<void>;
+  mode: MonitorMode;
+  baselineRestartCount: number;
   log: LoggerLike;
 }
 
@@ -179,6 +191,7 @@ function recordRollbackSuccess(
   containerName: string,
   backupImageTag: string,
   restoredTag: string,
+  mode: MonitorMode,
 ): void {
   auditStore.insertAudit({
     id: '',
@@ -188,7 +201,10 @@ function recordRollbackSuccess(
     fromVersion: backupImageTag,
     toVersion: restoredTag,
     status: 'success',
-    details: 'Automatic rollback triggered by health check failure',
+    details:
+      mode === 'liveness'
+        ? 'Automatic rollback triggered by liveness failure (container exited, restarted or was OOM-killed)'
+        : 'Automatic rollback triggered by health check failure',
   });
   getAuditCounter()?.inc({ action: 'auto-rollback' });
 }
@@ -214,6 +230,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
     backupImageTag,
     backupImageDigest,
     backupScope,
+    mode,
     log,
   } = context;
 
@@ -282,7 +299,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
       containerRef,
     );
 
-    recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag);
+    recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag, mode);
     log.info(`Auto-rollback of container ${containerName} completed successfully`);
   } catch (error: unknown) {
     // recreateContainer may have created a replacement before a later step
@@ -294,6 +311,44 @@ async function performRollback(context: RollbackContext): Promise<void> {
     log.error(`Auto-rollback failed for container ${containerName}: ${message}`);
     recordRollbackError(containerName, message);
   }
+}
+
+/**
+ * Why a container without a healthcheck counts as failed, or undefined while
+ * it is still up. A restart under a restart policy leaves it running, so the
+ * restart count is what catches a crash loop.
+ */
+function getLivenessFailure(inspection: unknown, baselineRestartCount: number): string | undefined {
+  const inspectionRecord = asUnknownRecord(inspection);
+  const state = asUnknownRecord(inspectionRecord?.State);
+  if (!state) {
+    return undefined;
+  }
+  if (state.OOMKilled === true) {
+    return 'was OOM-killed';
+  }
+  const restartCount = inspectionRecord?.RestartCount;
+  if (typeof restartCount === 'number' && restartCount > baselineRestartCount) {
+    return `restarted (restart count ${baselineRestartCount} -> ${restartCount})`;
+  }
+  if (state.Running === false) {
+    const exitCode = typeof state.ExitCode === 'number' ? ` with exit code ${state.ExitCode}` : '';
+    return `exited${exitCode}`;
+  }
+  return undefined;
+}
+
+async function inspectLivenessAndHandle(context: HealthPollContext): Promise<void> {
+  const { dockerApi, containerId, containerName, cleanup, onUnhealthy, log } = context;
+  const inspection = await dockerApi.getContainer(containerId).inspect();
+  const failure = getLivenessFailure(inspection, context.baselineRestartCount);
+  if (!failure) {
+    return;
+  }
+
+  log.warn(`Container ${containerName} ${failure} — initiating automatic rollback`);
+  cleanup();
+  await onUnhealthy();
 }
 
 async function inspectHealthAndHandle(context: HealthPollContext): Promise<void> {
@@ -325,7 +380,9 @@ function createPollHandler(context: HealthPollContext): () => Promise<void> {
     checkInFlight = true;
 
     try {
-      await inspectHealthAndHandle(context);
+      await (context.mode === 'liveness'
+        ? inspectLivenessAndHandle(context)
+        : inspectHealthAndHandle(context));
     } catch (error: unknown) {
       const message = getErrorMessage(error);
       context.log.warn(
@@ -342,10 +399,13 @@ function handleWindowExpiry(
   containerName: string,
   cleanup: () => void,
   log: LoggerLike,
+  mode: MonitorMode,
 ): void {
   if (signal.aborted) return;
   log.info(
-    `Health monitoring window expired for container ${containerName} — container is healthy`,
+    mode === 'liveness'
+      ? `Liveness watch window expired for container ${containerName} — container stayed up`
+      : `Health monitoring window expired for container ${containerName} — container is healthy`,
   );
   cleanup();
 }
@@ -368,6 +428,8 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
     backupScope,
     window: monitorWindow,
     interval,
+    mode = 'health',
+    baselineRestartCount = 0,
     triggerInstance: triggerInstanceOption,
     log: logOption,
   } = options;
@@ -398,14 +460,17 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
         backupImageTag,
         backupImageDigest,
         backupScope,
+        mode,
         log,
       }),
+    mode,
+    baselineRestartCount,
     log,
   });
 
   timers.pollTimer = setInterval(checkHealth, interval);
   timers.windowTimer = setTimeout(
-    () => handleWindowExpiry(signal, containerName, cleanup, log),
+    () => handleWindowExpiry(signal, containerName, cleanup, log, mode),
     monitorWindow,
   );
 

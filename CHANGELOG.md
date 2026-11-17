@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Opt-in liveness watch for containers without a `HEALTHCHECK`. Set the `dd.rollback.liveness` label, or the `LIVENESSWINDOW` option on the Docker or Docker Compose action, to a window in milliseconds. After an update, Drydock watches the recreated container for that long and rolls back to the previous image if it exits, is OOM-killed or restarts, using the same rollback path and audit entry as health-based auto-rollback. Containers with a healthcheck and installs that leave it unset behave as before.
+
 ### Security
 
 - HTTP trigger proxy URLs that carry credentials (for example `http://user:pass@proxy.local:3128`) no longer appear in registration logs, trigger API responses, debug dumps or the configuration endpoint. The userinfo is replaced with `[REDACTED]` where the proxy URL is shown, and the lower-scope trigger views redact the whole value. A value that cannot be parsed as a URL is redacted entirely.
