@@ -12,6 +12,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Opt-in liveness watch for containers without a `HEALTHCHECK`. Set the `dd.rollback.liveness` label, or the `LIVENESSWINDOW` option on the Docker or Docker Compose action, to a window in milliseconds. After an update, Drydock watches the recreated container for that long and rolls back to the previous image if it exits, is OOM-killed or restarts, using the same rollback path and audit entry as health-based auto-rollback. Containers with a healthcheck and installs that leave it unset behave as before.
 - Rejecting an update from the approvals queue can now skip a whole minor or major line instead of only the exact tag. A scope picker beside Reject offers this version only, the whole minor line or the whole major line, and the API takes `scope` on the reject routes and on the container `skip-current` action. Candidate selection leaves the rejected line out, so older patches and the next newer line are still offered. Line scopes need a semver tag update; digest updates and non-semver tags keep the exact skip.
+- OIDC sign-in can be restricted with `ALLOWEDEMAILS`, `ALLOWEDEMAILDOMAINS` and `REQUIREDGROUP` (claim name set by `GROUPCLAIM`, default `groups`, array or string values). Email matching is case-insensitive and rejects an address when the IdP reports `email_verified` as false. A denied user gets a `403` and no session. Unset, behavior is unchanged.
 
 ### Security
 
