@@ -6,7 +6,6 @@ const joi = JoiCronExpression(Joi);
 
 import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getDockerMaturityConfigurationSchema, withStoredSkipTags } from './update-policy.js';
 
@@ -44,6 +43,12 @@ import {
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
+import {
+  buildContainerWatchFilter,
+  type ContainerWatchFilterConfiguration,
+  getContainerFilterConfigurationSchema,
+  shouldWatchContainer,
+} from './container-filter.js';
 import {
   type AliasFilterDecision,
   applyEffectiveDockerConfigFromLabels,
@@ -105,7 +110,6 @@ import {
   getOldContainers,
   getSemverTagFromInspectPath,
   getStillInWatchScopeContainerIds,
-  isContainerToWatch,
   normalizeConfigNumberValue,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
@@ -163,8 +167,14 @@ import {
 } from './oidc.js';
 import { detectPodmanCompatibility } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
+import {
+  allSettledWithDockerWatchConcurrency,
+  mapWithDockerWatchConcurrency,
+} from './watch-concurrency.js';
 
-export interface DockerWatcherConfiguration extends ComponentConfiguration {
+export interface DockerWatcherConfiguration
+  extends ComponentConfiguration,
+    ContainerWatchFilterConfiguration {
   socket: string;
   host?: string;
   protocol?: 'http' | 'https';
@@ -207,23 +217,6 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
-const DOCKER_WATCH_CONCURRENCY = 10;
-
-function mapWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.all(items.map((item, index) => limit(() => mapper(item, index))));
-}
-
-function allSettledWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
-}
 
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
@@ -450,6 +443,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
+      ...getContainerFilterConfigurationSchema(this.joi),
       watchevents: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
@@ -1485,8 +1479,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }));
 
     // Filter on containers to watch
+    const watchFilter = buildContainerWatchFilter(this.configuration);
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
-      isContainerToWatch(getLabel(container.Labels, ddWatch), this.configuration.watchbydefault),
+      shouldWatchContainer(
+        getLabel(container.Labels, ddWatch),
+        this.configuration.watchbydefault,
+        watchFilter,
+        container.Names,
+        container.Labels,
+      ),
     );
     const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,

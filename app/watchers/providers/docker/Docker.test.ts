@@ -334,6 +334,24 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
 
+    test('should accept container and label filters', () => {
+      expect(() =>
+        docker.validateConfiguration({
+          containers: { include: '^web-', exclude: 'canary$' },
+          labels: { include: 'tier=^(web|api)$', exclude: 'skip' },
+        }),
+      ).not.toThrow();
+    });
+
+    test.each([
+      [{ containers: { include: '(unclosed' } }, /Invalid regular expression "\(unclosed"/],
+      [{ containers: { exclude: '(a)\\1' } }, /Invalid regular expression/],
+      [{ labels: { include: 'tier=(bad' } }, /Invalid regular expression/],
+      [{ labels: { exclude: '=value' } }, /label key/],
+    ])('should reject invalid container filter %j', (config, message) => {
+      expect(() => docker.validateConfiguration(config)).toThrow(message);
+    });
+
     test.each(['watchdigest', 'watchatstart'])('should reject removed %s configuration', (key) => {
       expect(() => docker.validateConfiguration({ [key]: false })).toThrow(
         new RegExp(`${key}.*not allowed`, 'i'),
