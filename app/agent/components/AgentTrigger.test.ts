@@ -43,6 +43,7 @@ vi.mock('../../event/index.js', () => ({
   registerContainerUpdateApplied: vi.fn(() => vi.fn()),
   registerContainerUpdateFailed: vi.fn(() => vi.fn()),
   registerSecurityAlert: vi.fn(() => vi.fn()),
+  registerContainerStateAlert: vi.fn(() => vi.fn()),
   registerSecurityScanCycleComplete: vi.fn(() => vi.fn()),
   registerAgentConnected: vi.fn(() => vi.fn()),
   registerAgentDisconnected: vi.fn(() => vi.fn()),
