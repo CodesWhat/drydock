@@ -25,6 +25,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - HTTP trigger proxy credentials in the proxy URL are now sent to the proxy. Previously only the host and port were used, so an authenticated proxy rejected the request.
+- The getdrydock.com site now honors Do Not Track and Global Privacy Control. When either signal is set the browser never loads PostHog, and any event that would still reach it is dropped. PostHog ignored its own `respect_dnt` setting in cookieless mode, so the check now lives in the site code.
 
 ### Documentation
 
