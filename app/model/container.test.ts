@@ -382,6 +382,30 @@ test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-dige
 
   expect(
     container.testable_isUpdateSuppressed(
+      { updatePolicy: { skipTags: ['major:1'] } },
+      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
+    ),
+  ).toBe(true);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      { updatePolicy: { skipTags: ['minor:1.1'] } },
+      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
+    ),
+  ).toBe(false);
+
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        transformTags: '^rel-(.*)$ => $1',
+        updatePolicy: { skipTags: ['major:3'] },
+      },
+      { kind: 'tag', remoteValue: 'rel-3.0.1', semverDiff: 'patch' },
+    ),
+  ).toBe(true);
+
+  expect(
+    container.testable_isUpdateSuppressed(
       {
         updatePolicy: {
           skipDigests: ['sha256:next'],

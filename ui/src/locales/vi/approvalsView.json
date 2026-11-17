@@ -39,8 +39,14 @@
       "approveDisabledNotify": "Chế độ cập nhật là notify; chức năng phê duyệt bị vô hiệu hóa",
       "reject": "Từ chối",
       "rejectAriaLabel": "Từ chối cập nhật",
+      "rejectScopeAriaLabel": "Phạm vi từ chối",
       "defer": "Hoãn",
       "deferAriaLabel": "Hoãn cập nhật"
+    },
+    "rejectScope": {
+      "tag": "Chỉ phiên bản này",
+      "minor": "Toàn bộ dòng minor",
+      "major": "Toàn bộ dòng major"
     },
     "detail": {
       "loading": "Đang tải chi tiết…",
@@ -65,6 +71,7 @@
       "reject": {
         "header": "Từ chối cập nhật",
         "message": "Từ chối cập nhật {name} lên {toRef}? Bản cập nhật sẽ không được áp dụng tự động.",
+        "messageLine": "Từ chối bản cập nhật {name} lên {toRef} và bỏ qua mọi phiên bản {line}.x? Các dòng mới hơn vẫn được đề xuất.",
         "acceptLabel": "Từ chối"
       },
       "defer": {

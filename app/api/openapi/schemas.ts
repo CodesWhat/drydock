@@ -2064,6 +2064,12 @@ export const openApiSchemas = {
         maxLength: 500,
         description: 'Free-text reason recorded on every decided row and its audit entry',
       },
+      scope: {
+        type: 'string',
+        enum: ['tag', 'minor', 'major'],
+        description:
+          'Reject only. Skip just the tag (default), its whole X.Y line, or its whole X line.',
+      },
     },
     required: ['ids', 'action'],
     additionalProperties: false,

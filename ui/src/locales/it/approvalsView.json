@@ -39,8 +39,14 @@
       "approveDisabledNotify": "La modalità di aggiornamento è notify; le approvazioni sono disabilitate",
       "reject": "Rifiuta",
       "rejectAriaLabel": "Rifiuta aggiornamento",
+      "rejectScopeAriaLabel": "Ambito del rifiuto",
       "defer": "Rimanda",
       "deferAriaLabel": "Rimanda aggiornamento"
+    },
+    "rejectScope": {
+      "tag": "Solo questa versione",
+      "minor": "Intera linea minor",
+      "major": "Intera linea major"
     },
     "detail": {
       "loading": "Caricamento dei dettagli…",
@@ -65,6 +71,7 @@
       "reject": {
         "header": "Rifiuta aggiornamento",
         "message": "Rifiutare l’aggiornamento di {name} a {toRef}? Non verrà applicato automaticamente.",
+        "messageLine": "Rifiutare l'aggiornamento di {name} a {toRef} e saltare tutte le versioni {line}.x? Le linee più recenti vengono comunque proposte.",
         "acceptLabel": "Rifiuta"
       },
       "defer": {

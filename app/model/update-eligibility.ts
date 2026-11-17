@@ -29,6 +29,7 @@ import {
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
+import { isTagSkipped } from './skip-scope.js';
 
 export type UpdateBlockerReason =
   | 'no-update-available'
@@ -452,7 +453,7 @@ export function computeUpdateEligibility(
   // 3. skip-tag
   const remoteTag = container.result?.tag;
   const skipTags = container.updatePolicy?.skipTags;
-  if (remoteTag && Array.isArray(skipTags) && skipTags.includes(remoteTag)) {
+  if (remoteTag && isTagSkipped(remoteTag, skipTags, container.transformTags)) {
     blockers.push(
       makeBlocker({
         reason: 'skip-tag',

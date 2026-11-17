@@ -752,6 +752,75 @@ describe('ApprovalsView', () => {
       expect(mockToast.success).toHaveBeenCalledWith('Rejected update for app');
     });
 
+    it('offers tag, minor and major scopes on a tag update, defaulting to tag', async () => {
+      const wrapper = await mountView();
+      const select = wrapper.find('[data-testid="approval-reject-scope"]');
+
+      expect(select.exists()).toBe(true);
+      expect((select.element as HTMLSelectElement).value).toBe('tag');
+      expect(select.findAll('option').map((option) => option.attributes('value'))).toEqual([
+        'tag',
+        'minor',
+        'major',
+      ]);
+    });
+
+    it.each([
+      ['minor', '1.1'],
+      ['major', '1'],
+    ] as const)(
+      'sends a %s scope and names the %s.x line in the confirmation',
+      async (scope, line) => {
+        const wrapper = await mountView();
+        await wrapper.find('[data-testid="approval-reject-scope"]').setValue(scope);
+        await findButtonByText(wrapper, 'Reject')!.trigger('click');
+        await flushPromises();
+
+        expect(mockConfirmRequire.mock.calls[0][0].message).toContain(`${line}.x`);
+        await mockConfirmRequire.mock.calls[0][0].accept();
+        await flushPromises();
+
+        expect(mockRejectApproval).toHaveBeenCalledWith('approval-1', { scope });
+      },
+    );
+
+    it('falls back to the whole tag in the confirmation when it has no version', async () => {
+      mockListApprovals.mockResolvedValue(makeListResponse([makeApproval({ toRef: 'latest' })]));
+      const wrapper = await mountView();
+      await wrapper.find('[data-testid="approval-reject-scope"]').setValue('major');
+      await findButtonByText(wrapper, 'Reject')!.trigger('click');
+      await flushPromises();
+
+      expect(mockConfirmRequire.mock.calls[0][0].message).toContain('latest.x');
+    });
+
+    it('hides the scope choice for a digest update, which only supports the exact skip', async () => {
+      mockListApprovals.mockResolvedValue(
+        makeListResponse([makeApproval({ updateKind: 'digest' })]),
+      );
+      const wrapper = await mountView();
+
+      expect(wrapper.find('[data-testid="approval-reject-scope"]').exists()).toBe(false);
+      await findButtonByText(wrapper, 'Reject')!.trigger('click');
+      await flushPromises();
+      await mockConfirmRequire.mock.calls[0][0].accept();
+      await flushPromises();
+      expect(mockRejectApproval).toHaveBeenCalledWith('approval-1');
+    });
+
+    it('ignores a scope value it does not know', async () => {
+      const wrapper = await mountView();
+      const select = wrapper.find('[data-testid="approval-reject-scope"]');
+      (select.element as HTMLSelectElement).value = 'bogus';
+      await select.trigger('change');
+      await findButtonByText(wrapper, 'Reject')!.trigger('click');
+      await flushPromises();
+      await mockConfirmRequire.mock.calls[0][0].accept();
+      await flushPromises();
+
+      expect(mockRejectApproval).toHaveBeenCalledWith('approval-1');
+    });
+
     it('shows an error toast when rejectApproval rejects', async () => {
       mockRejectApproval.mockRejectedValue(new Error('boom'));
       const wrapper = await mountView();
