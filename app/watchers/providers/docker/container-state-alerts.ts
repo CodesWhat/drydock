@@ -9,9 +9,9 @@ import { getOperationsByContainerId } from '../../../store/update-operation.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 /** Restarts (crashes) inside the window that make a restart loop. */
-export const DEFAULT_RESTART_LOOP_THRESHOLD = 3;
+const DEFAULT_RESTART_LOOP_THRESHOLD = 3;
 /** Restart loop window, in seconds. */
-export const DEFAULT_RESTART_LOOP_WINDOW_SECONDS = 300;
+const DEFAULT_RESTART_LOOP_WINDOW_SECONDS = 300;
 /**
  * Docker emits `oom`, `die` and (for an explicit stop) `stop` within milliseconds of each
  * other, in that order. Wait this long after the first of them before classifying, so one
@@ -19,7 +19,7 @@ export const DEFAULT_RESTART_LOOP_WINDOW_SECONDS = 300;
  */
 export const STATE_ALERT_SETTLE_MS = 1500;
 /** Updates and rollbacks keep stopping and recreating containers shortly after they end. */
-export const DRYDOCK_OPERATION_GRACE_MS = 60 * 1000;
+const DRYDOCK_OPERATION_GRACE_MS = 60 * 1000;
 
 export interface RestartLoopConfiguration {
   threshold?: number;
