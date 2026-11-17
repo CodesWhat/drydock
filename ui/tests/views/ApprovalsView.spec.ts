@@ -808,6 +808,16 @@ describe('ApprovalsView', () => {
       expect(mockRejectApproval).toHaveBeenCalledWith('approval-1');
     });
 
+    it('does not let a click on the scope picker bubble to the row', async () => {
+      const wrapper = await mountView();
+      const rowClick = vi.fn();
+      wrapper.element.addEventListener('click', rowClick);
+
+      await wrapper.find('[data-testid="approval-reject-scope"]').trigger('click');
+
+      expect(rowClick).not.toHaveBeenCalled();
+    });
+
     it('ignores a scope value it does not know', async () => {
       const wrapper = await mountView();
       const select = wrapper.find('[data-testid="approval-reject-scope"]');
