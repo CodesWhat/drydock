@@ -5,7 +5,7 @@ export interface OidcAccessPolicyConfiguration {
   groupclaim?: string;
 }
 
-export const DEFAULT_OIDC_GROUP_CLAIM = 'groups';
+const DEFAULT_OIDC_GROUP_CLAIM = 'groups';
 
 /**
  * Thrown when a user authenticated at the IdP but is not allowed in by the
