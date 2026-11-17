@@ -32,3 +32,12 @@ test('should redact a top-level bearer credential', () => {
     mode: 'simple',
   });
 });
+
+test('should redact a proxy URL that carries credentials', () => {
+  const sanitized = redactTriggerConfigurationInfrastructureDetails({
+    proxy: 'http://user:p%40ss@proxy.local:3128',
+    mode: 'simple',
+  });
+
+  expect(sanitized).toEqual({ proxy: '[REDACTED]', mode: 'simple' });
+});

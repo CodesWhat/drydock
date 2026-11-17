@@ -531,6 +531,22 @@ describe('Config Router', () => {
     },
   );
 
+  test.each(['/', '/:section'])(
+    'redacts credentials embedded in an HTTP trigger proxy URL: %s',
+    (route) => {
+      Object.assign(mockDdEnvVars, {
+        DD_NOTIFICATION_HTTP_X_PROXY: 'http://user:proxy-private-sentinel@proxy.local:3128',
+        DD_NOTIFICATION_HTTP_X_AUTH_PASSWORD: 'auth-private-sentinel',
+      });
+      configRouter.init();
+      const res = createResponse();
+      getHandler(route)({ params: { section: 'notification' } }, res);
+      const serialized = JSON.stringify(res.json.mock.calls[0][0]);
+      expect(serialized).not.toContain('proxy-private-sentinel');
+      expect(serialized).not.toContain('auth-private-sentinel');
+    },
+  );
+
   test('registers nocache middleware and rate-limited, session-only GET routes', () => {
     const router = configRouter.init();
     expect(router.use).toHaveBeenCalledWith('nocache-middleware');

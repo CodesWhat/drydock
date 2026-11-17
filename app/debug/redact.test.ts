@@ -240,6 +240,20 @@ describe('debug/redact', () => {
     });
   });
 
+  test('redacts HTTP trigger proxy URLs that embed credentials, env-style and camelCase', () => {
+    const source = {
+      DD_NOTIFICATION_HTTP_X_PROXY: 'http://user:p%40ss@proxy.local:3128',
+      proxy: 'http://user:p%40ss@proxy.local:3128',
+      cleanProxy: 'http://proxy.local:3128',
+    };
+
+    expect(redactDebugDump(source)).toEqual({
+      DD_NOTIFICATION_HTTP_X_PROXY: '[REDACTED]',
+      proxy: '[REDACTED]',
+      cleanProxy: 'http://proxy.local:3128',
+    });
+  });
+
   test('redacts webhook URL env vars (url token in env-style key)', () => {
     const source = {
       DD_NOTIFICATION_DISCORD_MYBOT_URL: 'https://discord.com/api/webhooks/T000/B000/XXXXSECRET',

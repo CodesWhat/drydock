@@ -3,6 +3,7 @@ const TRIGGER_INFRASTRUCTURE_CONFIG_KEYS = new Set([
   'host',
   'hostname',
   'url',
+  'proxy',
   'urls',
   'webhook',
   'webhookurl',
