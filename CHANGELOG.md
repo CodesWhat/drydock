@@ -10,6 +10,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- Classify four Alpine OpenSSL 3.5.9-r0 advisories (CVE-2026-107496, CVE-2026-88823, CVE-2026-95691, CVE-2026-95692) as `not_affected` through an OpenVEX document. The affected CMS encryption, AES-GCM-SIV and QUIC client code is not reachable in Drydock, and Node bundles its own OpenSSL. This stays in place until Alpine ships a fixed openssl.
 - Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
 
 ### Fixed
