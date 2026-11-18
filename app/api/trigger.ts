@@ -292,10 +292,7 @@ export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res
     return;
   }
 
-  if (
-    getTriggerCategoryForType(triggerType) === 'action' &&
-    !areContainerActionsEnabled()
-  ) {
+  if (getTriggerCategoryForType(triggerType) === 'action' && !areContainerActionsEnabled()) {
     sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
   }

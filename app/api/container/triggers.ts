@@ -13,11 +13,11 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
-import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import {
   areContainerActionsEnabled,
   CONTAINER_ACTIONS_DISABLED_MESSAGE,
 } from '../container-update-dispatch.js';
+import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { enforceApiKeyScope } from '../route-scopes.js';
