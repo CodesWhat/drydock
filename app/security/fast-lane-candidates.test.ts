@@ -34,10 +34,15 @@ import {
   selectFastLaneCandidates,
 } from './fast-lane-candidates.js';
 
+const RUN = `sha256:${'a'.repeat(64)}`;
+const NEW = `sha256:${'b'.repeat(64)}`;
+const OLD = `sha256:${'c'.repeat(64)}`;
+const OTHER = `sha256:${'d'.repeat(64)}`;
+
 const passedScan = {
   scanner: 'trivy',
   status: 'passed',
-  image: 'repo/app@sha256:new',
+  image: `repo/app@${NEW}`,
   scannedAt: '2026-01-02T00:00:00.000Z',
   vulnerabilities: [],
   severityIds: { critical: [], high: [] },
@@ -46,8 +51,8 @@ const passedScan = {
 const runningScan = {
   scanner: 'trivy',
   status: 'blocked',
-  image: 'repo/app@sha256:run',
-  imageDigest: 'sha256:run',
+  image: `repo/app@${RUN}`,
+  imageDigest: RUN,
   scannedAt: '2026-01-01T00:00:00.000Z',
   vulnerabilities: [],
   severityIds: { critical: ['CVE-1'], high: [] },
@@ -57,8 +62,8 @@ function candidate(overrides: Record<string, unknown> = {}) {
   return {
     id: 'c1',
     labels: { 'dd.security.fastlane': 'true' },
-    image: { tag: { value: '1.0.0' }, digest: { watch: false, value: 'sha256:run' } },
-    result: { tag: '2.0.0', digest: 'sha256:new' },
+    image: { tag: { value: '1.0.0' }, digest: { watch: false, value: RUN } },
+    result: { tag: '2.0.0', digest: NEW },
     security: { scan: runningScan },
     ...overrides,
   } as never;
@@ -97,26 +102,26 @@ describe('fast lane candidate scanning', () => {
       ).toHaveLength(0);
       expect(
         selectFastLaneCandidates([
-          candidate({ security: { scan: { ...runningScan, imageDigest: 'sha256:old' } } }),
+          candidate({ security: { scan: { ...runningScan, imageDigest: OLD } } }),
         ]),
       ).toHaveLength(0);
     });
 
     test('skips a candidate whose scan is already comparable', () => {
       const scanned = candidate({
-        security: { scan: runningScan, updateScan: { ...passedScan, imageDigest: 'sha256:new' } },
+        security: { scan: runningScan, updateScan: { ...passedScan, imageDigest: NEW } },
       });
       expect(selectFastLaneCandidates([scanned])).toHaveLength(0);
     });
 
     test('rescans a candidate scan of another digest or older than the running scan', () => {
       const otherDigest = candidate({
-        security: { scan: runningScan, updateScan: { ...passedScan, imageDigest: 'sha256:old' } },
+        security: { scan: runningScan, updateScan: { ...passedScan, imageDigest: OLD } },
       });
       const olderThanRunning = candidate({
         security: {
           scan: { ...runningScan, scannedAt: '2026-01-03T00:00:00.000Z' },
-          updateScan: { ...passedScan, imageDigest: 'sha256:new' },
+          updateScan: { ...passedScan, imageDigest: NEW },
         },
       });
       expect(selectFastLaneCandidates([otherDigest, olderThanRunning])).toHaveLength(2);
@@ -133,14 +138,14 @@ describe('fast lane candidate scanning', () => {
     test('scans the candidate pinned by digest, never by tag, and stamps that digest', async () => {
       mocks.getContainersRaw.mockReturnValue([candidate()]);
       expect(await scanFastLaneCandidates(options())).toBe(1);
-      expect(mocks.resolveImage).toHaveBeenCalledWith(expect.anything(), {}, 'sha256:new');
+      expect(mocks.resolveImage).toHaveBeenCalledWith(expect.anything(), {}, NEW);
       expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledWith(
         expect.objectContaining({ image: 'repo/app:2.0.0' }),
       );
       expect(mocks.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           security: expect.objectContaining({
-            updateScan: { ...passedScan, imageDigest: 'sha256:new' },
+            updateScan: { ...passedScan, imageDigest: NEW },
           }),
         }),
       );
@@ -159,7 +164,7 @@ describe('fast lane candidate scanning', () => {
       mocks.getContainerRaw.mockReturnValue(candidate({ security: undefined }));
       expect(await scanFastLaneCandidates(options())).toBe(1);
       expect(mocks.updateContainer.mock.calls[0][0].security).toStrictEqual({
-        updateScan: { ...passedScan, imageDigest: 'sha256:new' },
+        updateScan: { ...passedScan, imageDigest: NEW },
       });
     });
 
@@ -180,8 +185,71 @@ describe('fast lane candidate scanning', () => {
           security: { scan: { ...runningScan, scannedAt: '2026-01-05T00:00:00.000Z' } },
         }),
       ]);
+      mocks.scanImageForVulnerabilities.mockResolvedValue({
+        ...passedScan,
+        scannedAt: '2026-01-06T00:00:00.000Z',
+      });
       expect(await scanFastLaneCandidates(options())).toBe(1);
       expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+    });
+
+    test('containers pending the same candidate digest share one scan', async () => {
+      mocks.getContainersRaw.mockReturnValue([
+        candidate({ id: 'a' }),
+        candidate({ id: 'b' }),
+        candidate({ id: 'c' }),
+      ]);
+      expect(await scanFastLaneCandidates(options())).toBe(3);
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      expect(mocks.updateContainer).toHaveBeenCalledTimes(3);
+    });
+
+    test('reuses a remembered scan in a later batch only for containers it is comparable with', async () => {
+      mocks.getContainersRaw.mockReturnValue([candidate({ id: 'a' })]);
+      await scanFastLaneCandidates(options());
+      // A replica whose running scan is not newer takes the remembered scan without scanning.
+      mocks.getContainersRaw.mockReturnValue([candidate({ id: 'b' })]);
+      expect(await scanFastLaneCandidates(options())).toBe(1);
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      // A container whose running scan is newer than the remembered one forces a fresh scan.
+      mocks.getContainersRaw.mockReturnValue([
+        candidate({
+          id: 'c',
+          security: { scan: { ...runningScan, scannedAt: '2026-02-01T00:00:00.000Z' } },
+        }),
+      ]);
+      mocks.scanImageForVulnerabilities.mockResolvedValue({
+        ...passedScan,
+        scannedAt: '2026-02-02T00:00:00.000Z',
+      });
+      expect(await scanFastLaneCandidates(options())).toBe(1);
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+    });
+
+    test('a failed shared scan is attempted once and stores nothing for any replica', async () => {
+      mocks.getContainersRaw.mockReturnValue([candidate({ id: 'a' }), candidate({ id: 'b' })]);
+      mocks.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('registry down'));
+      expect(await scanFastLaneCandidates(options())).toBe(0);
+      expect(await scanFastLaneCandidates(options())).toBe(0);
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+    });
+
+    test('a replica whose candidate moved is skipped while the others still get the scan', async () => {
+      mocks.getContainersRaw.mockReturnValue([candidate({ id: 'a' }), candidate({ id: 'b' })]);
+      mocks.getContainerRaw.mockImplementation((id: string) =>
+        id === 'a'
+          ? candidate({ id: 'a', result: { tag: '3', digest: OTHER } })
+          : candidate({ id: 'b' }),
+      );
+      expect(await scanFastLaneCandidates(options())).toBe(1);
+    });
+
+    test('never scans a candidate whose digest is not an immutable sha256 digest', async () => {
+      mocks.getContainersRaw.mockReturnValue([
+        candidate({ result: { tag: '2.0.0', digest: '2.0.0' } }),
+      ]);
+      expect(await scanFastLaneCandidates(options())).toBe(0);
+      expect(mocks.scanImageForVulnerabilities).not.toHaveBeenCalled();
     });
 
     test('an errored scan is not stored', async () => {
@@ -197,20 +265,54 @@ describe('fast lane candidate scanning', () => {
       expect(await scanFastLaneCandidates(options())).toBe(0);
       resetFastLaneCandidateAttempts();
       mocks.getContainerRaw.mockReturnValueOnce(
-        candidate({ result: { tag: '2.0.0', digest: 'sha256:moved' } }),
+        candidate({ result: { tag: '2.0.0', digest: OTHER } }),
       );
       expect(await scanFastLaneCandidates(options())).toBe(0);
       expect(mocks.updateContainer).not.toHaveBeenCalled();
     });
 
     test('works through the queue with a bounded number of workers', async () => {
-      mocks.getContainersRaw.mockReturnValue([
-        candidate({ id: 'a' }),
-        candidate({ id: 'b' }),
-        candidate({ id: 'c' }),
-      ]);
+      const digestOf = (c: string) => `sha256:${c.repeat(64)}`;
+      mocks.getContainersRaw.mockReturnValue(
+        ['1', '2', '3'].map((c) =>
+          candidate({ id: `id-${c}`, result: { tag: '2.0.0', digest: digestOf(c) } }),
+        ),
+      );
+      mocks.getContainerRaw.mockImplementation((id: string) =>
+        candidate({ id, result: { tag: '2.0.0', digest: digestOf(id.slice(-1)) } }),
+      );
       expect(await scanFastLaneCandidates({ ...options(), scanConcurrency: 1 })).toBe(3);
       expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(3);
+    });
+
+    test('forgets the oldest remembered scan once the cache is full', async () => {
+      const digestOf = (i: number) => `sha256:${i.toString(16).padStart(64, '0')}`;
+      const total = 201;
+      mocks.getContainersRaw.mockReturnValue(
+        Array.from({ length: total }, (_, i) =>
+          candidate({ id: `id-${i}`, result: { tag: '2.0.0', digest: digestOf(i) } }),
+        ),
+      );
+      mocks.getContainerRaw.mockImplementation((id: string) =>
+        candidate({ id, result: { tag: '2.0.0', digest: digestOf(Number(id.slice(3))) } }),
+      );
+      const storedCount = await scanFastLaneCandidates({ ...options(), scanConcurrency: 8 });
+      expect(storedCount).toBe(total);
+
+      // The first digest was evicted, so a new container pending it scans again; the last was kept.
+      mocks.scanImageForVulnerabilities.mockClear();
+      mocks.getContainersRaw.mockReturnValue([
+        candidate({ id: 'fresh-0', result: { tag: '2.0.0', digest: digestOf(0) } }),
+        candidate({ id: 'fresh-1', result: { tag: '2.0.0', digest: digestOf(total - 1) } }),
+      ]);
+      mocks.getContainerRaw.mockImplementation((id: string) =>
+        candidate({
+          id,
+          result: { tag: '2.0.0', digest: digestOf(id === 'fresh-0' ? 0 : total - 1) },
+        }),
+      );
+      await scanFastLaneCandidates({ ...options(), scanConcurrency: 8 });
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
     });
 
     test('stops taking work once aborted', async () => {

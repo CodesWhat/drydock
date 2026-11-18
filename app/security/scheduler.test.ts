@@ -1588,6 +1588,33 @@ describe('runScheduledScans', () => {
     );
   });
 
+  test('scans the running image by its immutable digest, not the mutable tag', async () => {
+    const digest = `sha256:${'e'.repeat(64)}`;
+    const container = createContainer({
+      image: { ...createContainer().image, digest: { watch: true, value: digest } },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, digest);
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest }),
+      expect.any(Number),
+    );
+  });
+
+  test('falls back to the tag when the running digest is not a real digest', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, undefined);
+  });
+
   test('should use empty object fallback when registry state has no registry key', async () => {
     mockGetState.mockReturnValue({});
     const container = createContainer();

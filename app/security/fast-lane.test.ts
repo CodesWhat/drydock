@@ -9,6 +9,11 @@ import {
   updateScanMatchesCandidate,
 } from './fast-lane.js';
 
+const RUN = `sha256:${'a'.repeat(64)}`;
+const NEW = `sha256:${'b'.repeat(64)}`;
+const OLD = `sha256:${'c'.repeat(64)}`;
+const OTHER = `sha256:${'d'.repeat(64)}`;
+
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
 type Scan = NonNullable<Container['security']>['scan'];
 
@@ -19,8 +24,8 @@ function ids(vulns: Array<[string, Severity]>, severity: Severity) {
 function scan(vulns: Array<[string, Severity]>, overrides: Record<string, unknown> = {}): Scan {
   return {
     scanner: 'trivy',
-    image: 'repo/app@sha256:run',
-    imageDigest: 'sha256:run',
+    image: `repo/app@${RUN}`,
+    imageDigest: RUN,
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: vulns.some(([, s]) => s === 'CRITICAL' || s === 'HIGH') ? 'blocked' : 'passed',
     blockSeverities: ['CRITICAL', 'HIGH'],
@@ -34,8 +39,8 @@ function scan(vulns: Array<[string, Severity]>, overrides: Record<string, unknow
 
 const candidateScan = (vulns: Array<[string, Severity]>, overrides = {}) =>
   scan(vulns, {
-    image: 'repo/app@sha256:new',
-    imageDigest: 'sha256:new',
+    image: `repo/app@${NEW}`,
+    imageDigest: NEW,
     scannedAt: '2026-01-02T00:00:00.000Z',
     ...overrides,
   });
@@ -49,8 +54,8 @@ function makeContainer(
     id: 'c1',
     name: 'web',
     labels: { [SECURITY_FAST_LANE_LABEL]: 'true' },
-    image: { digest: { value: 'sha256:run' } },
-    result: { tag: '2.0.0', digest: 'sha256:new' },
+    image: { digest: { value: RUN } },
+    result: { tag: '2.0.0', digest: NEW },
     security: { scan: running, ...(candidate ? { updateScan: candidate } : {}) },
     ...overrides,
   } as unknown as Container;
@@ -200,7 +205,7 @@ describe('security fast lane evaluation', () => {
     const running = () => scan([['CVE-1', 'CRITICAL']]);
 
     test('a candidate scan of a different digest does not qualify', () => {
-      const other = candidateScan([], { imageDigest: 'sha256:other' });
+      const other = candidateScan([], { imageDigest: OTHER });
       expect(evaluateSecurityFastLane(makeContainer(running(), other))).toBeUndefined();
     });
 
@@ -219,8 +224,23 @@ describe('security fast lane evaluation', () => {
     });
 
     test('a running scan of a different digest does not qualify', () => {
-      const stale = scan([['CVE-1', 'CRITICAL']], { imageDigest: 'sha256:old' });
+      const stale = scan([['CVE-1', 'CRITICAL']], { imageDigest: OLD });
       expect(evaluateSecurityFastLane(makeContainer(stale, candidateScan([])))).toBeUndefined();
+    });
+
+    test('a tag the registry fell back to is not a digest, on either side', () => {
+      const tagAsDigest = candidateScan([], { imageDigest: '2.0.0' });
+      const candidateWithTag = makeContainer(running(), tagAsDigest, {
+        result: { tag: '2.0.0', digest: '2.0.0' } as never,
+      });
+      expect(evaluateSecurityFastLane(candidateWithTag)).toBeUndefined();
+      expect(needsFastLaneCandidateScan(candidateWithTag)).toBe(false);
+
+      const runningTag = scan([['CVE-1', 'CRITICAL']], { imageDigest: 'latest' });
+      const runningWithTag = makeContainer(runningTag, candidateScan([]), {
+        image: { digest: { value: 'latest' } } as never,
+      });
+      expect(evaluateSecurityFastLane(runningWithTag)).toBeUndefined();
     });
 
     test('a running scan or running image without a digest does not qualify', () => {
@@ -298,7 +318,7 @@ describe('needsFastLaneCandidateScan', () => {
   test('is true for a candidate scan that is stale, of another digest, or from another scanner', () => {
     for (const override of [
       { scannedAt: '2025-12-31T00:00:00.000Z' },
-      { imageDigest: 'sha256:other' },
+      { imageDigest: OTHER },
       { scanner: 'grype' },
       { severityIds: undefined },
       { error: 'partial' },
@@ -315,7 +335,7 @@ describe('needsFastLaneCandidateScan', () => {
 
   test('is false without usable running evidence or a candidate digest', () => {
     expect(
-      needsFastLaneCandidateScan(makeContainer(scan([], { imageDigest: 'sha256:old' }), undefined)),
+      needsFastLaneCandidateScan(makeContainer(scan([], { imageDigest: OLD }), undefined)),
     ).toBe(false);
     expect(
       needsFastLaneCandidateScan(
@@ -367,13 +387,9 @@ describe('updateScanMatchesCandidate', () => {
   const base = { image: 'repo/app:2.0.0' } as never;
 
   test('matches by digest, from the stamped digest or the image reference', () => {
-    const container = { result: { digest: 'sha256:new' } } as unknown as Container;
-    expect(updateScanMatchesCandidate(container, { ...base, imageDigest: 'sha256:new' })).toBe(
-      true,
-    );
-    expect(updateScanMatchesCandidate(container, { image: 'repo/app@sha256:new' } as never)).toBe(
-      true,
-    );
+    const container = { result: { digest: NEW } } as unknown as Container;
+    expect(updateScanMatchesCandidate(container, { ...base, imageDigest: NEW })).toBe(true);
+    expect(updateScanMatchesCandidate(container, { image: `repo/app@${NEW}` } as never)).toBe(true);
     expect(updateScanMatchesCandidate(container, { ...base, imageDigest: 'sha256:x' })).toBe(false);
   });
 

@@ -7,6 +7,7 @@ import {
   hasCandidateIdentityChanged,
   hasRawUpdate,
 } from '../../model/container.js';
+import { isImmutableDigest } from '../../security/digest.js';
 import { isSecurityFastLaneEnabled } from '../../security/fast-lane.js';
 import {
   getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
@@ -376,9 +377,12 @@ async function scanUpdateImage(options: {
     try {
       // Pin the scan to the candidate digest when there is one: a mutable tag could resolve
       // to a different image mid-scan, and the stamped digest must describe what was scanned.
+      const candidateDigest = isImmutableDigest(container.result.digest)
+        ? container.result.digest
+        : undefined;
       const updateImage = context.getContainerImageFullName(
         container,
-        container.result.digest ?? container.result.tag,
+        candidateDigest ?? container.result.tag,
       );
       context.log.info(`Running on-demand security scan for update image ${updateImage}`);
       const updateScanResult = await context.scanImageForVulnerabilities({
@@ -386,8 +390,8 @@ async function scanUpdateImage(options: {
         auth,
       });
       // Stamp the candidate digest so the scan is recognisable as that candidate's.
-      securityPatch.updateScan = container.result.digest
-        ? { ...updateScanResult, imageDigest: container.result.digest }
+      securityPatch.updateScan = candidateDigest
+        ? { ...updateScanResult, imageDigest: candidateDigest }
         : updateScanResult;
 
       if (securityConfiguration.signature.verify) {

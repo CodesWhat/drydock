@@ -9,8 +9,12 @@ import { hasCandidateIdentityChanged, hasRawUpdate } from '../model/container.js
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
-import { isSecurityFastLaneEnabled, needsFastLaneCandidateScan } from './fast-lane.js';
-import { scanImageForVulnerabilities } from './scan.js';
+import {
+  isComparableCandidateScan,
+  isSecurityFastLaneEnabled,
+  needsFastLaneCandidateScan,
+} from './fast-lane.js';
+import { type ContainerSecurityScan, scanImageForVulnerabilities } from './scan.js';
 
 const logFastLane = log.child({ component: 'security.fast-lane' });
 
@@ -22,8 +26,25 @@ const logFastLane = log.child({ component: 'security.fast-lane' });
  */
 const attemptedCandidates = new Set<string>();
 
+/**
+ * The latest candidate scan per digest, shared by every container pending that digest (replicas,
+ * or several services on one image). A container only takes it when it is comparable with its
+ * own running scan, so a stale result is never reused.
+ */
+const candidateScanByDigest = new Map<string, ContainerSecurityScan>();
+const CANDIDATE_SCAN_CACHE_MAX_ENTRIES = 200;
+
+function rememberCandidateScan(digest: string, scanResult: ContainerSecurityScan): void {
+  candidateScanByDigest.delete(digest);
+  candidateScanByDigest.set(digest, scanResult);
+  if (candidateScanByDigest.size > CANDIDATE_SCAN_CACHE_MAX_ENTRIES) {
+    candidateScanByDigest.delete(candidateScanByDigest.keys().next().value as string);
+  }
+}
+
 export function resetFastLaneCandidateAttempts(): void {
   attemptedCandidates.clear();
+  candidateScanByDigest.clear();
 }
 
 function candidateKey(container: Container): string {
@@ -45,54 +66,91 @@ export function selectFastLaneCandidates(containers: Container[]): Container[] {
   );
 }
 
-async function scanFastLaneCandidate(
+function isScanUsableFor(
   container: Container,
-  options: { signal: AbortSignal },
-): Promise<boolean> {
-  attemptedCandidates.add(candidateKey(container));
+  digest: string,
+  scanResult: ContainerSecurityScan | undefined,
+): scanResult is ContainerSecurityScan {
+  const running = container.security?.scan;
+  return (
+    scanResult !== undefined &&
+    running !== undefined &&
+    isComparableCandidateScan({ ...scanResult, imageDigest: digest }, running, digest)
+  );
+}
+
+async function scanCandidateDigest(
+  representative: Container,
+  digest: string,
+  signal: AbortSignal,
+): Promise<ContainerSecurityScan | undefined> {
   try {
     // Scan the candidate by digest, never by the mutable tag: the result is stamped with that
     // digest and must describe exactly it, even if the tag moves while the scan runs.
-    const digest = container.result?.digest as string;
     const registries = registry.getState().registry || {};
-    const image = resolveContainerImageFullName(container, registries, digest);
-    const auth = await resolveContainerRegistryAuth(container, registries, {
+    const image = resolveContainerImageFullName(representative, registries, digest);
+    const auth = await resolveContainerRegistryAuth(representative, registries, {
       log: logFastLane,
       sanitizeLogParam,
     });
-    const scanResult = await scanImageForVulnerabilities({
-      image,
-      auth,
-      signal: options.signal,
-    });
-    // Read the CURRENT record at write-back time, and drop the result when the candidate
-    // moved while the scan ran, so it never lands on a different pending update. An errored
-    // scan is not stored: it describes nothing about the candidate.
-    const current =
-      scanResult.status === 'error' ? undefined : storeContainer.getContainerRaw(container.id);
-    if (!current || hasCandidateIdentityChanged(container.result, current.result)) {
-      return false;
-    }
-    storeContainer.updateContainer({
-      ...current,
-      security: {
-        ...(current.security || {}),
-        updateScan: { ...scanResult, imageDigest: digest },
-      },
-    });
-    return true;
+    const scanResult = await scanImageForVulnerabilities({ image, auth, signal });
+    return scanResult.status === 'error' ? undefined : { ...scanResult, imageDigest: digest };
   } catch (error: unknown) {
     logFastLane.warn(
-      `Fast lane candidate scan failed for container ${sanitizeLogParam(container.id, 80)}: ${getErrorMessage(error)}`,
+      `Fast lane candidate scan failed for digest ${sanitizeLogParam(digest, 80)}: ${getErrorMessage(error)}`,
     );
-    return false;
+    return undefined;
   }
 }
 
+/** Write a candidate scan onto the container's CURRENT record, unless the candidate moved. */
+function storeCandidateScan(container: Container, scanResult: ContainerSecurityScan): boolean {
+  const current = storeContainer.getContainerRaw(container.id);
+  if (!current || hasCandidateIdentityChanged(container.result, current.result)) {
+    return false;
+  }
+  storeContainer.updateContainer({
+    ...current,
+    security: { ...(current.security || {}), updateScan: scanResult },
+  });
+  return true;
+}
+
 /**
- * Scan the pending candidate of each opted-in container once, so the fast lane has the
- * evidence it needs for a held update. Runs after the scheduled scan with the same worker
- * count, and only touches candidates that are still unscanned.
+ * One candidate digest and every opted-in container pending it. The digest is scanned at most
+ * once for the group (and not at all when a comparable result is already remembered), and the
+ * result is shared by every container whose running scan it is comparable with.
+ */
+async function processCandidateGroup(
+  digest: string,
+  containers: Container[],
+  signal: AbortSignal,
+): Promise<number> {
+  for (const container of containers) {
+    attemptedCandidates.add(candidateKey(container));
+  }
+  const remembered = candidateScanByDigest.get(digest);
+  let shared = remembered;
+  if (!containers.some((container) => isScanUsableFor(container, digest, remembered))) {
+    shared = await scanCandidateDigest(containers[0], digest, signal);
+    if (shared) {
+      rememberCandidateScan(digest, shared);
+    }
+  }
+  let stored = 0;
+  for (const container of containers) {
+    if (isScanUsableFor(container, digest, shared) && storeCandidateScan(container, shared)) {
+      stored += 1;
+    }
+  }
+  return stored;
+}
+
+/**
+ * Scan the pending candidate of each opted-in container so the fast lane has the evidence it
+ * needs for a held update. Runs after the scheduled scan with the same worker count. Containers
+ * pending the same candidate digest share one scan, and only candidates without a comparable
+ * scan are touched. Returns how many containers received a scan.
  */
 export async function scanFastLaneCandidates(options: {
   signal: AbortSignal;
@@ -104,21 +162,28 @@ export async function scanFastLaneCandidates(options: {
   if (candidates.length === 0) {
     return 0;
   }
-  logFastLane.info(`Scanning ${candidates.length} fast lane update candidates`);
+  const groups = new Map<string, Container[]>();
+  for (const container of candidates) {
+    const digest = container.result?.digest as string;
+    groups.set(digest, [...(groups.get(digest) ?? []), container]);
+  }
+  logFastLane.info(
+    `Scanning ${groups.size} fast lane update candidates for ${candidates.length} containers`,
+  );
 
+  const entries = [...groups.entries()];
   let nextIndex = 0;
-  let scanned = 0;
-  const workerCount = Math.min(options.scanConcurrency, candidates.length);
+  let stored = 0;
+  const workerCount = Math.min(options.scanConcurrency, entries.length);
   await Promise.all(
     Array.from({ length: workerCount }, async () => {
-      while (!options.signal.aborted && nextIndex < candidates.length) {
-        const container = candidates[nextIndex];
+      while (!options.signal.aborted && nextIndex < entries.length) {
+        const [digest, containers] = entries[nextIndex];
         nextIndex += 1;
-        if (await scanFastLaneCandidate(container, options)) {
-          scanned += 1;
-        }
+        const storedForGroup = await processCandidateGroup(digest, containers, options.signal);
+        stored += storedForGroup;
       }
     }),
   );
-  return scanned;
+  return stored;
 }

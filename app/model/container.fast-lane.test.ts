@@ -1,13 +1,17 @@
 import * as container from './container.js';
 import { daysToMs } from './maturity-policy.js';
 
+const RUN = `sha256:${'a'.repeat(64)}`;
+const NEW = `sha256:${'b'.repeat(64)}`;
+const OTHER = `sha256:${'d'.repeat(64)}`;
+
 const summary = { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 };
 
 function scan(ids: Array<[string, string]>, extra: Record<string, unknown> = {}) {
   return {
     scanner: 'trivy',
-    image: 'organization/image@sha256:run',
-    imageDigest: 'sha256:run',
+    image: `organization/image@${RUN}`,
+    imageDigest: RUN,
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: 'blocked',
     blockSeverities: ['CRITICAL', 'HIGH'],
@@ -33,19 +37,19 @@ function build(overrides: Record<string, unknown> = {}) {
       registry: { name: 'hub', url: 'https://hub' },
       name: 'organization/image',
       tag: { value: '1.0.0', semver: true },
-      digest: { watch: false, value: 'sha256:run' },
+      digest: { watch: false, value: RUN },
       architecture: 'arch',
       os: 'os',
     },
-    result: { tag: '1.0.1', digest: 'sha256:new' },
+    result: { tag: '1.0.1', digest: NEW },
     security: {
       scan: scan([
         ['CVE-1', 'CRITICAL'],
         ['CVE-2', 'MEDIUM'],
       ]),
       updateScan: scan([['CVE-2', 'MEDIUM']], {
-        image: 'organization/image@sha256:new',
-        imageDigest: 'sha256:new',
+        image: `organization/image@${NEW}`,
+        imageDigest: NEW,
         scannedAt: '2026-01-02T00:00:00.000Z',
         status: 'passed',
       }),
@@ -96,8 +100,8 @@ describe('validate: security fast lane', () => {
         security: {
           scan: scan([['CVE-2', 'MEDIUM']]),
           updateScan: scan([], {
-            image: 'organization/image@sha256:new',
-            imageDigest: 'sha256:new',
+            image: `organization/image@${NEW}`,
+            imageDigest: NEW,
             scannedAt: '2026-01-02T00:00:00.000Z',
             status: 'passed',
           }),
@@ -118,7 +122,7 @@ describe('validate: security fast lane', () => {
 
   test('a candidate scan of the mutable tag rather than the pending digest stays suppressed', () => {
     const input = build(held);
-    (input.security.updateScan as { imageDigest?: string }).imageDigest = 'sha256:moved';
+    (input.security.updateScan as { imageDigest?: string }).imageDigest = OTHER;
     const validated = container.validate(input);
     expect(validated.securityFastLane).toBeUndefined();
     expect(validated.updateAvailable).toBe(false);

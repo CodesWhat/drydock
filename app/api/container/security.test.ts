@@ -1310,12 +1310,59 @@ describe('api/container/security', () => {
       await callScanContainer(harness.handlers);
 
       const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
-      expect(persisted.security.updateScan).toEqual({ ...updateScan, imageDigest: 'sha256:AAA' });
+      expect(persisted.security.updateScan).toEqual(updateScan);
+    });
+
+    test('scans the running image pinned by its immutable digest', async () => {
+      const runningDigest = `sha256:${'f'.repeat(64)}`;
+      const running = createContainer({
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+          digest: { value: runningDigest },
+        },
+        updateAvailable: false,
+        result: undefined,
+      });
+      const harness = createHarness({ container: running });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ image: CURRENT_IMAGE }),
+      );
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...running });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        runningDigest,
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.scan.imageDigest).toBe(runningDigest);
+    });
+
+    test('scans a candidate whose digest is not immutable by tag and does not stamp it', async () => {
+      const initialContainer = createContainer({ result: { tag: '2.0.0', digest: '2.0.0' } });
+      const harness = createHarness({ container: initialContainer });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult({ image: CURRENT_IMAGE }))
+        .mockResolvedValueOnce(createScanResult({ image: UPDATE_IMAGE }));
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...initialContainer });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        '2.0.0',
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan.imageDigest).toBeUndefined();
     });
 
     test('scans the candidate pinned by digest and stamps exactly that digest', async () => {
+      const candidateDigest = `sha256:${'9'.repeat(64)}`;
       const initialContainer = createContainer({
-        result: { tag: '2.0.0', digest: 'sha256:AAA' },
+        result: { tag: '2.0.0', digest: candidateDigest },
       });
       const harness = createHarness({ container: initialContainer });
       harness.deps.scanImageForVulnerabilities
@@ -1327,10 +1374,10 @@ describe('api/container/security', () => {
 
       expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'c1' }),
-        'sha256:AAA',
+        candidateDigest,
       );
       const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
-      expect(persisted.security.updateScan.imageDigest).toBe('sha256:AAA');
+      expect(persisted.security.updateScan.imageDigest).toBe(candidateDigest);
     });
 
     test('scans the candidate of a held update when the container is on the security fast lane', async () => {

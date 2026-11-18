@@ -1,4 +1,5 @@
 import type { Container } from '../model/container.js';
+import { isImmutableDigest } from './digest.js';
 
 /** Per-container opt-in (or opt-out of the global default). */
 export const SECURITY_FAST_LANE_LABEL = 'dd.security.fastlane';
@@ -75,7 +76,12 @@ function isCompleteScan(scan: ContainerScan): boolean {
 function getRunningEvidence(container: Container): ContainerScan | undefined {
   const scan = container.security?.scan;
   const runningDigest = container.image?.digest?.value;
-  if (!scan || !runningDigest || scan.imageDigest !== runningDigest || !isCompleteScan(scan)) {
+  if (
+    !scan ||
+    !isImmutableDigest(runningDigest) ||
+    scan.imageDigest !== runningDigest ||
+    !isCompleteScan(scan)
+  ) {
     return undefined;
   }
   return scan;
@@ -86,12 +92,13 @@ function getRunningEvidence(container: Container): ContainerScan | undefined {
  * the pending candidate digest by the same scanner, and not before the running scan (a
  * scan of an older vulnerability database would credit fixes the candidate doesn't have).
  */
-function isComparableCandidateScan(
+export function isComparableCandidateScan(
   candidate: ContainerScan,
   running: ContainerScan,
   candidateDigest: string,
 ): boolean {
   return (
+    isImmutableDigest(candidateDigest) &&
     candidate.imageDigest === candidateDigest &&
     isCompleteScan(candidate) &&
     candidate.scanner === running.scanner &&
@@ -107,7 +114,7 @@ function isComparableCandidateScan(
 export function needsFastLaneCandidateScan(container: Container): boolean {
   const running = getRunningEvidence(container);
   const candidateDigest = container.result?.digest;
-  if (!running || !candidateDigest) {
+  if (!running || !isImmutableDigest(candidateDigest)) {
     return false;
   }
   const candidate = container.security?.updateScan;
@@ -134,7 +141,7 @@ export function evaluateSecurityFastLane(container: Container): SecurityFastLane
   const candidate = container.security?.updateScan;
   if (
     !running?.severityIds ||
-    !candidateDigest ||
+    !isImmutableDigest(candidateDigest) ||
     !candidate?.severityIds ||
     !isComparableCandidateScan(candidate, running, candidateDigest)
   ) {
