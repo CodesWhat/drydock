@@ -2348,6 +2348,21 @@ describe('container state alerts', () => {
     expect(trigger.renderSimpleBody(dispatched)).toBe(item.body);
   });
 
+  test.each(['command', 'docker', 'dockercompose', 'portainer'])(
+    'a %s action trigger never dispatches a state alert, even with an empty rule trigger list',
+    async (type) => {
+      trigger.type = type;
+      const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      await trigger.handleContainerStateAlertEvent({
+        kind: 'container-exited',
+        containerName: 'local_web',
+        container: stateContainer,
+        exitCode: 2,
+      } as any);
+      expect(provider).not.toHaveBeenCalled();
+    },
+  );
+
   test('a disabled rule does not dispatch', async () => {
     notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
       enabled: false,

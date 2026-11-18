@@ -25,6 +25,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Container state alerts (`container-stopped`, `container-exited`, `container-oom-killed` and `container-restart-loop`) now go to notification triggers only. With an empty trigger list the rule means all notification triggers, but a Command action trigger was also running its command for these alerts. Command and the update actions are skipped for them now, as the docs already said.
 - Reloading the configuration from the API or the config editor no longer attributes later scheduled scans and auto-updates to the admin who triggered the reload. Components re-registered by a reload now run outside the request's audit actor, so their cron jobs and timers record as System, not as that user until the next restart.
 - An invalid watcher setting, such as a bad `CONTAINERS_INCLUDE` or `LABELS_EXCLUDE` pattern or a `RESTARTLOOP_THRESHOLD` below 2, now stops startup with a clear message on installs that use environment variables only, the same as it already did with a `drydock.yml`. Before, those installs logged "Some watchers failed to register" and kept running without the watcher.
 - Digest-only tag comparison now ignores include and exclude tag patterns longer than 1024 characters, the same as normal tag filtering. Before, one overlong label could give two different tag sets. The three filter compilers now share one implementation.
