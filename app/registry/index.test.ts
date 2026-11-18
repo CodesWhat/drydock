@@ -1064,6 +1064,28 @@ test('registerAuthentications should log startup health guidance when DD_AUTH va
   );
 });
 
+test('initObservationOnly registers registries and watchers but no triggers, authentications or agents', async () => {
+  registries = { hub: { private: { login: 'login', token: 'token' } } };
+  triggers = { mock: { mock1: {} } };
+  watchers = { watcher1: { host: 'host1' } };
+  authentications = { basic: { john: { user: 'john', hash: TEST_BASIC_HASH } } };
+  const onceSpy = vi.spyOn(process, 'once');
+
+  await registry.initObservationOnly();
+
+  expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1']);
+  expect(Object.keys(registry.getState().registry)).toContain('hub.private');
+  expect(registry.getState().trigger).toEqual({});
+  expect(registry.getState().authentication).toEqual({});
+  expect(registry.getState().agent).toEqual({});
+  expect(onceSpy).not.toHaveBeenCalledWith('SIGINT', expect.anything());
+
+  await registry.deregisterObservationOnly();
+
+  expect(registry.getState().watcher).toEqual({});
+  expect(registry.getState().registry).toEqual({});
+});
+
 test('init should register all components', async () => {
   registries = {
     hub: {

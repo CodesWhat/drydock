@@ -41,6 +41,11 @@ vi.mock('../../../release-notes/index.js', () => ({
   toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
 }));
 
+const mockIsObservationMode = vi.hoisted(() => vi.fn(() => false));
+vi.mock('../../../runtime/observation-mode.js', () => ({
+  isObservationMode: mockIsObservationMode,
+}));
+
 // Mock all dependencies
 vi.mock('dockerode');
 vi.mock('node-cron');
@@ -824,6 +829,23 @@ describe('Docker Watcher', () => {
       });
       await docker.init();
       expect(mockDebounce).not.toHaveBeenCalled();
+    });
+
+    test('in observation mode registers no cron, startup scan, events stream or update listener', async () => {
+      mockIsObservationMode.mockReturnValue(true);
+      try {
+        await docker.register('watcher', 'docker', 'test', { watchevents: true });
+        await docker.init();
+
+        expect(mockCron.schedule).not.toHaveBeenCalled();
+        expect(docker.watchCron).toBeUndefined();
+        expect(docker.watchCronTimeout).toBeUndefined();
+        expect(docker.listenDockerEventsTimeout).toBeUndefined();
+        expect(docker.unregisterContainerUpdateApplied).toBeUndefined();
+        expect(mockDebounce).not.toHaveBeenCalled();
+      } finally {
+        mockIsObservationMode.mockReturnValue(false);
+      }
     });
 
     test('should always schedule the startup watch when watcher state already exists', async () => {

@@ -32,6 +32,7 @@ import {
 } from '../../../prometheus/watcher.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
 import * as registry from '../../../registry/index.js';
+import { isObservationMode } from '../../../runtime/observation-mode.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
@@ -353,6 +354,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  // True when the last watch() could not enumerate every container (the list
+  // call failed, or some containers could not be inspected). The one-shot
+  // `scan` command reads it, because watch() itself only logs these.
+  public lastScanIncomplete: boolean = false;
   // Bumped on every getContainers() call before its first await, so a
   // stale call's listContainers() result can tell it no longer owns the
   // right to record the claim set (see recordControllerLocalEnumeration()
@@ -736,6 +741,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
     }
     await seedControllerLocalEnumeration(this, this.dockerApi, this.log);
+    // The one-shot `scan` command drives watch() itself and exits, so it gets
+    // no cron, startup scan, docker events stream or update listener.
+    if (isObservationMode()) {
+      return;
+    }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(
       this.configuration.cron,
@@ -1239,6 +1249,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       );
       containerEnumerationFailed = true;
     }
+    this.lastScanIncomplete =
+      containerEnumerationFailed || enumerationDiagnostics.enrichmentErrors > 0;
     if (enumerationDiagnostics.enrichmentErrors > 0) {
       this.log.warn(
         `Container enumeration degraded: ${enumerationDiagnostics.enrichmentErrors} container(s) could not be inspected this cycle; suppressing the watcher snapshot so the controller keeps its last-known state`,

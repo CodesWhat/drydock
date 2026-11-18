@@ -1197,6 +1197,21 @@ export async function reconcileComponentsWithConfiguration(): Promise<ComponentR
   return result;
 }
 
+/**
+ * Register only what an observation-only run needs: registries and watchers.
+ * No triggers (so nothing can notify or act), no authentications, no agents,
+ * and no signal handlers.
+ */
+export async function initObservationOnly() {
+  await registerRegistries();
+  await registerWatchers({});
+}
+
+/** Tear down what {@link initObservationOnly} registered. */
+export async function deregisterObservationOnly() {
+  await Promise.allSettled([deregisterWatchers(), deregisterRegistries()]);
+}
+
 async function shutdown() {
   try {
     securityScheduler.shutdown();
