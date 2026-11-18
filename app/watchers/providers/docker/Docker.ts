@@ -131,6 +131,7 @@ import {
   createDockerImageDetailsHelpers,
 } from './docker-image-details-orchestration.js';
 import { createDockerInventoryRefresh, type DockerInventoryWatcher } from './docker-inventory.js';
+import { type DockerRecentEvent, toRecentDockerEvent } from './docker-recent-event.js';
 import {
   applyRemoteAuthHeadersForWatcher,
   ensureRemoteAuthHeadersForWatcher,
@@ -280,14 +281,6 @@ type DockerEventParseErrorInput = Parameters<typeof isRecoverableDockerEventPars
 type DockerContainerInspectPayload = Parameters<typeof updateContainerFromInspectState>[1];
 type DockerImageDetailsWatcher = Parameters<typeof addImageDetailsToContainerOrchestration>[0];
 type DockerImageDetailsContainer = Parameters<typeof addImageDetailsToContainerOrchestration>[1];
-
-interface DockerRecentEvent {
-  timestamp: string;
-  action?: string;
-  type?: string;
-  id?: string;
-  actorId?: string;
-}
 
 type DockerWatcherSourceProbe = {
   name: string;
@@ -955,55 +948,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return sleep(ms);
   }
 
-  private toEventTimestamp(rawDockerEvent: Record<string, unknown>): string {
-    const rawTimeNano = rawDockerEvent.timeNano;
-    if (typeof rawTimeNano === 'number' && Number.isFinite(rawTimeNano) && rawTimeNano > 0) {
-      return new Date(Math.trunc(rawTimeNano / 1_000_000)).toISOString();
-    }
-
-    const rawTime = rawDockerEvent.time;
-    if (typeof rawTime === 'number' && Number.isFinite(rawTime) && rawTime > 0) {
-      const timestampMs =
-        rawTime > 1_000_000_000_000 ? Math.trunc(rawTime) : Math.trunc(rawTime * 1000);
-      return new Date(timestampMs).toISOString();
-    }
-
-    return new Date().toISOString();
-  }
-
   recordRecentDockerEvent(dockerEvent: unknown): void {
-    if (!dockerEvent || typeof dockerEvent !== 'object') {
-      return;
+    const recentEvent = toRecentDockerEvent(dockerEvent);
+    if (recentEvent) {
+      appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
     }
-
-    const dockerEventRecord = dockerEvent as Record<string, unknown>;
-    const actor = dockerEventRecord.Actor;
-    const actorId =
-      actor &&
-      typeof actor === 'object' &&
-      typeof (actor as Record<string, unknown>).ID === 'string'
-        ? ((actor as Record<string, unknown>).ID as string)
-        : undefined;
-
-    const recentEvent: DockerRecentEvent = {
-      timestamp: this.toEventTimestamp(dockerEventRecord),
-      action:
-        typeof dockerEventRecord.Action === 'string'
-          ? dockerEventRecord.Action
-          : typeof dockerEventRecord.status === 'string'
-            ? dockerEventRecord.status
-            : undefined,
-      type:
-        typeof dockerEventRecord.Type === 'string'
-          ? dockerEventRecord.Type
-          : typeof dockerEventRecord.scope === 'string'
-            ? dockerEventRecord.scope
-            : undefined,
-      id: typeof dockerEventRecord.id === 'string' ? dockerEventRecord.id : undefined,
-      actorId,
-    };
-
-    appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
   }
 
   private recordAliasFilterDecisions(decisions: AliasFilterDecision[]): void {
