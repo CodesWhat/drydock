@@ -7,6 +7,7 @@ import * as apiKeysRouter from './api-keys.js';
 import * as appRouter from './app.js';
 import * as approvalsRouter from './approvals.js';
 import * as auditRouter from './audit.js';
+import { bindAuditActor } from './audit-actor.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
@@ -178,6 +179,7 @@ export function init(): express.Router {
   router.use(requireAuthentication);
   router.use(apiKeyLimiter);
   router.use(requireSameOriginForMutations);
+  router.use(bindAuditActor);
 
   // Mount app router (authenticated — exposes version info)
   mountRouter(router, '/app', appRouter.init());

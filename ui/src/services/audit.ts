@@ -1,15 +1,28 @@
 import { extractCollectionData } from '../utils/api';
 
+interface AuditFilterParams {
+  action?: string;
+  actions?: string[];
+  container?: string;
+  actor?: string;
+  from?: string;
+  to?: string;
+}
+
+function applyAuditFilters(query: URLSearchParams, params: AuditFilterParams) {
+  if (params.action) query.set('action', params.action);
+  if (params.actions && params.actions.length > 0) query.set('actions', params.actions.join(','));
+  if (params.container) query.set('container', params.container);
+  if (params.actor) query.set('actor', params.actor);
+  if (params.from) query.set('from', params.from);
+  if (params.to) query.set('to', params.to);
+}
+
 export async function getAuditLog(
-  params: {
+  params: AuditFilterParams & {
     page?: number;
     offset?: number;
     limit?: number;
-    action?: string;
-    actions?: string[];
-    container?: string;
-    from?: string;
-    to?: string;
   } = {},
 ) {
   const limit =
@@ -24,11 +37,7 @@ export async function getAuditLog(
   const query = new URLSearchParams();
   if (offset !== undefined) query.set('offset', String(offset));
   query.set('limit', String(limit));
-  if (params.action) query.set('action', params.action);
-  if (params.actions && params.actions.length > 0) query.set('actions', params.actions.join(','));
-  if (params.container) query.set('container', params.container);
-  if (params.from) query.set('from', params.from);
-  if (params.to) query.set('to', params.to);
+  applyAuditFilters(query, params);
   const queryString = query.toString();
   const url = `/api/v1/audit?${queryString}`;
   const response = await fetch(url, { credentials: 'include' });
@@ -41,4 +50,23 @@ export async function getAuditLog(
     };
   }
   return payload;
+}
+
+/**
+ * Download every audit entry matching the filters as CSV or JSON. Returns the
+ * file text and the name the server suggested, so the caller can save it.
+ */
+export async function exportAuditLog(
+  format: 'csv' | 'json',
+  params: AuditFilterParams = {},
+): Promise<{ filename: string; text: string }> {
+  const query = new URLSearchParams({ format });
+  applyAuditFilters(query, params);
+  const response = await fetch(`/api/v1/audit/export?${query.toString()}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error(`Failed to export audit log: ${response.statusText}`);
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `drydock-audit.${format}`;
+  return { filename, text: await response.text() };
 }

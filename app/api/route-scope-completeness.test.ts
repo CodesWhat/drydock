@@ -52,6 +52,7 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/approvals/:id → read',
   'GET /api/v1/approvals/summary → read',
   'GET /api/v1/audit → read',
+  'GET /api/v1/audit/export → read',
   'GET /api/v1/auth/totp-factor → session-only',
   'GET /api/v1/authentications → read',
   'GET /api/v1/authentications/:type/:name → read',

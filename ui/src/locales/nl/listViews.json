@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filter op doel of gebeurtenis...",
     "onThisPage": "op deze pagina",
     "containerFilterPlaceholder": "Containernaam...",
+    "actorFilterPlaceholder": "Gebruiker...",
+    "actorFilterLabel": "Filteren op gebruiker",
     "allEvents": "Alle evenementen",
     "eventsSelected": "{count} gebeurtenissen geselecteerd",
     "clear": "Wissen",
@@ -16,12 +18,19 @@
       "nextPage": "Volgende pagina"
     },
     "emptyFiltered": "Er zijn geen auditgegevens die overeenkomen met uw filters",
+    "systemActor": "Systeem",
+    "exportError": "Auditlog exporteren mislukt",
+    "export": {
+      "csv": "CSV exporteren",
+      "json": "JSON exporteren"
+    },
     "columns": {
       "time": "Tijd",
       "event": "Evenement",
       "target": "Doel",
       "status": "Status",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "card": {
       "time": "Tijd",
@@ -34,7 +43,8 @@
       "fromVersion": "Van versie",
       "toVersion": "Naar versie",
       "trigger": "Trigger",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "status": {
       "success": "Succes",

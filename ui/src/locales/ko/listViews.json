@@ -5,6 +5,8 @@
     "filterPlaceholder": "대상 또는 이벤트로 필터...",
     "onThisPage": "이 페이지에서",
     "containerFilterPlaceholder": "컨테이너 이름...",
+    "actorFilterPlaceholder": "사용자...",
+    "actorFilterLabel": "사용자별 필터",
     "allEvents": "전체 이벤트",
     "eventsSelected": "{count}개 이벤트 선택됨",
     "clear": "초기화",
@@ -16,12 +18,19 @@
       "nextPage": "다음 페이지"
     },
     "emptyFiltered": "필터와 일치하는 감사 항목이 없습니다",
+    "systemActor": "시스템",
+    "exportError": "감사 로그를 내보내지 못했습니다",
+    "export": {
+      "csv": "CSV 내보내기",
+      "json": "JSON 내보내기"
+    },
     "columns": {
       "time": "시간",
       "event": "이벤트",
       "target": "대상",
       "status": "상태",
-      "details": "상세 정보"
+      "details": "상세 정보",
+      "actor": "수행자"
     },
     "card": {
       "time": "시간",
@@ -34,7 +43,8 @@
       "fromVersion": "이전 버전",
       "toVersion": "새 버전",
       "trigger": "트리거",
-      "details": "상세 정보"
+      "details": "상세 정보",
+      "actor": "수행자"
     },
     "status": {
       "success": "성공",

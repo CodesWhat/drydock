@@ -1,10 +1,15 @@
 import { daysToMs } from '../model/maturity-policy.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as audit from './audit.js';
+import { runWithAuditActor } from './audit-actor.js';
 import type { Database } from './db/driver.js';
 
+const { logMock } = vi.hoisted(() => ({
+  logMock: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 vi.mock('../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
+  default: { child: () => logMock },
 }));
 
 let db: Database;
@@ -502,5 +507,136 @@ describe('pruneOldEntries', () => {
     vi.resetModules();
     const freshAudit = await import('./audit.js');
     expect(freshAudit.pruneOldEntries(30)).toBe(0);
+  });
+});
+
+describe('actor attribution', () => {
+  const insert = (containerName: string, extra: Record<string, unknown> = {}) =>
+    audit.insertAudit({
+      action: 'update-applied',
+      containerName,
+      status: 'success',
+      ...extra,
+    } as never);
+
+  test('stores an explicit actor and reads it back', () => {
+    insert('web', { actor: 'alice' });
+    expect(audit.getAuditEntries().entries[0].actor).toBe('alice');
+  });
+
+  test('takes the actor from the request context when the entry has none', () => {
+    runWithAuditActor('bob', () => insert('web'));
+    expect(audit.getAuditEntries().entries[0].actor).toBe('bob');
+  });
+
+  test('an explicit actor wins over the request context', () => {
+    runWithAuditActor('bob', () => insert('web', { actor: 'alice' }));
+    expect(audit.getAuditEntries().entries[0].actor).toBe('alice');
+  });
+
+  test('stores null and omits the actor outside a request', () => {
+    const entry = insert('web');
+    expect(entry).not.toHaveProperty('actor');
+    expect(db.prepare('SELECT actor FROM audit').get()).toEqual({ actor: null });
+    expect(audit.getAuditEntries().entries[0].actor).toBeUndefined();
+  });
+
+  test('filters by exact actor', () => {
+    insert('a', { actor: 'alice' });
+    insert('b', { actor: 'alice smith' });
+    insert('c', { actor: 'bob' });
+    insert('d');
+
+    const result = audit.getAuditEntries({ actor: 'alice' });
+    expect(result.total).toBe(1);
+    expect(result.entries.map((entry) => entry.containerName)).toEqual(['a']);
+  });
+
+  test('actor=system matches rows with no actor and the literal system actor', () => {
+    insert('a', { actor: 'alice' });
+    insert('b');
+    insert('c', { actor: 'system' });
+
+    const result = audit.getAuditEntries({ actor: 'system' });
+    expect(result.entries.map((entry) => entry.containerName).sort()).toEqual(['b', 'c']);
+  });
+
+  test('treats an actor containing SQL wildcards or quotes as a literal', () => {
+    insert('a', { actor: "o'brien" });
+    insert('b', { actor: 'alice' });
+
+    expect(audit.getAuditEntries({ actor: "o'brien" }).total).toBe(1);
+    expect(audit.getAuditEntries({ actor: '%' }).total).toBe(0);
+  });
+});
+
+describe('retention configuration', () => {
+  const insertAged = (id: string, ageDays: number) =>
+    db
+      .prepare(
+        `INSERT INTO audit (id, timestamp, timestamp_ms, action, container_name, status)
+         VALUES (?, ?, ?, 'update-applied', ?, 'success')`,
+      )
+      .run(id, new Date().toISOString(), Date.now() - daysToMs(ageDays), id);
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  test('defaults to 30 days when unset', () => {
+    insertAged('day-29', 29);
+    insertAged('day-31', 31);
+    audit.createCollections(db);
+    expect(audit.getAuditEntries().entries.map((entry) => entry.id)).toEqual(['day-29']);
+    expect(logMock.warn).not.toHaveBeenCalled();
+  });
+
+  test('defaults to 30 days when blank', () => {
+    vi.stubEnv('DD_AUDIT_RETENTION_DAYS', '   ');
+    insertAged('day-31', 31);
+    audit.createCollections(db);
+    expect(audit.getAuditEntries().total).toBe(0);
+    expect(logMock.warn).not.toHaveBeenCalled();
+  });
+
+  test('keeps rows for a longer configured window', () => {
+    vi.stubEnv('DD_AUDIT_RETENTION_DAYS', '90');
+    insertAged('day-60', 60);
+    insertAged('day-100', 100);
+    audit.createCollections(db);
+    expect(audit.getAuditEntries().entries.map((entry) => entry.id)).toEqual(['day-60']);
+  });
+
+  test('prunes sooner for a shorter configured window, including on the periodic timer', () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('DD_AUDIT_RETENTION_DAYS', '7');
+      audit.createCollections(db);
+      insertAged('day-10', 10);
+      insertAged('day-3', 3);
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      expect(audit.getAuditEntries().entries.map((entry) => entry.id)).toEqual(['day-3']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test.each(['0', '-5', 'abc', '1.5', '7d', '3651', '99999999999999999999'])(
+    'falls back to 30 days and warns for invalid value %s',
+    (value) => {
+      vi.stubEnv('DD_AUDIT_RETENTION_DAYS', value);
+      insertAged('day-29', 29);
+      insertAged('day-31', 31);
+      audit.createCollections(db);
+      expect(audit.getAuditEntries().entries.map((entry) => entry.id)).toEqual(['day-29']);
+      expect(logMock.warn).toHaveBeenCalledWith(expect.stringContaining('DD_AUDIT_RETENTION_DAYS'));
+    },
+  );
+
+  test('accepts the 3650 day maximum', () => {
+    vi.stubEnv('DD_AUDIT_RETENTION_DAYS', '3650');
+    insertAged('day-1000', 1000);
+    audit.createCollections(db);
+    expect(audit.getAuditEntries().total).toBe(1);
   });
 });

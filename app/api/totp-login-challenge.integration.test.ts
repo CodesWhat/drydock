@@ -617,6 +617,7 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
         status: 'success',
         containerName: 'authentication',
         details: `subject=${SUBJECT_ID}`,
+        actor: TEST_USER,
       });
 
       const again = await startChallenge(h);

@@ -11,6 +11,7 @@
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
 import {
+  AUDIT_ACTOR_SQL,
   INITIAL_SCHEMA_SQL,
   SCHEMA_MIGRATIONS_TABLE_SQL,
   TOTP_ENROLLMENT_FAILURES_SQL,
@@ -53,6 +54,9 @@ export const TOTP_SUBJECT_STATE_MIGRATION_VERSION = 12;
 export const TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION = 13;
 
 export const AGENT_KEY_ROTATION_MIGRATION_VERSION = 14;
+
+/** Nullable audit.actor column and its index (RBAC 14.4 audit attribution). */
+export const AUDIT_ACTOR_MIGRATION_VERSION = 15;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -237,6 +241,11 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
       CREATE UNIQUE INDEX agent_keys_pending_rotation ON agent_keys(rotation_parent_id)
         WHERE rotation_parent_id IS NOT NULL AND revoked_at IS NULL;
     `,
+  },
+  {
+    version: AUDIT_ACTOR_MIGRATION_VERSION,
+    note: 'add audit.actor and index it (RBAC 14.4 audit attribution)',
+    sql: AUDIT_ACTOR_SQL,
   },
 ];
 

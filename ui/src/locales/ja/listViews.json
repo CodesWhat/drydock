@@ -5,6 +5,8 @@
     "filterPlaceholder": "対象またはイベントで絞り込む...",
     "onThisPage": "このページ内",
     "containerFilterPlaceholder": "コンテナ名...",
+    "actorFilterPlaceholder": "ユーザー...",
+    "actorFilterLabel": "ユーザーで絞り込み",
     "allEvents": "全イベント",
     "eventsSelected": "{count} 件のイベントを選択",
     "clear": "クリア",
@@ -16,12 +18,19 @@
       "nextPage": "次のページ"
     },
     "emptyFiltered": "フィルターに一致する監査エントリがありません",
+    "systemActor": "システム",
+    "exportError": "監査ログのエクスポートに失敗しました",
+    "export": {
+      "csv": "CSVをエクスポート",
+      "json": "JSONをエクスポート"
+    },
     "columns": {
       "time": "時刻",
       "event": "イベント",
       "target": "対象",
       "status": "ステータス",
-      "details": "詳細"
+      "details": "詳細",
+      "actor": "実行者"
     },
     "card": {
       "time": "時刻",
@@ -34,7 +43,8 @@
       "fromVersion": "更新前バージョン",
       "toVersion": "更新後バージョン",
       "trigger": "トリガー",
-      "details": "詳細"
+      "details": "詳細",
+      "actor": "実行者"
     },
     "status": {
       "success": "成功",

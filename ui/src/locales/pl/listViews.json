@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filtruj według celu lub zdarzenia...",
     "onThisPage": "na tej stronie",
     "containerFilterPlaceholder": "Nazwa kontenera...",
+    "actorFilterPlaceholder": "Użytkownik...",
+    "actorFilterLabel": "Filtruj według użytkownika",
     "allEvents": "Wszystkie wydarzenia",
     "eventsSelected": "Wybrano zdarzenia {count}",
     "clear": "Wyczyść",
@@ -16,12 +18,19 @@
       "nextPage": "Następna strona"
     },
     "emptyFiltered": "Żadne wpisy audytu nie pasują do wybranych filtrów",
+    "systemActor": "System",
+    "exportError": "Nie udało się wyeksportować dziennika audytu",
+    "export": {
+      "csv": "Eksportuj CSV",
+      "json": "Eksportuj JSON"
+    },
     "columns": {
       "time": "Czas",
       "event": "Wydarzenie",
       "target": "Cel",
       "status": "Stan",
-      "details": "Szczegóły"
+      "details": "Szczegóły",
+      "actor": "Wykonawca"
     },
     "card": {
       "time": "Czas",
@@ -34,7 +43,8 @@
       "fromVersion": "Z wersji",
       "toVersion": "Do wersji",
       "trigger": "Wyzwalacz",
-      "details": "Szczegóły"
+      "details": "Szczegóły",
+      "actor": "Wykonawca"
     },
     "status": {
       "success": "Sukces",
