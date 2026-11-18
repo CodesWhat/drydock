@@ -6,13 +6,18 @@ const summary = { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 };
 function scan(ids: Array<[string, string]>, extra: Record<string, unknown> = {}) {
   return {
     scanner: 'trivy',
-    image: 'organization/image:1.0.0',
+    image: 'organization/image@sha256:run',
+    imageDigest: 'sha256:run',
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: 'blocked',
     blockSeverities: ['CRITICAL', 'HIGH'],
     blockingCount: ids.length,
     summary,
     vulnerabilities: ids.map(([id, severity]) => ({ id, severity })),
+    severityIds: {
+      critical: ids.filter(([, s]) => s === 'CRITICAL').map(([id]) => id),
+      high: ids.filter(([, s]) => s === 'HIGH').map(([id]) => id),
+    },
     ...extra,
   };
 }
@@ -28,18 +33,20 @@ function build(overrides: Record<string, unknown> = {}) {
       registry: { name: 'hub', url: 'https://hub' },
       name: 'organization/image',
       tag: { value: '1.0.0', semver: true },
-      digest: { watch: false },
+      digest: { watch: false, value: 'sha256:run' },
       architecture: 'arch',
       os: 'os',
     },
-    result: { tag: '1.0.1' },
+    result: { tag: '1.0.1', digest: 'sha256:new' },
     security: {
       scan: scan([
         ['CVE-1', 'CRITICAL'],
         ['CVE-2', 'MEDIUM'],
       ]),
       updateScan: scan([['CVE-2', 'MEDIUM']], {
-        image: 'organization/image:1.0.1',
+        image: 'organization/image@sha256:new',
+        imageDigest: 'sha256:new',
+        scannedAt: '2026-01-02T00:00:00.000Z',
         status: 'passed',
       }),
     },
@@ -88,7 +95,12 @@ describe('validate: security fast lane', () => {
         ...held,
         security: {
           scan: scan([['CVE-2', 'MEDIUM']]),
-          updateScan: scan([], { image: 'organization/image:1.0.1', status: 'passed' }),
+          updateScan: scan([], {
+            image: 'organization/image@sha256:new',
+            imageDigest: 'sha256:new',
+            scannedAt: '2026-01-02T00:00:00.000Z',
+            status: 'passed',
+          }),
         },
       }),
     );
@@ -101,6 +113,14 @@ describe('validate: security fast lane', () => {
       build({ updatePolicy: { ...held.updatePolicy, skipTags: ['1.0.1'] } }),
     );
     expect(validated.securityFastLane).toBeDefined();
+    expect(validated.updateAvailable).toBe(false);
+  });
+
+  test('a candidate scan of the mutable tag rather than the pending digest stays suppressed', () => {
+    const input = build(held);
+    (input.security.updateScan as { imageDigest?: string }).imageDigest = 'sha256:moved';
+    const validated = container.validate(input);
+    expect(validated.securityFastLane).toBeUndefined();
     expect(validated.updateAvailable).toBe(false);
   });
 

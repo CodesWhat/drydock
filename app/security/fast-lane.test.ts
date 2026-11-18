@@ -2,6 +2,7 @@ import type { Container } from '../model/container.js';
 import {
   evaluateSecurityFastLane,
   isSecurityFastLaneEnabled,
+  needsFastLaneCandidateScan,
   SECURITY_FAST_LANE_ENV,
   SECURITY_FAST_LANE_ID_CAP,
   SECURITY_FAST_LANE_LABEL,
@@ -9,27 +10,39 @@ import {
 } from './fast-lane.js';
 
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN';
+type Scan = NonNullable<Container['security']>['scan'];
 
-function scan(
-  vulns: Array<[string, Severity]>,
-  overrides: Record<string, unknown> = {},
-): NonNullable<Container['security']>['scan'] {
+function ids(vulns: Array<[string, Severity]>, severity: Severity) {
+  return [...new Set(vulns.filter(([, s]) => s === severity).map(([id]) => id))].sort();
+}
+
+function scan(vulns: Array<[string, Severity]>, overrides: Record<string, unknown> = {}): Scan {
   return {
     scanner: 'trivy',
-    image: 'repo/app:1.0.0',
+    image: 'repo/app@sha256:run',
+    imageDigest: 'sha256:run',
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: vulns.some(([, s]) => s === 'CRITICAL' || s === 'HIGH') ? 'blocked' : 'passed',
     blockSeverities: ['CRITICAL', 'HIGH'],
     blockingCount: 0,
     summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
     vulnerabilities: vulns.map(([id, severity]) => ({ id, severity })),
+    severityIds: { critical: ids(vulns, 'CRITICAL'), high: ids(vulns, 'HIGH') },
     ...overrides,
   } as never;
 }
 
+const candidateScan = (vulns: Array<[string, Severity]>, overrides = {}) =>
+  scan(vulns, {
+    image: 'repo/app@sha256:new',
+    imageDigest: 'sha256:new',
+    scannedAt: '2026-01-02T00:00:00.000Z',
+    ...overrides,
+  });
+
 function makeContainer(
-  running: ReturnType<typeof scan>,
-  candidate: ReturnType<typeof scan> | undefined,
+  running: Scan,
+  candidate: Scan | undefined,
   overrides: Partial<Container> = {},
 ): Container {
   return {
@@ -42,9 +55,6 @@ function makeContainer(
     ...overrides,
   } as unknown as Container;
 }
-
-const candidateScan = (vulns: Array<[string, Severity]>, overrides = {}) =>
-  scan(vulns, { image: 'repo/app:2.0.0', imageDigest: 'sha256:new', ...overrides });
 
 describe('security fast lane evaluation', () => {
   afterEach(() => {
@@ -97,6 +107,16 @@ describe('security fast lane evaluation', () => {
     expect(evaluateSecurityFastLane(container)).toBeUndefined();
   });
 
+  test('a finding that only dropped to a lower severity in the candidate counts as fixed', () => {
+    const container = makeContainer(
+      scan([['CVE-1', 'CRITICAL']]),
+      candidateScan([['CVE-1', 'HIGH']]),
+    );
+    expect(evaluateSecurityFastLane(container)).toBeUndefined();
+    const lowered = makeContainer(scan([['CVE-1', 'HIGH']]), candidateScan([['CVE-1', 'LOW']]));
+    expect(evaluateSecurityFastLane(lowered)?.fixedIds).toStrictEqual(['CVE-1']);
+  });
+
   test('a candidate that introduces a new critical does not qualify even when it fixes one', () => {
     const container = makeContainer(
       scan([['CVE-1', 'CRITICAL']]),
@@ -105,11 +125,11 @@ describe('security fast lane evaluation', () => {
     expect(evaluateSecurityFastLane(container)).toBeUndefined();
   });
 
-  test('a new high or a critical the running image already had at another severity is tolerated', () => {
+  test('a new high, or a critical the running image already had as high, is tolerated', () => {
     const container = makeContainer(
       scan([
         ['CVE-1', 'CRITICAL'],
-        ['CVE-2', 'MEDIUM'],
+        ['CVE-2', 'HIGH'],
       ]),
       candidateScan([
         ['CVE-2', 'CRITICAL'],
@@ -126,43 +146,114 @@ describe('security fast lane evaluation', () => {
   });
 
   test('a container with no running scan does not qualify', () => {
-    const container = makeContainer(undefined as never, candidateScan([]));
-    expect(evaluateSecurityFastLane(container)).toBeUndefined();
-  });
-
-  test('errored scans on either side do not qualify', () => {
     expect(
-      evaluateSecurityFastLane(
-        makeContainer(scan([['CVE-1', 'CRITICAL']], { status: 'error' }), candidateScan([])),
-      ),
-    ).toBeUndefined();
-    expect(
-      evaluateSecurityFastLane(
-        makeContainer(scan([['CVE-1', 'CRITICAL']]), candidateScan([], { status: 'error' })),
-      ),
+      evaluateSecurityFastLane(makeContainer(undefined as never, candidateScan([]))),
     ).toBeUndefined();
   });
 
-  test('a candidate scan of a different image than the pending one does not qualify', () => {
-    const stale = candidateScan([], { imageDigest: 'sha256:other', image: 'repo/app:1.5.0' });
+  test('a scan carrying an error does not qualify whatever its status', () => {
+    for (const status of ['error', 'blocked', 'passed']) {
+      expect(
+        evaluateSecurityFastLane(
+          makeContainer(
+            scan([['CVE-1', 'CRITICAL']], { status, error: 'Grype: timeout' }),
+            candidateScan([]),
+          ),
+        ),
+      ).toBeUndefined();
+      expect(
+        evaluateSecurityFastLane(
+          makeContainer(
+            scan([['CVE-1', 'CRITICAL']]),
+            candidateScan([], { status, error: 'Trivy: db missing' }),
+          ),
+        ),
+      ).toBeUndefined();
+    }
+  });
+
+  test('a scan without its full critical/high ID sets (recorded before truncation) does not qualify', () => {
+    const legacyRunning = scan([['CVE-1', 'CRITICAL']], { severityIds: undefined });
     expect(
-      evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), stale)),
+      evaluateSecurityFastLane(makeContainer(legacyRunning, candidateScan([]))),
+    ).toBeUndefined();
+    const legacyCandidate = candidateScan([], { severityIds: undefined });
+    expect(
+      evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), legacyCandidate)),
     ).toBeUndefined();
   });
 
-  test('a running scan of a different digest than the running image does not qualify', () => {
-    const container = makeContainer(
-      scan([['CVE-1', 'CRITICAL']], { imageDigest: 'sha256:old' }),
-      candidateScan([]),
-    );
-    expect(evaluateSecurityFastLane(container)).toBeUndefined();
+  test('compares the full ID sets, not the truncated stored list', () => {
+    // The stored list is cut off and no longer shows CVE-1, but the full set still does.
+    const truncated = candidateScan([], { severityIds: { critical: ['CVE-1'], high: [] } });
+    expect(
+      evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), truncated)),
+    ).toBeUndefined();
+    // A new critical that fell off the stored list still disqualifies.
+    const hidden = candidateScan([], { severityIds: { critical: ['CVE-NEW'], high: [] } });
+    expect(
+      evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), hidden)),
+    ).toBeUndefined();
   });
 
-  test('a running scan without a digest is accepted', () => {
-    const container = makeContainer(scan([['CVE-1', 'CRITICAL']]), candidateScan([]), {
-      image: { digest: {} } as never,
+  describe('digest binding', () => {
+    const running = () => scan([['CVE-1', 'CRITICAL']]);
+
+    test('a candidate scan of a different digest does not qualify', () => {
+      const other = candidateScan([], { imageDigest: 'sha256:other' });
+      expect(evaluateSecurityFastLane(makeContainer(running(), other))).toBeUndefined();
     });
-    expect(evaluateSecurityFastLane(container)?.fixedCount).toBe(1);
+
+    test('a candidate scan identified only by its image reference or tag does not qualify', () => {
+      const tagOnly = candidateScan([], { imageDigest: undefined, image: 'repo/app:2.0.0' });
+      expect(evaluateSecurityFastLane(makeContainer(running(), tagOnly))).toBeUndefined();
+      const refOnly = candidateScan([], { imageDigest: undefined });
+      expect(evaluateSecurityFastLane(makeContainer(running(), refOnly))).toBeUndefined();
+    });
+
+    test('a candidate without a digest never qualifies, even with a tag-matching scan', () => {
+      const container = makeContainer(running(), candidateScan([]), {
+        result: { tag: '2.0.0' } as never,
+      });
+      expect(evaluateSecurityFastLane(container)).toBeUndefined();
+    });
+
+    test('a running scan of a different digest does not qualify', () => {
+      const stale = scan([['CVE-1', 'CRITICAL']], { imageDigest: 'sha256:old' });
+      expect(evaluateSecurityFastLane(makeContainer(stale, candidateScan([])))).toBeUndefined();
+    });
+
+    test('a running scan or running image without a digest does not qualify', () => {
+      const unstamped = scan([['CVE-1', 'CRITICAL']], { imageDigest: undefined });
+      expect(evaluateSecurityFastLane(makeContainer(unstamped, candidateScan([])))).toBeUndefined();
+      const noRunningDigest = makeContainer(running(), candidateScan([]), {
+        image: { digest: {} } as never,
+      });
+      expect(evaluateSecurityFastLane(noRunningDigest)).toBeUndefined();
+    });
+  });
+
+  describe('comparability', () => {
+    test('a candidate scan older than the running scan does not qualify', () => {
+      const stale = candidateScan([], { scannedAt: '2025-12-31T00:00:00.000Z' });
+      expect(
+        evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), stale)),
+      ).toBeUndefined();
+    });
+
+    test('a candidate scan taken at the same moment as the running scan qualifies', () => {
+      const same = candidateScan([], { scannedAt: '2026-01-01T00:00:00.000Z' });
+      expect(
+        evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), same)),
+      ).toBeDefined();
+    });
+
+    test('scans from different scanners do not qualify', () => {
+      const other = candidateScan([], { scanner: 'grype' });
+      expect(
+        evaluateSecurityFastLane(makeContainer(scan([['CVE-1', 'CRITICAL']]), other)),
+      ).toBeUndefined();
+    });
   });
 
   test('lists criticals before highs, sorted, capped at the ID limit with the full count kept', () => {
@@ -178,31 +269,15 @@ describe('security fast lane evaluation', () => {
     expect(result?.fixedIds[8]).toBe('CVE-H-0');
   });
 
-  test('an ID recorded at both severities counts once, as critical', () => {
-    const container = makeContainer(
-      scan([
-        ['CVE-1', 'HIGH'],
-        ['CVE-1', 'CRITICAL'],
-      ]),
-      candidateScan([]),
-    );
-    expect(evaluateSecurityFastLane(container)).toMatchObject({
+  test('an ID listed at both severities counts once, as critical', () => {
+    const running = scan([['CVE-1', 'CRITICAL']], {
+      severityIds: { critical: ['CVE-1'], high: ['CVE-1'] },
+    });
+    expect(evaluateSecurityFastLane(makeContainer(running, candidateScan([])))).toMatchObject({
       fixedCount: 1,
       fixedCritical: 1,
       fixedHigh: 0,
     });
-  });
-
-  test('scans without a vulnerability list are treated as empty', () => {
-    const noList = candidateScan([]);
-    (noList as { vulnerabilities?: unknown }).vulnerabilities = undefined;
-    const running = scan([['CVE-1', 'CRITICAL']]);
-    expect(evaluateSecurityFastLane(makeContainer(running, noList))?.fixedCount).toBe(1);
-    const runningNoList = scan([]);
-    (runningNoList as { vulnerabilities?: unknown }).vulnerabilities = undefined;
-    expect(evaluateSecurityFastLane(makeContainer(runningNoList, candidateScan([])))).toBe(
-      undefined,
-    );
   });
 
   test('a container that did not opt in is never fast-laned', () => {
@@ -210,6 +285,43 @@ describe('security fast lane evaluation', () => {
       labels: {},
     });
     expect(evaluateSecurityFastLane(container)).toBeUndefined();
+  });
+});
+
+describe('needsFastLaneCandidateScan', () => {
+  const running = () => scan([['CVE-1', 'CRITICAL']]);
+
+  test('is true for an unscanned candidate behind trustworthy running evidence', () => {
+    expect(needsFastLaneCandidateScan(makeContainer(running(), undefined))).toBe(true);
+  });
+
+  test('is true for a candidate scan that is stale, of another digest, or from another scanner', () => {
+    for (const override of [
+      { scannedAt: '2025-12-31T00:00:00.000Z' },
+      { imageDigest: 'sha256:other' },
+      { scanner: 'grype' },
+      { severityIds: undefined },
+      { error: 'partial' },
+    ]) {
+      expect(
+        needsFastLaneCandidateScan(makeContainer(running(), candidateScan([], override))),
+      ).toBe(true);
+    }
+  });
+
+  test('is false once the candidate scan is comparable', () => {
+    expect(needsFastLaneCandidateScan(makeContainer(running(), candidateScan([])))).toBe(false);
+  });
+
+  test('is false without usable running evidence or a candidate digest', () => {
+    expect(
+      needsFastLaneCandidateScan(makeContainer(scan([], { imageDigest: 'sha256:old' }), undefined)),
+    ).toBe(false);
+    expect(
+      needsFastLaneCandidateScan(
+        makeContainer(running(), undefined, { result: { tag: '2.0.0' } as never }),
+      ),
+    ).toBe(false);
   });
 });
 

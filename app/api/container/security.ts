@@ -374,7 +374,12 @@ async function scanUpdateImage(options: {
     container.updateAvailable || (isSecurityFastLaneEnabled(container) && hasRawUpdate(container));
   if (candidateWorthScanning && container.result?.tag) {
     try {
-      const updateImage = context.getContainerImageFullName(container, container.result.tag);
+      // Pin the scan to the candidate digest when there is one: a mutable tag could resolve
+      // to a different image mid-scan, and the stamped digest must describe what was scanned.
+      const updateImage = context.getContainerImageFullName(
+        container,
+        container.result.digest ?? container.result.tag,
+      );
       context.log.info(`Running on-demand security scan for update image ${updateImage}`);
       const updateScanResult = await context.scanImageForVulnerabilities({
         image: updateImage,

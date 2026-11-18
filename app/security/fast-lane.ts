@@ -63,9 +63,55 @@ export function updateScanMatchesCandidate(container: Container, updateScan: Con
   );
 }
 
-function runningScanDescribesRunningImage(container: Container, scan: ContainerScan): boolean {
+/** A scan usable as fast lane evidence: no error or partial failure, and the full ID sets. */
+function isCompleteScan(scan: ContainerScan): boolean {
+  return !scan.error && scan.status !== 'error' && scan.severityIds !== undefined;
+}
+
+/**
+ * The running image's scan, when it positively describes the digest that is running. A
+ * missing digest on either side is not a match.
+ */
+function getRunningEvidence(container: Container): ContainerScan | undefined {
+  const scan = container.security?.scan;
   const runningDigest = container.image?.digest?.value;
-  return !(scan.imageDigest && runningDigest && scan.imageDigest !== runningDigest);
+  if (!scan || !runningDigest || scan.imageDigest !== runningDigest || !isCompleteScan(scan)) {
+    return undefined;
+  }
+  return scan;
+}
+
+/**
+ * Whether the stored candidate scan can be compared with the running scan: it was taken of
+ * the pending candidate digest by the same scanner, and not before the running scan (a
+ * scan of an older vulnerability database would credit fixes the candidate doesn't have).
+ */
+function isComparableCandidateScan(
+  candidate: ContainerScan,
+  running: ContainerScan,
+  candidateDigest: string,
+): boolean {
+  return (
+    candidate.imageDigest === candidateDigest &&
+    isCompleteScan(candidate) &&
+    candidate.scanner === running.scanner &&
+    Date.parse(candidate.scannedAt) >= Date.parse(running.scannedAt)
+  );
+}
+
+/**
+ * Whether an opted-in container's pending candidate still needs a scan before the fast lane
+ * can judge it: there is trustworthy running evidence, a candidate digest, and no stored
+ * candidate scan that is comparable with it.
+ */
+export function needsFastLaneCandidateScan(container: Container): boolean {
+  const running = getRunningEvidence(container);
+  const candidateDigest = container.result?.digest;
+  if (!running || !candidateDigest) {
+    return false;
+  }
+  const candidate = container.security?.updateScan;
+  return !(candidate && isComparableCandidateScan(candidate, running, candidateDigest));
 }
 
 /**
@@ -73,61 +119,43 @@ function runningScanDescribesRunningImage(container: Container, scan: ContainerS
  * that already exist. Never scans anything.
  *
  * "Fixes" means at least one critical or high vulnerability ID in the running image's
- * latest scan is absent from the candidate's scan, and the candidate carries no critical ID
- * the running image did not already have. An unscanned candidate, a scan that errored, or a
- * scan of a different image than the one pending, never qualifies.
+ * latest scan is absent from the candidate's critical and high IDs, and the candidate
+ * carries no critical ID the running image did not already list as critical or high. Both
+ * scans must be complete (no error, full ID sets recorded before the stored list is cut
+ * off), positively bound to the running digest and the pending candidate digest, and
+ * comparable in time and scanner. Anything less means no fast lane.
  */
 export function evaluateSecurityFastLane(container: Container): SecurityFastLane | undefined {
   if (!isSecurityFastLaneEnabled(container)) {
     return undefined;
   }
-  const running = container.security?.scan;
+  const running = getRunningEvidence(container);
+  const candidateDigest = container.result?.digest;
   const candidate = container.security?.updateScan;
   if (
-    !running ||
-    !candidate ||
-    running.status === 'error' ||
-    candidate.status === 'error' ||
-    !runningScanDescribesRunningImage(container, running) ||
-    !updateScanMatchesCandidate(container, candidate)
+    !running?.severityIds ||
+    !candidateDigest ||
+    !candidate?.severityIds ||
+    !isComparableCandidateScan(candidate, running, candidateDigest)
   ) {
     return undefined;
   }
 
-  const candidateIds = new Set<string>();
-  const candidateCritical = new Set<string>();
-  for (const vulnerability of candidate.vulnerabilities ?? []) {
-    candidateIds.add(vulnerability.id);
-    if (vulnerability.severity === 'CRITICAL') {
-      candidateCritical.add(vulnerability.id);
-    }
-  }
+  const candidateCritical = new Set(candidate.severityIds.critical);
+  const candidateAll = new Set([...candidateCritical, ...candidate.severityIds.high]);
+  const runningAll = new Set([...running.severityIds.critical, ...running.severityIds.high]);
+  const fixedCritical = running.severityIds.critical.filter((id) => !candidateAll.has(id));
+  const fixedCriticalSet = new Set(fixedCritical);
+  const fixedHigh = running.severityIds.high.filter(
+    (id) => !candidateAll.has(id) && !fixedCriticalSet.has(id),
+  );
 
-  const runningIds = new Set<string>();
-  const fixedCritical = new Set<string>();
-  const fixedHigh = new Set<string>();
-  for (const vulnerability of running.vulnerabilities ?? []) {
-    runningIds.add(vulnerability.id);
-    if (candidateIds.has(vulnerability.id)) {
-      continue;
-    }
-    if (vulnerability.severity === 'CRITICAL') {
-      fixedCritical.add(vulnerability.id);
-    } else if (vulnerability.severity === 'HIGH') {
-      fixedHigh.add(vulnerability.id);
-    }
-  }
-  // A vulnerability recorded at both severities (two scanners) counts once, as critical.
-  for (const id of fixedCritical) {
-    fixedHigh.delete(id);
-  }
-
-  const fixedCount = fixedCritical.size + fixedHigh.size;
+  const fixedCount = fixedCritical.length + fixedHigh.length;
   if (fixedCount === 0) {
     return undefined;
   }
   for (const id of candidateCritical) {
-    if (!runningIds.has(id)) {
+    if (!runningAll.has(id)) {
       return undefined;
     }
   }
@@ -138,7 +166,7 @@ export function evaluateSecurityFastLane(container: Container): SecurityFastLane
       SECURITY_FAST_LANE_ID_CAP,
     ),
     fixedCount,
-    fixedCritical: fixedCritical.size,
-    fixedHigh: fixedHigh.size,
+    fixedCritical: fixedCritical.length,
+    fixedHigh: fixedHigh.length,
   };
 }

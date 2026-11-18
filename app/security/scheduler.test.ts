@@ -397,7 +397,7 @@ describe('runScheduledScans', () => {
     expect(mockGetContainers).not.toHaveBeenCalled();
   });
 
-  test('scans fast lane candidates after the batch with the same worker count and interval', async () => {
+  test('scans fast lane candidates after the batch with the same worker count', async () => {
     const container = createContainer();
     setMockContainersRaw([container]);
     mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
@@ -408,7 +408,6 @@ describe('runScheduledScans', () => {
     expect(mockScanFastLaneCandidates).toHaveBeenCalledWith(
       expect.objectContaining({
         scanConcurrency: expect.any(Number),
-        scanIntervalMs: expect.any(Number),
         signal: expect.any(AbortSignal),
       }),
     );

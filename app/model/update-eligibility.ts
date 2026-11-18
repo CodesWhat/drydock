@@ -385,10 +385,8 @@ export function computeUpdateEligibility(
   const updateScan = container.security?.updateScan;
   const candidatePassedRelative =
     updateScan?.status === 'passed' &&
-    updateScanMatchesCandidate(container, updateScan) &&
-    // A candidate that fixes findings of the running image and itself passes the gate is the
-    // way out of a blocked running scan, so the fast lane does not need the relative gate.
-    (updateScan.relativeGate?.decision === 'passed' || fastLane !== undefined);
+    updateScan.relativeGate?.decision === 'passed' &&
+    updateScanMatchesCandidate(container, updateScan);
   if (
     container.security?.updateScan?.status === 'blocked' ||
     (container.security?.scan?.status === 'blocked' && !candidatePassedRelative)

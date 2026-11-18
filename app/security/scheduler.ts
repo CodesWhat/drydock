@@ -558,8 +558,6 @@ export async function runScheduledScans(): Promise<void> {
       await scanFastLaneCandidates({
         signal: batchController.signal,
         scanConcurrency,
-        scanIntervalMs,
-        trivyDbUpdatedAt,
       });
     }
 

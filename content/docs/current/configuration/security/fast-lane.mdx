@@ -30,14 +30,16 @@ The fast lane needs [Update Bouncer](/docs/configuration/security) scanning to b
 
 Drydock compares two scans that already exist: the latest scan of the running image, and the scan of the pending candidate. The update is on the fast lane when all of these hold:
 
-- the candidate has been scanned, and that scan is for the candidate that's pending now (a scan of an older candidate doesn't count);
-- neither scan errored, and the running image's scan is for the digest that's running;
-- at least one critical or high vulnerability ID (a CVE or GHSA) in the running image's scan is missing from the candidate's scan;
-- the candidate has no critical ID that the running image didn't already have.
+- the candidate has been scanned by digest (`repo@sha256:...`, never by tag, so the result describes exactly that image), and that scan is for the digest that's pending now;
+- the running image's scan is for the digest that's running. A missing digest on either side means no fast lane;
+- both scans are complete: neither carries an error, even a partial one from one of two scanners, and both recorded their full critical and high ID lists before the stored list was cut off;
+- the candidate scan is by the same scanner and is not older than the running scan, so a stale candidate scan can't be credited against a fresh running scan;
+- at least one critical or high vulnerability ID (a CVE or GHSA) in the running image's scan is missing from the candidate's critical and high IDs;
+- the candidate has no critical ID that the running image didn't already list as critical or high.
 
 An update that only fixes medium or low findings doesn't qualify, and neither does one that brings in a new critical, even if it fixes others.
 
-The fast lane never starts a scan storm. An unscanned candidate simply isn't on the fast lane. For opted-in containers, the [scheduled scan](/docs/configuration/security#scheduled-scanning) scans each pending candidate once, with the same worker count as the rest of the scheduled scan, and the on-demand scan of a container scans its candidate even when a snooze or maturity hold is hiding the update. A failed candidate scan isn't retried until the candidate changes.
+The fast lane never starts a scan storm. An unscanned candidate simply isn't on the fast lane. For opted-in containers, the [scheduled scan](/docs/configuration/security#scheduled-scanning) scans each pending candidate once, with the same worker count as the rest of the scheduled scan, and the on-demand scan of a container scans its candidate even when a snooze or maturity hold is hiding the update. A candidate is scanned once per candidate digest and running scan, so a failed scan isn't retried until the candidate or the running scan changes.
 
 ## What it lifts
 
@@ -58,7 +60,7 @@ The maintenance window is only lifted for the automatic install. Under `scope=sc
 - A blocked scan of the candidate, a rolled-back candidate, and an update already in progress
 - Approval. In `manual` mode, or under any group or trigger rule that needs approval, a fast-laned update still waits in the [approval queue](/docs/configuration/actions/approvals). The row is marked **Security fix** so it's easy to spot, and it carries the same hold reasons as before.
 
-One interaction with the scan gate: when the running image's own scan is blocked, a candidate that fixes some of its findings and passes the scan gate is allowed through without enabling the [no-worse-than-current gate](/docs/configuration/security#no-worse-than-current-gate).
+The scan gate is not lifted either. A candidate is scanned before the pull and the image that's deployed is only known after it, so the install still runs its own scan of the exact pulled digest, and a blocked running image keeps `security-scan-blocked` unless the [no-worse-than-current gate](/docs/configuration/security#no-worse-than-current-gate) passes.
 
 ## What gets recorded
 

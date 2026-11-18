@@ -200,31 +200,25 @@ describe('security fast lane eligibility', () => {
         updateScan: { image: 'nginx:1.0.1', summary: {}, vulnerabilities: [], ...updateScan },
       }) as never;
 
-    test('does not hold a fast-laned candidate whose own scan passed', () => {
+    // The fast lane never lifts the scan gate: the candidate that will actually be deployed is
+    // only known after the pull, so a passing scan taken beforehand is not enough to wave it through.
+    test('still holds a fast-laned candidate whose own scan passed', () => {
       const result = computeUpdateEligibility(
         makeContainer({ security: security({ status: 'passed' }) }),
         context(),
       );
-      expect(result.eligible).toBe(true);
-    });
-
-    test('still holds a candidate whose own scan is for another image', () => {
-      const result = computeUpdateEligibility(
-        makeContainer({ security: security({ status: 'passed', image: 'nginx:0.9.0' }) }),
-        context(),
-      );
       expect(reasons(result)).toStrictEqual(['security-scan-blocked']);
     });
 
-    test('still holds a container that is not on the fast lane', () => {
+    test('is still lifted by the relative gate, as before', () => {
       const result = computeUpdateEligibility(
         makeContainer({
           securityFastLane: undefined,
-          security: security({ status: 'passed' }),
+          security: security({ status: 'passed', relativeGate: { decision: 'passed' } }),
         }),
         context(),
       );
-      expect(reasons(result)).toStrictEqual(['security-scan-blocked']);
+      expect(result.eligible).toBe(true);
     });
   });
 });

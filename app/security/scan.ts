@@ -65,6 +65,11 @@ export interface ContainerSecurityScan {
   blockingCount: number;
   summary: ContainerVulnerabilitySummary;
   vulnerabilities: ContainerVulnerability[];
+  /**
+   * Every critical and high vulnerability ID of the scan, recorded before `vulnerabilities`
+   * is cut off at the storage limit, so comparisons never rest on a truncated list.
+   */
+  severityIds?: { critical: string[]; high: string[] };
   relativeGate?: {
     decision: 'passed' | 'blocked';
     reason: 'no-worse-than-current' | 'candidate-worse' | 'current-scan-unavailable';
@@ -205,6 +210,19 @@ function normalizeSeverity(severity: string | undefined): SecuritySeverity {
     return severityNormalized as SecuritySeverity;
   }
   return 'UNKNOWN';
+}
+
+function collectSeverityIds(vulnerabilities: ContainerVulnerability[]) {
+  const critical = new Set<string>();
+  const high = new Set<string>();
+  for (const vulnerability of vulnerabilities) {
+    if (vulnerability.severity === 'CRITICAL') {
+      critical.add(vulnerability.id);
+    } else if (vulnerability.severity === 'HIGH') {
+      high.add(vulnerability.id);
+    }
+  }
+  return { critical: [...critical].sort(), high: [...high].sort() };
 }
 
 function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulnerabilitySummary {
@@ -1149,6 +1167,7 @@ export async function scanImageForVulnerabilities(
     blockingCount,
     summary: buildSummary(vulnerabilities),
     vulnerabilities: vulnerabilities.slice(0, MAX_STORED_VULNERABILITIES),
+    severityIds: collectSeverityIds(vulnerabilities),
     ...(error ? { error } : {}),
   };
 }

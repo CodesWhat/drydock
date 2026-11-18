@@ -463,6 +463,46 @@ test('both provider mode preserves known blocking findings when the other provid
   expect(result.status).toBe('blocked');
   expect(result.blockingCount).toBe(1);
   expect(result.error).toContain('Grype');
+  // A blocked scan can still be a partial one: the error stays on the record for consumers.
+  expect(result.severityIds).toStrictEqual({ critical: ['CVE-BLOCK'], high: [] });
+});
+
+test('scan results record every critical and high ID even when the stored list is cut off', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    scanner: 'trivy',
+  });
+  const medium = Array.from({ length: 600 }, (_, i) => ({
+    VulnerabilityID: `CVE-M-${i}`,
+    PkgName: 'pkg',
+    Severity: 'MEDIUM',
+  }));
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(
+      null,
+      JSON.stringify({
+        Results: [
+          {
+            Vulnerabilities: [
+              ...medium,
+              { VulnerabilityID: 'CVE-LATE-C', PkgName: 'a', Severity: 'CRITICAL' },
+              { VulnerabilityID: 'CVE-LATE-H', PkgName: 'b', Severity: 'HIGH' },
+              { VulnerabilityID: 'CVE-LATE-H', PkgName: 'c', Severity: 'HIGH' },
+              { VulnerabilityID: 'CVE-LOW', PkgName: 'd', Severity: 'LOW' },
+            ],
+          },
+        ],
+      }),
+      '',
+    );
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
+
+  expect(result.vulnerabilities).toHaveLength(500);
+  expect(result.vulnerabilities.some((v) => v.id === 'CVE-LATE-C')).toBe(false);
+  expect(result.severityIds).toStrictEqual({ critical: ['CVE-LATE-C'], high: ['CVE-LATE-H'] });
 });
 
 test('Docker backend executes Trivy through the worker runtime without a local command', async () => {

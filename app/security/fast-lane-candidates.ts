@@ -9,15 +9,16 @@ import { hasCandidateIdentityChanged, hasRawUpdate } from '../model/container.js
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
-import { isSecurityFastLaneEnabled, updateScanMatchesCandidate } from './fast-lane.js';
-import { scanImageForVulnerabilities, scanImageWithDedup } from './scan.js';
+import { isSecurityFastLaneEnabled, needsFastLaneCandidateScan } from './fast-lane.js';
+import { scanImageForVulnerabilities } from './scan.js';
 
 const logFastLane = log.child({ component: 'security.fast-lane' });
 
 /**
- * Candidates already scanned (or attempted) for the fast lane, keyed by container and
- * candidate identity. One attempt per candidate: a failed scan is not retried until the
- * candidate changes, so this can never turn into a scan storm.
+ * Candidates already scanned (or attempted) for the fast lane, keyed by container, candidate
+ * digest and the running scan they are compared with. One attempt per candidate digest per
+ * running-scan generation: a failed scan is not retried until the candidate or the running
+ * scan changes, so this can never turn into a scan storm.
  */
 const attemptedCandidates = new Set<string>();
 
@@ -26,54 +27,44 @@ export function resetFastLaneCandidateAttempts(): void {
 }
 
 function candidateKey(container: Container): string {
-  return `${container.id}|${container.result?.digest ?? container.result?.tag}`;
+  return `${container.id}|${container.result?.digest}|${container.security?.scan?.scannedAt}`;
 }
 
-/** Opted-in containers with a pending candidate that has no scan yet and a usable baseline. */
+/**
+ * Opted-in containers whose pending candidate digest has no scan comparable with the
+ * running scan yet (missing, of another digest, older than the running scan, or from another
+ * scanner).
+ */
 export function selectFastLaneCandidates(containers: Container[]): Container[] {
-  return containers.filter((container) => {
-    const baseline = container.security?.scan;
-    const updateScan = container.security?.updateScan;
-    return (
+  return containers.filter(
+    (container) =>
       isSecurityFastLaneEnabled(container) &&
       hasRawUpdate(container) &&
-      container.result?.tag !== undefined &&
-      baseline !== undefined &&
-      baseline.status !== 'error' &&
-      !(updateScan && updateScanMatchesCandidate(container, updateScan)) &&
-      !attemptedCandidates.has(candidateKey(container))
-    );
-  });
+      needsFastLaneCandidateScan(container) &&
+      !attemptedCandidates.has(candidateKey(container)),
+  );
 }
 
 async function scanFastLaneCandidate(
   container: Container,
-  options: { signal: AbortSignal; scanIntervalMs: number; trivyDbUpdatedAt?: string },
+  options: { signal: AbortSignal },
 ): Promise<boolean> {
   attemptedCandidates.add(candidateKey(container));
   try {
-    const tag = container.result?.tag as string;
-    const digest = container.result?.digest;
+    // Scan the candidate by digest, never by the mutable tag: the result is stamped with that
+    // digest and must describe exactly it, even if the tag moves while the scan runs.
+    const digest = container.result?.digest as string;
     const registries = registry.getState().registry || {};
-    const image = resolveContainerImageFullName(container, registries, tag);
+    const image = resolveContainerImageFullName(container, registries, digest);
     const auth = await resolveContainerRegistryAuth(container, registries, {
       log: logFastLane,
       sanitizeLogParam,
     });
-    const scanResult = digest
-      ? (
-          await scanImageWithDedup(
-            {
-              image,
-              auth,
-              digest,
-              trivyDbUpdatedAt: options.trivyDbUpdatedAt,
-              signal: options.signal,
-            },
-            options.scanIntervalMs,
-          )
-        ).scanResult
-      : await scanImageForVulnerabilities({ image, auth, signal: options.signal });
+    const scanResult = await scanImageForVulnerabilities({
+      image,
+      auth,
+      signal: options.signal,
+    });
     // Read the CURRENT record at write-back time, and drop the result when the candidate
     // moved while the scan ran, so it never lands on a different pending update. An errored
     // scan is not stored: it describes nothing about the candidate.
@@ -86,7 +77,7 @@ async function scanFastLaneCandidate(
       ...current,
       security: {
         ...(current.security || {}),
-        updateScan: digest ? { ...scanResult, imageDigest: digest } : scanResult,
+        updateScan: { ...scanResult, imageDigest: digest },
       },
     });
     return true;
@@ -106,8 +97,6 @@ async function scanFastLaneCandidate(
 export async function scanFastLaneCandidates(options: {
   signal: AbortSignal;
   scanConcurrency: number;
-  scanIntervalMs: number;
-  trivyDbUpdatedAt?: string;
 }): Promise<number> {
   const candidates = selectFastLaneCandidates(
     storeContainer.getContainersRaw().map(storeContainer.cloneContainer),

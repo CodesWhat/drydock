@@ -346,6 +346,10 @@ const containerSecurityScanSchema = joi.object({
   blockingCount: joi.number().integer().min(0).required(),
   summary: containerSecuritySummarySchema.required(),
   vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  severityIds: joi.object({
+    critical: joi.array().items(joi.string()).required(),
+    high: joi.array().items(joi.string()).required(),
+  }),
   relativeGate: joi.object({
     decision: joi.string().valid('passed', 'blocked').required(),
     reason: joi

@@ -1313,6 +1313,26 @@ describe('api/container/security', () => {
       expect(persisted.security.updateScan).toEqual({ ...updateScan, imageDigest: 'sha256:AAA' });
     });
 
+    test('scans the candidate pinned by digest and stamps exactly that digest', async () => {
+      const initialContainer = createContainer({
+        result: { tag: '2.0.0', digest: 'sha256:AAA' },
+      });
+      const harness = createHarness({ container: initialContainer });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult({ image: CURRENT_IMAGE }))
+        .mockResolvedValueOnce(createScanResult({ image: UPDATE_IMAGE }));
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...initialContainer });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        'sha256:AAA',
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan.imageDigest).toBe('sha256:AAA');
+    });
+
     test('scans the candidate of a held update when the container is on the security fast lane', async () => {
       const held = createContainer({
         updateAvailable: false,
