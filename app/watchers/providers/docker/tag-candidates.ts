@@ -17,6 +17,15 @@ import {
   type NumericTagShape,
 } from '../../../tag/precision.js';
 import {
+  canApplyCeiling,
+  getRunningVersion,
+  isWithinCeiling,
+  normalizeTagCeiling,
+  type RunningVersion,
+  substituteRunningVersionVariables,
+  type TagCeiling,
+} from '../../../tag/running-version.js';
+import {
   getReleaseMaturityEvidence,
   type ReleaseMaturityEvidence,
   selectVersionPopulation,
@@ -53,10 +62,35 @@ function compileFilter(
 }
 
 /**
+ * Resolve running-version variables (`${major}`, `${minor}`, `${patch}`,
+ * `${flavor}`) in a dd.tag.include / dd.tag.exclude pattern. Returns null (and
+ * warns) when the running tag cannot supply a variable the pattern uses.
+ */
+function resolveFilterPattern(
+  pattern: string,
+  label: 'include' | 'exclude',
+  container: Container,
+  running: RunningVersion | null,
+  logContainer: TagCandidatesLogger,
+): string | null {
+  const substitution = substituteRunningVersionVariables(pattern, running);
+  if ('pattern' in substitution) {
+    return substitution.pattern;
+  }
+  const variables = substitution.missing.map((name) => `\${${name}}`).join(', ');
+  logContainer.warn(
+    `dd.tag.${label} "${pattern}" uses ${variables}, which the running tag "${container.image.tag.value}" cannot supply. No candidates are offered from this filter.`,
+  );
+  return null;
+}
+
+/**
  * Apply include/exclude regex filters to tags.
  * Returns the filtered tags and whether include-filter recovery mode is active.
  * A pattern that does not compile fails closed: no tag survives and `filterError`
  * names the bad pattern, so a typo never widens the candidate set.
+ * Filters may use running-version variables; a filter whose variables cannot be
+ * resolved fails safe by offering no candidates at all.
  */
 function applyIncludeExcludeFilters(
   container: Container,
@@ -65,9 +99,24 @@ function applyIncludeExcludeFilters(
 ): { filteredTags: string[]; allowIncludeFilterRecovery: boolean; filterError?: string } {
   let filteredTags = tags;
   let allowIncludeFilterRecovery = false;
+  const usesVariables = (pattern: string | undefined) => pattern?.includes('${') ?? false;
+  const running =
+    usesVariables(container.includeTags) || usesVariables(container.excludeTags)
+      ? getRunningVersion(transformTag(container.transformTags, container.image.tag.value))
+      : null;
 
   if (container.includeTags) {
-    const includeTagsRegex = compileFilter('include', container.includeTags, logContainer);
+    const includePattern = resolveFilterPattern(
+      container.includeTags,
+      'include',
+      container,
+      running,
+      logContainer,
+    );
+    if (includePattern === null) {
+      return { filteredTags: [], allowIncludeFilterRecovery: false };
+    }
+    const includeTagsRegex = compileFilter('include', includePattern, logContainer);
     if ('error' in includeTagsRegex) {
       return { filteredTags: [], allowIncludeFilterRecovery, filterError: includeTagsRegex.error };
     }
@@ -84,7 +133,17 @@ function applyIncludeExcludeFilters(
   }
 
   if (container.excludeTags) {
-    const excludeTagsRegex = compileFilter('exclude', container.excludeTags, logContainer);
+    const excludePattern = resolveFilterPattern(
+      container.excludeTags,
+      'exclude',
+      container,
+      running,
+      logContainer,
+    );
+    if (excludePattern === null) {
+      return { filteredTags: [], allowIncludeFilterRecovery: false };
+    }
+    const excludeTagsRegex = compileFilter('exclude', excludePattern, logContainer);
     if ('error' in excludeTagsRegex) {
       return { filteredTags: [], allowIncludeFilterRecovery, filterError: excludeTagsRegex.error };
     }
@@ -455,6 +514,57 @@ function trackCrossFamilyGreaterDrop(
   }
 }
 
+interface CeilingState {
+  ceiling: TagCeiling;
+  running: RunningVersion;
+}
+
+const MAX_CEILING_IGNORED_KEYS = 1000;
+const ceilingIgnoredLogged = new Set<string>();
+
+function logCeilingIgnoredOnce(container: Container, logContainer: TagCandidatesLogger): void {
+  const key = `${container.image.name}:${container.image.tag.value}:${container.tagCeiling}`;
+  if (ceilingIgnoredLogged.has(key)) {
+    return;
+  }
+  if (ceilingIgnoredLogged.size >= MAX_CEILING_IGNORED_KEYS) {
+    ceilingIgnoredLogged.clear();
+  }
+  ceilingIgnoredLogged.add(key);
+  logContainer.debug?.(
+    `dd.tag.ceiling=${container.tagCeiling} ignored: running tag "${container.image.tag.value}" is not a semver version with enough segments`,
+  );
+}
+
+/**
+ * Resolve the running-version ceiling (dd.tag.ceiling). An invalid value warns
+ * and is ignored; a running tag that is not semver (or has too few segments for
+ * the ceiling) leaves the ceiling unable to apply, which is logged once at debug.
+ */
+function getCeilingState(
+  container: Container,
+  logContainer: TagCandidatesLogger,
+): CeilingState | undefined {
+  const ceiling = normalizeTagCeiling(container.tagCeiling);
+  if (ceiling === undefined) {
+    return undefined;
+  }
+  if (ceiling === 'invalid') {
+    logContainer.warn(
+      `Invalid tag ceiling "${container.tagCeiling}", ignoring it (use "major" or "minor")`,
+    );
+    return undefined;
+  }
+  const running = getRunningVersion(
+    transformTag(container.transformTags, container.image.tag.value),
+  );
+  if (!running || !canApplyCeiling(ceiling, running)) {
+    logCeilingIgnoredOnce(container, logContainer);
+    return undefined;
+  }
+  return { ceiling, running };
+}
+
 interface SemverCandidateFilterContext {
   transformTags: string | undefined;
   currentPrefix: string;
@@ -467,6 +577,7 @@ interface SemverCandidateFilterContext {
   // #501: only true for the computePinGateInsight() call chain — never for
   // the actionable candidate path.
   allowPrereleaseToGA: boolean;
+  ceilingState: CeilingState | undefined;
 }
 
 function shouldIncludeSemverCandidate(
@@ -481,6 +592,12 @@ function shouldIncludeSemverCandidate(
 
   const transformedTag = transformTag(context.transformTags, tag);
   if (parseSemver(transformedTag) === null) {
+    return false;
+  }
+  if (
+    context.ceilingState &&
+    !isWithinCeiling(context.ceilingState.ceiling, context.ceilingState.running, transformedTag)
+  ) {
     return false;
   }
   stats.afterSemver += 1;
@@ -519,6 +636,7 @@ function filterSemverCandidatesOnePass(
   applyPrefixFilter: boolean,
   allowIncludeFilterRecovery: boolean,
   allowPrereleaseToGA = false,
+  ceilingState: CeilingState | undefined = undefined,
 ): { filteredTags: string[]; currentPrefix: string; stats: SemverCandidateFilterStats } {
   const currentTag = container.image.tag.value;
   const currentPrefix = getCurrentPrefix(currentTag);
@@ -535,6 +653,7 @@ function filterSemverCandidatesOnePass(
     applyPrefixFilter,
     allowIncludeFilterRecovery,
     allowPrereleaseToGA,
+    ceilingState,
   };
 
   const stats: SemverCandidateFilterStats = {
@@ -912,6 +1031,7 @@ function filterMeaningfulInsightCandidates(
 function computePinGateInsight(
   container: Container,
   filteredTags: string[],
+  ceilingState: CeilingState | undefined,
 ): TagInsight | undefined {
   const { filteredTags: insightCandidates } = filterSemverCandidatesOnePass(
     filteredTags,
@@ -920,6 +1040,7 @@ function computePinGateInsight(
     true,
     false,
     true,
+    ceilingState,
   );
 
   if (insightCandidates.length === 0) {
@@ -1001,6 +1122,8 @@ export function getTagCandidates(
     container.transformTags,
   );
 
+  const ceilingState = getCeilingState(container, logContainer);
+
   if (!container.image.tag.semver && !container.includeTags) {
     return { tags: [] };
   }
@@ -1053,7 +1176,9 @@ export function getTagCandidates(
   // isPinGateGoverned() so the UI pin glyph and this gate cannot drift.
   if (isPinGateGoverned(container)) {
     const digestWatchEnabled = Boolean(container.image.digest?.watch);
-    const insight = computeInsight ? computePinGateInsight(container, filteredTags) : undefined;
+    const insight = computeInsight
+      ? computePinGateInsight(container, filteredTags, ceilingState)
+      : undefined;
     const noUpdateReason = digestWatchEnabled
       ? `Pinned tag "${container.image.tag.value}" is compared by digest only. Set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`
       : getPinGateDigestDisabledNoUpdateReason(container.image.tag.value, Boolean(insight));
@@ -1081,6 +1206,8 @@ export function getTagCandidates(
     tagFamilyPolicy,
     !container.includeTags,
     allowIncludeFilterRecovery,
+    false,
+    ceilingState,
   );
   filteredTags = semverTagCandidates;
 
