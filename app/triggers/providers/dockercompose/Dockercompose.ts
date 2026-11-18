@@ -2590,16 +2590,31 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
    * @returns {Promise<boolean[]>}
    */
   async triggerBatch(containers, runtimeContext?: unknown): Promise<boolean[]> {
+    // Never replace a locally built image (compose `build:` service) with the pulled
+    // upstream base: a base image update is notification-only. A project often mixes
+    // one local build with stock services, so skip the local builds and update the rest.
+    // Only a batch with nothing else in it is refused outright.
+    const localBuilds = containers.filter((container) => isLocalBuildContainer(container));
+    if (localBuilds.length === containers.length && localBuilds.length > 0) {
+      throw new Error(LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
+    }
+    for (const localBuild of localBuilds) {
+      this.log.warn(
+        `Skipping container ${localBuild?.name} in the compose update batch: ${LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE}`,
+      );
+    }
+    if (localBuilds.length > 0) {
+      return this.triggerBatch(
+        containers.filter((container) => !isLocalBuildContainer(container)),
+        runtimeContext,
+      );
+    }
+
     // Strip the internal-only gate outcome keys here, at the public entry,
     // before the caller's argument is threaded anywhere it could be merged
     // into a service's runtime context (DR-52). trigger() delegates to this
     // method, so this is the one place both public entries have to guard.
     const sanitizedRuntimeContext = sanitizeComposeCallerRuntimeContext(runtimeContext);
-    // Never replace a locally built image (compose `build:` service) with the pulled
-    // upstream base: a base image update is notification-only.
-    if (containers.some((container) => isLocalBuildContainer(container))) {
-      throw new Error(LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
-    }
     const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,
