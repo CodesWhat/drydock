@@ -1,5 +1,6 @@
 import type { Container, ContainerImage } from '../../model/container.js';
 import { buildImageReference } from '../../registries/image-reference.js';
+import { withTransientScanState } from '../../security/scan-state.js';
 import { getErrorMessage, getErrorStatusCode } from '../../util/error.js';
 
 type RegistryAuth = { username?: string; password?: string };
@@ -199,9 +200,12 @@ export function projectLabelOwnedForApi<T>(container: T): T {
     : ({ ...rest, labelOwnedSources: labelOwned.sources } as T);
 }
 
-/** A container as the API serves it: runtime env classified, label-owned state projected. */
+/**
+ * A container as the API serves it: runtime env classified, label-owned state
+ * projected, and the in-memory scanning state overlaid while a scan runs.
+ */
 export function toApiContainer<T>(container: T): T {
-  return projectLabelOwnedForApi(classifyContainerRuntimeEnv(container));
+  return withTransientScanState(projectLabelOwnedForApi(classifyContainerRuntimeEnv(container)));
 }
 
 export function toApiContainers<T>(containers: T): T {

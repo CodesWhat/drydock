@@ -67,7 +67,9 @@ interface ContainerActionGroup {
 
 type ContainerActionTarget =
   | string
-  | Pick<Container, 'id' | 'name' | 'identityKey' | 'updateEligibility'>;
+  | (Pick<Container, 'id' | 'name' | 'identityKey' | 'updateEligibility'> & {
+      securityScanState?: Container['securityScanState'];
+    });
 
 type ResolveUpdateOperation = (
   container: OperationContainerRef,
@@ -1771,6 +1773,11 @@ export function useContainerActions(input: UseContainerActionsInput) {
   }
 
   function isContainerScanInProgress(target: ContainerActionTarget) {
+    // The server marks a container `scanning` for the life of a scan, which covers a scan
+    // started elsewhere or before this page loaded; the lifecycle set covers the click.
+    if (typeof target !== 'string' && target.securityScanState === 'scanning') {
+      return true;
+    }
     if (typeof target !== 'string' && target.id && scanLifecycle.isScanInFlight(target.id)) {
       return true;
     }

@@ -5,6 +5,7 @@ import type { Container } from '../../model/container.js';
 import { isImmutableDigest } from '../../security/digest.js';
 import type { TrivyDatabaseStatus } from '../../security/runtime.js';
 import type { ContainerSecurityScan } from '../../security/scan.js';
+import { beginContainerScan } from '../../security/scan-state.js';
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
 import type { BulkScanProgress } from '../sse.js';
@@ -210,6 +211,7 @@ async function runBulkScan(
       async (container) => {
         const containerId = container.id;
         deps.broadcastScanStarted(containerId, cycleId);
+        const releaseScanState = beginContainerScan(containerId);
         let status = 'error';
         try {
           const { displayImage, scanImage } = resolveCurrentImageScanTarget(
@@ -290,6 +292,7 @@ async function runBulkScan(
             `Bulk scan failed for container ${containerId} (${deps.getErrorMessage(err)})`,
           );
         } finally {
+          releaseScanState();
           completedCount += 1;
           if (requestId) {
             deps.broadcastScanCompleted(containerId, status, cycleId, {

@@ -97,6 +97,7 @@ vi.mock('../event/index.js', () => ({
   emitSecurityScanCycleComplete: (...args: unknown[]) => mockEmitSecurityScanCycleComplete(...args),
 }));
 
+import { _resetContainerScanStateForTesting, isContainerScanning } from './scan-state.js';
 import {
   _isScanInProgress,
   _resetForTesting,
@@ -2074,5 +2075,104 @@ describe('_resetForTesting', () => {
     expect(isRunning()).toBe(false);
     expect(mockTask.stop).toHaveBeenCalled();
     expect(mockClearDigestScanCache).toHaveBeenCalled();
+  });
+});
+
+describe('transient container scanning state', () => {
+  beforeEach(() => {
+    _resetContainerScanStateForTesting();
+  });
+
+  function sameDigestPair() {
+    return [createContainer({ id: 'c1' }), createContainer({ id: 'c2', name: 'nginx-replica' })];
+  }
+
+  test('marks every container sharing a digest while the scan runs and clears them on success', async () => {
+    mockGetContainers.mockReturnValue(sameDigestPair());
+    let finishScan: (() => void) | undefined;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishScan = () => resolve({ scanResult: createScanResult(), fromCache: false });
+        }),
+    );
+
+    const run = runScheduledScans();
+    await vi.waitFor(() => expect(mockScanImageWithDedup).toHaveBeenCalled());
+    expect(isContainerScanning('c1')).toBe(true);
+    expect(isContainerScanning('c2')).toBe(true);
+
+    finishScan?.();
+    await run;
+    expect(isContainerScanning('c1')).toBe(false);
+    expect(isContainerScanning('c2')).toBe(false);
+  });
+
+  test('clears the state when the scan fails', async () => {
+    mockGetContainers.mockReturnValue(sameDigestPair());
+    mockScanImageWithDedup.mockRejectedValue(new Error('trivy exploded'));
+
+    await runScheduledScans();
+
+    expect(isContainerScanning('c1')).toBe(false);
+    expect(isContainerScanning('c2')).toBe(false);
+  });
+
+  test('clears the state when the batch timeout aborts the scan', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 10 },
+    });
+    mockGetContainers.mockReturnValue([createContainer()]);
+    let scanningWhileRunning = false;
+    mockScanImageWithDedup.mockImplementation(
+      (rawOptions: unknown) =>
+        new Promise((_resolve, reject) => {
+          scanningWhileRunning = isContainerScanning('c1');
+          const signal = (rawOptions as { signal: AbortSignal }).signal;
+          signal.addEventListener('abort', () => reject(signal.reason ?? new Error('aborted')), {
+            once: true,
+          });
+        }),
+    );
+
+    await runScheduledScans();
+
+    expect(scanningWhileRunning).toBe(true);
+
+    expect(isContainerScanning('c1')).toBe(false);
+  });
+
+  test('keeps a container scanning until an overlapping scan of it also finishes', async () => {
+    mockGetContainers.mockReturnValue([createContainer()]);
+    let finishScan: (() => void) | undefined;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishScan = () => resolve({ scanResult: createScanResult(), fromCache: false });
+        }),
+    );
+
+    const { beginContainerScan } = await import('./scan-state.js');
+    const releaseOnDemand = beginContainerScan('c1');
+    const run = runScheduledScans();
+    await vi.waitFor(() => expect(mockScanImageWithDedup).toHaveBeenCalled());
+
+    finishScan?.();
+    await run;
+    expect(isContainerScanning('c1')).toBe(true);
+
+    releaseOnDemand();
+    expect(isContainerScanning('c1')).toBe(false);
+  });
+
+  test('does not mark containers that never reach the scan', async () => {
+    mockGetContainers.mockReturnValue([createContainer()]);
+    mockResolveContainerRegistryAuth.mockRejectedValue(new Error('auth lookup failed'));
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(isContainerScanning('c1')).toBe(false);
   });
 });

@@ -20,6 +20,7 @@ import type {
   ContainerSecurityScan,
   ContainerSignatureVerification,
 } from '../../security/scan.js';
+import { beginContainerScan } from '../../security/scan-state.js';
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
@@ -523,6 +524,7 @@ async function handleScanContainer(
   const startedAt = new Date().toISOString();
   scanState.inFlightOnDemandScans += 1;
   context.broadcastScanStarted(id);
+  const releaseScanState = beginContainerScan(id);
 
   let alertCount = 0;
   try {
@@ -558,6 +560,7 @@ async function handleScanContainer(
     context.broadcastScanCompleted(id, 'error');
     sendErrorResponse(res, 500, GENERIC_SCAN_ERROR_MESSAGE);
   } finally {
+    releaseScanState();
     scanState.inFlightOnDemandScans = Math.max(0, scanState.inFlightOnDemandScans - 1);
     const completedAt = new Date().toISOString();
     await context.emitSecurityScanCycleComplete({

@@ -245,7 +245,8 @@ export interface Container {
    */
   updateInsight?: { tag: string; kind: 'major' | 'minor' | 'patch' };
   bouncer: 'safe' | 'unsafe' | 'blocked';
-  securityScanState?: 'scanned' | 'not-scanned';
+  /** `scanning` is transient server state: a scan of this container is running right now. */
+  securityScanState?: 'scanned' | 'not-scanned' | 'scanning';
   securitySummary?: ContainerSecuritySummary;
   updateBouncer?: 'safe' | 'unsafe' | 'blocked';
   updateSecurityScanState?: 'scanned' | 'not-scanned';

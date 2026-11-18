@@ -292,6 +292,11 @@ function toTrivyTimeout(durationMs: number) {
   return `${timeoutSeconds}s`;
 }
 
+/** How often a long-running scanner or verifier command logs that it is still going. */
+const SCAN_HEARTBEAT_INTERVAL_MS = 30_000;
+
+const logScanHeartbeat = log.child({ component: 'security.scan' });
+
 function runCommand(options: {
   command: string;
   args: string[];
@@ -301,6 +306,8 @@ function runCommand(options: {
   maxBufferExceededMessage?: string;
   env: NodeJS.ProcessEnv;
   commandName: string;
+  /** Image (or other subject) named in the heartbeat line; falls back to the command name. */
+  image?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -311,14 +318,22 @@ function runCommand(options: {
 
     let settled = false;
     let child: ReturnType<typeof execFile> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const cleanupAbortListener = () => {
       options.signal?.removeEventListener('abort', handleAbort);
+    };
+    const stopHeartbeat = () => {
+      if (heartbeat !== undefined) {
+        clearInterval(heartbeat);
+        heartbeat = undefined;
+      }
     };
     const settle = (operation: () => void) => {
       if (settled) {
         return;
       }
       settled = true;
+      stopHeartbeat();
       cleanupAbortListener();
       operation();
     };
@@ -402,6 +417,18 @@ function runCommand(options: {
         settle(() => resolve(`${stdout || ''}`));
       },
     );
+
+    if (!settled) {
+      const startedAt = Date.now();
+      const subject = sanitizeLogParam(options.image ?? options.commandName);
+      heartbeat = setInterval(() => {
+        const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
+        logScanHeartbeat.info(
+          `${options.commandName}: still scanning ${subject} (${elapsedSeconds}s)`,
+        );
+      }, SCAN_HEARTBEAT_INTERVAL_MS);
+      heartbeat.unref?.();
+    }
 
     if (!settled && options.signal) {
       options.signal.addEventListener('abort', handleAbort, { once: true });
@@ -605,6 +632,7 @@ function runTrivyVulnerabilityCommand(
       maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
+      image: options.image,
     };
     if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
@@ -645,6 +673,7 @@ function runTrivySbomCommand(
       maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
+      image: options.image,
     };
     if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
@@ -682,7 +711,7 @@ function runGrypeVulnerabilityCommand(
 ): Promise<string> {
   const invocation = buildGrypeInvocation(options, configuration.grype);
   if (usesLocalCommand('grype', configuration)) {
-    return runCommand({ ...invocation, signal: options.signal });
+    return runCommand({ ...invocation, image: options.image, signal: options.signal });
   }
   return getDefaultScannerRuntime()
     .run({
@@ -761,6 +790,7 @@ function runSyftSbomCommand(
       maxBuffer: MAX_SYFT_OUTPUT_BYTES,
       env,
       commandName: 'Syft',
+      image: options.image,
       signal: options.signal,
     });
   }
@@ -865,6 +895,7 @@ async function runCosignVerifyCommand(
     maxBuffer: MAX_COSIGN_OUTPUT_BYTES,
     env,
     commandName: 'Cosign',
+    image: options.image,
     signal: options.signal,
   });
 }
