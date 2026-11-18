@@ -526,6 +526,7 @@ const routes = [
   "/docs/v1.8/deprecations",
   "/docs/v1.8/faq",
   "/docs/v1.8/getting-started",
+  "/docs/v1.8/guides/one-shot-scan",
   "/docs/v1.8/guides/security",
   "/docs/v1.8/guides/translations",
   "/docs/v1.8/guides/verifying-releases",
