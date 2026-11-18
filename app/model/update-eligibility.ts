@@ -450,10 +450,14 @@ export function computeUpdateEligibility(
     }
   }
 
-  // 3. skip-tag
+  // 3. skip-tag. Only a tag update: `isUpdateSuppressed` applies skipTags to tag updates
+  // alone, and a same-tag digest update carries `result.tag` equal to the running tag.
   const remoteTag = container.result?.tag;
   const skipTags = container.updatePolicy?.skipTags;
-  if (remoteTag && isTagSkipped(remoteTag, skipTags, container.transformTags)) {
+  if (
+    container.updateKind?.kind === 'tag' &&
+    remoteTag &&
+    isTagSkipped(remoteTag, skipTags, container.transformTags)) {
     blockers.push(
       makeBlocker({
         reason: 'skip-tag',

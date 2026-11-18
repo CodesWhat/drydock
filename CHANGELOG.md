@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- A same-tag digest rebuild no longer shows a skip-tag hold or confirmation when the tag was on the skip list. The skip-tag blocker now applies to tag updates only, matching what actually suppresses an update.
 - An approved update that failed now goes back to the approvals queue on the next watch cycle while its candidate is still on offer, instead of staying in Decided until retention pruned it. Rolled-back and applied approvals stay decided.
 - **Approvals bind a decision to the candidate, not to its ref spelling** - a row minted while the digest lookup failed can be approved, rejected or deferred once the digest returns, and a rejected candidate is no longer requeued and re-notified after one failed digest lookup. Two different known digests still never match.
 - Cancelling a queued update now sticks. The cancelled operation is no longer reopened and run when its turn comes up, and a cancelled entry is skipped at dispatch.
