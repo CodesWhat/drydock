@@ -922,6 +922,85 @@ test('deregister then initTrigger should not duplicate container event callbacks
   expect(triggerSpy).toHaveBeenCalledTimes(1);
 });
 
+describe('broker replacement', () => {
+  const hassConfiguration = {
+    ...configurationValid,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      discovery: true,
+      prefix: 'homeassistant',
+      attributes: 'short',
+      filter: { include: '', exclude: '' },
+    },
+  };
+
+  function fakeBrokerClient() {
+    return {
+      publish: vi.fn().mockResolvedValue(undefined),
+      endAsync: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  test('re-init against a new broker force-closes the old connection and republishes discovery on the new one', async () => {
+    mqtt.configuration = { ...hassConfiguration, url: 'mqtt://old-broker:1883' };
+    const oldBroker = fakeBrokerClient();
+    const newBroker = fakeBrokerClient();
+    const connectSpy = vi
+      .spyOn(mqttClient, 'connectAsync')
+      .mockResolvedValueOnce(oldBroker)
+      .mockResolvedValueOnce(newBroker);
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    const resyncSpy = vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+
+    await mqtt.initTrigger();
+    expect(oldBroker.endAsync).not.toHaveBeenCalled();
+
+    mqtt.configuration = { ...hassConfiguration, url: 'mqtt://new-broker:1883' };
+    await mqtt.initTrigger();
+
+    expect(connectSpy).toHaveBeenLastCalledWith('mqtt://new-broker:1883', expect.any(Object));
+    expect(oldBroker.endAsync).toHaveBeenCalledWith(true);
+    expect(newBroker.endAsync).not.toHaveBeenCalled();
+    // Discovery is retained state on the broker, so the replacement broker
+    // starts empty and must be repopulated by the second init.
+    expect(resyncSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('an old broker that fails to close does not block connecting to the new one', async () => {
+    mqtt.configuration = hassConfiguration;
+    const oldBroker = fakeBrokerClient();
+    oldBroker.endAsync.mockRejectedValue(new Error('broker is gone'));
+    const newBroker = fakeBrokerClient();
+    vi.spyOn(mqttClient, 'connectAsync')
+      .mockResolvedValueOnce(oldBroker)
+      .mockResolvedValueOnce(newBroker);
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+    const warnSpy = vi.spyOn(mqtt.log, 'warn');
+
+    await mqtt.initTrigger();
+    await mqtt.initTrigger();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broker is gone'));
+    expect(mqtt.client).toBe(newBroker);
+  });
+
+  test('deregisterComponent force-closes the broker connection', async () => {
+    mqtt.configuration = hassConfiguration;
+    const broker = fakeBrokerClient();
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker);
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+    vi.spyOn(Trigger.prototype, 'deregisterComponent').mockResolvedValue(undefined);
+
+    await mqtt.initTrigger();
+    await mqtt.deregisterComponent();
+
+    expect(broker.endAsync).toHaveBeenCalledWith(true);
+  });
+});
+
 describe('hass.attributes validation', () => {
   test('should accept hass.attributes short', () => {
     const validated = mqtt.validateConfiguration({

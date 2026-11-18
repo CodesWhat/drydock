@@ -16,6 +16,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Docker watchers can now include or exclude containers by name or label with `DD_WATCHER_{name}_CONTAINERS_INCLUDE`, `_CONTAINERS_EXCLUDE`, `_LABELS_INCLUDE` and `_LABELS_EXCLUDE`. Patterns use RE2, exclude wins over include, a container's `dd.watch` label still overrides the filters, and an invalid pattern stops startup with a clear message. Filtered containers are skipped before any registry lookup.
 - Container state alerts. Four new notification rules, `container-stopped`, `container-exited`, `container-oom-killed` and `container-restart-loop`, report when a watched container stops, exits non-zero, is killed for running out of memory, or crashes repeatedly (3 times in 300 seconds by default, set per watcher with `RESTARTLOOP_THRESHOLD` and `RESTARTLOOP_WINDOW`). They use the same routing, trigger lists, template overrides and `dd.notification.exclude` opt-out as the other rules, and templates get `event.exitCode`, `event.reason`, `event.restartCount` and `event.windowSeconds`. All four are off by default. One crash sends one alert, and stops or recreates Drydock does during an update or rollback never raise one.
 
+### Fixed
+
+- The MQTT trigger now closes its connection to the previous broker when it re-initializes (for example after the broker URL changes or the broker is replaced) and when it is deregistered. Before, the old client kept reconnecting in the background next to the new one.
+
 ### Security
 
 - HTTP trigger proxy URLs that carry credentials (for example `http://user:pass@proxy.local:3128`) no longer appear in registration logs, trigger API responses, debug dumps or the configuration endpoint. The userinfo is replaced with `[REDACTED]` where the proxy URL is shown, and the lower-scope trigger views redact the whole value. A value that cannot be parsed as a URL is redacted entirely.

@@ -462,6 +462,33 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('restoreComposeFileMutations should keep restoring the remaining files when one restore write fails', async () => {
+    const baseFile = '/opt/drydock/test/compose.yml';
+    const overrideFile = '/opt/drydock/test/compose.override.yml';
+    // Restore runs newest first, so the override file is attempted before the base file.
+    const writeSpy = vi
+      .spyOn(trigger, 'writeComposeFile')
+      .mockRejectedValueOnce(new Error('EACCES: permission denied'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      trigger.restoreComposeFileMutations([
+        { filePath: baseFile, originalText: 'base-original' },
+        { filePath: overrideFile, originalText: 'override-original' },
+      ]),
+    ).rejects.toThrow(
+      `Failed to restore compose file mutations (${overrideFile}: EACCES: permission denied)`,
+    );
+
+    expect(writeSpy.mock.calls).toEqual([
+      [overrideFile, 'override-original'],
+      [baseFile, 'base-original'],
+    ]);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to restore compose file ${overrideFile}`),
+    );
+  });
+
   test('mutateComposeFile should return false when no text changes are applied', async () => {
     vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
       Buffer.from('services:\n  nginx:\n    image: nginx:1.0.0\n'),
