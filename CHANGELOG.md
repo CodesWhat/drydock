@@ -22,6 +22,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Cancelling a queued update now sticks. The cancelled operation is no longer reopened and run when its turn comes up, and a cancelled entry is skipped at dispatch.
+- A container with `dd.depends_on.action=restart` and no update, requested on its own or without its upstream in the batch, is now rejected with "No update available" instead of being pulled and recreated.
+- In a dependency group update, a member that simply has no update no longer rejects every container that depends on it. A restart-only dependent still needs an upstream that will actually run.
 - Signing in from the UI with a non-ASCII password (for example `pässword` or `秘密`) works. The Basic credentials are now sent as UTF-8 bytes, matching what the server decodes, instead of failing in the browser or arriving as Latin-1.
 - The login page no longer shows Connection Lost when the server answers 429 (rate limited). It shows how long to wait, from the `Retry-After` header, and retries when that time is up. Real network failures still show the connection-lost overlay. ([#1592](https://github.com/CodesWhat/drydock/issues/1592))
 - The Docker Compose action keeps the `mac_address` you configure per network (and at service level) when it recreates a container. Drydock now reads the explicit address from the Compose service definition, including override files, and pins it on the matching network. Generated MAC addresses are still never copied, and a secondary network that pins a MAC is attached at create time because network connect ignores it on older Docker APIs. ([#1581](https://github.com/CodesWhat/drydock/issues/1581))
