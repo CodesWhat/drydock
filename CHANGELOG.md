@@ -25,6 +25,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- An invalid watcher setting, such as a bad `CONTAINERS_INCLUDE` or `LABELS_EXCLUDE` pattern or a `RESTARTLOOP_THRESHOLD` below 2, now stops startup with a clear message on installs that use environment variables only, the same as it already did with a `drydock.yml`. Before, those installs logged "Some watchers failed to register" and kept running without the watcher.
 - Digest-only tag comparison now ignores include and exclude tag patterns longer than 1024 characters, the same as normal tag filtering. Before, one overlong label could give two different tag sets. The three filter compilers now share one implementation.
 - Portainer triggers are now treated as update actions in the UI. The Notifications page no longer offers them as notification triggers (the server rejected them), and a Portainer trigger in dry-run mode now shows the preview label and badge, with its Run button disabled in notify mode like the Docker triggers.
 - The full-page container view now shows the reason when revealing a masked environment variable fails, the same as the side panel.

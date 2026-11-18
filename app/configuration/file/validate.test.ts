@@ -157,6 +157,19 @@ describe('validateConfiguration', () => {
     expect(result.errors).toEqual([]);
   });
 
+  test('watchersOnly validates watcher schemas and skips every other kind and section', async () => {
+    const result = await validateConfiguration(
+      {
+        DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD: '1',
+        DD_ACTION_DOCKER_DEPLOY_PULLTIMEOUT: 'not-a-number',
+        DD_SECURITY_SCANNER: 'bogus',
+      },
+      { watchersOnly: true },
+    );
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD');
+  });
+
   test('a valid discord trigger, ghcr registry (string form) and basic auth produce no errors', async () => {
     const result = await validateConfiguration({
       DD_NOTIFICATION_DISCORD_MYHOOK_URL: 'https://discord.example/hook',

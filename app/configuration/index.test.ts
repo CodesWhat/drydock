@@ -4046,14 +4046,61 @@ describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
     }
   }
 
-  test('with no config file present, resolves to no errors without walking a single component (env-only gate)', async () => {
-    // No DD_CONFIG_FILE at all in this process's real environment, so every
-    // key in configFileSources (if any) is 'env' — the hasFileSourcedValue
-    // gate short-circuits before the dynamic import of file/validate.js.
-    await expect(configuration.validateStartupConfiguration()).resolves.toStrictEqual({
-      errors: [],
+  test('with no config file present and a valid environment, resolves to no errors', async () => {
+    // A fresh module so ddEnvVars reflects this process's real environment, not
+    // keys earlier tests left on the shared singleton.
+    const fresh = await importFreshConfiguration();
+    await expect(fresh.validateStartupConfiguration()).resolves.toStrictEqual({ errors: [] });
+  }, 30_000);
+
+  async function withEnv<T>(env: Record<string, string>, run: () => Promise<T>): Promise<T> {
+    Object.assign(process.env, env);
+    try {
+      vi.resetModules();
+      return await run();
+    } finally {
+      for (const key of Object.keys(env)) {
+        delete process.env[key];
+      }
+    }
+  }
+
+  test('env-only: an invalid watcher filter regex is reported so startup stops', async () => {
+    await withEnv({ DD_WATCHER_LOCAL_CONTAINERS_INCLUDE: '(' }, async () => {
+      const fresh = await importFreshConfiguration();
+      const result = await fresh.validateStartupConfiguration();
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].path).toBe('watcher.local.containers.include');
+      expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_CONTAINERS_INCLUDE');
     });
-  });
+  }, 30_000);
+
+  test('env-only: a restart-loop threshold below 2 is reported so startup stops', async () => {
+    await withEnv({ DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD: '1' }, async () => {
+      const fresh = await importFreshConfiguration();
+      const result = await fresh.validateStartupConfiguration();
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD');
+    });
+  }, 30_000);
+
+  test('env-only: an invalid non-watcher component still degrades instead of failing the gate', async () => {
+    await withEnv({ DD_ACTION_DOCKER_DEPLOY_PULLTIMEOUT: 'not-a-number' }, async () => {
+      const fresh = await importFreshConfiguration();
+      await expect(fresh.validateStartupConfiguration()).resolves.toStrictEqual({ errors: [] });
+    });
+  }, 30_000);
+
+  test('file-sourced: an invalid watcher filter regex is reported with its YAML path', async () => {
+    await withConfigFile(
+      'watcher:\n  local:\n    containers:\n      include: "("\n',
+      async (fresh) => {
+        const result = await fresh.validateStartupConfiguration();
+        expect(result.errors).toHaveLength(1);
+        expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_CONTAINERS_INCLUDE');
+      },
+    );
+  }, 30_000);
 
   test('a valid config file produces no errors', async () => {
     await withConfigFile('server:\n  port: 3000\n', async (freshConfiguration) => {
