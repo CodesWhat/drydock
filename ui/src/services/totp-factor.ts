@@ -17,6 +17,9 @@ interface TotpFactorStatus {
   activatedAt?: string;
   recoveryCodesRemaining: number;
   pendingEnrollment?: PendingEnrollment;
+  /** False when this connection is plain HTTP from a non-local client, so enrolling would be refused. */
+  managementAllowed: boolean;
+  reason?: 'https-required';
 }
 
 /** The one and only reveal of a new seed. */
@@ -117,14 +120,20 @@ function parseStatus(payload: unknown): TotpFactorStatus {
   if (
     !isRecord(payload) ||
     (payload.status !== 'unenrolled' && payload.status !== 'active') ||
-    typeof payload.recoveryCodesRemaining !== 'number'
+    typeof payload.recoveryCodesRemaining !== 'number' ||
+    typeof payload.managementAllowed !== 'boolean' ||
+    (payload.reason !== undefined && payload.reason !== 'https-required')
   ) {
     return unexpected();
   }
   const status: TotpFactorStatus = {
     status: payload.status,
     recoveryCodesRemaining: payload.recoveryCodesRemaining,
+    managementAllowed: payload.managementAllowed,
   };
+  if (payload.reason === 'https-required') {
+    status.reason = payload.reason;
+  }
   if (payload.status === 'active') {
     if (typeof payload.activatedAt !== 'string') {
       return unexpected();

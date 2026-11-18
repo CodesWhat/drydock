@@ -336,8 +336,18 @@ export const openApiSchemas = {
       activatedAt: { type: 'string', format: 'date-time' },
       recoveryCodesRemaining: { type: 'integer', minimum: 0 },
       pendingEnrollment: { $ref: '#/components/schemas/TotpPendingEnrollment' },
+      managementAllowed: {
+        type: 'boolean',
+        description:
+          'Whether this connection may enroll, replace or remove a factor. False when the request is plain HTTP from a non-local client and the operator has not set `DD_AUTH_TOTP_ALLOWHTTP=true`.',
+      },
+      reason: {
+        type: 'string',
+        enum: ['https-required'],
+        description: 'Present only when `managementAllowed` is false.',
+      },
     },
-    required: ['status', 'recoveryCodesRemaining'],
+    required: ['status', 'recoveryCodesRemaining', 'managementAllowed'],
     additionalProperties: false,
   },
   TotpReauthenticationRequest: {
