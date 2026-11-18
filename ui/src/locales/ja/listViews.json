@@ -105,6 +105,7 @@
       "update-applied-dryrun": "更新プレビュー済み（ドライラン）",
       "update-failed": "更新失敗",
       "auto-update-blocked": "自動更新ブロック",
+      "security-fast-lane": "セキュリティ優先レーン",
       "update-policy-override-set": "更新ポリシーの上書きを設定",
       "update-policy-override-cleared": "更新ポリシーの上書きを解除",
       "group-policy-set": "グループポリシーを設定",

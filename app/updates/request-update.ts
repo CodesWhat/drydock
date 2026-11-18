@@ -21,7 +21,7 @@ import {
   resolveForTrigger,
   selectActionTrigger,
 } from '../model/action-policy.js';
-import { type Container, hasRawUpdate } from '../model/container.js';
+import { type Container, fullName, hasRawUpdate } from '../model/container.js';
 import {
   groupTriggerExcludedMessage,
   groupUpdateModeRejectionMessage,
@@ -33,8 +33,11 @@ import {
   getPrimaryHardBlocker,
   type UpdateBlocker,
   type UpdateBlockerReason,
+  type UpdateEligibility,
 } from '../model/update-eligibility.js';
+import { getContainerMaintenanceWindowOpen } from '../model/watcher-maintenance-window.js';
 import * as registry from '../registry/index.js';
+import * as auditStore from '../store/audit.js';
 import { withCurrentGroupPolicy } from '../store/group-policy.js';
 import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
@@ -441,10 +444,52 @@ function prepareContainerUpdateRequest(
     }
   }
 
+  if (source === 'automatic') {
+    recordSecurityFastLaneAudit(container, eligibility, trigger);
+  }
+
   return {
     container,
     trigger,
   };
+}
+
+/**
+ * One audit entry per automatic admission that only got through because the security fast
+ * lane lifted a hold. The maintenance window is read live here: eligibility never carries it
+ * for admission, and the trigger's own deferral gate already stood down for this container.
+ */
+function recordSecurityFastLaneAudit(
+  container: Container,
+  eligibility: UpdateEligibility,
+  trigger: ResolvedUpdateTrigger,
+): void {
+  const fastLane = eligibility.securityFastLane;
+  if (!fastLane) {
+    return;
+  }
+  const bypassed = [...fastLane.bypassedHolds];
+  if (getContainerMaintenanceWindowOpen(container, registry.getState().watcher) === false) {
+    bypassed.push('maintenance-window-closed');
+  }
+  if (bypassed.length === 0) {
+    return;
+  }
+  const more = fastLane.fixedCount - fastLane.fixedIds.length;
+  auditStore.insertAudit({
+    id: '',
+    timestamp: new Date().toISOString(),
+    action: 'security-fast-lane',
+    containerName: fullName(container),
+    containerImage: container.image?.name,
+    fromVersion: container.updateKind?.localValue,
+    toVersion: container.updateKind?.remoteValue,
+    updateKind: container.updateKind?.kind,
+    semverDiff: container.updateKind?.semverDiff,
+    triggerName: trigger.getId(),
+    status: 'info',
+    details: `Security fast lane: fixes ${fastLane.fixedCritical} critical and ${fastLane.fixedHigh} high (${fastLane.fixedIds.join(', ')}${more > 0 ? `, +${more} more` : ''}); lifted ${bypassed.join(', ')}`,
+  });
 }
 
 function createAcceptedContainerUpdateRequest(

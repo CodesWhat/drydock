@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Update in voorbeeld getoond (dry run)",
       "update-failed": "Update mislukt",
       "auto-update-blocked": "Automatische update geblokkeerd",
+      "security-fast-lane": "Beveiligings-fastlane",
       "update-policy-override-set": "Update-beleidsoverride ingesteld",
       "update-policy-override-cleared": "Update-beleidsoverride gewist",
       "group-policy-set": "Groepsbeleid ingesteld",

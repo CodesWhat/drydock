@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Aggiornamento in anteprima (Dry Run)",
       "update-failed": "Aggiornamento non riuscito",
       "auto-update-blocked": "Aggiornamento automatico bloccato",
+      "security-fast-lane": "Corsia rapida di sicurezza",
       "update-policy-override-set": "Override della policy di aggiornamento impostato",
       "update-policy-override-cleared": "Override della policy di aggiornamento rimosso",
       "group-policy-set": "Policy di gruppo impostata",

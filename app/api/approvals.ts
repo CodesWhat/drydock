@@ -210,13 +210,23 @@ function getApprovals(req: Request, res: Response): void {
   });
 
   res.status(200).json({
-    data: records,
+    data: records.map(withSecurityFastLane),
     total,
     limit: pagination.limit,
     offset: pagination.offset,
     hasMore: pagination.limit > 0 && pagination.offset + records.length < total,
     ...(links ? { _links: links } : {}),
   });
+}
+
+/**
+ * Flag a row whose candidate is a security fix for the running image (the container's
+ * security fast lane). Read live from the container, never stored on the row: the fast lane
+ * follows the latest scans, and a held update is approved on exactly the same terms.
+ */
+function withSecurityFastLane<T extends { containerId: string }>(record: T) {
+  const securityFastLane = getContainer(record.containerId)?.securityFastLane;
+  return securityFastLane ? { ...record, securityFastLane } : record;
 }
 
 /**
@@ -255,7 +265,11 @@ function getApproval(req: Request<{ id: string }>, res: Response): void {
   }
 
   const eligibility = computeUpdateEligibility(container, buildEligibilityContext(container));
-  res.status(200).json({ approval, eligibility, holdReasons: getSoftBlockers(eligibility) });
+  res.status(200).json({
+    approval: withSecurityFastLane(approval),
+    eligibility,
+    holdReasons: getSoftBlockers(eligibility),
+  });
 }
 
 /** Whoever the authentication middleware resolved, if anyone. */

@@ -105,6 +105,7 @@
       "update-applied-dryrun": "تمت معاينة التحديث (تشغيل تجريبي)",
       "update-failed": "فشل التحديث",
       "auto-update-blocked": "التحديث التلقائي محظور",
+      "security-fast-lane": "المسار السريع الأمني",
       "update-policy-override-set": "تم تعيين تجاوز سياسة التحديث",
       "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
       "group-policy-set": "تم تعيين سياسة المجموعة",

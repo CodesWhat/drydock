@@ -32,6 +32,10 @@
       "prerelease": "Prerelease",
       "unknown": "Unknown"
     },
+    "securityFastLane": {
+      "badge": "Security fix",
+      "tooltip": "Fixes critical or high vulnerabilities in the running image. It still needs approval."
+    },
     "actions": {
       "notesAriaLabel": "Show release notes and hold reasons",
       "approve": "Approve",

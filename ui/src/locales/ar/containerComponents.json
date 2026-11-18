@@ -481,6 +481,7 @@
       "maturityClockPublished": "نُشر المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | نُشر المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "maturityClockDetected": "اكتُشف المرشح في {date} — يوم واحد آخر حتى الحد الأدنى ({minDays} يومًا) | اكتُشف المرشح في {date} — {count} أيام أخرى حتى الحد الأدنى ({minDays} يومًا)",
       "groupManualOnly": "سياسة المجموعة '{group}' تسمح بالتحديثات اليدوية فقط. لن يطبّق Drydock هذا التحديث تلقائيًا.",
+      "securityFastLane": "يصلح {count} من الثغرات الحرجة أو العالية في الصورة قيد التشغيل ({ids}). لا تنطبق قيود التأجيل والنضج ونافذة الصيانة.",
       "updateAvailableRuleDisabled": "قاعدة الإشعار Update Available متوقفة، وهي تتحكم أيضًا في التحديثات التلقائية. فعّلها من Settings > Notifications > Update Available حتى يطبّق Drydock هذا التحديث تلقائيًا.",
       "updateButton": "تحديث الآن",
       "blockedButton": "التحديث محظور",
@@ -527,6 +528,7 @@
         "update-available-rule-disabled": "قاعدة Update Available متوقفة",
         "group-notify-only": "المجموعة تسمح بالإشعارات فقط",
         "group-manual-only": "المجموعة تتطلب تحديثات يدوية",
+        "security-fast-lane": "المسار السريع الأمني",
         "dry-run-trigger": "تهيئة المشغّل بوضع المعاينة التجريبية",
         "maturity-releases-not-reached": "سياسة النضج بانتظار"
       },

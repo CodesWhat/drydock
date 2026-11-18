@@ -1,5 +1,5 @@
 import { i18n } from '../boot/i18n';
-import type { UpdateEligibility } from '../types/container';
+import type { SecurityFastLane, UpdateEligibility } from '../types/container';
 import { readJsonResponse } from '../utils/api';
 
 const APPROVALS_API_BASE = '/api/v1/approvals';
@@ -38,6 +38,8 @@ export interface ApprovalRecord {
   scanLow?: number;
   scanUnknown?: number;
   scanAt?: string;
+  /** Set live by the server when the candidate fixes critical/high findings of the running image. */
+  securityFastLane?: SecurityFastLane;
   createdAt: string;
   createdAtMs: number;
   decision: ApprovalDecision;

@@ -32,6 +32,10 @@
       "prerelease": "Bản phát hành thử",
       "unknown": "Không xác định"
     },
+    "securityFastLane": {
+      "badge": "Bản vá bảo mật",
+      "tooltip": "Sửa các lỗ hổng mức nghiêm trọng hoặc cao trong image đang chạy. Vẫn cần được phê duyệt."
+    },
     "actions": {
       "notesAriaLabel": "Hiển thị ghi chú phát hành và lý do tạm giữ",
       "approve": "Phê duyệt",

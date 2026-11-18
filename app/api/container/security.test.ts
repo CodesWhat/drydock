@@ -1310,7 +1310,41 @@ describe('api/container/security', () => {
       await callScanContainer(harness.handlers);
 
       const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan).toEqual({ ...updateScan, imageDigest: 'sha256:AAA' });
+    });
+
+    test('scans the candidate of a held update when the container is on the security fast lane', async () => {
+      const held = createContainer({
+        updateAvailable: false,
+        labels: { 'dd.security.fastlane': 'true' },
+        result: { tag: '2.0.0' },
+      });
+      const harness = createHarness({ container: held });
+      const currentScan = createScanResult({ image: CURRENT_IMAGE });
+      const updateScan = createScanResult({ image: UPDATE_IMAGE });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScan)
+        .mockResolvedValueOnce(updateScan);
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...held });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
       expect(persisted.security.updateScan).toEqual(updateScan);
+    });
+
+    test('does not scan the candidate of a held update when the fast lane is off', async () => {
+      const held = createContainer({ updateAvailable: false, result: { tag: '2.0.0' } });
+      const harness = createHarness({ container: held });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ image: CURRENT_IMAGE }),
+      );
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...held });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
     });
 
     test('skips the write and returns 404 when the container vanished while the scan was in flight', async () => {

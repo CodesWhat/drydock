@@ -481,6 +481,7 @@
       "maturityClockPublished": "候補は {date} に公開されました — {minDays} 日の最低期間まであと {count} 日",
       "maturityClockDetected": "候補は {date} に検出されました — {minDays} 日の最低期間まであと {count} 日",
       "groupManualOnly": "グループポリシー '{group}' は手動更新のみを許可しています。Drydock はこの更新を自動では適用しません。",
+      "securityFastLane": "実行中のイメージの重大または高レベルの脆弱性を {count} 件修正します ({ids})。スヌーズ、成熟期間、メンテナンスウィンドウの保留は適用されません。",
       "updateAvailableRuleDisabled": "Update Available 通知ルールがオフです。このルールは自動更新も制御します。Drydock がこの更新を自動で適用するには、Settings > Notifications > Update Available でオンにしてください。",
       "updateButton": "今すぐ更新",
       "blockedButton": "更新はブロックされています",
@@ -527,6 +528,7 @@
         "update-available-rule-disabled": "Update Available ルールがオフです",
         "group-notify-only": "グループは通知のみ許可しています",
         "group-manual-only": "グループは手動更新を必須にしています",
+        "security-fast-lane": "セキュリティ優先レーン",
         "dry-run-trigger": "トリガー構成がドライランモードです",
         "maturity-releases-not-reached": "成熟度ポリシー待機中"
       },

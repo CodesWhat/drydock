@@ -23,6 +23,8 @@ const mockLogError = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn(async () => {}));
 const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn(async () => {}));
+const mockScanFastLaneCandidates = vi.hoisted(() => vi.fn(async () => 0));
+const mockResetFastLaneCandidateAttempts = vi.hoisted(() => vi.fn());
 
 vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: mockGetSecurityConfiguration,
@@ -78,6 +80,12 @@ vi.mock('../store/container.js', () => ({
 vi.mock('./scan.js', () => ({
   scanImageWithDedup: (...args: unknown[]) => mockScanImageWithDedup(...args),
   clearDigestScanCache: (...args: unknown[]) => mockClearDigestScanCache(...args),
+}));
+
+vi.mock('./fast-lane-candidates.js', () => ({
+  scanFastLaneCandidates: (...args: unknown[]) => mockScanFastLaneCandidates(...args),
+  resetFastLaneCandidateAttempts: (...args: unknown[]) =>
+    mockResetFastLaneCandidateAttempts(...args),
 }));
 
 vi.mock('./runtime.js', () => ({
@@ -385,8 +393,43 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    expect(mockGetContainersRaw).toHaveBeenCalledTimes(1);
+    expect(mockGetContainersRaw).toHaveBeenCalled();
     expect(mockGetContainers).not.toHaveBeenCalled();
+  });
+
+  test('scans fast lane candidates after the batch with the same worker count and interval', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledTimes(1);
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanConcurrency: expect.any(Number),
+        scanIntervalMs: expect.any(Number),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  test('skips fast lane candidate scans when the batch was aborted', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockImplementation(async () => {
+      shutdown();
+      return { scanResult: createScanResult(), fromCache: false };
+    });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).not.toHaveBeenCalled();
+  });
+
+  test('shutdown forgets which fast lane candidates were attempted', () => {
+    shutdown();
+    expect(mockResetFastLaneCandidateAttempts).toHaveBeenCalled();
   });
 
   test('should process digest scans with configured concurrency', async () => {

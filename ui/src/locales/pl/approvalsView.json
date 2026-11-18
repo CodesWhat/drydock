@@ -32,6 +32,10 @@
       "prerelease": "Wersja wstępna",
       "unknown": "Nieznana"
     },
+    "securityFastLane": {
+      "badge": "Poprawka bezpieczeństwa",
+      "tooltip": "Naprawia krytyczne lub wysokie podatności w działającym obrazie. Nadal wymaga zatwierdzenia."
+    },
     "actions": {
       "notesAriaLabel": "Pokaż informacje o wydaniu i powody wstrzymania",
       "approve": "Zatwierdź",

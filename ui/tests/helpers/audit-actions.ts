@@ -50,6 +50,7 @@ const backendAuditActions = {
   'config-reloaded': true,
   'config-written': true,
   'auto-update-blocked': true,
+  'security-fast-lane': true,
   'update-policy-override-set': true,
   'update-policy-override-cleared': true,
   'group-policy-set': true,

@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Podgląd aktualizacji (dry run)",
       "update-failed": "Aktualizacja nie powiodła się",
       "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
+      "security-fast-lane": "Szybka ścieżka bezpieczeństwa",
       "update-policy-override-set": "Ustawiono nadpisanie polityki aktualizacji",
       "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
       "group-policy-set": "Ustawiono politykę grupy",

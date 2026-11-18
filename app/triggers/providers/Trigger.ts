@@ -407,12 +407,14 @@ const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
   'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
+const SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION =
+  'container.securityFastLane ? " (security fast lane: fixes " + container.securityFastLane.fixedCount + " critical or high vulnerabilities)" : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
   `isDigestUpdate ? ${DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION}`,
 );
 const DEFAULT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression(
   `isDigestUpdate ? ${DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION}`,
-)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
+)}${buildLiteralTemplateExpression(SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
 
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
@@ -435,7 +437,7 @@ const CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpress
 const CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is in a restart loop`;
 const CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} crashed ${buildLiteralTemplateExpression('event.restartCount')} times in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds${buildLiteralTemplateExpression('event.exitCode ? " (last exit code " + event.exitCode + ")" : ""')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
-const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}`;
+const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}${buildLiteralTemplateExpression(SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION)}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update awaiting approval for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} has an update awaiting approval${buildLiteralTemplateExpression('event.fromRef && event.toRef ? ": " + event.fromRef + " to " + event.toRef : ""')}${buildLiteralTemplateExpression('event.approvalUrl ? "\\n" + event.approvalUrl : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
@@ -4147,6 +4149,9 @@ class Trigger<
    * and is never touched from here.
    */
   private deferAutoUpdateForMaintenanceWindow(container: Container): boolean {
+    // The security fast lane lifts the window for a candidate that fixes critical/high
+    // findings; the audit entry is written at admission.
+    if (container.securityFastLane) return false;
     const watcher = getContainerMaintenanceWindowWatcher(container, registry.getState().watcher);
     if (!watcher || typeof watcher.isMaintenanceWindowOpen !== 'function') return false;
     if (watcher.isMaintenanceWindowOpen()) return false;

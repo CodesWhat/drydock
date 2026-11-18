@@ -481,6 +481,7 @@
       "maturityClockPublished": "Kandydat opublikowany {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat opublikowany {date} — jeszcze {count} dni do minimum {minDays} dni",
       "maturityClockDetected": "Kandydat wykryty {date} — jeszcze {count} dzień do minimum {minDays} dni | Kandydat wykryty {date} — jeszcze {count} dni do minimum {minDays} dni",
       "groupManualOnly": "Zasady grupy '{group}' dopuszczają tylko ręczne aktualizacje. Drydock nie zastosuje tej automatycznie.",
+      "securityFastLane": "Naprawia {count} krytycznych lub wysokich podatności w działającym obrazie ({ids}). Wstrzymanie, dojrzewanie i okno serwisowe nie obowiązują.",
       "updateAvailableRuleDisabled": "Reguła powiadomień Update Available jest wyłączona i steruje też aktualizacjami automatycznymi. Włącz ją w Settings > Notifications > Update Available, aby Drydock sam zastosował tę aktualizację.",
       "updateButton": "Aktualizuj teraz",
       "blockedButton": "Aktualizacja zablokowana",
@@ -527,6 +528,7 @@
         "update-available-rule-disabled": "Reguła Update Available jest wyłączona",
         "group-notify-only": "Grupa zezwala tylko na powiadomienia",
         "group-manual-only": "Grupa wymaga ręcznych aktualizacji",
+        "security-fast-lane": "Szybka ścieżka bezpieczeństwa",
         "dry-run-trigger": "Konfiguracja wyzwalacza w trybie dry-run",
         "maturity-releases-not-reached": "Polityka dojrzałości oczekuje"
       },

@@ -5,7 +5,9 @@ import {
   type Container,
   type ContainerSecurityState,
   hasCandidateIdentityChanged,
+  hasRawUpdate,
 } from '../../model/container.js';
+import { isSecurityFastLaneEnabled } from '../../security/fast-lane.js';
 import {
   getTrivyDatabaseStatus as getTrivyDatabaseStatusDefault,
   type TrivyDatabaseStatus,
@@ -366,7 +368,11 @@ async function scanUpdateImage(options: {
 }): Promise<void> {
   const { context, container, securityConfiguration, auth, securityPatch } = options;
 
-  if (container.updateAvailable && container.result?.tag) {
+  // A held update (snoozed, maturity) has no public updateAvailable, but a container on the
+  // security fast lane still needs its candidate scanned to find out whether it qualifies.
+  const candidateWorthScanning =
+    container.updateAvailable || (isSecurityFastLaneEnabled(container) && hasRawUpdate(container));
+  if (candidateWorthScanning && container.result?.tag) {
     try {
       const updateImage = context.getContainerImageFullName(container, container.result.tag);
       context.log.info(`Running on-demand security scan for update image ${updateImage}`);
@@ -374,7 +380,10 @@ async function scanUpdateImage(options: {
         image: updateImage,
         auth,
       });
-      securityPatch.updateScan = updateScanResult;
+      // Stamp the candidate digest so the scan is recognisable as that candidate's.
+      securityPatch.updateScan = container.result.digest
+        ? { ...updateScanResult, imageDigest: container.result.digest }
+        : updateScanResult;
 
       if (securityConfiguration.signature.verify) {
         const updateSignatureResult = await context.verifyImageSignature({

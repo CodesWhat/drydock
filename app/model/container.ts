@@ -1,6 +1,7 @@
 import { snakeCase } from 'change-case';
 import { flatten as flat } from 'flat';
 import joi from 'joi';
+import { evaluateSecurityFastLane, type SecurityFastLane } from '../security/fast-lane.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -272,6 +273,12 @@ export interface Container {
   /** Spec 7.5: the declared layer and effective sources behind the label-owned fields. */
   labelOwned?: LabelOwnedState;
   security?: ContainerSecurityState;
+  /**
+   * Derived on every validate(): set only when the container opted in to the security fast
+   * lane and its pending candidate fixes critical/high findings of the running image. While
+   * set, snooze and maturity no longer suppress `updateAvailable`.
+   */
+  securityFastLane?: SecurityFastLane;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
   result?: ContainerResult;
@@ -443,6 +450,12 @@ const schema = joi.object({
   dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
+  securityFastLane: joi.object({
+    fixedIds: joi.array().items(joi.string()).required(),
+    fixedCount: joi.number().integer().min(1).required(),
+    fixedCritical: joi.number().integer().min(0).required(),
+    fixedHigh: joi.number().integer().min(0).required(),
+  }),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -779,15 +792,18 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     return false;
   }
 
-  if (updatePolicy.snoozeUntil) {
-    const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
-    if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+  // The security fast lane lifts exactly these two holds; skip lists below still apply.
+  if (container.securityFastLane === undefined) {
+    if (updatePolicy.snoozeUntil) {
+      const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
+      if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+        return true;
+      }
+    }
+
+    if (isMaturityGatePending(container)) {
       return true;
     }
-  }
-
-  if (isMaturityGatePending(container)) {
-    return true;
   }
 
   if (
@@ -896,6 +912,19 @@ function getLink(container: Container, originalTagValue: string) {
   return container.linkTemplate.replaceAll(/\$\{(\w+)\}/g, (_, key) =>
     key in vars ? vars[key] : '',
   );
+}
+
+function addSecurityFastLaneProperty(container: Container) {
+  // Recomputed from the scans on every validate(), so a stale value that rode in on a clone
+  // never outlives the scan or policy it was derived from.
+  delete container.securityFastLane;
+  if (!hasRawUpdate(container)) {
+    return;
+  }
+  const securityFastLane = evaluateSecurityFastLane(container);
+  if (securityFastLane) {
+    container.securityFastLane = securityFastLane;
+  }
 }
 
 function addTagPinnedProperty(container: Container) {
@@ -1144,6 +1173,7 @@ export function validate(container: unknown): Container {
   // entries round-trip cleanly, but the derived value wins.
   containerValidated.identityKey = deriveContainerIdentityKey(containerValidated);
   addTagPinnedProperty(containerValidated);
+  addSecurityFastLaneProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
   addUpdateAgeProperty(containerValidated);
