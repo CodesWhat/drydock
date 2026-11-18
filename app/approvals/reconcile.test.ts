@@ -876,6 +876,78 @@ describe('operation outcomes', () => {
   });
 });
 
+describe('an approved candidate whose update failed', () => {
+  let notified: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    notified = vi.fn();
+    events.registerApprovalPendingNotification(notified);
+  });
+
+  async function approveAndFail(): Promise<string> {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    const [row] = allRows();
+    approvalStore.updateApproval(row.id, {
+      decision: 'approved',
+      decidedAt: '2026-01-01T00:00:00.000Z',
+      decidedBy: 'scott',
+      operationId: 'op-1',
+    });
+    await emitContainerUpdateFailed({ containerName: 'nginx', operationId: 'op-1' } as never);
+    expect(allRows()[0]).toMatchObject({ decision: 'approved', outcome: 'failed' });
+    notified.mockClear();
+    return row.id;
+  }
+
+  test('returns to Pending on the next unchanged report, once', async () => {
+    const id = await approveAndFail();
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()).toHaveLength(1);
+    expect(allRows()[0]).toMatchObject({ id, decision: 'pending' });
+    expect(allRows()[0].outcome).toBeUndefined();
+    expect(approvalStore.countApprovals().pending).toBe(1);
+    expect(notified).toHaveBeenCalledTimes(1);
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()).toHaveLength(1);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  test('stays decided while a hard blocker holds the candidate, and returns when it lifts', async () => {
+    const id = await approveAndFail();
+    getStateMock.mockReturnValue({ trigger: createTrigger('onauto') });
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ id, decision: 'approved', outcome: 'failed' });
+    expect(notified).not.toHaveBeenCalled();
+
+    getStateMock.mockReturnValue({ trigger: createTrigger('none') });
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ id, decision: 'pending' });
+  });
+
+  test('a rolled-back approval stays decided', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    const [row] = allRows();
+    approvalStore.updateApproval(row.id, { decision: 'approved', operationId: 'op-2' });
+    await emitContainerUpdateFailed({
+      containerName: 'nginx',
+      operationId: 'op-2',
+      rollbackReason: 'health',
+    } as never);
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ decision: 'approved', outcome: 'rolled-back' });
+    expect(approvalStore.countApprovals().pending).toBe(0);
+  });
+});
+
 describe('failure isolation', () => {
   test('a store failure never breaks the watch cycle', async () => {
     const insertSpy = vi.spyOn(approvalStore, 'insertApproval').mockImplementation(() => {

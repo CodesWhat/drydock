@@ -160,12 +160,16 @@ function reconcileContainer(reported: Container | undefined): void {
   // under: a digest-backed row and the same tag reported without its digest are one
   // candidate. A compatible approved or rejected row therefore keeps the candidate out of
   // the queue, and a pending duplicate of it (minted under the other spelling) is stale.
-  const decided = rows.some(
+  // The exception is an approval whose update failed: the candidate is still on offer and
+  // would otherwise never be asked about again, so that row returns to the queue below.
+  const decidedRow = rows.find(
     (row) =>
       (row.decision === 'approved' || row.decision === 'rejected') &&
       isSameApprovalCandidate(row, input),
   );
-  if (decided) {
+  const failedApproval =
+    decidedRow?.decision === 'approved' && decidedRow.outcome === 'failed' ? decidedRow : undefined;
+  if (decidedRow !== undefined && failedApproval === undefined) {
     resolveRows(currentRows, 'superseded');
     return;
   }
@@ -176,11 +180,13 @@ function reconcileContainer(reported: Container | undefined): void {
     return;
   }
 
-  // Only an operator's answer (approved or rejected) keeps a candidate out of the queue. A
-  // row the system resolved (superseded, withdrawn, auto-applied, container removed) must
-  // not: the store allows one row per container and ref, so such a candidate returns by
-  // reopening its row instead of being refused for good (#1500).
-  const existing = findApprovalByContainerAndCandidate(input.containerId, input.candidateRef);
+  // Only an operator's answer (approved or rejected) keeps a candidate out of the queue, and
+  // an approval whose update failed is not final. A row the system resolved (superseded,
+  // withdrawn, auto-applied, container removed) must not keep it out either: the store allows
+  // one row per container and ref, so such a candidate returns by reopening its row instead of
+  // being refused for good (#1500).
+  const existing =
+    failedApproval ?? findApprovalByContainerAndCandidate(input.containerId, input.candidateRef);
   const queued = existing === undefined ? insertApproval(input) : reopenApproval(existing.id);
   if (queued !== undefined) {
     announceApprovalEvent('created', queued);
