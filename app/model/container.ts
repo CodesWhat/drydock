@@ -337,6 +337,7 @@ const containerSecurityScanSchema = joi.object({
   scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
   imageDigest: joi.string(),
+  scannedRef: joi.string(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
   blockSeverities: joi

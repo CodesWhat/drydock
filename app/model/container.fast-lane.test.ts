@@ -11,6 +11,7 @@ function scan(ids: Array<[string, string]>, extra: Record<string, unknown> = {})
   return {
     scanner: 'trivy',
     image: `organization/image@${RUN}`,
+    scannedRef: `organization/image@${RUN}`,
     imageDigest: RUN,
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: 'blocked',
@@ -49,6 +50,7 @@ function build(overrides: Record<string, unknown> = {}) {
       ]),
       updateScan: scan([['CVE-2', 'MEDIUM']], {
         image: `organization/image@${NEW}`,
+        scannedRef: `organization/image@${NEW}`,
         imageDigest: NEW,
         scannedAt: '2026-01-02T00:00:00.000Z',
         status: 'passed',
@@ -101,6 +103,7 @@ describe('validate: security fast lane', () => {
           scan: scan([['CVE-2', 'MEDIUM']]),
           updateScan: scan([], {
             image: `organization/image@${NEW}`,
+            scannedRef: `organization/image@${NEW}`,
             imageDigest: NEW,
             scannedAt: '2026-01-02T00:00:00.000Z',
             status: 'passed',

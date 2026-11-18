@@ -1,5 +1,5 @@
 import type { Container } from '../model/container.js';
-import { isImmutableDigest } from './digest.js';
+import { isImmutableDigest, isScannedRefPinnedTo } from './digest.js';
 
 /** Per-container opt-in (or opt-out of the global default). */
 export const SECURITY_FAST_LANE_LABEL = 'dd.security.fastlane';
@@ -80,6 +80,7 @@ function getRunningEvidence(container: Container): ContainerScan | undefined {
     !scan ||
     !isImmutableDigest(runningDigest) ||
     scan.imageDigest !== runningDigest ||
+    !isScannedRefPinnedTo(scan.scannedRef, runningDigest) ||
     !isCompleteScan(scan)
   ) {
     return undefined;
@@ -100,6 +101,7 @@ export function isComparableCandidateScan(
   return (
     isImmutableDigest(candidateDigest) &&
     candidate.imageDigest === candidateDigest &&
+    isScannedRefPinnedTo(candidate.scannedRef, candidateDigest) &&
     isCompleteScan(candidate) &&
     candidate.scanner === running.scanner &&
     Date.parse(candidate.scannedAt) >= Date.parse(running.scannedAt)

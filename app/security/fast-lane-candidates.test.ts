@@ -4,7 +4,9 @@ const mocks = vi.hoisted(() => ({
   updateContainer: vi.fn(),
   cloneContainer: vi.fn((c: unknown) => c),
   scanImageForVulnerabilities: vi.fn(),
-  resolveImage: vi.fn(() => 'repo/app:2.0.0'),
+  resolveImage: vi.fn(
+    (_container: unknown, _registries: unknown, ref: string) => `repo/app@${ref}`,
+  ),
   resolveAuth: vi.fn(async () => ({ auth: true })),
   getState: vi.fn(() => ({ registry: {} })),
   warn: vi.fn(),
@@ -43,6 +45,7 @@ const passedScan = {
   scanner: 'trivy',
   status: 'passed',
   image: `repo/app@${NEW}`,
+  scannedRef: `repo/app@${NEW}`,
   scannedAt: '2026-01-02T00:00:00.000Z',
   vulnerabilities: [],
   severityIds: { critical: [], high: [] },
@@ -52,6 +55,7 @@ const runningScan = {
   scanner: 'trivy',
   status: 'blocked',
   image: `repo/app@${RUN}`,
+  scannedRef: `repo/app@${RUN}`,
   imageDigest: RUN,
   scannedAt: '2026-01-01T00:00:00.000Z',
   vulnerabilities: [],
@@ -75,7 +79,10 @@ describe('fast lane candidate scanning', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetFastLaneCandidateAttempts();
-    mocks.scanImageForVulnerabilities.mockResolvedValue(passedScan);
+    mocks.scanImageForVulnerabilities.mockImplementation(async ({ image }: { image: string }) => ({
+      ...passedScan,
+      scannedRef: image,
+    }));
     mocks.getContainerRaw.mockImplementation(() => candidate());
   });
 
@@ -140,7 +147,7 @@ describe('fast lane candidate scanning', () => {
       expect(await scanFastLaneCandidates(options())).toBe(1);
       expect(mocks.resolveImage).toHaveBeenCalledWith(expect.anything(), {}, NEW);
       expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledWith(
-        expect.objectContaining({ image: 'repo/app:2.0.0' }),
+        expect.objectContaining({ image: `repo/app@${NEW}` }),
       );
       expect(mocks.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({

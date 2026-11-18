@@ -25,6 +25,7 @@ function scan(vulns: Array<[string, Severity]>, overrides: Record<string, unknow
   return {
     scanner: 'trivy',
     image: `repo/app@${RUN}`,
+    scannedRef: `repo/app@${RUN}`,
     imageDigest: RUN,
     scannedAt: '2026-01-01T00:00:00.000Z',
     status: vulns.some(([, s]) => s === 'CRITICAL' || s === 'HIGH') ? 'blocked' : 'passed',
@@ -40,6 +41,7 @@ function scan(vulns: Array<[string, Severity]>, overrides: Record<string, unknow
 const candidateScan = (vulns: Array<[string, Severity]>, overrides = {}) =>
   scan(vulns, {
     image: `repo/app@${NEW}`,
+    scannedRef: `repo/app@${NEW}`,
     imageDigest: NEW,
     scannedAt: '2026-01-02T00:00:00.000Z',
     ...overrides,
@@ -250,6 +252,37 @@ describe('security fast lane evaluation', () => {
         image: { digest: {} } as never,
       });
       expect(evaluateSecurityFastLane(noRunningDigest)).toBeUndefined();
+    });
+  });
+
+  describe('scanned reference', () => {
+    const running = () => scan([['CVE-1', 'CRITICAL']]);
+
+    test.each([
+      ['a tag scan stamped with the digest', 'repo/app:1.0.0'],
+      ['no recorded reference', undefined],
+      ['a reference pinned to another digest', `repo/app@${OTHER}`],
+    ])('a running scan with %s is not evidence', (_label, scannedRef) => {
+      const stamped = scan([['CVE-1', 'CRITICAL']], { scannedRef });
+      expect(evaluateSecurityFastLane(makeContainer(stamped, candidateScan([])))).toBeUndefined();
+    });
+
+    test.each([
+      ['a tag scan stamped with the digest', 'repo/app:2.0.0'],
+      ['no recorded reference', undefined],
+      ['a reference pinned to another digest', `repo/app@${OTHER}`],
+    ])('a candidate scan with %s is not evidence', (_label, scannedRef) => {
+      expect(
+        evaluateSecurityFastLane(makeContainer(running(), candidateScan([], { scannedRef }))),
+      ).toBeUndefined();
+      expect(
+        needsFastLaneCandidateScan(makeContainer(running(), candidateScan([], { scannedRef }))),
+      ).toBe(true);
+    });
+
+    test('a tag-and-digest reference is accepted', () => {
+      const both = candidateScan([], { scannedRef: `repo/app:2.0.0@${NEW}` });
+      expect(evaluateSecurityFastLane(makeContainer(running(), both))).toBeDefined();
     });
   });
 

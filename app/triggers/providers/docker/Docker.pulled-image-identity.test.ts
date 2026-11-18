@@ -76,6 +76,62 @@ test('binds a private-registry pull to the digest published under that exact rep
   );
 });
 
+describe('security fast lane digest guard', () => {
+  const fastLane = { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 };
+  const fastLaned = () =>
+    createTriggerContainer({
+      securityFastLane: fastLane,
+      result: { tag: '4.5.6', digest: PULLED_DIGEST },
+    });
+
+  test('binds normally when the pulled digest is the qualifying candidate', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${PULLED_DIGEST}`],
+    });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:4.5.6', fastLaned(), createLogContainer()),
+    ).resolves.toEqual({ imageIdentity: `nginx:4.5.6@${PULLED_DIGEST}` });
+  });
+
+  test('aborts the install when the tag was retagged after the candidate qualified', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`],
+    });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:4.5.6', fastLaned(), createLogContainer()),
+    ).rejects.toThrow(/Security fast lane/);
+  });
+
+  test('does not apply to a container that is not on the fast lane', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`],
+    });
+
+    await expect(
+      docker.bindPulledImageIdentity(
+        dockerApi,
+        'nginx:4.5.6',
+        createTriggerContainer({ result: { tag: '4.5.6', digest: PULLED_DIGEST } }),
+        createLogContainer(),
+      ),
+    ).resolves.toEqual({ imageIdentity: `nginx:4.5.6@${RETAGGED_DIGEST}` });
+  });
+
+  test('docker compose goes through the same guarded method', async () => {
+    const { default: Dockercompose } = await import('../dockercompose/Dockercompose.js');
+    expect(Object.hasOwn(Dockercompose.prototype, 'capturePulledImageIdentity')).toBe(false);
+    expect(Object.hasOwn(Dockercompose.prototype, 'bindPulledImageIdentity')).toBe(false);
+  });
+});
+
 test('keeps the operator tag when rebinding a Docker Hub short reference', async () => {
   mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
   const dockerApi = createImageApi({

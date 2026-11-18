@@ -7,3 +7,13 @@ const IMMUTABLE_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
 export function isImmutableDigest(value: unknown): value is string {
   return typeof value === 'string' && IMMUTABLE_DIGEST_PATTERN.test(value);
 }
+
+/**
+ * Whether a scanned reference is pinned to exactly this digest (`repo@sha256:...`, or
+ * `repo:tag@sha256:...`). A tag reference, or a missing one, is not.
+ */
+export function isScannedRefPinnedTo(scannedRef: unknown, digest: unknown): boolean {
+  return (
+    isImmutableDigest(digest) && typeof scannedRef === 'string' && scannedRef.endsWith(`@${digest}`)
+  );
+}

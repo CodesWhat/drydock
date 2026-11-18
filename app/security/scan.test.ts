@@ -2739,6 +2739,60 @@ describe('scanImageWithDedup', () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
+  describe('with an immutable digest', () => {
+    const digest = `sha256:${'a'.repeat(64)}`;
+    const options = {
+      image: `registry.example.com/app@${digest}`,
+      digest,
+      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    test('does not serve a cached scan of the mutable tag, stamped or not', async () => {
+      updateDigestScanCache(
+        digest,
+        { ...createMockScanResult(), scannedRef: 'registry.example.com/app:1.2.3' },
+        '2025-01-01T00:00:00Z',
+      );
+      const execFileMock = vi.fn((_command, _args, _options, callback) => {
+        callback(null, JSON.stringify({ Results: [] }), '');
+        return { exitCode: 0 };
+      });
+      childProcessControl.execFileImpl = execFileMock;
+
+      const { scanResult, fromCache } = await scanImageWithDedup(options, 3_600_000);
+
+      expect(fromCache).toBe(false);
+      expect(execFileMock).toHaveBeenCalled();
+      expect(scanResult.scannedRef).toBe(options.image);
+      expect(scanResult.imageDigest).toBe(digest);
+    });
+
+    test('does not serve a cached scan that recorded no reference at all', async () => {
+      updateDigestScanCache(digest, createMockScanResult(), '2025-01-01T00:00:00Z');
+      childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+        callback(null, JSON.stringify({ Results: [] }), '');
+        return { exitCode: 0 };
+      };
+
+      expect((await scanImageWithDedup(options, 3_600_000)).fromCache).toBe(false);
+    });
+
+    test('still serves a cached scan that was taken by that digest', async () => {
+      updateDigestScanCache(
+        digest,
+        { ...createMockScanResult(options.image), scannedRef: options.image },
+        '2025-01-01T00:00:00Z',
+      );
+      const execFileMock = vi.fn();
+      childProcessControl.execFileImpl = execFileMock;
+
+      const { fromCache } = await scanImageWithDedup(options, 3_600_000);
+
+      expect(fromCache).toBe(true);
+      expect(execFileMock).not.toHaveBeenCalled();
+    });
+  });
+
   test('should run fresh scan when DB has been updated since cache', async () => {
     const cachedResult = createMockScanResult();
     updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');

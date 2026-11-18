@@ -31,7 +31,7 @@ The fast lane needs [Update Bouncer](/docs/configuration/security) scanning to b
 Drydock compares two scans that already exist: the latest scan of the running image, and the scan of the pending candidate. The update is on the fast lane when all of these hold:
 
 - the candidate has been scanned by digest (`repo@sha256:...`, never by tag, so the result describes exactly that image), and that scan is for the digest that's pending now;
-- the running image's scan is for the digest that's running, and was taken by digest as well. Both digests have to be real `sha256:` content digests. If a registry doesn't return one and Drydock falls back to the tag, there's no fast lane for it;
+- the running image's scan is for the digest that's running, and was taken by digest as well. Each scan records the reference it actually scanned, and it has to be a digest reference for the digest being claimed, so a scan of a tag, a copy of one, or an older record with no reference never counts. Both digests have to be real `sha256:` content digests. If a registry doesn't return one and Drydock falls back to the tag, there's no fast lane for it;
 - both scans are complete: neither carries an error, even a partial one from one of two scanners, and both recorded their full critical and high ID lists before the stored list was cut off;
 - the candidate scan is by the same scanner and is not older than the running scan, so a stale candidate scan can't be credited against a fresh running scan;
 - at least one critical or high vulnerability ID (a CVE or GHSA) in the running image's scan is missing from the candidate's critical and high IDs;
@@ -61,6 +61,10 @@ The maintenance window is only lifted for the automatic install. Under `scope=sc
 - Approval. In `manual` mode, or under any group or trigger rule that needs approval, a fast-laned update still waits in the [approval queue](/docs/configuration/actions/approvals). The row is marked **Security fix** so it's easy to spot, and it carries the same hold reasons as before.
 
 The scan gate is not lifted either. A candidate is scanned before the pull and the image that's deployed is only known after it, so the install still runs its own scan of the exact pulled digest, and a blocked running image keeps `security-scan-blocked` unless the [no-worse-than-current gate](/docs/configuration/security#no-worse-than-current-gate) passes.
+
+## The install checks the digest
+
+The update pulls by tag, so after the pull Drydock compares the digest that arrived with the candidate digest that qualified. If the tag was moved in between, or the pulled digest can't be determined, that install is aborted before anything is recreated, a `security-fast-lane` audit entry records the digest mismatch, and the next scan re-evaluates the new candidate under the normal holds. This applies to Docker and Docker Compose actions alike. On multi-arch images the digest of the pulled platform image can differ from the one that was scanned, in which case that install is aborted as well and the update goes through the usual holds.
 
 ## What gets recorded
 

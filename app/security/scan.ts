@@ -19,6 +19,7 @@ import {
   noteBundledTrivyRemoval,
   resolveProviderExecution,
 } from './backend-resolution.js';
+import { isImmutableDigest, isScannedRefPinnedTo } from './digest.js';
 import {
   buildGrypeInvocation,
   buildGrypeOutputLimitMessage,
@@ -59,6 +60,12 @@ export interface ContainerSecurityScan {
   scanner: SecurityScanner;
   image: string;
   imageDigest?: string;
+  /**
+   * The reference that was actually handed to the scanner. Fast lane evidence requires it to be
+   * a digest reference (`@sha256:...`), so a scan of a mutable tag, or a copy of one that the
+   * digest cache stamped with a digest, never counts.
+   */
+  scannedRef?: string;
   scannedAt: string;
   status: SecurityScanStatus;
   blockSeverities: SecuritySeverity[];
@@ -1161,6 +1168,7 @@ export async function scanImageForVulnerabilities(
   return {
     scanner,
     image: options.image,
+    scannedRef: options.image,
     scannedAt: new Date().toISOString(),
     status,
     blockSeverities,
@@ -1414,8 +1422,15 @@ export async function scanImageWithDedup(
   const dbUpdatedAt = options.trivyDbUpdatedAt;
   const scannerFingerprint = getScannerFingerprint(dbUpdatedAt || '');
 
+  // A real digest only serves a scan that was taken by that digest. A tag scan cached under
+  // it (a bulk or on-demand scan of the mutable tag) would otherwise come back stamped as the
+  // digest's scan, so it is skipped and the digest is scanned properly instead.
+  const cacheEntryDescribesDigest =
+    !isImmutableDigest(options.digest) ||
+    isScannedRefPinnedTo(cached?.scanResult.scannedRef, options.digest);
   if (
     cached &&
+    cacheEntryDescribesDigest &&
     cached.scannerFingerprint === scannerFingerprint &&
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {
