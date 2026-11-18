@@ -44,6 +44,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - The webhook credential check now treats `/UPDATE/x` and `/Watch` the same as the lowercase paths. Before, with per-endpoint webhook credentials set, the shared webhook credential still worked on a differently cased path because Express routes case-insensitively and the credential selection did not.
 - Running an action trigger through `POST /api/v1/containers/:id/triggers/:type/:name` or the trigger routes now returns 403 when `DD_SERVER_FEATURE_CONTAINERACTIONS` is `false`, like the other update paths. Notification triggers can still be test-fired.
 - The MQTT trigger now closes its connection to the previous broker when it re-initializes (for example after the broker URL changes or the broker is replaced) and when it is deregistered. Before, the old client kept reconnecting in the background next to the new one.
+- The container detail security tab no longer shows a previously selected container's vulnerabilities or SBOM when responses arrive out of order. Switching containers, clearing the selection or changing the SBOM format now discards stale responses, and only the latest request updates results, errors and loading state.
 
 ### Security
 
