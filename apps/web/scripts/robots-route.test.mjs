@@ -26,3 +26,11 @@ test("robots does not block any training crawler or the whole site", () => {
 test("robots still advertises the sitemap", () => {
   assert.match(source, /sitemap: `\$\{BASE_URL\}\/sitemap\.xml`/);
 });
+
+test("robots disallows every superseded docs version but never the current one", async () => {
+  const { versions } = await import("./docs-versions.mjs");
+  assert.match(source, /versions\.slice\(1\)/);
+  assert.match(source, /\/docs\/\$\{v\.slug\}\//);
+  assert.doesNotMatch(source, /versions\[0\]/);
+  assert.ok(versions.length > 1);
+});

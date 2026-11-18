@@ -82,10 +82,10 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   const isArchived =
     versionSlug !== versions[0].slug && versions.some((v) => v.slug === versionSlug);
   // An archived page canonicalises to the same page in the current docs when one
-  // exists. With no current counterpart it stays self-canonical and is kept out
-  // of the index, so old versions don't outrank the current docs.
+  // exists, and to the current docs root when it doesn't, so old versions never
+  // compete with the current docs. robots.txt also disallows archived versions.
   const currentCounterpart = isArchived ? getDocsPage([versions[0].slug, ...rest]) : undefined;
-  const canonical = currentCounterpart ? `${BASE_URL}${currentCounterpart.url}` : url;
+  const canonical = isArchived ? `${BASE_URL}${currentCounterpart?.url ?? DOCS_ROOT}` : url;
   const isCurrentIndex = page.url === DOCS_ROOT;
   const title = isCurrentIndex ? DOCS_INDEX_TITLE : page.data.title;
   const socialTitle = isCurrentIndex
@@ -98,7 +98,6 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
     alternates: {
       canonical,
     },
-    ...(isArchived && !currentCounterpart ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title: socialTitle,
       description: page.data.description,
