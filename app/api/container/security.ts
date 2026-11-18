@@ -20,6 +20,7 @@ import type {
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
+import { resolveCurrentImageScanTarget } from './shared.js';
 
 interface SecurityStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
@@ -212,13 +213,17 @@ async function handleGetContainerSbom(
   }
 
   try {
-    const image = context.getContainerImageFullName(container);
+    const { displayImage: image, scanImage } = resolveCurrentImageScanTarget(
+      container,
+      context.getContainerImageFullName,
+    );
     const auth = await context.getContainerRegistryAuth(container);
-    const generatedSbom = await context.generateImageSbom({
-      image,
+    const rawSbom = await context.generateImageSbom({
+      image: scanImage,
       auth,
       formats: [sbomFormat],
     });
+    const generatedSbom = { ...rawSbom, image };
     const generatedDocument = generatedSbom.documents?.[sbomFormat];
     const existingSbomState = container.security?.sbom;
     const combinedSbom: ContainerSecuritySbom = {
@@ -238,19 +243,27 @@ async function handleGetContainerSbom(
       storage: context.sbomStorage,
       subjectDigest: container.image?.digest?.value,
     });
-    const containerToStore = {
-      ...container,
-      security: {
-        ...(container.security || {}),
-        sbom: {
-          ...existingSbomState,
-          ...sbomResult,
-          documentRefs: sbomResult.documentRefs,
-          documents: undefined,
+    // Re-read the live record after the awaits above and merge only
+    // security.sbom onto it, so a watcher poll or update that landed during
+    // generation is not reverted. If the row is gone, skip the write rather
+    // than resurrecting a removed container.
+    const current = context.storeContainer.getContainerRaw(id);
+    if (current) {
+      context.storeContainer.updateContainer({
+        ...current,
+        security: {
+          ...(current.security || {}),
+          sbom: {
+            ...current.security?.sbom,
+            ...sbomResult,
+            documentRefs: sbomResult.documentRefs,
+            documents: undefined,
+          },
         },
-      },
-    };
-    context.storeContainer.updateContainer(containerToStore);
+      });
+    } else {
+      context.log.info(`Skipping SBOM persistence for removed container ${id}`);
+    }
 
     if (sbomResult.status !== 'generated' || !generatedDocument) {
       context.log.info(
@@ -286,14 +299,17 @@ async function scanCurrentImage(options: {
   alertCount: number;
 }> {
   const { context, container, securityConfiguration, cycleId } = options;
-  const image = context.getContainerImageFullName(container);
+  const { displayImage: image, scanImage } = resolveCurrentImageScanTarget(
+    container,
+    context.getContainerImageFullName,
+  );
   context.log.info(`Running on-demand security scan for ${image}`);
   const auth = await context.getContainerRegistryAuth(container);
-  const rawScanResult = await context.scanImageForVulnerabilities({ image, auth });
+  const rawScanResult = await context.scanImageForVulnerabilities({ image: scanImage, auth });
   const containerDigest = container.image?.digest?.value;
   const scanResult = containerDigest
-    ? { ...rawScanResult, imageDigest: containerDigest }
-    : rawScanResult;
+    ? { ...rawScanResult, image, imageDigest: containerDigest }
+    : { ...rawScanResult, image };
   const securityPatch: Partial<ContainerSecurityState> = { scan: scanResult };
 
   // Populate the digest scan cache so scheduled scans can benefit
@@ -321,18 +337,18 @@ async function scanCurrentImage(options: {
   }
 
   if (securityConfiguration.signature.verify) {
-    const signatureResult = await context.verifyImageSignature({ image, auth });
+    const signatureResult = await context.verifyImageSignature({ image: scanImage, auth });
     securityPatch.signature = signatureResult;
   }
 
   if (securityConfiguration.sbom.enabled) {
     const generatedSbom = await context.generateImageSbom({
-      image,
+      image: scanImage,
       auth,
       formats: securityConfiguration.sbom.formats,
     });
     securityPatch.sbom = await offloadSbomDocuments({
-      sbom: generatedSbom,
+      sbom: { ...generatedSbom, image },
       storage: context.sbomStorage,
       subjectDigest: container.image?.digest?.value,
     });

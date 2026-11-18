@@ -2,6 +2,7 @@ import { CronExpressionParser } from 'cron-parser';
 import cron from 'node-cron';
 import {
   resolveContainerImageFullName,
+  resolveCurrentImageScanTarget,
   resolveContainerRegistryAuth,
 } from '../api/container/shared.js';
 import { broadcastScanCompleted, broadcastScanStarted } from '../api/sse.js';
@@ -187,7 +188,10 @@ async function scanDigestGroup(options: {
 
   try {
     const representative = group[0];
-    const image = getContainerImageFullName(representative);
+    const { scanImage: image } = resolveCurrentImageScanTarget(
+      representative,
+      getContainerImageFullName,
+    );
     const auth = await withAbortSignal(getContainerRegistryAuth(representative), signal);
 
     // Broadcast scan-started for all containers with this digest
@@ -241,7 +245,13 @@ async function scanDigestGroup(options: {
       const previousScan = current.security?.scan;
       const keepPrevious =
         scanResult.status === 'error' && previousScan && isWithinPreservationWindow(previousScan);
-      const scan = keepPrevious ? previousScan : scanResult;
+      // Stored scans keep the tag-form image the security gate compares against.
+      const scan = keepPrevious
+        ? previousScan
+        : {
+            ...scanResult,
+            image: resolveCurrentImageScanTarget(current, getContainerImageFullName).displayImage,
+          };
       const containerToStore = {
         ...current,
         security: {

@@ -10,6 +10,7 @@ import {
   redactContainersRuntimeEnv,
   redactRuntimeDetailsForStorage,
   resolveContainerImageFullName,
+  resolveCurrentImageScanTarget,
   toApiContainer,
   toApiContainers,
 } from './shared.js';
@@ -573,6 +574,37 @@ describe('api/container/shared', () => {
       const container = makeContainer('myreg', 'plain-registry.io', 'library/v2/tool', '1.0');
       const result = resolveContainerImageFullName(container, {});
       expect(result).toBe('plain-registry.io/library/v2/tool:1.0');
+    });
+  });
+
+  describe('resolveCurrentImageScanTarget', () => {
+    const getName = (c: any, tagOverride?: string) => {
+      const ref = tagOverride || c.image.tag.value;
+      return `repo/app${ref.includes(':') ? '@' : ':'}${ref}`;
+    };
+    const withDigest = (value: unknown) =>
+      ({ image: { tag: { value: 'latest' }, digest: { value } } }) as never;
+
+    test('pins the running digest for scanning and keeps the tag as the display reference', () => {
+      expect(resolveCurrentImageScanTarget(withDigest('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), getName)).toEqual({
+        displayImage: 'repo/app:latest',
+        scanImage: 'repo/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      });
+    });
+
+    test.each([
+      ['absent', undefined],
+      ['malformed', 'sha256:abc123'],
+    ])('falls back to the tag reference when the digest is %s', (_label, value) => {
+      expect(resolveCurrentImageScanTarget(withDigest(value), getName)).toEqual({
+        displayImage: 'repo/app:latest',
+        scanImage: 'repo/app:latest',
+      });
+    });
+
+    test('falls back to the tag reference when the container has no digest record', () => {
+      const container = { image: { tag: { value: 'latest' } } } as never;
+      expect(resolveCurrentImageScanTarget(container, getName).scanImage).toBe('repo/app:latest');
     });
   });
 });
