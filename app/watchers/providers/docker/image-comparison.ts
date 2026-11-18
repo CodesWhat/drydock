@@ -1,4 +1,3 @@
-import { RE2JS } from 're2js';
 import log from '../../../log/index.js';
 import {
   type Container,
@@ -12,6 +11,7 @@ import type Registry from '../../../registries/Registry.js';
 import type { RegistryLookupOptions } from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
 import { isCredentialedInstance } from '../../../registry/index.js';
+import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
@@ -68,31 +68,6 @@ export interface ContainerWatchLogger {
   debug: (message: string) => void;
 }
 
-interface SafeRegex {
-  test(value: string): boolean;
-}
-
-function safeRegExp(
-  pattern: string | undefined,
-  logContainer: Pick<ContainerWatchLogger, 'warn'>,
-): SafeRegex | null {
-  if (!pattern) {
-    return null;
-  }
-
-  try {
-    const compiled = RE2JS.compile(pattern);
-    return {
-      test(value: string) {
-        return compiled.matcher(value).find();
-      },
-    };
-  } catch (error: unknown) {
-    logContainer.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(error)}`);
-    return null;
-  }
-}
-
 function filterTagsForDigestComparison(
   container: Container,
   tags: string[],
@@ -102,12 +77,16 @@ function filterTagsForDigestComparison(
     (tag) => tag !== '' && !tag.startsWith('sha') && !tag.endsWith('.sig'),
   );
 
-  const includeTagsRegex = safeRegExp(container.includeTags, logContainer);
+  const includeTagsRegex = container.includeTags
+    ? compileFilterRegex(container.includeTags, logContainer)
+    : null;
   if (includeTagsRegex) {
     filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
   }
 
-  const excludeTagsRegex = safeRegExp(container.excludeTags, logContainer);
+  const excludeTagsRegex = container.excludeTags
+    ? compileFilterRegex(container.excludeTags, logContainer)
+    : null;
   if (excludeTagsRegex) {
     filteredTags = filteredTags.filter((tag) => !excludeTagsRegex.test(tag));
   }

@@ -536,6 +536,56 @@ describe('image-comparison', () => {
     expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
   });
 
+  describe('digest filter pattern length boundary', () => {
+    async function run(filters: { includeTags?: string; excludeTags?: string }) {
+      const getImageManifestDigest = createManifestLookup();
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(['latest', 'stable']),
+            getImageManifestDigest,
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      await findNewVersion(createDigestOnlyContainer(filters) as never, log);
+      return { getImageManifestDigest, log };
+    }
+
+    test('applies a 1024-character include pattern without a warning', async () => {
+      const { getImageManifestDigest, log } = await run({ includeTags: 'a'.repeat(1024) });
+
+      expect(getImageManifestDigest).not.toHaveBeenCalled();
+      expect(log.warn).not.toHaveBeenCalled();
+    });
+
+    test('ignores a 1025-character include pattern with a warning', async () => {
+      const { getImageManifestDigest, log } = await run({ includeTags: 'a'.repeat(1025) });
+
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Regex pattern exceeds maximum length of 1024'),
+      );
+      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
+    });
+
+    test('applies a 1024-character exclude pattern without a warning', async () => {
+      const { getImageManifestDigest, log } = await run({ excludeTags: 'a'.repeat(1024) });
+
+      expect(log.warn).not.toHaveBeenCalled();
+      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
+    });
+
+    test('ignores a 1025-character exclude pattern with a warning', async () => {
+      const { getImageManifestDigest, log } = await run({ excludeTags: 'a'.repeat(1025) });
+
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Regex pattern exceeds maximum length of 1024'),
+      );
+      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
+    });
+  });
+
   test('applies digest exclude filters before choosing a comparison tag', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({
