@@ -22,6 +22,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Portainer triggers are now treated as update actions in the UI. The Notifications page no longer offers them as notification triggers (the server rejected them), and a Portainer trigger in dry-run mode now shows the preview label and badge, with its Run button disabled in notify mode like the Docker triggers.
+- The full-page container view now shows the reason when revealing a masked environment variable fails, the same as the side panel.
 - A failed Command action now reports the failure instead of resolving. Before, a command that exited non-zero or timed out was recorded as delivered, so under the default `once` setting it was never retried, and a manual run returned success. The error names the exit code or timeout and never includes the command string.
 - Registry bearer authentication requests now use the configured outbound HTTP timeout (`DD_OUTBOUND_HTTP_TIMEOUT_MS`, 30 seconds by default). Before, a registry or token realm that accepted the connection and never answered left the lookup hanging.
 - A same-tag digest rebuild no longer shows a skip-tag hold or confirmation when the tag was on the skip list. The skip-tag blocker now applies to tag updates only, matching what actually suppresses an update.
