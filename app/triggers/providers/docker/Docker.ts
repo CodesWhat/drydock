@@ -55,6 +55,15 @@ import {
 } from './created-container-candidate.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
+import {
+  acquirePullSlot,
+  DEFAULT_PULL_CONCURRENCY,
+  detectPullThrottle,
+  getPullPacingState,
+  normalizePullRegistryHost,
+  reportPullSuccess,
+  reportPullThrottle,
+} from './pull-pacing.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
@@ -107,6 +116,7 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   dryrun: boolean;
   autoremovetimeout: number;
   pulltimeout: number;
+  pullconcurrency: number;
   helpercompletiontimeout: number;
   backupcount: number;
 }
@@ -824,6 +834,7 @@ class Docker<
         .positive()
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
+      pullconcurrency: this.joi.number().integer().positive().default(DEFAULT_PULL_CONCURRENCY),
       helpercompletiontimeout: this.joi
         .number()
         .integer()
@@ -1021,6 +1032,13 @@ class Docker<
    */
 
   async pullImage(dockerApi, auth, newImage, logContainer) {
+    const registryHost = normalizePullRegistryHost(newImage);
+    const pullConcurrency = this.configuration.pullconcurrency ?? DEFAULT_PULL_CONCURRENCY;
+    const pacing = getPullPacingState(registryHost);
+    if (pacing.blockedUntil !== undefined || pacing.active >= pullConcurrency) {
+      logContainer.info(`Pull image ${newImage} is waiting for a ${registryHost} pull slot`);
+    }
+    const releasePullSlot = await acquirePullSlot(registryHost, { limit: pullConcurrency });
     logContainer.info(`Pull image ${newImage}`);
     try {
       const pullProgressLogger = this.createPullProgressLogger(logContainer, newImage);
@@ -1096,10 +1114,17 @@ class Docker<
             (error) => settle(error),
           );
       });
+      reportPullSuccess(registryHost);
       logContainer.info(`Image ${newImage} pulled with success`);
     } catch (e: unknown) {
+      const throttle = detectPullThrottle(e);
+      if (throttle) {
+        reportPullThrottle(registryHost, throttle.retryAfterMs, logContainer);
+      }
       logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);
       throw e;
+    } finally {
+      releasePullSlot();
     }
   }
 
