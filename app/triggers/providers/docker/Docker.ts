@@ -61,6 +61,10 @@ import {
 import { assertFastLaneDigest } from './fast-lane-guard.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
+import ImagePreloader, {
+  DEFAULT_PRELOAD_CONCURRENCY,
+  DEFAULT_PRELOAD_MAX_CANDIDATES,
+} from './ImagePreloader.js';
 import {
   acquirePullSlot,
   DEFAULT_PULL_CONCURRENCY,
@@ -124,6 +128,9 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   autoremovetimeout: number;
   pulltimeout: number;
   pullconcurrency: number;
+  preload: boolean | 'label';
+  preloadconcurrency: number;
+  preloadmaxcandidates: number;
   helpercompletiontimeout: number;
   backupcount: number;
 }
@@ -541,6 +548,20 @@ class Docker<
     return this.updateSemaphore;
   }
 
+  protected readonly imagePreloader: ImagePreloader = new ImagePreloader(
+    this as unknown as ConstructorParameters<typeof ImagePreloader>[0],
+  );
+
+  async init() {
+    await super.init();
+    this.imagePreloader.start();
+  }
+
+  async deregisterComponent(): Promise<void> {
+    this.imagePreloader.stop();
+    await super.deregisterComponent();
+  }
+
   constructor() {
     super();
 
@@ -858,6 +879,20 @@ class Docker<
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
       pullconcurrency: this.joi.number().integer().positive().default(DEFAULT_PULL_CONCURRENCY),
+      preload: this.joi
+        .alternatives()
+        .try(this.joi.boolean(), this.joi.string().valid('label'))
+        .default(false),
+      preloadconcurrency: this.joi
+        .number()
+        .integer()
+        .positive()
+        .default(DEFAULT_PRELOAD_CONCURRENCY),
+      preloadmaxcandidates: this.joi
+        .number()
+        .integer()
+        .positive()
+        .default(DEFAULT_PRELOAD_MAX_CANDIDATES),
       helpercompletiontimeout: this.joi
         .number()
         .integer()

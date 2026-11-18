@@ -24,6 +24,9 @@ const configurationValid = {
   autoremovetimeout: 10000,
   pulltimeout: 600000,
   pullconcurrency: 2,
+  preload: false,
+  preloadconcurrency: 1,
+  preloadmaxcandidates: 5,
   helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:

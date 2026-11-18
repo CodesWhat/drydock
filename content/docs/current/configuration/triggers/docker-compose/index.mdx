@@ -35,6 +35,9 @@ The trigger will:
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PULLTIMEOUT` | ⚪ | Maximum time allowed for an image pull and its progress stream (ms) | Positive integer | `600000` (10 min) |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PULLCONCURRENCY` | ⚪ | Max simultaneous image pulls per registry host across all Docker and Docker Compose actions in this process. Docker Hub aliases (`docker.io`, `index.docker.io`, `registry-1.docker.io`) count as one registry. See [Pull pacing](/docs/configuration/actions#pull-pacing) | Positive integer | `2` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PRELOAD` | ⚪ | Download held update candidates ahead of time. `true` covers every container, `label` only containers with `dd.update.preload=true`. See [Image preload](/docs/configuration/actions#image-preload) | `true`, `false` or `label` | `false` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PRELOADCONCURRENCY` | ⚪ | Max simultaneous preload pulls per Docker host | Positive integer | `1` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_PRELOADMAXCANDIDATES` | ⚪ | Max preloaded candidates kept per Docker host | Positive integer | `5` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILELABEL` | ⚪ | Container label name used to locate the compose file per container | Label name | `dd.compose.file` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |

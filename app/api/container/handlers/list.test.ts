@@ -1,5 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import { getUpdateMode } from '../../../store/settings.js';
+import { resetImagePreloads, setImagePreload } from '../../../updates/image-preload-state.js';
 import type { CrudHandlerContext } from '../crud-context.js';
 import { toApiContainer } from '../shared.js';
 import {
@@ -1521,6 +1522,46 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
       ...overrides,
     });
   }
+
+  describe('image preload', () => {
+    afterEach(() => {
+      resetImagePreloads();
+    });
+
+    test('exposes preload state for the current candidate without internal keys', () => {
+      const container = createContainerWithUpdate({ result: { tag: '1.1.0', digest: 'sha256:a' } });
+      setImagePreload(container, {
+        status: 'done',
+        image: 'org/web@sha256:a',
+        digest: 'sha256:a',
+        candidate: 'sha256:a',
+        host: 'local.local',
+      });
+      const result = attachUpdateEligibility(createMockContext(), container) as any;
+      expect(result.imagePreload).toEqual({
+        status: 'done',
+        image: 'org/web@sha256:a',
+        digest: 'sha256:a',
+        updatedAt: expect.any(String),
+      });
+    });
+
+    test('omits stale or missing preload state', () => {
+      const container = createContainerWithUpdate({ result: { tag: '1.1.0', digest: 'sha256:b' } });
+      expect((attachUpdateEligibility(createMockContext(), container) as any).imagePreload).toBe(
+        undefined,
+      );
+      setImagePreload(container, {
+        status: 'done',
+        image: 'org/web@sha256:a',
+        candidate: 'sha256:a',
+        host: 'local.local',
+      });
+      expect((attachUpdateEligibility(createMockContext(), container) as any).imagePreload).toBe(
+        undefined,
+      );
+    });
+  });
 
   test('supplies the global update mode and lets a stricter group policy lower it', () => {
     const context = createMockContext();
