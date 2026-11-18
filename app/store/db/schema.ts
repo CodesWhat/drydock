@@ -538,3 +538,13 @@ export const INITIAL_SCHEMA_TABLES: readonly string[] = [
   'update_operations',
   'update_policy_retention_cache',
 ];
+
+/**
+ * Migration 15: who performed the action that produced an audit row. NULL means
+ * the system itself (schedulers, auto-updates, agent-reported events) and every
+ * row written before this column existed.
+ */
+export const AUDIT_ACTOR_SQL = `
+ALTER TABLE audit ADD COLUMN actor TEXT;
+CREATE INDEX audit_actor_timestamp ON audit(actor, timestamp_ms DESC);
+`;

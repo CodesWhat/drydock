@@ -5,6 +5,8 @@
     "filterPlaceholder": "Фільтр за цільовим об'єктом або подією...",
     "onThisPage": "на цій сторінці",
     "containerFilterPlaceholder": "Назва контейнера...",
+    "actorFilterPlaceholder": "Користувач...",
+    "actorFilterLabel": "Фільтр за користувачем",
     "allEvents": "Всі події",
     "eventsSelected": "{count} подій вибрано",
     "clear": "Очистити",
@@ -16,12 +18,19 @@
       "nextPage": "Наступна сторінка"
     },
     "emptyFiltered": "Записи аудиту не відповідають вашим фільтрам",
+    "systemActor": "Система",
+    "exportError": "Не вдалося експортувати журнал аудиту",
+    "export": {
+      "csv": "Експорт CSV",
+      "json": "Експорт JSON"
+    },
     "columns": {
       "time": "Час",
       "event": "Подія",
       "target": "Об'єкт",
       "status": "Статус",
-      "details": "Деталі"
+      "details": "Деталі",
+      "actor": "Виконавець"
     },
     "card": {
       "time": "Час",
@@ -34,7 +43,8 @@
       "fromVersion": "З версії",
       "toVersion": "До версії",
       "trigger": "Тригер",
-      "details": "Деталі"
+      "details": "Деталі",
+      "actor": "Виконавець"
     },
     "status": {
       "success": "Успіх",

@@ -5,6 +5,8 @@
     "filterPlaceholder": "按目標或事件篩選……",
     "onThisPage": "本頁內",
     "containerFilterPlaceholder": "容器名稱……",
+    "actorFilterPlaceholder": "使用者...",
+    "actorFilterLabel": "依使用者篩選",
     "allEvents": "所有事件",
     "eventsSelected": "已選擇 {count} 個事件",
     "clear": "清除",
@@ -16,12 +18,19 @@
       "nextPage": "下一頁"
     },
     "emptyFiltered": "沒有稽核記錄匹配您的篩選條件",
+    "systemActor": "系統",
+    "exportError": "匯出稽核記錄失敗",
+    "export": {
+      "csv": "匯出 CSV",
+      "json": "匯出 JSON"
+    },
     "columns": {
       "time": "時間",
       "event": "事件",
       "target": "目標",
       "status": "狀態",
-      "details": "詳情"
+      "details": "詳情",
+      "actor": "操作者"
     },
     "card": {
       "time": "時間",
@@ -34,7 +43,8 @@
       "fromVersion": "從版本",
       "toVersion": "到版本",
       "trigger": "觸發器",
-      "details": "詳情"
+      "details": "詳情",
+      "actor": "操作者"
     },
     "status": {
       "success": "成功",

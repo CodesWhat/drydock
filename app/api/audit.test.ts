@@ -527,3 +527,186 @@ describe('Audit Router', () => {
     });
   });
 });
+
+describe('Audit Router actor filter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAuditEntries.mockReturnValue({ entries: [], total: 0 });
+  });
+
+  const listHandler = () => {
+    auditRouter.init();
+    return mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+  };
+
+  test('passes the actor filter to the store verbatim, including spaces and @', () => {
+    const res = createMockResponse();
+    listHandler()(createMockRequest({ query: { actor: 'Alice O@example.com' } }), res);
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      skip: 0,
+      limit: 50,
+      actor: 'Alice O@example.com',
+    });
+  });
+
+  test('ignores an empty actor filter', () => {
+    listHandler()(createMockRequest({ query: { actor: '' } }), createMockResponse());
+    expect(mockGetAuditEntries.mock.calls[0][0]).not.toHaveProperty('actor');
+  });
+
+  test.each([
+    ['a control character', 'bad\nactor'],
+    ['an overlong value', 'a'.repeat(201)],
+    ['a non-string value', { $ne: 'x' }],
+  ])('returns 400 for %s in the actor filter', (_label, actor) => {
+    const res = createMockResponse();
+    listHandler()(createMockRequest({ query: { actor } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockGetAuditEntries).not.toHaveBeenCalled();
+  });
+});
+
+describe('Audit Router export', () => {
+  const entry = {
+    id: '1',
+    timestamp: '2026-01-01T00:00:00.000Z',
+    action: 'update-applied',
+    containerName: 'web',
+    status: 'success',
+    actor: 'alice',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetAuditEntries.mockReturnValue({ entries: [entry], total: 1 });
+  });
+
+  const exportHandler = () => {
+    auditRouter.init();
+    return mockRouter.get.mock.calls.find((c) => c[0] === '/export')[1];
+  };
+
+  test('registers the export route', () => {
+    auditRouter.init();
+    expect(mockRouter.get).toHaveBeenCalledWith('/export', expect.any(Function));
+  });
+
+  test('exports CSV by default with a header row, attachment headers and the shared filters', () => {
+    const res = createMockResponse();
+    exportHandler()(
+      createMockRequest({ query: { actor: 'alice', container: 'web', action: 'update-applied' } }),
+      res,
+    );
+
+    expect(mockGetAuditEntries).toHaveBeenCalledWith({
+      actor: 'alice',
+      container: 'web',
+      action: 'update-applied',
+      skip: 0,
+      limit: 100000,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.getHeader('content-type')).toBe('text/csv; charset=utf-8');
+    expect(String(res.getHeader('content-disposition'))).toMatch(
+      /^attachment; filename="drydock-audit-[\dT-]+Z\.csv"$/,
+    );
+    expect(res.getHeader('x-total-count')).toBe('1');
+    expect(res.getHeader('x-content-type-options')).toBe('nosniff');
+    expect(res.body).toBe(
+      'id,timestamp,actor,action,containerName,containerIdentityKey,containerImage,fromVersion,toVersion,updateKind,semverDiff,triggerName,status,details\r\n' +
+        '1,2026-01-01T00:00:00.000Z,alice,update-applied,web,,,,,,,,success,\r\n',
+    );
+  });
+
+  test('exports JSON as an array of entries', () => {
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: { format: 'json' } }), res);
+
+    expect(res.getHeader('content-type')).toBe('application/json');
+    expect(String(res.getHeader('content-disposition'))).toContain('.json"');
+    expect(JSON.parse(res.body as string)).toEqual([entry]);
+  });
+
+  test('quotes cells holding commas, quotes and newlines and doubles embedded quotes', () => {
+    mockGetAuditEntries.mockReturnValue({
+      entries: [{ ...entry, details: 'said "hi", then\nleft', containerName: 'a,b' }],
+      total: 1,
+    });
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: {} }), res);
+
+    expect(res.body).toContain('"a,b"');
+    expect(res.body).toContain('"said ""hi"", then\nleft"');
+  });
+
+  test.each([
+    ['=', '=HYPERLINK("http://x","y")', `"'=HYPERLINK(""http://x"",""y"")"`],
+    ['+', '+1+1', "'+1+1"],
+    ['-', '-2+3', "'-2+3"],
+    ['@', '@SUM(A1)', "'@SUM(A1)"],
+    ['tab', '\tcmd', "'\tcmd"],
+    ['carriage return', '\rcmd', `"'\rcmd"`],
+  ])('neutralizes a cell starting with %s so a spreadsheet will not run it', (_n, value, cell) => {
+    mockGetAuditEntries.mockReturnValue({
+      entries: [{ ...entry, details: value, actor: value }],
+      total: 1,
+    });
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: {} }), res);
+
+    expect((res.body as string).split('\r\n')[1]).toContain(`,${cell},`);
+    expect((res.body as string).split('\r\n')[1].endsWith(cell)).toBe(true);
+  });
+
+  test('does not touch a formula-looking value in the JSON export', () => {
+    mockGetAuditEntries.mockReturnValue({ entries: [{ ...entry, details: '=1+1' }], total: 1 });
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: { format: 'json' } }), res);
+    expect(JSON.parse(res.body as string)[0].details).toBe('=1+1');
+  });
+
+  test('reports the full match count when the export is capped', () => {
+    mockGetAuditEntries.mockReturnValue({ entries: [entry], total: 250000 });
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: {} }), res);
+    expect(res.getHeader('x-total-count')).toBe('250000');
+  });
+
+  test('returns 400 for an unknown format', () => {
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: { format: 'xml' } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockGetAuditEntries).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 for an invalid filter', () => {
+    const res = createMockResponse();
+    exportHandler()(createMockRequest({ query: { container: 'bad name!' } }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mockGetAuditEntries).not.toHaveBeenCalled();
+  });
+
+  test('requires the read scope: an API key without it is refused, one with it is served', () => {
+    const handler = exportHandler();
+    const denied = createMockResponse();
+    handler(
+      createMockRequest({
+        query: {},
+        principal: { kind: 'api-key', username: 'k', keyId: 'k1', scopes: ['containers:watch'] },
+      }),
+      denied,
+    );
+    expect(denied.status).toHaveBeenCalledWith(403);
+    expect(mockGetAuditEntries).not.toHaveBeenCalled();
+
+    const allowed = createMockResponse();
+    handler(
+      createMockRequest({
+        query: {},
+        principal: { kind: 'api-key', username: 'k', keyId: 'k1', scopes: ['read'] },
+      }),
+      allowed,
+    );
+    expect(allowed.statusCode).toBe(200);
+  });
+});

@@ -5,6 +5,8 @@
     "filterPlaceholder": "Фильтр по цели или событию...",
     "onThisPage": "на этой странице",
     "containerFilterPlaceholder": "Имя контейнера...",
+    "actorFilterPlaceholder": "Пользователь...",
+    "actorFilterLabel": "Фильтр по пользователю",
     "allEvents": "Все события",
     "eventsSelected": "Выбрано событий: {count}",
     "clear": "Очистить",
@@ -16,12 +18,19 @@
       "nextPage": "Следующая страница"
     },
     "emptyFiltered": "Нет записей аудита, соответствующих фильтрам",
+    "systemActor": "Система",
+    "exportError": "Не удалось экспортировать журнал аудита",
+    "export": {
+      "csv": "Экспорт CSV",
+      "json": "Экспорт JSON"
+    },
     "columns": {
       "time": "Время",
       "event": "Событие",
       "target": "Цель",
       "status": "Статус",
-      "details": "Детали"
+      "details": "Детали",
+      "actor": "Исполнитель"
     },
     "card": {
       "time": "Время",
@@ -34,7 +43,8 @@
       "fromVersion": "Из версии",
       "toVersion": "В версию",
       "trigger": "Триггер",
-      "details": "Детали"
+      "details": "Детали",
+      "actor": "Исполнитель"
     },
     "status": {
       "success": "Успешно",

@@ -52,6 +52,19 @@ describe('recordAuditEvent', () => {
     expect(mockInc).toHaveBeenCalledWith({ action: 'rollback' });
   });
 
+  test('passes an explicit actor through and omits the key otherwise', () => {
+    recordAuditEvent({
+      action: 'auth-login',
+      status: 'success',
+      containerName: 'authentication',
+      actor: 'alice',
+    });
+    recordAuditEvent({ action: 'auth-login', status: 'error', containerName: 'authentication' });
+
+    expect(mockInsertAudit.mock.calls[0][0].actor).toBe('alice');
+    expect(mockInsertAudit.mock.calls[1][0]).not.toHaveProperty('actor');
+  });
+
   test('an explicit identity key wins over the one derived from the container', () => {
     recordAuditEvent({
       action: 'rollback',

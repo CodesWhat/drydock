@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filtrer par cible ou événement...",
     "onThisPage": "sur cette page",
     "containerFilterPlaceholder": "Nom du conteneur...",
+    "actorFilterPlaceholder": "Utilisateur...",
+    "actorFilterLabel": "Filtrer par utilisateur",
     "allEvents": "Tous les événements",
     "eventsSelected": "{count} événements sélectionnés",
     "clear": "Effacer",
@@ -16,12 +18,19 @@
       "nextPage": "Page suivante"
     },
     "emptyFiltered": "Aucune entrée d'audit ne correspond à vos filtres",
+    "systemActor": "Système",
+    "exportError": "Échec de l'export du journal d'audit",
+    "export": {
+      "csv": "Exporter en CSV",
+      "json": "Exporter en JSON"
+    },
     "columns": {
       "time": "Heure",
       "event": "Événement",
       "target": "Cible",
       "status": "État",
-      "details": "Détails"
+      "details": "Détails",
+      "actor": "Acteur"
     },
     "card": {
       "time": "Heure",
@@ -34,7 +43,8 @@
       "fromVersion": "Version source",
       "toVersion": "Version cible",
       "trigger": "Trigger",
-      "details": "Détails"
+      "details": "Détails",
+      "actor": "Acteur"
     },
     "status": {
       "success": "Succès",

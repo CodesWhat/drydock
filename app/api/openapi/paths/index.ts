@@ -727,6 +727,14 @@ export const openApiPaths = {
         { name: 'actions', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'container', in: 'query', required: false, schema: { type: 'string' } },
         {
+          name: 'actor',
+          in: 'query',
+          required: false,
+          description:
+            'Only entries caused by this user or API key; `system` matches automated events',
+          schema: { type: 'string' },
+        },
+        {
           name: 'from',
           in: 'query',
           required: false,
@@ -741,6 +749,49 @@ export const openApiPaths = {
       ],
       responses: {
         200: jsonResponse('Audit entries page', { $ref: '#/components/schemas/PaginatedResult' }),
+        400: errorResponse('Invalid audit query parameter'),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/audit/export': {
+    get: {
+      tags: ['Audit'],
+      summary: 'Export audit entries as CSV or JSON',
+      operationId: 'exportAuditEntries',
+      parameters: [
+        {
+          name: 'format',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', enum: ['csv', 'json'], default: 'csv' },
+        },
+        { name: 'action', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'actions', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'container', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'actor', in: 'query', required: false, schema: { type: 'string' } },
+        {
+          name: 'from',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', format: 'date-time' },
+        },
+        {
+          name: 'to',
+          in: 'query',
+          required: false,
+          schema: { type: 'string', format: 'date-time' },
+        },
+      ],
+      responses: {
+        200: {
+          description:
+            'Every matching entry, newest first, capped at 100000 rows. CSV cells that start with =, +, - or @ are prefixed with an apostrophe.',
+          content: {
+            'text/csv': { schema: { type: 'string' } },
+            'application/json': { schema: { $ref: '#/components/schemas/GenericArray' } },
+          },
+        },
         400: errorResponse('Invalid audit query parameter'),
         401: errorResponse('Authentication required'),
       },

@@ -5,6 +5,8 @@
     "filterPlaceholder": "Hedefe veya etkinliğe göre filtreleyin...",
     "onThisPage": "bu sayfada",
     "containerFilterPlaceholder": "Konteyner adı...",
+    "actorFilterPlaceholder": "Kullanıcı...",
+    "actorFilterLabel": "Kullanıcıya göre filtrele",
     "allEvents": "Tüm etkinlikler",
     "eventsSelected": "{count} etkinlikleri seçildi",
     "clear": "Temizle",
@@ -16,12 +18,19 @@
       "nextPage": "Sonraki sayfa"
     },
     "emptyFiltered": "Filtrelerinizle eşleşen denetim girişi yok",
+    "systemActor": "Sistem",
+    "exportError": "Denetim günlüğü dışa aktarılamadı",
+    "export": {
+      "csv": "CSV olarak dışa aktar",
+      "json": "JSON olarak dışa aktar"
+    },
     "columns": {
       "time": "Zaman",
       "event": "Etkinlik",
       "target": "Hedef",
       "status": "Durum",
-      "details": "Ayrıntılar"
+      "details": "Ayrıntılar",
+      "actor": "Kullanıcı"
     },
     "card": {
       "time": "Zaman",
@@ -34,7 +43,8 @@
       "fromVersion": "Sürümden",
       "toVersion": "Sürüme",
       "trigger": "Tetikleyici",
-      "details": "Ayrıntılar"
+      "details": "Ayrıntılar",
+      "actor": "Kullanıcı"
     },
     "status": {
       "success": "Başarılı",

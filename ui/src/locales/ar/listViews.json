@@ -5,6 +5,8 @@
     "filterPlaceholder": "تصفية حسب الهدف أو الحدث...",
     "onThisPage": "في هذه الصفحة",
     "containerFilterPlaceholder": "اسم الحاوية...",
+    "actorFilterPlaceholder": "المستخدم...",
+    "actorFilterLabel": "التصفية حسب المستخدم",
     "allEvents": "جميع الأحداث",
     "eventsSelected": "{count} أحداث محددة",
     "clear": "مسح",
@@ -16,12 +18,19 @@
       "nextPage": "الصفحة التالية"
     },
     "emptyFiltered": "لا توجد إدخالات تدقيق تطابق عوامل التصفية",
+    "systemActor": "النظام",
+    "exportError": "تعذّر تصدير سجل التدقيق",
+    "export": {
+      "csv": "تصدير CSV",
+      "json": "تصدير JSON"
+    },
     "columns": {
       "time": "الوقت",
       "event": "الحدث",
       "target": "الهدف",
       "status": "الحالة",
-      "details": "التفاصيل"
+      "details": "التفاصيل",
+      "actor": "المنفّذ"
     },
     "card": {
       "time": "الوقت",
@@ -34,7 +43,8 @@
       "fromVersion": "من الإصدار",
       "toVersion": "إلى الإصدار",
       "trigger": "المشغّل",
-      "details": "التفاصيل"
+      "details": "التفاصيل",
+      "actor": "المنفّذ"
     },
     "status": {
       "success": "نجاح",

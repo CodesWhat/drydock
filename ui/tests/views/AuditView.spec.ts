@@ -3,7 +3,8 @@ import { defineComponent, nextTick } from 'vue';
 import { i18n, setI18nLocale } from '@/boot/i18n';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
-import { getAuditLog } from '@/services/audit';
+import { exportAuditLog, getAuditLog } from '@/services/audit';
+import { downloadTextFile } from '@/utils/download-text';
 import AuditView from '@/views/AuditView.vue';
 import { BACKEND_AUDIT_ACTIONS } from '../helpers/audit-actions';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -19,6 +20,11 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/audit', () => ({
   getAuditLog: vi.fn(),
+  exportAuditLog: vi.fn(),
+}));
+
+vi.mock('@/utils/download-text', () => ({
+  downloadTextFile: vi.fn(() => true),
 }));
 
 vi.mock('@/composables/useBreakpoints', () => ({
@@ -65,6 +71,7 @@ const stubs: Record<string, any> = {
           </button>
           <slot name="cell-timestamp" :row="row" />
           <slot name="cell-action" :row="row" />
+          <slot name="cell-actor" :row="row" />
           <slot name="cell-containerName" :row="row" />
           <slot name="cell-status" :row="row" />
           <slot name="cell-details" :row="row" />
@@ -844,6 +851,118 @@ describe('AuditView', () => {
         page: 1,
         limit: 50,
       });
+    });
+  });
+
+  describe('actor', () => {
+    it('shows the actor, and System for an automated entry', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ id: 'a', actor: 'alice' }), makeEntry({ id: 'b' })],
+        total: 2,
+      });
+      const wrapper = await mountAuditView();
+      const rows = wrapper.findAll('.data-table-row');
+      expect(rows[0].text()).toContain('alice');
+      expect(rows[1].text()).toContain('System');
+      expect(wrapper.find('.dt-header[data-col-key="actor"]').text()).toBe('Actor');
+    });
+
+    it('shows the actor in the detail panel, defaulting to System', async () => {
+      mockGetAuditLog.mockResolvedValue({
+        entries: [makeEntry({ actor: 'alice' }), makeEntry({ id: 'b' })],
+        total: 2,
+      });
+      const wrapper = await mountAuditView();
+      await wrapper.get('.row-click-first').trigger('click');
+      expect(wrapper.get('.detail-content').text()).toContain('alice');
+      await wrapper.get('.row-click-second').trigger('click');
+      expect(wrapper.get('.detail-content').text()).toContain('System');
+    });
+
+    it('sends the actor filter to the service, trimmed, and refetches on change', async () => {
+      const wrapper = await mountAuditView();
+      await wrapper.get('input[name="actor"]').setValue('  alice ');
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50, actor: 'alice' });
+    });
+
+    it('does not send a whitespace-only actor filter', async () => {
+      const wrapper = await mountAuditView();
+      await wrapper.get('input[name="actor"]').setValue('   ');
+      await flushPromises();
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50 });
+    });
+
+    it('initializes the actor filter from the route query and clears it with the other filters', async () => {
+      mockRoute.query = { actor: ' bob ' };
+      const wrapper = await mountAuditView();
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50, actor: 'bob' });
+      expect((wrapper.get('input[name="actor"]').element as HTMLInputElement).value).toBe('bob');
+
+      const clearButton = wrapper.findAll('button').find((button) => button.text() === 'Clear');
+      await clearButton?.trigger('click');
+      await flushPromises();
+      expect((wrapper.get('input[name="actor"]').element as HTMLInputElement).value).toBe('');
+      expect(mockGetAuditLog).toHaveBeenLastCalledWith({ page: 1, limit: 50 });
+    });
+  });
+
+  describe('export', () => {
+    it.each([
+      ['csv', 'audit-export-csv', 'Export CSV'],
+      ['json', 'audit-export-json', 'Export JSON'],
+    ] as const)(
+      'exports %s with the active server-side filters and saves the file',
+      async (format, testId, label) => {
+        mockRoute.query = { actor: 'alice', container: 'web', action: 'update-failed' };
+        vi.mocked(exportAuditLog).mockResolvedValue({ filename: `audit.${format}`, text: 'body' });
+        const wrapper = await mountAuditView();
+        const button = wrapper.get(`[data-test="${testId}"]`);
+        expect(button.text()).toBe(label);
+
+        await button.trigger('click');
+        await flushPromises();
+
+        expect(exportAuditLog).toHaveBeenCalledWith(format, {
+          action: 'update-failed',
+          container: 'web',
+          actor: 'alice',
+        });
+        expect(downloadTextFile).toHaveBeenCalledWith(`audit.${format}`, 'body');
+        expect(wrapper.text()).not.toContain('Failed to export audit log');
+      },
+    );
+
+    it('shows an error when the export request fails', async () => {
+      vi.mocked(exportAuditLog).mockRejectedValue(new Error('nope'));
+      const wrapper = await mountAuditView();
+      await wrapper.get('[data-test="audit-export-csv"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Failed to export audit log');
+      expect(downloadTextFile).not.toHaveBeenCalled();
+    });
+
+    it('shows an error when the browser cannot save the file', async () => {
+      vi.mocked(exportAuditLog).mockResolvedValue({ filename: 'a.csv', text: 'x' });
+      vi.mocked(downloadTextFile).mockReturnValueOnce(false);
+      const wrapper = await mountAuditView();
+      await wrapper.get('[data-test="audit-export-json"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.text()).toContain('Failed to export audit log');
+    });
+
+    it('ignores a second click while an export is running', async () => {
+      const pending = Promise.withResolvers<{ filename: string; text: string }>();
+      vi.mocked(exportAuditLog).mockReturnValue(pending.promise);
+      const wrapper = await mountAuditView();
+      const button = wrapper.get('[data-test="audit-export-csv"]');
+      await button.trigger('click');
+      await button.trigger('click');
+      expect(exportAuditLog).toHaveBeenCalledTimes(1);
+      expect(button.attributes('disabled')).toBeDefined();
+      pending.resolve({ filename: 'a.csv', text: 'x' });
+      await flushPromises();
+      expect(button.attributes('disabled')).toBeUndefined();
     });
   });
 

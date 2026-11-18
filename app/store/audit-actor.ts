@@ -1,0 +1,24 @@
+/**
+ * Request-scoped audit actor.
+ *
+ * The API layer binds the authenticated principal's name here once per request
+ * (`app/api/audit-actor.ts`), and `insertAudit` reads it back, so every audit
+ * row written while serving that request carries who asked for it without each
+ * call site threading a username through. The value only ever comes from the
+ * server-side principal, never from request input. Work that starts outside a
+ * request (schedulers, auto-updates, agent events) runs with no actor and is
+ * stored as NULL, which the API reports as `system`.
+ */
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+const actorStorage = new AsyncLocalStorage<{ actor: string }>();
+
+/** Run `fn` with `actor` attributed to every audit row it writes. */
+export function runWithAuditActor<T>(actor: string, fn: () => T): T {
+  return actorStorage.run({ actor }, fn);
+}
+
+/** The actor bound to the current async context, if any. */
+export function getAuditActor(): string | undefined {
+  return actorStorage.getStore()?.actor;
+}

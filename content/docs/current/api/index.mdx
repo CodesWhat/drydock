@@ -363,7 +363,8 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
       "toVersion": "2024.12.0",
       "triggerName": "docker.local",
       "status": "success",
-      "details": ""
+      "details": "",
+      "actor": "alice"
     }
   ],
   "total": 42,
@@ -382,8 +383,27 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 | `action` | string | | Filter by a single action type |
 | `actions` | string | | Comma-separated list of action types (e.g. `update-applied,update-failed`) |
 | `container` | string | | Filter by container name |
+| `actor` | string | | Filter by who caused the entry: a username or `api-key:<key name>`. `system` matches automated entries with no actor |
 | `from` | string | | ISO 8601 date -- only entries on or after this timestamp |
 | `to` | string | | ISO 8601 date -- only entries on or before this timestamp |
+
+### Actor
+
+Each entry carries an `actor` when a signed-in user or API key caused it: the username for sessions, Basic and OIDC, `api-key:<key name>` for an API key, and `anonymous` when anonymous access is enabled. The value comes from the authenticated request on the server, never from anything the client sends. Entries from schedulers, auto-updates and agent-reported events have no `actor`, and so do entries written before this field existed. A failed login has no actor either, because the name was typed by the caller and never verified.
+
+### Export audit entries
+
+```bash
+curl -OJ "http://drydock:3000/api/v1/audit/export?format=csv&actor=alice&from=2024-12-01"
+```
+
+Downloads every entry matching the filters, newest first, as a file. It takes `format` (`csv`, the default, or `json`) plus the same `action`, `actions`, `container`, `actor`, `from` and `to` filters as the list route, and ignores `offset` and `limit`. The export is capped at 100,000 entries; the `X-Total-Count` header carries the full match count. It needs the same `read` scope as the list route.
+
+The CSV has a header row and the columns `id`, `timestamp`, `actor`, `action`, `containerName`, `containerIdentityKey`, `containerImage`, `fromVersion`, `toVersion`, `updateKind`, `semverDiff`, `triggerName`, `status` and `details`. Cells are quoted when they hold a comma, quote or line break. A cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet shows it as text instead of running it as a formula. The JSON export is an array of entries with the stored values unchanged.
+
+### Retention
+
+Entries older than 30 days are pruned by default. Set `DD_AUDIT_RETENTION_DAYS` to keep them longer or shorter; see [Storage](/docs/configuration/storage).
 
 ### Action types
 

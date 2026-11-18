@@ -75,4 +75,6 @@ export interface AuditEntry {
   triggerName?: string;
   status: 'success' | 'error' | 'info';
   details?: string;
+  /** Who caused the event. Absent for the system (schedulers, auto-updates, agents). */
+  actor?: string;
 }
