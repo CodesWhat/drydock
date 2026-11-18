@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createAnalyticsRuntime, createPostHogOptions } from "../src/lib/analytics-client.ts";
+import {
+  createAnalyticsRuntime,
+  createPostHogOptions,
+  hasPrivacySignal,
+  readPrivacySignal,
+} from "../src/lib/analytics-client.ts";
 import { POSTHOG_API_HOST, POSTHOG_UI_HOST } from "../src/lib/analytics-contract.ts";
 
 const ROUTES = new Set(["/", "/compare", "/docs/v1.7"]);
@@ -70,7 +75,7 @@ test("valid initialization queues until the SDK is ready and emits canonical eve
   const runtime = createAnalyticsRuntime({
     env: VALID_ENV,
     routes: ROUTES,
-    getDoNotTrack: () => null,
+    hasPrivacySignal: () => false,
     loadPostHog: () =>
       new Promise((resolve) => {
         finishLoading = () => resolve(posthog);
@@ -113,22 +118,22 @@ test("valid initialization queues until the SDK is ready and emits canonical eve
 
 test("missing, partial, malformed, and DNT environments never load or capture", async () => {
   for (const { env, dnt } of [
-    { env: {}, dnt: null },
-    { env: { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: "phc_partial" }, dnt: null },
+    { env: {}, dnt: false },
+    { env: { NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: "phc_partial" }, dnt: false },
     {
       env: {
         ...VALID_ENV,
         NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: "private-token",
       },
-      dnt: null,
+      dnt: false,
     },
-    { env: VALID_ENV, dnt: "1" },
+    { env: VALID_ENV, dnt: true },
   ]) {
     let loadCount = 0;
     const runtime = createAnalyticsRuntime({
       env,
       routes: ROUTES,
-      getDoNotTrack: () => dnt,
+      hasPrivacySignal: () => dnt,
       loadPostHog: async () => {
         loadCount += 1;
         throw new Error("must not load");
@@ -147,7 +152,7 @@ test("SDK load failures fail closed without leaking queued events", async () => 
   const runtime = createAnalyticsRuntime({
     env: VALID_ENV,
     routes: ROUTES,
-    getDoNotTrack: () => null,
+    hasPrivacySignal: () => false,
     loadPostHog: async () => {
       loadCount += 1;
       throw new Error("provider unavailable");
@@ -159,4 +164,58 @@ test("SDK load failures fail closed without leaking queued events", async () => 
   await assert.doesNotReject(initialized);
   runtime.capturePageview("/compare");
   assert.equal(loadCount, 1);
+});
+
+test("Do Not Track and Global Privacy Control are both detected", () => {
+  assert.equal(hasPrivacySignal({ doNotTrack: "1" }), true);
+  assert.equal(hasPrivacySignal({ globalPrivacyControl: true }), true);
+  assert.equal(hasPrivacySignal({ msDoNotTrack: "1" }), true);
+  assert.equal(hasPrivacySignal({}, { doNotTrack: "1" }), true);
+  assert.equal(hasPrivacySignal({ doNotTrack: "0", globalPrivacyControl: false }), false);
+  assert.equal(hasPrivacySignal({ doNotTrack: null }, {}), false);
+  assert.equal(hasPrivacySignal(null, null), false);
+});
+
+test("reading the privacy signal is safe without navigator or window", () => {
+  assert.equal(typeof navigator === "undefined" || typeof window === "undefined", true);
+  assert.equal(readPrivacySignal(), false);
+});
+
+test("before_send drops every event once a privacy signal is set", () => {
+  let signal = false;
+  const options = createPostHogOptions("phc_public-token_123", ROUTES, () => signal);
+  const event = {
+    uuid: "u",
+    event: "$pageview",
+    properties: { $raw_user_agent: "UA", $host: "getdrydock.com", $pathname: "/" },
+  };
+  assert.notEqual(options.before_send(structuredClone(event)), null);
+  signal = true;
+  assert.equal(options.before_send(structuredClone(event)), null);
+});
+
+test("a signal that appears after init stops queued and later captures", async () => {
+  let signal = false;
+  const calls = [];
+  let finishLoading;
+  const runtime = createAnalyticsRuntime({
+    env: VALID_ENV,
+    routes: ROUTES,
+    hasPrivacySignal: () => signal,
+    loadPostHog: () =>
+      new Promise((resolve) => {
+        finishLoading = () =>
+          resolve({
+            init: () => calls.push("init"),
+            capture: (event) => calls.push(event),
+          });
+      }),
+  });
+  const initialized = runtime.initialize();
+  runtime.capturePageview("/");
+  signal = true;
+  finishLoading();
+  await initialized;
+  runtime.capturePageview("/compare");
+  assert.deepEqual(calls, ["init"]);
 });
