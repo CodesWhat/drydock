@@ -195,6 +195,51 @@ describe('watchContainer error result preservation', () => {
   });
 });
 
+describe('watchContainer lookup error handling (#1590)', () => {
+  test('stores the lookup error and keeps the previously detected update', async () => {
+    const previous = { tag: '1.3.0', digest: 'sha256:newer' };
+    const container = createValidatedContainer({ result: previous });
+    const dependencies = createDependencies(
+      vi.fn().mockResolvedValue({ tag: '1.3.0', lookupError: 'registry unavailable' }),
+    );
+
+    const report = await watchContainer(container, dependencies);
+
+    expect(report.container.error?.message).toBe('registry unavailable');
+    expect(report.container.result).toEqual(previous);
+    expect(report.container.result).not.toHaveProperty('lookupError');
+  });
+
+  test('keeps a newer tag found this cycle and still stores the lookup error', async () => {
+    const container = createValidatedContainer({ result: { tag: '1.3.0' } });
+    const dependencies = createDependencies(
+      vi.fn().mockResolvedValue({ tag: '1.4.0', lookupError: 'digest lookup failed' }),
+    );
+
+    const report = await watchContainer(container, dependencies);
+
+    expect(report.container.error?.message).toBe('digest lookup failed');
+    expect(report.container.result).toEqual({ tag: '1.4.0' });
+  });
+
+  test('stores the lookup error on a first cycle with no previous result', async () => {
+    const container = createValidatedContainer({ result: undefined });
+    const dependencies = createDependencies(
+      vi.fn().mockResolvedValue({
+        tag: '1.3.0',
+        lookupError: 'no configured registry matches registry.example.com',
+      }),
+    );
+
+    const report = await watchContainer(container, dependencies);
+
+    expect(report.container.error?.message).toBe(
+      'no configured registry matches registry.example.com',
+    );
+    expect(report.container.result).toEqual({ tag: '1.3.0' });
+  });
+});
+
 describe('watchContainer stale scan gating (DR-72)', () => {
   test('skips the store write and report emission when isScanStale reports the scan is stale', async () => {
     const container = createValidatedContainer({ result: { tag: '1.3.0' } });

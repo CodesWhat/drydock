@@ -277,7 +277,18 @@ async function runContainerWatch(
   logContainer.debug('Start watching');
 
   try {
-    containerWithResult.result = await findNewVersion(container, logContainer);
+    const comparison = await findNewVersion(container, logContainer);
+    containerWithResult.result = comparison;
+    const lookupError = comparison?.lookupError;
+    if (lookupError !== undefined) {
+      delete comparison.lookupError;
+      containerWithResult.error = { message: lookupError };
+      // A failed lookup (e.g. digest watch) must not erase the last good verdict (#1590).
+      // A newer tag found this cycle comes from the tag list and stands as is.
+      if (previousResult !== undefined && comparison.tag === container.image.tag.value) {
+        containerWithResult.result = previousResult;
+      }
+    }
     await enrichWithinBudget(containerWithResult, logContainer, watchSeq, isScanStale);
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);

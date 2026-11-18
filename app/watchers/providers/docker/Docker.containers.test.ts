@@ -1237,7 +1237,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        tag: '1.0.0',
+        lookupError: 'no configured registry matches unknown',
+      });
       expect(mockLogChild.error).toHaveBeenCalledWith(
         expect.stringContaining('Unsupported registry (unknown)'),
       );
@@ -4371,7 +4374,10 @@ describe('Docker Watcher', () => {
       };
 
       const result = await docker.findNewVersion(container, logChild);
-      expect(result).toEqual({ tag: '1.2.3' });
+      expect(result).toEqual({
+        tag: '1.2.3',
+        lookupError: 'no configured registry matches unknown',
+      });
       expect(logChild.error).toHaveBeenCalledWith('Unsupported registry (unknown)');
     });
   });

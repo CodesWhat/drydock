@@ -401,7 +401,10 @@ export async function findNewVersion(
     registryProvider = getRegistry(container.image.registry.name);
   } catch {
     logContainer.error(`Unsupported registry (${container.image.registry.name})`);
-    return { tag: container.image.tag.value };
+    return {
+      tag: container.image.tag.value,
+      lookupError: `no configured registry matches ${container.image.registry.url || container.image.registry.name}`,
+    };
   }
 
   const result: ContainerResult = { tag: container.image.tag.value };
@@ -519,7 +522,7 @@ export async function findNewVersion(
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
       logContainer.warn(`Digest watch failed (${errorMessage})`);
-      container.error = { message: errorMessage };
+      result.lookupError = errorMessage;
     }
   }
 
