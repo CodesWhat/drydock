@@ -22,3 +22,13 @@ export function runWithAuditActor<T>(actor: string, fn: () => T): T {
 export function getAuditActor(): string | undefined {
   return actorStorage.getStore()?.actor;
 }
+
+/**
+ * Run `fn` outside any bound actor. Request handlers that (re)register
+ * components use this so timers and schedulers armed during registration (cron
+ * jobs, intervals) don't capture the admin's actor and attribute every later
+ * scheduled run to them.
+ */
+export function runOutsideAuditActor<T>(fn: () => T): T {
+  return actorStorage.exit(fn);
+}
