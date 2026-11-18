@@ -151,6 +151,16 @@ services:
       - DD_UPDATE_MAX_CONCURRENT=3
 ```
 
+## Pull pacing
+
+Docker and Docker Compose actions download images through the Docker daemon, so the registry HTTP retries used for update checks do not cover those pulls. Drydock paces daemon pulls per registry host across every Docker and Docker Compose action in the process.
+
+- At most `PULLCONCURRENCY` pulls (default `2`) run at once for one registry host. Further pulls wait in first-in, first-out order. Other registries are not affected.
+- Hosts are normalized, so `docker.io`, `index.docker.io`, `registry-1.docker.io` and images with no registry prefix share one limit.
+- When a pull fails with HTTP 429 or `toomanyrequests`, that registry's waiting pulls are deferred. Drydock honors a parseable `Retry-After`; otherwise it backs off from 5 seconds, doubling on each consecutive throttle with a little jitter. Either delay is capped at 5 minutes. The pull that was throttled still fails as before, and a later successful pull resets the backoff.
+- Each throttle logs one warning naming the registry, how many pulls are waiting and the delay. A pull that has to wait logs that it is waiting for a slot.
+- The pull timeout (`PULLTIMEOUT`) starts when the pull gets a slot, so time spent queued does not count against it. The image reference being pulled, including a digest pin, is never changed by pacing.
+
 ## Health-gate SSE heartbeat
 
 When drydock waits for a new container to pass its health gate (images with long healthcheck intervals, like vaultwarden's 60 s check), the UI receives no SSE events between the `health-gate` phase (start of wait) and `health-gate-passed` (end of wait). The health-gate heartbeat fixes this by re-emitting the same `health-gate` phase event at a configurable interval, keeping the UI informed in near-real-time without relying on REST reconciliation.
