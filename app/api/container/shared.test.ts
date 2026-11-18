@@ -586,9 +586,15 @@ describe('api/container/shared', () => {
       ({ image: { tag: { value: 'latest' }, digest: { value } } }) as never;
 
     test('pins the running digest for scanning and keeps the tag as the display reference', () => {
-      expect(resolveCurrentImageScanTarget(withDigest('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), getName)).toEqual({
+      expect(
+        resolveCurrentImageScanTarget(
+          withDigest('sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'),
+          getName,
+        ),
+      ).toEqual({
         displayImage: 'repo/app:latest',
-        scanImage: 'repo/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        scanImage:
+          'repo/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       });
     });
 

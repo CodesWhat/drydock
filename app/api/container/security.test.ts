@@ -462,7 +462,9 @@ describe('api/container/security', () => {
 
       expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(harness.deps.log.info).toHaveBeenCalledWith(expect.stringContaining('removed container'));
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('removed container'),
+      );
     });
 
     test('merges only security.sbom onto the live record when it changed during generation', async () => {
