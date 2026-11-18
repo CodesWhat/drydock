@@ -12,11 +12,11 @@ import {
   buildApprovalRecordInput,
   classifyApprovalCandidate,
   getApprovalCandidateRef,
-  isSameApprovalCandidate,
   isApprovalDeferred,
   isApprovalPending,
   isApprovalResolved,
   isAutoDispatchable,
+  isSameApprovalCandidate,
   shouldQueueForApproval,
 } from './approval.js';
 import type { Container } from './container.js';
