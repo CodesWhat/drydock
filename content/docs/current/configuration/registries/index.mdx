@@ -104,7 +104,7 @@ An image you build on the host and never push has no registry copy, so Drydock n
 
 The update is labelled a **base image update** (`updateKind.baseImage` is `true` in the API, with `kind` still `tag`), and the default notification title and body say so. It is notification-only. The Docker and Docker Compose actions never run for a locally built image, automatically or by hand, because pulling the upstream base would replace your build with the stock image. The update button is refused with a `409`, and automatic dispatch skips the container.
 
-To act on the update, wire a rebuild yourself with a [command action](/docs/configuration/triggers/command), which is not blocked. Point it at your own rebuild script and include the container, for example:
+To act on the update, ask your CI to rebuild with the [GitHub Dispatch](/docs/configuration/triggers/githubdispatch) or [GitLab Pipeline](/docs/configuration/triggers/gitlabpipeline) trigger, or wire a rebuild yourself with a [command action](/docs/configuration/triggers/command), which is not blocked. Point it at your own rebuild script and include the container, for example:
 
 ```yaml
 services:
