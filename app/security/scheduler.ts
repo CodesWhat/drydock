@@ -2,8 +2,8 @@ import { CronExpressionParser } from 'cron-parser';
 import cron from 'node-cron';
 import {
   resolveContainerImageFullName,
-  resolveCurrentImageScanTarget,
   resolveContainerRegistryAuth,
+  resolveCurrentImageScanTarget,
 } from '../api/container/shared.js';
 import { broadcastScanCompleted, broadcastScanStarted } from '../api/sse.js';
 import { getSecurityConfiguration } from '../configuration/index.js';
