@@ -552,6 +552,25 @@ describe('Auth Service', () => {
     });
   });
 
+  describe('getStrategies rate limiting', () => {
+    it('keeps the status and Retry-After of a 429 response', async () => {
+      const { getStrategies } = await loadAuthService();
+      fetchMock.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: new Headers({ 'Retry-After': '42' }),
+        json: async () => ({}),
+      });
+
+      await expect(getStrategies()).rejects.toMatchObject({
+        name: 'AuthRequestError',
+        status: 429,
+        retryAfterSeconds: 42,
+      });
+    });
+  });
+
   describe('getOidcRedirection', () => {
     it('returns oidc redirection payload', async () => {
       const { getOidcRedirection } = await loadAuthService();

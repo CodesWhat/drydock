@@ -85,7 +85,11 @@ async function getStrategies(): Promise<{
 }> {
   const response = await fetch('/api/v1/auth/status', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get auth strategies: ${response.statusText}`);
+    throw new AuthRequestError(
+      `Failed to get auth strategies: ${response.statusText}`,
+      response.status,
+      parseRetryAfterSeconds(response),
+    );
   }
   return response.json();
 }
