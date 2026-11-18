@@ -140,12 +140,12 @@ test('should handle command execution error', async () => {
   const logSpy = vi.spyOn(cmd.log, 'warn');
 
   const container = { name: 'test' };
-  await cmd.trigger(container);
+  await expect(cmd.trigger(container)).rejects.toThrow('Command execution failed');
 
   expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
-test('runCommand should log execFile callback errors without rejecting', async () => {
+test('runCommand should log execFile callback errors and reject', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', {
     cmd: 'exit 1',
@@ -155,7 +155,7 @@ test('runCommand should log execFile callback errors without rejecting', async (
     error: new Error('command failed'),
   });
 
-  await expect(cmd.trigger({ name: 'test' })).resolves.toBeUndefined();
+  await expect(cmd.trigger({ name: 'test' })).rejects.toThrow('Command execution failed');
   expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
@@ -216,9 +216,40 @@ test('should not include a failed configured command in execution logs', async (
     error: new Error(`Command failed: /bin/sh -c ${secretCommand}`),
   });
 
-  await cmd.trigger({ name: 'test' });
+  const failure = await cmd.trigger({ name: 'test' }).catch((error: Error) => error);
 
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).not.toContain(secretCommand);
+  expect((failure as Error).cause).toBeUndefined();
   expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(secretCommand);
+});
+
+test.each([
+  [{ code: 2 }, 'Command execution failed (exit code 2)'],
+  [{ killed: true }, 'Command execution failed (timed out)'],
+  [{ signal: 'SIGTERM' }, 'Command execution failed (timed out)'],
+  [{ code: 'ENOENT' }, 'Command execution failed'],
+  [undefined, 'Command execution failed'],
+])('runCommand rejects with a sanitized message for %j', async (error, message) => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    error: Object.assign(new Error('Command failed: /bin/sh -c echo test'), error),
+  });
+
+  await expect(cmd.runCommand({})).rejects.toThrow(new Error(message));
+});
+
+test('triggerBatch rejects with a sanitized error so the batch retry path runs', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo secret' });
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    error: Object.assign(new Error('Command failed: /bin/sh -c echo secret'), { code: 1 }),
+  });
+
+  await expect(cmd.triggerBatch([{ name: 'a' }, { name: 'b' }])).rejects.toThrow(
+    new Error('Command execution failed (exit code 1)'),
+  );
 });
 
 test('runCommand should use execFile with shell and -c arguments', async () => {
@@ -814,7 +845,7 @@ test('a failing command releases its slot so a queued command still runs', async
     error: new Error('command failed'),
   });
 
-  await cmd.runCommand({});
+  await expect(cmd.runCommand({})).rejects.toThrow('Command execution failed');
   expect(warnSpy).toHaveBeenCalledWith('Command execution failed');
 
   childProcessMockControl.execFileImpl = createChildProcessCallbackMock({ stdout: 'ok' });

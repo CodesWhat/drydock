@@ -1112,6 +1112,33 @@ test.each(['manual', 'notify'] as const)(
   },
 );
 
+test('a failing command action is not recorded as delivered and retries on the next report under once', async () => {
+  mockGetUpdateMode.mockReturnValue('auto');
+  trigger.type = 'command';
+  trigger.configuration.once = true;
+  const commandSpy = vi
+    .spyOn(trigger, 'trigger')
+    .mockRejectedValueOnce(new Error('Command execution failed (exit code 1)'))
+    .mockResolvedValue(undefined);
+  const report = {
+    changed: true,
+    container: {
+      id: 'c1',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any;
+
+  await trigger.handleContainerReport(report);
+  expect(commandSpy).toHaveBeenCalledTimes(1);
+  expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+
+  await trigger.handleContainerReport(report);
+  expect(commandSpy).toHaveBeenCalledTimes(2);
+  expect(notificationHistoryStore.recordNotification).toHaveBeenCalled();
+});
+
 test('simple action dispatch rechecks mode before enqueueing when mode changes mid-report', async () => {
   mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
   trigger.type = 'docker';
