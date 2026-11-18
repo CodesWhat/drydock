@@ -59,10 +59,16 @@ class Hub extends Custom<HubRegistryConfiguration> {
 
   match(image: ContainerImage) {
     const registryUrl = image?.registry?.url;
+    if (!registryUrl) {
+      return true;
+    }
+    // normalizeImage() rewrites the url to its canonical form
+    // (https://registry-1.docker.io/v2); match must accept that form too so a
+    // second normalization pass keeps the hub provider (#1591).
+    const registryHost = registryUrl.replace(/^https:\/\//, '').replace(/\/v2\/?$/, '');
     return (
-      !registryUrl ||
-      registryUrl === 'docker.io' ||
-      (registryUrl.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryUrl))
+      registryHost === 'docker.io' ||
+      (registryHost.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryHost))
     );
   }
 

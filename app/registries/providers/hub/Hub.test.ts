@@ -51,6 +51,22 @@ describe('Docker Hub Registry', () => {
     expect(hub.match({ registry: { url: 'notdocker.io' } })).toBe(false);
   });
 
+  test('should keep matching its own canonical url across repeated normalization (#1591)', async () => {
+    const once = hub.normalizeImage({ name: 'nginx', registry: { url: 'docker.io' } });
+    expect(once.registry.url).toBe('https://registry-1.docker.io/v2');
+    expect(hub.match(once)).toBe(true);
+    const twice = hub.normalizeImage(once);
+    expect(twice.registry.url).toBe('https://registry-1.docker.io/v2');
+    expect(twice.name).toBe('library/nginx');
+    expect(hub.match({ registry: { url: 'https://registry-1.docker.io' } })).toBe(true);
+  });
+
+  test('should still reject canonical-looking urls on other hosts (#1591)', async () => {
+    expect(hub.match({ registry: { url: 'https://ghcr.io/v2' } })).toBe(false);
+    expect(hub.match({ registry: { url: 'https://docker.io.attacker.com/v2' } })).toBe(false);
+    expect(hub.match({ registry: { url: 'https://evil-docker.io/v2' } })).toBe(false);
+  });
+
   test('should normalize image name for official images', async () => {
     const image = { name: 'nginx', registry: {} };
     const normalized = hub.normalizeImage(image);
