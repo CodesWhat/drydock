@@ -598,7 +598,11 @@ describe('TOTP slice 4: factor-management API', () => {
       expect(response.status).toBe(200);
       expect(response.headers.get('cache-control')).toBe('no-store');
       const body = await response.json();
-      expect(body).toEqual({ status: 'unenrolled', recoveryCodesRemaining: 0 });
+      expect(body).toEqual({
+        status: 'unenrolled',
+        recoveryCodesRemaining: 0,
+        managementAllowed: true,
+      });
       expectContract('/api/v1/auth/totp-factor', 'get', '200', body);
     });
 
@@ -608,7 +612,12 @@ describe('TOTP slice 4: factor-management API', () => {
       const done = await enrollThroughApi(h, cookie);
       const { body } = await factorStatus(h, done.cookie);
 
-      expect(Object.keys(body).sort()).toEqual(['activatedAt', 'recoveryCodesRemaining', 'status']);
+      expect(Object.keys(body).sort()).toEqual([
+        'activatedAt',
+        'managementAllowed',
+        'recoveryCodesRemaining',
+        'status',
+      ]);
       expect(body.status).toBe('active');
       expect(body.recoveryCodesRemaining).toBe(10);
       expect(Number.isNaN(Date.parse(body.activatedAt as string))).toBe(false);
@@ -638,6 +647,41 @@ describe('TOTP slice 4: factor-management API', () => {
         headers: { 'X-Forwarded-For': '203.0.113.9' },
       });
       expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({ managementAllowed: false, reason: 'https-required' });
+      expectContract('/api/v1/auth/totp-factor', 'get', '200', body);
+    });
+
+    test('over HTTPS, or plain HTTP from a genuinely local client, management is allowed', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const secure = await (await call(h, 'GET', '/totp-factor', { cookie })).json();
+      expect(secure.managementAllowed).toBe(true);
+      expect(secure).not.toHaveProperty('reason');
+      const local = await (await call(h, 'GET', '/totp-factor', { cookie, https: false })).json();
+      expect(local.managementAllowed).toBe(true);
+      expect(local).not.toHaveProperty('reason');
+    });
+
+    test('a proxy header on a loopback connection is not local, unless DD_AUTH_TOTP_ALLOWHTTP is set', async () => {
+      const h = await boot();
+      const cookie = await sessionCookie(h);
+      const proxied = await call(h, 'GET', '/totp-factor', {
+        cookie,
+        https: false,
+        headers: { 'X-Real-IP': '203.0.113.9' },
+      });
+      expect(await proxied.json()).toMatchObject({ managementAllowed: false });
+
+      ddEnvVars.DD_AUTH_TOTP_ALLOWHTTP = 'true';
+      const open = await boot();
+      const openCookie = await sessionCookie(open);
+      const allowed = await call(open, 'GET', '/totp-factor', {
+        cookie: openCookie,
+        https: false,
+        headers: { 'X-Forwarded-For': '203.0.113.9' },
+      });
+      expect(await allowed.json()).toMatchObject({ managementAllowed: true });
     });
   });
 
@@ -2421,6 +2465,7 @@ describe('TOTP slice 4: factor-management API', () => {
       expect((await factorStatus(h, fresh)).body).toEqual({
         status: 'unenrolled',
         recoveryCodesRemaining: 0,
+        managementAllowed: true,
       });
 
       // A legacy session is not resurrected by removal, and password login is back.
@@ -2799,6 +2844,7 @@ describe('TOTP slice 4: factor-management API', () => {
       expect((await factorStatus(h, theirs)).body).toEqual({
         status: 'unenrolled',
         recoveryCodesRemaining: 0,
+        managementAllowed: true,
       });
       expect(await protectedStatus(h, theirs)).toBe(200);
       expect((await loginPassword(h, TEST_USER, OTHER_PASSWORD)).status).toBe(200);

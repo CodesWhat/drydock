@@ -74,7 +74,7 @@ function isLoopbackHost(hostHeader: string | undefined): boolean {
  * and must not turn the public internet into "local". `allowPlainHttp` is the
  * operator's explicit opt-out of all of that (`DD_AUTH_TOTP_ALLOWHTTP`).
  */
-function isAllowedTransport(req: Request, allowPlainHttp: boolean): boolean {
+export function isAllowedTransport(req: Request, allowPlainHttp: boolean): boolean {
   if (allowPlainHttp || req.secure) {
     return true;
   }
