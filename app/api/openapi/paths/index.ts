@@ -22,6 +22,7 @@ import { groupPolicyPaths } from './group-policies.js';
 import { imagePaths } from './images.js';
 import { labelOverridePaths } from './label-overrides.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
+import { notificationSilencePaths } from './notification-silences.js';
 import { portwingPaths } from './portwing.js';
 import { statsPaths } from './stats.js';
 import { totpFactorPaths } from './totp-factor.js';
@@ -957,6 +958,7 @@ export const openApiPaths = {
     },
   },
   ...notificationOutboxPaths,
+  ...notificationSilencePaths,
   ...approvalPaths,
   '/api/v1/notifications/{id}': {
     patch: {

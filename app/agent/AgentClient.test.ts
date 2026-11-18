@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import axios from 'axios';
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { checkAgentVersion } from './agent-version-alerts.js';
 
 vi.mock('axios');
 vi.mock('node:fs', () => ({
@@ -49,6 +50,7 @@ vi.mock('../store/container.js', () => ({
   updateContainer: vi.fn((c) => c),
   deleteContainer: vi.fn(),
 }));
+vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
@@ -1363,6 +1365,20 @@ describe('AgentClient', () => {
         agentName: 'test-agent',
         reconnected: false,
       });
+    });
+
+    test('checks the agent version once when transitioning to connected state', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+      client.info = { ...client.info, version: '1.8.0' };
+
+      await client.handshake();
+
+      expect(checkAgentVersion).toHaveBeenCalledTimes(1);
+      expect(checkAgentVersion).toHaveBeenCalledWith('test-agent', '1.8.0');
     });
 
     test('should emit batched container reports after handshake processing', async () => {

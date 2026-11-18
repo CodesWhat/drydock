@@ -1493,6 +1493,37 @@ export function getMaturitySweepConfiguration() {
   return configurationToValidate.value;
 }
 
+/**
+ * Notification alert tuning from `DD_ALERTS_*`.
+ *
+ * - `DD_ALERTS_AGENTVERSIONPATCH`: also alert on a patch-only agent/controller version difference.
+ * - `DD_ALERTS_QUIETHOURS_SCHEDULE`, `_TZ`, `_RULES`, `_EXEMPT`: the global quiet-hours window.
+ */
+export function getNotificationAlertsConfiguration() {
+  const configurationFromEnv = get('dd.alerts', ddEnvVars);
+  const configurationSchema = joi.object().keys({
+    agentversionpatch: joi.boolean().default(false),
+    quiethours: joi
+      .object()
+      .keys({
+        schedule: joi.string().allow('').default(''),
+        tz: joi.string().default('UTC'),
+        rules: joi.string().allow('').default(''),
+        exempt: joi.string().allow('').default('security-alert,update-failed'),
+      })
+      .default(),
+  });
+
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv);
+  if (configurationToValidate.error) {
+    throw configurationToValidate.error;
+  }
+  return configurationToValidate.value as {
+    agentversionpatch: boolean;
+    quiethours: { schedule: string; tz: string; rules: string; exempt: string };
+  };
+}
+
 const DNS_MODE_VALUES = ['ipv4first', 'ipv6first', 'verbatim'] as const;
 export type DnsMode = (typeof DNS_MODE_VALUES)[number];
 

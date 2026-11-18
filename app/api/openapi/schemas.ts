@@ -1965,6 +1965,54 @@ export const openApiSchemas = {
     required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
+  NotificationSilence: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      ruleId: { type: 'string', description: 'Absent for a silence on every rule' },
+      reason: { type: 'string' },
+      createdAt: { type: 'string', format: 'date-time' },
+      expiresAt: { type: 'string', format: 'date-time' },
+      createdBy: { type: 'string' },
+    },
+    required: ['id', 'createdAt', 'expiresAt'],
+    additionalProperties: false,
+  },
+  NotificationSilenceResult: {
+    type: 'object',
+    properties: {
+      data: { type: 'array', items: { $ref: '#/components/schemas/NotificationSilence' } },
+      total: { type: 'integer', minimum: 0 },
+      quietHours: {
+        type: ['object', 'null'],
+        properties: {
+          schedule: { type: 'string' },
+          timezone: { type: 'string' },
+          rules: { type: 'array', items: { type: 'string' } },
+          exempt: { type: 'array', items: { type: 'string' } },
+          activeNow: { type: 'boolean' },
+        },
+        required: ['schedule', 'timezone', 'rules', 'exempt', 'activeNow'],
+        additionalProperties: false,
+      },
+      suppressed: {
+        type: 'array',
+        description: 'Notifications dropped since the process started, per rule and reason',
+        items: {
+          type: 'object',
+          properties: {
+            ruleId: { type: 'string' },
+            reason: { type: 'string', enum: ['quiet-hours', 'silenced'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          required: ['ruleId', 'reason', 'count'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['data', 'total', 'quietHours', 'suppressed'],
+    additionalProperties: false,
+  },
   Approval: {
     type: 'object',
     description:

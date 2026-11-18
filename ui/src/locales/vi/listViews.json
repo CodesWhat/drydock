@@ -120,7 +120,9 @@
       "security-alert": "Cảnh báo bảo mật",
       "maturity-cleared": "Đã hết thời gian chờ",
       "image-prune": "Dọn dẹp Image",
-      "cleanup": "Dọn dẹp"
+      "cleanup": "Dọn dẹp",
+      "notification-silence-set": "Đã tắt tiếng thông báo",
+      "notification-silence-cleared": "Đã bật lại tiếng thông báo"
     },
     "target": {
       "container": "Container",

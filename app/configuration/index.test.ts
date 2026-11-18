@@ -827,6 +827,47 @@ test('getMaturitySweepConfiguration should throw when the cron value is invalid'
   delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON_EXTRA;
 });
 
+test('getNotificationAlertsConfiguration defaults to no quiet hours and no patch alerts', () => {
+  expect(configuration.getNotificationAlertsConfiguration()).toStrictEqual({
+    agentversionpatch: false,
+    quiethours: { schedule: '', tz: 'UTC', rules: '', exempt: 'security-alert,update-failed' },
+  });
+});
+
+test('getNotificationAlertsConfiguration reads the DD_ALERTS_* variables', () => {
+  configuration.ddEnvVars.DD_ALERTS_AGENTVERSIONPATCH = 'true';
+  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE = '22:00-07:00';
+  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_TZ = 'Europe/Berlin';
+  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_RULES = 'container-stopped';
+  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_EXEMPT = '';
+  try {
+    expect(configuration.getNotificationAlertsConfiguration()).toStrictEqual({
+      agentversionpatch: true,
+      quiethours: {
+        schedule: '22:00-07:00',
+        tz: 'Europe/Berlin',
+        rules: 'container-stopped',
+        exempt: '',
+      },
+    });
+  } finally {
+    delete configuration.ddEnvVars.DD_ALERTS_AGENTVERSIONPATCH;
+    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE;
+    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_TZ;
+    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_RULES;
+    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_EXEMPT;
+  }
+});
+
+test('getNotificationAlertsConfiguration throws on an unknown key', () => {
+  configuration.ddEnvVars.DD_ALERTS_NOPE = 'x';
+  try {
+    expect(() => configuration.getNotificationAlertsConfiguration()).toThrow();
+  } finally {
+    delete configuration.ddEnvVars.DD_ALERTS_NOPE;
+  }
+});
+
 test('replaceSecrets must read secret in file', async () => {
   const vars = {
     DD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,

@@ -233,6 +233,25 @@ export interface ContainerStateAlertEventPayload {
   windowSeconds?: number;
 }
 
+export interface AuthAbuseEventPayload {
+  /** `account`: one username crossed the lockout threshold. `ip`: one source address did. */
+  scope: 'account' | 'ip';
+  /** Source address, for the `ip` scope. */
+  source?: string;
+  /** The username as the audit trail already records it, for the `account` scope. */
+  username?: string;
+  failedAttempts: number;
+  windowSeconds: number;
+  lockoutSeconds: number;
+}
+
+export interface AgentVersionMismatchEventPayload {
+  agentName: string;
+  agentVersion: string;
+  controllerVersion: string;
+  difference: 'major' | 'minor' | 'patch';
+}
+
 export interface MaturityGateClearedEventPayload {
   container: Container;
   clearedAt: string;
@@ -342,6 +361,11 @@ const containerHealthTransitionHandlers = new Map<
 const containerStateAlertHandlers = new Map<
   number,
   OrderedEventHandler<ContainerStateAlertEventPayload>
+>();
+const authAbuseHandlers = new Map<number, OrderedEventHandler<AuthAbuseEventPayload>>();
+const agentVersionMismatchHandlers = new Map<
+  number,
+  OrderedEventHandler<AgentVersionMismatchEventPayload>
 >();
 const maturityGateClearedHandlers = new Map<
   number,
@@ -614,6 +638,46 @@ export function registerContainerStateAlert(
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(containerStateAlertHandlers, handler, options);
+}
+
+/**
+ * Emit AuthAbuse event (failed sign-ins locked out an account or a source address).
+ * @param payload
+ */
+export async function emitAuthAbuse(payload: AuthAbuseEventPayload): Promise<void> {
+  await emitOrderedHandlers(authAbuseHandlers, payload);
+}
+
+/**
+ * Register to AuthAbuse event.
+ * @param handler
+ */
+export function registerAuthAbuse(
+  handler: OrderedEventHandlerFn<AuthAbuseEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(authAbuseHandlers, handler, options);
+}
+
+/**
+ * Emit AgentVersionMismatch event (an agent connected on a different version than the controller).
+ * @param payload
+ */
+export async function emitAgentVersionMismatch(
+  payload: AgentVersionMismatchEventPayload,
+): Promise<void> {
+  await emitOrderedHandlers(agentVersionMismatchHandlers, payload);
+}
+
+/**
+ * Register to AgentVersionMismatch event.
+ * @param handler
+ */
+export function registerAgentVersionMismatch(
+  handler: OrderedEventHandlerFn<AgentVersionMismatchEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(agentVersionMismatchHandlers, handler, options);
 }
 
 /**
@@ -984,6 +1048,8 @@ export function clearAllListenersForTests(): void {
   securityAlertHandlers.clear();
   containerHealthTransitionHandlers.clear();
   containerStateAlertHandlers.clear();
+  authAbuseHandlers.clear();
+  agentVersionMismatchHandlers.clear();
   maturityGateClearedHandlers.clear();
   approvalPendingNotificationHandlers.clear();
   securityScanCycleCompleteHandlers.clear();

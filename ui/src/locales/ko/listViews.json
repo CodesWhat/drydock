@@ -120,7 +120,9 @@
       "security-alert": "보안 경고",
       "maturity-cleared": "대기 기간 종료",
       "image-prune": "이미지 정리",
-      "cleanup": "정리"
+      "cleanup": "정리",
+      "notification-silence-set": "알림 음소거 설정됨",
+      "notification-silence-cleared": "알림 음소거 해제됨"
     },
     "target": {
       "container": "컨테이너",

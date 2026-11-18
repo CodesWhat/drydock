@@ -66,6 +66,8 @@ const backendAuditActions = {
   'api-key-auth-failed': true,
   'image-prune': true,
   cleanup: true,
+  'notification-silence-set': true,
+  'notification-silence-cleared': true,
 } satisfies Record<AuditEntry['action'], true>;
 
 export const BACKEND_AUDIT_ACTIONS = Object.keys(backendAuditActions);

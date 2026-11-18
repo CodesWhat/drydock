@@ -120,7 +120,9 @@
       "security-alert": "Güvenlik Uyarısı",
       "maturity-cleared": "Bekleme süresi doldu",
       "image-prune": "İmaj Temizleme",
-      "cleanup": "Temizlik"
+      "cleanup": "Temizlik",
+      "notification-silence-set": "Bildirim Sessize Alma Ayarlandı",
+      "notification-silence-cleared": "Bildirim Sessize Alma Kaldırıldı"
     },
     "target": {
       "container": "Kapsayıcı",

@@ -120,7 +120,9 @@
       "security-alert": "Alerta de segurança",
       "maturity-cleared": "Período de maturação concluído",
       "image-prune": "Limpeza de imagem",
-      "cleanup": "Limpeza"
+      "cleanup": "Limpeza",
+      "notification-silence-set": "Silenciamento de notificações definido",
+      "notification-silence-cleared": "Silenciamento de notificações removido"
     },
     "target": {
       "container": "Contêiner",

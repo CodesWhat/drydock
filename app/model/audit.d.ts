@@ -66,7 +66,9 @@ export interface AuditEntry {
     | 'api-key-revoked'
     | 'api-key-auth-failed'
     | 'image-prune'
-    | 'cleanup';
+    | 'cleanup'
+    | 'notification-silence-set'
+    | 'notification-silence-cleared';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;
