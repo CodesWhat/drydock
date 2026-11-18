@@ -64,7 +64,7 @@ The scan gate is not lifted either. A candidate is scanned before the pull and t
 
 ## The install checks the digest
 
-The update pulls by tag, so after the pull Drydock compares the digest that arrived with the candidate digest that qualified. If the tag was moved in between, or the pulled digest can't be determined, that install is aborted before anything is recreated, a `security-fast-lane` audit entry records the digest mismatch, and the next scan re-evaluates the new candidate under the normal holds. This applies to Docker and Docker Compose actions alike. On multi-arch images the digest of the pulled platform image can differ from the one that was scanned, in which case that install is aborted as well and the update goes through the usual holds.
+The update pulls by tag, so after the pull Drydock compares the digest that arrived with the candidate digest that qualified. If the tag was moved in between, or the pulled digest can't be determined, that install is aborted before anything is recreated, a `security-fast-lane` audit entry records the digest mismatch, and the next scan re-evaluates the new candidate under the normal holds. This applies to Docker and Docker Compose actions alike. On a multi-arch image the tag resolves through a manifest list, and a pull records the list's digest locally rather than the platform image's. Drydock records the list digest at discovery next to the platform digest, and the install accepts either one. Anything else, including a list digest left over from an older candidate or one the registry didn't return, aborts the install and the update goes through the usual holds.
 
 ## What gets recorded
 

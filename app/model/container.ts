@@ -97,6 +97,8 @@ export interface ContainerResult {
   tag?: string;
   suggestedTag?: string;
   digest?: string;
+  /** Digest of the manifest list the platform digest was picked from (what a pull by tag records). */
+  indexDigest?: string;
   created?: string;
   softwareVersion?: string;
   releaseMaturity?: ReleaseMaturityEvidence;
@@ -574,6 +576,7 @@ const schema = joi.object({
     tag: joi.string().min(1),
     suggestedTag: joi.string().min(1),
     digest: joi.string(),
+    indexDigest: joi.string(),
     created: joi.string().isoDate(),
     softwareVersion: joi.string().max(256),
     releaseMaturity: joi.object({

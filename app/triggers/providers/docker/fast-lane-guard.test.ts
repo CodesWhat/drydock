@@ -5,6 +5,8 @@ import { assertFastLaneDigest, FastLaneDigestMismatchError } from './fast-lane-g
 
 const QUALIFIED = `sha256:${'a'.repeat(64)}`;
 const RETAGGED = `sha256:${'b'.repeat(64)}`;
+const INDEX = `sha256:${'c'.repeat(64)}`;
+const STALE_INDEX = `sha256:${'d'.repeat(64)}`;
 
 function fastLaned(overrides: Record<string, unknown> = {}) {
   return {
@@ -25,6 +27,48 @@ describe('assertFastLaneDigest', () => {
       assertFastLaneDigest(fastLaned(), `registry/acme/web:2.0.0@${QUALIFIED}`, false),
     ).not.toThrow();
     expect(mocks.insertAudit).not.toHaveBeenCalled();
+  });
+
+  describe('multi-arch candidates', () => {
+    const multiArch = (indexDigest: unknown = INDEX) =>
+      fastLaned({ result: { tag: '2.0.0', digest: QUALIFIED, indexDigest } });
+
+    test('accepts the manifest list digest a pull by tag records locally', () => {
+      expect(() =>
+        assertFastLaneDigest(multiArch(), `registry/acme/web:2.0.0@${INDEX}`, false),
+      ).not.toThrow();
+    });
+
+    test('still accepts the platform digest', () => {
+      expect(() =>
+        assertFastLaneDigest(multiArch(), `registry/acme/web:2.0.0@${QUALIFIED}`, false),
+      ).not.toThrow();
+    });
+
+    test('a retag to different content changes the index digest and aborts', () => {
+      expect(() =>
+        assertFastLaneDigest(multiArch(), `registry/acme/web:2.0.0@${RETAGGED}`, false),
+      ).toThrow(FastLaneDigestMismatchError);
+      expect(mocks.insertAudit).toHaveBeenCalledTimes(1);
+    });
+
+    test('an index digest left over from an older candidate is not accepted', () => {
+      expect(() =>
+        assertFastLaneDigest(multiArch(), `registry/acme/web:2.0.0@${STALE_INDEX}`, false),
+      ).toThrow(FastLaneDigestMismatchError);
+    });
+
+    test('an index digest that is not a real digest is never accepted', () => {
+      expect(() =>
+        assertFastLaneDigest(multiArch('latest'), 'registry/acme/web:2.0.0@latest', false),
+      ).toThrow(FastLaneDigestMismatchError);
+    });
+
+    test('a single-arch candidate has no index digest and behaves as before', () => {
+      expect(() =>
+        assertFastLaneDigest(fastLaned(), `registry/acme/web:2.0.0@${INDEX}`, false),
+      ).toThrow(FastLaneDigestMismatchError);
+    });
   });
 
   test('aborts and audits when the tag was retagged after the candidate qualified', () => {

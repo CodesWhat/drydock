@@ -1,5 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import { fullName } from '../../../model/container.js';
+import { isImmutableDigest } from '../../../security/digest.js';
 import * as auditStore from '../../../store/audit.js';
 
 /**
@@ -39,8 +40,15 @@ export function assertFastLaneDigest(
     return;
   }
   const qualified = container.result?.digest;
+  const indexDigest = container.result?.indexDigest;
   const pulled = pulledDigestOf(imageIdentity);
-  if (pulled !== undefined && pulled === qualified) {
+  // A pull by tag records the manifest list's digest locally when the image is multi-arch, and
+  // the platform manifest's when it is not. Either is the content that qualified; anything
+  // else, including a digest this candidate never had, is a retag.
+  if (
+    pulled !== undefined &&
+    (pulled === qualified || (isImmutableDigest(indexDigest) && pulled === indexDigest))
+  ) {
     return;
   }
   const detail = pulled

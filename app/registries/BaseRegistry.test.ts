@@ -1328,6 +1328,29 @@ test('getImagePublishedAt should handle images without tag metadata', async () =
   );
 });
 
+test('getImageManifestDigest keeps the manifest list digest through the poll-cycle cache', async () => {
+  const indexDigest = `sha256:${'1'.repeat(64)}`;
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:manifest-123',
+    indexDigest,
+    version: 2,
+  });
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  const first = await baseRegistry.getImageManifestDigest(image);
+  const cached = await baseRegistry.getImageManifestDigest(image);
+
+  expect(first.indexDigest).toBe(indexDigest);
+  expect(cached.indexDigest).toBe(indexDigest);
+});
+
 test('getImageManifestDigest should deduplicate sequential lookups within a poll cycle', async () => {
   const superGetImageManifestDigestSpy = vi
     .spyOn(Registry.prototype, 'getImageManifestDigest')

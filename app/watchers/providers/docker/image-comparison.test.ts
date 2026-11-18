@@ -101,6 +101,40 @@ describe('image-comparison', () => {
     expect(current.image).toHaveProperty('softwareVersion', '2026.7.5');
   });
 
+  test('records the manifest list digest beside the platform digest, and drops it when the registry gives none', async () => {
+    const indexDigest = `sha256:${'1'.repeat(64)}`;
+    const stateFor = (lookup: ReturnType<typeof vi.fn>) => ({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: lookup,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    mockGetState.mockReturnValue(
+      stateFor(vi.fn().mockResolvedValue({ digest: 'sha256:remote', indexDigest, version: 2 })),
+    );
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const current = createFloatingAliasContainer();
+    current.image.tag.value = 'latest';
+    current.image.tag.semver = false;
+
+    const first = await findNewVersion(current as never, log);
+    expect(first).toMatchObject({ digest: 'sha256:remote', indexDigest });
+
+    // A new platform digest never inherits the previous cycle's index digest.
+    mockGetState.mockReturnValue(
+      stateFor(vi.fn().mockResolvedValue({ digest: 'sha256:remote-2', version: 2 })),
+    );
+    const next = createFloatingAliasContainer();
+    next.image.tag.value = 'latest';
+    next.image.tag.semver = false;
+    const second = await findNewVersion(next as never, log);
+    expect(second.digest).toBe('sha256:remote-2');
+    expect(second.indexDigest).toBeUndefined();
+  });
+
   test.each([
     {
       tag: 'latest',

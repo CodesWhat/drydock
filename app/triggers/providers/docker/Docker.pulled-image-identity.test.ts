@@ -96,6 +96,38 @@ describe('security fast lane digest guard', () => {
     ).resolves.toEqual({ imageIdentity: `nginx:4.5.6@${PULLED_DIGEST}` });
   });
 
+  test('binds a multi-arch pull, which records the list digest, against the candidate index digest', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${UNRELATED_DIGEST}`],
+    });
+    const multiArch = createTriggerContainer({
+      securityFastLane: fastLane,
+      result: { tag: '4.5.6', digest: PULLED_DIGEST, indexDigest: UNRELATED_DIGEST },
+    });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:4.5.6', multiArch, createLogContainer()),
+    ).resolves.toEqual({ imageIdentity: `nginx:4.5.6@${UNRELATED_DIGEST}` });
+  });
+
+  test('aborts a multi-arch pull whose list digest is not the candidate index digest', async () => {
+    mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
+    const dockerApi = createImageApi({
+      Id: LOCAL_IMAGE_ID,
+      RepoDigests: [`nginx@${RETAGGED_DIGEST}`],
+    });
+    const multiArch = createTriggerContainer({
+      securityFastLane: fastLane,
+      result: { tag: '4.5.6', digest: PULLED_DIGEST, indexDigest: UNRELATED_DIGEST },
+    });
+
+    await expect(
+      docker.bindPulledImageIdentity(dockerApi, 'nginx:4.5.6', multiArch, createLogContainer()),
+    ).rejects.toThrow(/Security fast lane/);
+  });
+
   test('aborts the install when the tag was retagged after the candidate qualified', async () => {
     mockGetSecurityConfiguration.mockReturnValue(createSecurityConfiguration());
     const dockerApi = createImageApi({
