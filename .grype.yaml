@@ -23,5 +23,10 @@
 # not_affected findings move to JSON ignoredMatches and are omitted from SARIF.
 # No ignore rules or severity cutoffs change.
 # Reassess if the package revision or build recipe changes.
+# Exact-package OpenVEX evidence for four OpenSSL 3.5.9-r0 advisories (CVE-2026-107496,
+# CVE-2026-88823, CVE-2026-95691, CVE-2026-95692). The vulnerable CMS, AES-GCM-SIV and QUIC
+# client code is not reachable in Drydock. No ignore rules or severity cutoffs change.
+# Delete docker/openssl-3.5.9.vex.json and this entry once Alpine ships a fixed openssl.
 vex-documents:
   - docker/zlib-infback9.vex.json
+  - docker/openssl-3.5.9.vex.json
