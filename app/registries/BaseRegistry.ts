@@ -8,7 +8,10 @@ import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { getErrorMessage } from '../util/error.js';
-import { getRegistryRequestTimeoutMs, REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
+import {
+  getRegistryRequestTimeoutMs,
+  REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
+} from './configuration.js';
 import { withRetry } from './http-retry.js';
 import Registry, { type RegistryLookupOptions } from './Registry.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';

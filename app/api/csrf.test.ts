@@ -994,7 +994,11 @@ describe('CSRF middleware', () => {
       const req = createReq({
         method: 'POST',
         protocol: 'https',
-        headers: { host: 'drydock.example.com', ...(cookie === undefined ? {} : { cookie }), ...headers },
+        headers: {
+          host: 'drydock.example.com',
+          ...(cookie === undefined ? {} : { cookie }),
+          ...headers,
+        },
       });
       const res = createRes();
       const next = vi.fn();
