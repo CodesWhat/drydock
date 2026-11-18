@@ -1285,6 +1285,35 @@ Values are substituted before the pattern is compiled with RE2, and every substi
 
 If the running tag can't supply a variable the pattern uses (a non-semver tag such as `latest`, no third segment for `${patch}`, or no suffix for `${flavor}`), the filter fails safe. No candidates are offered from that filter and a warning names the pattern and the missing variable. It never falls back to matching everything. This applies to both include and exclude. Names other than these four are left in the pattern as written.
 
+### Candidates per update type {#candidates-per-update-type}
+
+Next to the highest allowed tag, Drydock records the best newer tag for each kind of update, measured against the running version:
+
+- `patch`: same major and minor, higher patch.
+- `minor`: same major, higher minor.
+- `major`: higher major.
+
+Each entry carries its tag and `semverDiff`, plus a digest when the lookup resolved one for that tag. A kind with no candidate is left out, and the list is only recorded when at least two kinds are on offer, because a lone candidate is the main update. They are listed under `result.updateCandidates` in the container API:
+
+```json
+{
+  "result": {
+    "tag": "3.0.0",
+    "updateCandidates": {
+      "patch": { "tag": "1.2.9", "semverDiff": "patch" },
+      "minor": { "tag": "1.5.0", "semverDiff": "minor" },
+      "major": { "tag": "3.0.0", "semverDiff": "major" }
+    }
+  }
+}
+```
+
+Every candidate goes through the same rules as the main update: `dd.tag.include` and `dd.tag.exclude` (including the running-version variables), `dd.tag.family`, `dd.tag.ceiling`, `dd.tag.transform` and rejected release lines. `result.tag` and the update kind are still the highest allowed candidate, so nothing changes unless you opt in. The container detail view lists the candidates when more than one kind exists. Digest-only and non-semver updates have no kinds, so only the main update applies.
+
+By default a trigger whose `THRESHOLD` rules out the main update does nothing. For example, with `THRESHOLD=minor` and a new major out, a pending minor or patch is ignored. Set `SEPARATEUPDATETYPES=true` on the trigger (`DD_ACTION_DOCKER_{trigger_name}_SEPARATEUPDATETYPES` or the notification equivalent) and it acts on the best candidate inside the threshold instead, largest change first. The notification names that candidate's tag, and the approval item and the update itself target it too. If the main update already meets the threshold, nothing changes.
+
+An approval item is for the candidate the trigger chose. There is one item per container, not a queue per update type, and the manual Update button still offers the main update only.
+
 ### Transform the tags before performing the analysis
 
 In certain cases, tag values are so badly formatted that the resolution algorithm cannot find any valid update candidates or, worst, find bad positive matches.

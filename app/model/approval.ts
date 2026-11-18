@@ -19,6 +19,7 @@ import {
 } from './action-policy.js';
 import { type Container, getContainerIdentityKey, hasRawUpdate } from './container.js';
 import { resolveUpdateModeCeiling } from './group-policy.js';
+import { applySeparateUpdateTypes } from './separate-update-types.js';
 import {
   computeUpdateEligibility,
   getPrimaryHardBlocker,
@@ -209,6 +210,24 @@ export function classifyApprovalCandidate(
   }
 
   return isAutoDispatchable(container, triggers, updateMode) ? 'auto-dispatch' : 'queue';
+}
+
+/**
+ * The container as the approval queue sees it. A trigger that opted into
+ * `separateupdatetypes` acts on the best candidate inside its threshold, so the queue item,
+ * the notification and the dispatch on approval all have to name that same candidate rather
+ * than the primary the trigger will never apply. Containers without per-type candidates are
+ * returned as is, without resolving a trigger. One approval item exists per container: a
+ * queue per update type is not modelled.
+ */
+export function chooseApprovalCandidate(
+  container: Container,
+  triggers: Record<string, ActionPolicyTrigger> | undefined,
+): Container {
+  if (!container.result?.updateCandidates) {
+    return container;
+  }
+  return applySeparateUpdateTypes(container, selectActionTrigger(triggers, container)?.trigger);
 }
 
 /**

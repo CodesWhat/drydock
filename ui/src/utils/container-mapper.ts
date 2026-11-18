@@ -73,6 +73,11 @@ interface ApiContainerUpdateInsight {
   kind?: unknown;
 }
 
+interface ApiContainerUpdateCandidate {
+  tag?: unknown;
+  digest?: unknown;
+}
+
 interface ApiContainerResult {
   tag?: unknown;
   suggestedTag?: unknown;
@@ -83,6 +88,7 @@ interface ApiContainerResult {
   publishedAtTrusted?: unknown;
   releaseNotes?: ApiContainerReleaseNotes | null;
   updateInsight?: ApiContainerUpdateInsight | null;
+  updateCandidates?: Record<string, ApiContainerUpdateCandidate | null | undefined> | null;
 }
 
 interface ApiContainerUpdateKind {
@@ -703,6 +709,25 @@ function deriveUpdateInsight(
   return { tag, kind: kind as 'major' | 'minor' | 'patch' };
 }
 
+const UPDATE_CANDIDATE_KINDS = ['patch', 'minor', 'major'] as const;
+
+/**
+ * Derive the best candidate per update type (patch, minor, major) in that order.
+ * Entries without a usable tag are dropped; undefined when none remain.
+ */
+function deriveUpdateCandidates(
+  apiContainer: ApiContainerInput,
+): Container['updateCandidates'] | undefined {
+  const candidates = apiContainer.result?.updateCandidates;
+  if (!candidates || typeof candidates !== 'object') return undefined;
+  const derived: NonNullable<Container['updateCandidates']> = [];
+  for (const kind of UPDATE_CANDIDATE_KINDS) {
+    const tag = asNonEmptyString(candidates[kind]?.tag);
+    if (tag) derived.push({ kind, tag });
+  }
+  return derived.length > 0 ? derived : undefined;
+}
+
 /** Derive a user-facing registry error message from API error payloads. */
 function deriveRegistryError(apiContainer: ApiContainerInput): string | undefined {
   return asNonEmptyString(apiContainer.error?.message);
@@ -966,6 +991,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn
     registryErrorKind: deriveRegistryErrorKind(apiContainer),
     noUpdateReason: deriveNoUpdateReason(apiContainer),
     updateInsight: deriveUpdateInsight(apiContainer),
+    updateCandidates: deriveUpdateCandidates(apiContainer),
     bouncer: deriveBouncer(apiContainer),
     securityScanState: deriveSecurityScanState(apiContainer),
     securitySummary: currentSummary,

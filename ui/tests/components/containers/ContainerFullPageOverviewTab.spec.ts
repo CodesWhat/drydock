@@ -174,6 +174,22 @@ describe('ContainerFullPageOverviewTab', () => {
     expect(text).not.toContain('bogus-kind');
   });
 
+  it('lists the per-type update candidates', () => {
+    selectedContainer.value = makeContainer({
+      newTag: '3.0.0',
+      updateKind: 'major',
+      updateCandidates: [
+        { kind: 'minor', tag: '1.5.0' },
+        { kind: 'major', tag: '3.0.0' },
+      ],
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.get('[data-test="update-candidate-minor"]').text()).toContain('1.5.0');
+    expect(wrapper.get('[data-test="update-candidate-major"]').text()).toContain('3.0.0');
+  });
+
   it('renders the up-to-date state when there is no new tag', () => {
     selectedContainer.value = makeContainer({ newTag: undefined, updateKind: null });
 

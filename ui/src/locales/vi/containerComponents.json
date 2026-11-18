@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Đã có phiên bản mới hơn: {tag}. Tag này đã được ghim, drydock sẽ không tự động cập nhật."
     },
+    "updateCandidates": {
+      "title": "Ứng viên theo loại cập nhật"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bị chặn do bảo mật",
       "rolledBack": "Đã khôi phục",

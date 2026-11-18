@@ -11,6 +11,7 @@ import ContainerStats from './ContainerStats.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import LabelOverridesPanel from '../LabelOverridesPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateCandidatesList from './UpdateCandidatesList.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import ContainerPortEntry from './ContainerPortEntry.vue';
@@ -299,6 +300,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppIcon name="arrow-right" :size="7" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
+              <UpdateCandidatesList :candidates="selectedContainer.updateCandidates" />
               <div v-if="selectedContainer.softwareVersion"
                    class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-2xs-plus font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }"

@@ -42,6 +42,7 @@ import {
   type ApprovalRecord,
   type ApprovalResolution,
   buildApprovalRecordInput,
+  chooseApprovalCandidate,
   classifyApprovalCandidate,
   isApprovalResolved,
   isSameApprovalCandidate,
@@ -113,7 +114,7 @@ function reconcileContainer(reported: Container | undefined): void {
   // The group rule is read live, as the global mode is: a report is built at store-write
   // time and can predate a policy saved since, which would resolve a row `auto-applied` on
   // a stale read that the dedupe on container and candidate below never requeues.
-  const container = withCurrentGroupPolicy(reported);
+  const container = chooseApprovalCandidate(withCurrentGroupPolicy(reported), getActionTriggers());
 
   const rows = findApprovalsByContainerId(container.id);
   const openRows = rows.filter(isOpen);

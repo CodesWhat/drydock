@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Neuere Version verfügbar: {tag}. Dieser Tag ist gepinnt, drydock aktualisiert ihn nicht automatisch."
     },
+    "updateCandidates": {
+      "title": "Kandidaten nach Update-Typ"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Durch Sicherheit blockiert",
       "rolledBack": "Rollback ausgeführt",

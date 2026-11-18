@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Nova versão disponível: {tag}. Esta Tag está fixada, o drydock não vai atualizá-la automaticamente."
     },
+    "updateCandidates": {
+      "title": "Candidatos por tipo de atualização"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Bloqueado por segurança",
       "rolledBack": "Rollback feito",

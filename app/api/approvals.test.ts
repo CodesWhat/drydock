@@ -28,6 +28,7 @@ const {
   mockApplyContainerUpdatePolicyAction,
   mockRequestContainerUpdate,
   mockGetServerConfiguration,
+  mockRegistryGetState,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockListApprovals: vi.fn(),
@@ -43,6 +44,7 @@ const {
   mockApplyContainerUpdatePolicyAction: vi.fn(),
   mockRequestContainerUpdate: vi.fn(),
   mockGetServerConfiguration: vi.fn(() => ({ feature: { containeractions: true } })),
+  mockRegistryGetState: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -83,6 +85,7 @@ vi.mock('../updates/request-update.js', () => ({
   },
 }));
 vi.mock('../store/container.js', () => ({ getContainer: mockGetContainer }));
+vi.mock('../registry/index.js', () => ({ getState: mockRegistryGetState }));
 vi.mock('./sse-container-enrichment.js', () => ({
   buildEligibilityContext: mockBuildEligibilityContext,
 }));
@@ -183,6 +186,7 @@ beforeEach(() => {
   mockCountApprovals.mockReturnValue({ pending: 2, deferred: 1, decidedToday: 3 });
   mockGetApprovalById.mockReturnValue(undefined);
   mockGetContainer.mockReturnValue(undefined);
+  mockRegistryGetState.mockReturnValue({ trigger: {} });
   mockDecideApprovalIfPending.mockImplementation((_id: string, patch: Partial<ApprovalRecord>) => ({
     status: 'decided',
     record: { ...createRecord(), ...patch },
@@ -1659,5 +1663,60 @@ describe('OpenAPI contract', () => {
     getHandler('/:id')({ params: { id: 'approval-1' } }, res);
 
     expectValid('/api/v1/approvals/{id}', vi.mocked(res.json).mock.calls[0][0]);
+  });
+});
+
+describe('a trigger that separates update types', () => {
+  const separateTriggers = {
+    trigger: {
+      'docker.local': {
+        type: 'docker',
+        configuration: { auto: 'none', threshold: 'minor', separateupdatetypes: true },
+        getId: () => 'docker.local',
+      },
+    },
+  };
+
+  function createMajorContainer() {
+    return createContainer({
+      updateAvailable: true,
+      result: {
+        tag: '3.0.0',
+        updateCandidates: { minor: { tag: '1.5.0', semverDiff: 'minor' } },
+      },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '3.0.0', semverDiff: 'major' },
+    });
+  }
+
+  beforeEach(() => {
+    mockRegistryGetState.mockReturnValue(separateTriggers);
+    mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: '1.5.0', toRef: '1.5.0' }));
+    mockGetContainer.mockReturnValue(createMajorContainer());
+  });
+
+  test('approving dispatches the candidate the row names', async () => {
+    const { status } = await callDecision('/:id/approve');
+
+    expect(status).toBe(202);
+    const dispatched = mockRequestContainerUpdate.mock.calls[0][0];
+    expect(dispatched.result.tag).toBe('1.5.0');
+    expect(dispatched.updateKind.remoteValue).toBe('1.5.0');
+  });
+
+  test('a row naming the primary is superseded once the trigger chooses another candidate', async () => {
+    mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: '3.0.0', toRef: '3.0.0' }));
+
+    const { status } = await callDecision('/:id/approve');
+
+    expect(status).toBe(409);
+    expect(mockRequestContainerUpdate).not.toHaveBeenCalled();
+  });
+
+  test('the detail view evaluates eligibility against the chosen candidate', () => {
+    const res = createMockResponse();
+
+    getHandler('/:id')({ params: { id: 'approval-1' } }, res);
+
+    expect(mockBuildEligibilityContext.mock.calls[0][0].result.tag).toBe('1.5.0');
   });
 });

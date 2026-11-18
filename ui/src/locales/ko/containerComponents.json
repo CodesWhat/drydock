@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "새 버전 사용 가능: {tag}. 이 Tag는 고정되어 있어 drydock이 자동으로 업데이트하지 않습니다."
     },
+    "updateCandidates": {
+      "title": "업데이트 유형별 후보"
+    },
     "eligibilityBadges": {
       "securityBlocked": "보안으로 인해 차단됨",
       "rolledBack": "롤백됨",

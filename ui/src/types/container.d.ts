@@ -244,6 +244,11 @@ export interface Container {
    * update (see updateKind/updateEligibility for that).
    */
   updateInsight?: { tag: string; kind: 'major' | 'minor' | 'patch' };
+  /**
+   * Best newer tag per update type, patch first. Display only: the update
+   * actions still target newTag.
+   */
+  updateCandidates?: Array<{ kind: 'patch' | 'minor' | 'major'; tag: string }>;
   bouncer: 'safe' | 'unsafe' | 'blocked';
   /** `scanning` is transient server state: a scan of this container is running right now. */
   securityScanState?: 'scanned' | 'not-scanned' | 'scanning';

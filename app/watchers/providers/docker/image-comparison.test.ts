@@ -2181,4 +2181,166 @@ describe('image-comparison', () => {
       });
     });
   });
+
+  describe('per-type update candidates', () => {
+    function mockTags(tags: string[], manifestDigest = 'sha256:primary') {
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getTags: vi.fn().mockResolvedValue(tags),
+            getImageManifestDigest: vi.fn().mockResolvedValue({
+              digest: manifestDigest,
+              created: '2026-04-01T00:00:00.000Z',
+              version: 2,
+            }),
+            normalizeImage: identityNormalizeImage,
+          },
+        },
+      });
+    }
+
+    function createSemverContainer(overrides: Record<string, unknown> = {}, tag = '1.2.3') {
+      return {
+        image: {
+          id: 'image-1',
+          registry: { name: 'hub' },
+          name: 'library/app',
+          tag: { value: tag, semver: true, tagPrecision: 'specific' },
+          digest: { watch: false },
+        },
+        tagFamily: 'loose',
+        ...overrides,
+      };
+    }
+
+    const log = () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() });
+
+    test('records the best candidate per type and keeps the highest as the primary', async () => {
+      mockTags(['1.2.4', '1.2.5', '1.3.0', '1.4.2', '2.0.0', '3.1.0']);
+      const result = await findNewVersion(createSemverContainer() as never, log());
+      expect(result.tag).toBe('3.1.0');
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.5', semverDiff: 'patch' },
+        minor: { tag: '1.4.2', semverDiff: 'minor' },
+        major: { tag: '3.1.0', semverDiff: 'major' },
+      });
+    });
+
+    test('respects the running-version ceiling', async () => {
+      mockTags(['1.2.5', '1.4.2', '2.0.0']);
+      const result = await findNewVersion(
+        createSemverContainer({ tagCeiling: 'major' }) as never,
+        log(),
+      );
+      expect(result.tag).toBe('1.4.2');
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.5', semverDiff: 'patch' },
+        minor: { tag: '1.4.2', semverDiff: 'minor' },
+      });
+    });
+
+    test('respects running-version variables in the include filter', async () => {
+      mockTags(['1.2.5', '1.4.2', '2.0.0']);
+      const result = await findNewVersion(
+        createSemverContainer({ includeTags: '^${major}\\.' }) as never,
+        log(),
+      );
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.5', semverDiff: 'patch' },
+        minor: { tag: '1.4.2', semverDiff: 'minor' },
+      });
+    });
+
+    test('respects the include and exclude filters', async () => {
+      mockTags(['1.2.5-alpine', '1.2.6', '1.5.0', '2.0.0']);
+      const result = await findNewVersion(
+        createSemverContainer({ excludeTags: '^2\\.' }) as never,
+        log(),
+      );
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.6', semverDiff: 'patch' },
+        minor: { tag: '1.5.0', semverDiff: 'minor' },
+      });
+    });
+
+    test('keeps the tag family: strict family drops other suffix families', async () => {
+      mockTags(['1.2.4-alpine', '1.2.5', '1.3.0-alpine', '2.0.0']);
+      const result = await findNewVersion(
+        createSemverContainer({ tagFamily: 'strict', includeTags: '.*' }, '1.2.3-alpine') as never,
+        log(),
+      );
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.4-alpine', semverDiff: 'patch' },
+        minor: { tag: '1.3.0-alpine', semverDiff: 'minor' },
+      });
+    });
+
+    test('classifies against the transformed running tag', async () => {
+      mockTags(['release-1.2.4', 'release-1.3.0']);
+      const result = await findNewVersion(
+        createSemverContainer(
+          { transformTags: '^release-(\\d+\\.\\d+\\.\\d+) => $1' },
+          'release-1.2.3',
+        ) as never,
+        log(),
+      );
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: 'release-1.2.4', semverDiff: 'patch' },
+        minor: { tag: 'release-1.3.0', semverDiff: 'minor' },
+      });
+    });
+
+    test('skips rejected release lines so the next eligible tag is offered', async () => {
+      mockTags(['1.2.5', '1.3.0', '1.4.0', '2.0.0', '2.1.0']);
+      const result = await findNewVersion(
+        createSemverContainer({ updatePolicy: { skipTags: ['major:2', 'minor:1.4'] } }) as never,
+        log(),
+      );
+      expect(result.updateCandidates).toEqual({
+        patch: { tag: '1.2.5', semverDiff: 'patch' },
+        minor: { tag: '1.3.0', semverDiff: 'minor' },
+      });
+    });
+
+    test('attaches the resolved digest to the primary candidate only', async () => {
+      mockTags(['1.2.4', '2.0.0']);
+      const container = createSemverContainer();
+      container.image.digest = { watch: true, repo: 'sha256:local' } as never;
+      const result = await findNewVersion(container as never, log());
+      expect(result.updateCandidates?.major).toEqual({
+        tag: '2.0.0',
+        digest: 'sha256:primary',
+        semverDiff: 'major',
+      });
+      expect(result.updateCandidates?.patch).toEqual({ tag: '1.2.4', semverDiff: 'patch' });
+    });
+
+    test('records no candidates for a non-semver running tag', async () => {
+      mockTags(['1.0.0', '2.0.0']);
+      const container = createSemverContainer({ includeTags: '^\\d' }, 'latest');
+      container.image.tag.semver = false;
+      const result = await findNewVersion(container as never, log());
+      expect(result.updateCandidates).toBeUndefined();
+    });
+
+    test('records no candidates when only the primary update is on offer', async () => {
+      mockTags(['1.2.4', '1.2.5']);
+      const result = await findNewVersion(createSemverContainer() as never, log());
+      expect(result.tag).toBe('1.2.5');
+      expect(result.updateCandidates).toBeUndefined();
+    });
+
+    test('records no candidates when nothing is newer', async () => {
+      mockTags(['1.0.0', '1.2.3']);
+      const result = await findNewVersion(createSemverContainer() as never, log());
+      expect(result.updateCandidates).toBeUndefined();
+    });
+
+    test('records no candidates when the running tag has no numeric version', async () => {
+      mockTags(['1.2.3']);
+      const container = createSemverContainer({}, 'stable');
+      const result = await findNewVersion(container as never, log());
+      expect(result.updateCandidates).toBeUndefined();
+    });
+  });
 });
