@@ -8,6 +8,8 @@ import type { Logger } from 'pino';
 import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
+  ContainerStateAlertEventPayload,
+  ContainerStateAlertKind,
   ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
@@ -21,6 +23,7 @@ import {
   emitBatchUpdateCompleted,
   emitContainerReport,
   emitContainerReports,
+  emitContainerStateAlert,
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
   emitSecurityAlert,
@@ -34,6 +37,7 @@ import {
   type ContainerReport,
   clearDetectedUpdateState,
   deriveContainerIdentityKey,
+  isRollbackContainerName,
 } from '../model/container.js';
 import {
   type ActiveContainerUpdateOperationStatus,
@@ -62,6 +66,7 @@ import { uuidv7 } from '../util/uuid.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
 import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js';
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
+import { isDrydockInitiatedStateChange } from '../watchers/providers/docker/container-state-alerts.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
 import { checkAgentVersion } from './agent-version-alerts.js';
@@ -281,6 +286,12 @@ export const AGENT_SSE_IDLE_TIMEOUT_MS = 45_000;
 const SSE_HEARTBEAT_LINE = ': heartbeat';
 // Longer than any heartbeat line, so a trailing partial line never needs more.
 const SSE_PARTIAL_LINE_KEEP_CHARS = SSE_HEARTBEAT_LINE.length + 4;
+const CONTAINER_STATE_ALERT_KINDS: ReadonlySet<string> = new Set<ContainerStateAlertKind>([
+  'container-stopped',
+  'container-exited',
+  'container-oom-killed',
+  'container-restart-loop',
+]);
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -2509,6 +2520,54 @@ export class AgentClient {
     return parsedPayload;
   }
 
+  /**
+   * Agents classify container state alerts where the Docker events are, so the controller
+   * only validates and relays. It still drops anything Drydock is replacing itself (the
+   * agent checks its own operations; this covers a controller-issued one) and rollback
+   * containers, so a stale or older-protocol payload cannot page for an update.
+   */
+  private parseContainerStateAlertPayload(
+    data: unknown,
+  ): ContainerStateAlertEventPayload | undefined {
+    const payload = toOptionalRecord(data);
+    if (
+      !payload ||
+      typeof payload.kind !== 'string' ||
+      !CONTAINER_STATE_ALERT_KINDS.has(payload.kind) ||
+      typeof payload.containerName !== 'string' ||
+      payload.containerName.length === 0
+    ) {
+      return undefined;
+    }
+    const snapshot = toOptionalRecord(payload.container) as unknown as Container | undefined;
+    const stored = snapshot ? storeContainer.getContainer(snapshot.id) : undefined;
+    const container =
+      stored?.agent === this.name
+        ? stored
+        : snapshot
+          ? { ...snapshot, agent: this.name }
+          : undefined;
+    if (!container) {
+      return undefined;
+    }
+    if (isRollbackContainerName(container.name) || isDrydockInitiatedStateChange(container)) {
+      return undefined;
+    }
+    return {
+      kind: payload.kind as ContainerStateAlertKind,
+      containerName: payload.containerName,
+      container,
+      ...(Number.isInteger(payload.exitCode) ? { exitCode: Number(payload.exitCode) } : {}),
+      ...(typeof payload.reason === 'string' ? { reason: payload.reason } : {}),
+      ...(Number.isFinite(payload.restartCount)
+        ? { restartCount: Number(payload.restartCount) }
+        : {}),
+      ...(Number.isFinite(payload.windowSeconds)
+        ? { windowSeconds: Number(payload.windowSeconds) }
+        : {}),
+    };
+  }
+
   private parseSecurityScanCycleCompleteEventPayload(
     data: unknown,
   ): SecurityScanCycleCompleteEventPayload | undefined {
@@ -2625,6 +2684,13 @@ export class AgentClient {
               completedAt: nowIso,
             });
           }
+        }
+        return;
+      }
+      case 'dd:container-state-alert': {
+        const payload = this.parseContainerStateAlertPayload(data);
+        if (payload) {
+          await emitContainerStateAlert(payload);
         }
         return;
       }
