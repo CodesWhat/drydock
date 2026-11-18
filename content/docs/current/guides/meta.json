@@ -1,4 +1,4 @@
 {
   "title": "Guides",
-  "pages": ["security", "verifying-releases", "translations"]
+  "pages": ["security", "verifying-releases", "one-shot-scan", "translations"]
 }

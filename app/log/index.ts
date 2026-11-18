@@ -2,6 +2,7 @@ import { Writable } from 'node:stream';
 import pino from 'pino';
 import pinoPretty from 'pino-pretty';
 import { getLogBufferEnabled, getLogFormat, getLogLevel } from '../configuration/index.js';
+import { isObservationMode } from '../runtime/observation-mode.js';
 import { addEntry } from './buffer.js';
 import { TEXT_LOG_TIMESTAMP_TRANSLATE_TIME } from './display-timestamp.js';
 import { setWarnLogger } from './warn.js';
@@ -28,11 +29,15 @@ const bufferStream = new Writable({
 });
 
 function createMainLogStream() {
+  // The one-shot `scan` command keeps stdout for its own output.
+  const observing = isObservationMode();
+  const target = observing ? process.stderr : process.stdout;
   if (getLogFormat() === 'json') {
-    return process.stdout;
+    return target;
   }
   return pinoPretty({
-    colorize: Boolean(process.stdout.isTTY),
+    colorize: Boolean(target.isTTY),
+    ...(observing ? { destination: process.stderr.fd } : {}),
     sync: true,
     singleLine: true,
     translateTime: TEXT_LOG_TIMESTAMP_TRANSLATE_TIME,

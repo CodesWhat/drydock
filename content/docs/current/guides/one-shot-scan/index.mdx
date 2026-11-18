@@ -1,0 +1,90 @@
+---
+title: "One-Shot Scan"
+description: "Run one observation-only scan from a CI job or script, get JSON or NDJSON on stdout and a distinct exit code for no updates, updates found, failure and timeout."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+`scan` checks your containers for updates once, prints the result and exits. It is meant for CI jobs and scripts that need an answer rather than a running service. It uses the same `DD_WATCHER_*` and `DD_REGISTRY_*` configuration (and `drydock.yml`) as a normal start.
+
+```bash
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  codeswhat/drydock:latest node dist/index.js scan --updates-only
+```
+
+## What it does and doesn't do
+
+A scan is observation-only. It starts no HTTP server, no scheduler and no Docker events stream, and it reads and writes nothing in the `/store` volume: the database lives in memory for the length of the run. Only watchers and registries are loaded, so no notification or action can fire, and there are no flags to turn them on. Passing `--notify`, `--trigger`, `--action`, `--update` or `--apply` is a usage error. Authentication and agents are not loaded either, so a scan does not need a login and does not talk to remote agents.
+
+Logs go to stderr. Stdout carries only the chosen output, so `drydock scan | jq` is safe.
+
+## Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--format json\|ndjson` | `json` | One JSON document, or one JSON line per container |
+| `--updates-only` | off | List only containers with an update available |
+| `--timeout <seconds>` | `300` | Give up after this long |
+| `--help` | | Print usage and exit `0` |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Scan completed, no updates available |
+| `1` | Technical failure |
+| `2` | Usage error (bad or refused argument) |
+| `3` | Scan completed, at least one update available |
+| `4` | The `--timeout` elapsed before the scan finished |
+
+Technical failure covers a Docker enumeration error, a registry lookup that failed for any container, a watcher that threw, no watcher being registered and a store or startup error. It wins over `3`: if any container could not be checked, the scan cannot say the update list is complete, so the exit code is `1` even when other containers have updates. The output is still printed so you can see which ones failed.
+
+<Callout type="info">`--updates-only` filters what is listed, not what decides the exit code. A scan with no updates exits `0` and prints an empty `containers` list.</Callout>
+
+## JSON output
+
+```json
+{
+  "schemaVersion": 1,
+  "status": "updates",
+  "scannedAt": "2026-11-17T10:00:00.000Z",
+  "summary": { "scanned": 12, "updates": 1, "errors": 0 },
+  "containers": [
+    {
+      "watcher": "local",
+      "name": "web",
+      "id": "3f2a9c1d7b0e",
+      "status": "running",
+      "image": { "registry": "hub", "name": "library/nginx", "tag": "1.27.0" },
+      "updateAvailable": true,
+      "updateKind": { "kind": "tag", "semverDiff": "minor", "local": "1.27.0", "remote": "1.28.0" },
+      "result": { "tag": "1.28.0", "digest": null },
+      "error": null
+    }
+  ],
+  "errors": []
+}
+```
+
+`status` is `ok`, `updates`, `error` or `timeout`, matching exit codes `0`, `3`, `1` and `4`. Field names and their order do not change within a `schemaVersion`. Containers are sorted by watcher, then name. Fields with no value are `null`, never omitted. `summary.scanned` counts every container checked, whatever `--updates-only` listed. `errors` holds watcher-level failures; a per-container failure is in that container's `error`.
+
+## NDJSON output
+
+`--format ndjson` prints one line per container with the same fields as an entry in `containers`, in the same order, and nothing else: no summary line. Read the outcome from the exit code. A timeout or a startup failure prints no lines.
+
+## In CI
+
+```bash
+set +e
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  codeswhat/drydock:latest node dist/index.js scan --updates-only --timeout 120 > updates.json
+case $? in
+  0) echo "up to date" ;;
+  3) echo "updates available"; cat updates.json ;;
+  4) echo "scan timed out"; exit 1 ;;
+  *) echo "scan failed"; exit 1 ;;
+esac
+```
+
+After a timeout the process exits right away, even if registry requests are still in flight. Every other outcome closes its watchers and registries and lets the process end on its own.
