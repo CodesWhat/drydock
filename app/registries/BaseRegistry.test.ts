@@ -360,12 +360,33 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
     method: 'GET',
     url: 'https://auth.example.com/token',
     maxRedirects: 0,
+    timeout: 30000,
     headers: {
       Accept: 'application/json',
       Authorization: 'Basic dXNlcjpwYXNz',
     },
   });
   expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should honor DD_OUTBOUND_HTTP_TIMEOUT_MS for the auth request', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const previous = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+  process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '5000';
+  try {
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+    );
+    expect(axios.mock.calls.at(-1)[0].timeout).toBe(5000);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    } else {
+      process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previous;
+    }
+  }
 });
 
 test('authenticateBearerFromAuthUrl should set bearer token using access_token from default extractor', async () => {

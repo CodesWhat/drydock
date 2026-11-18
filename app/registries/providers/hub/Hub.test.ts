@@ -158,6 +158,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -181,6 +182,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
       },
@@ -206,6 +208,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',

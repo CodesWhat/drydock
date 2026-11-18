@@ -164,6 +164,7 @@ test('authenticate should throw actionable error when configured credentials are
     method: 'GET',
     url: 'https://gcr.io/v2/token?scope=repository:project/image:pull',
     maxRedirects: 0,
+    timeout: 30000,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${expectedBasic}`,
@@ -197,6 +198,7 @@ test('resolveBearerChallengeOptions should use configured service account creden
     method: 'GET',
     url: 'https://gcr.io/v2/token?service=gcr.io&scope=repository%3Aproject%2Fimage%3Apull',
     maxRedirects: 0,
+    timeout: 30000,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${expectedBasic}`,
