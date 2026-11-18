@@ -2527,6 +2527,7 @@ describe('Update Operation Store', () => {
       expect(result!.operation.id).toBe(op.id);
       expect(result!.operation.status).toBe('failed');
       expect(result!.operation.lastError).toBe('Cancelled by operator');
+      expect(result!.operation.cancelRequested).toBe(true);
     });
 
     test('flags an in-progress operation with cancelRequested', () => {
