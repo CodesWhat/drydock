@@ -611,7 +611,9 @@ export async function enqueueContainerUpdates(
       .filter((prepared) => actionKindOf(prepared) === 'update')
       .map((prepared) => prepared.container.id),
   );
-  const pendingRestarts = preparedAccepted.filter((prepared) => actionKindOf(prepared) === 'restart');
+  const pendingRestarts = preparedAccepted.filter(
+    (prepared) => actionKindOf(prepared) === 'restart',
+  );
   let activated = true;
   while (activated) {
     activated = false;
