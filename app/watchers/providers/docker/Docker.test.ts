@@ -1062,6 +1062,56 @@ describe('Docker Watcher', () => {
       });
     });
 
+    // #1595: UI/API updates emit the bare container name, and the stored row still
+    // holds the removed container's id. Reporter ran WATCHEVENTS=false.
+    test('callback matches the bare container name and refreshes the recreated container by name (#1595)', async () => {
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      await docker.init();
+
+      const matchedContainer = { id: 'old-id', name: 'dashy', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('dashy');
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'other-id', Names: ['/dashy-extra'] },
+        { Id: 'nameless-id' },
+        { Id: 'new-id', Names: ['/dashy'] },
+      ]);
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('dashy');
+
+      expect(mockDockerApi.listContainers).toHaveBeenCalledWith({
+        all: true,
+        filters: { name: ['dashy'] },
+      });
+      expect(docker.watchContainer).toHaveBeenCalledTimes(1);
+      expect(docker.watchContainer).toHaveBeenCalledWith(
+        { ...matchedContainer, id: 'new-id' },
+        { emitBatchEvent: false, refreshImageDetails: true },
+      );
+    });
+
+    test('callback falls back to the stored record when the replacement lookup fails', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const matchedContainer = { id: 'old-id', name: 'dashy', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('dashy');
+      mockDockerApi.listContainers.mockRejectedValue(new Error('socket hang up'));
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('dashy');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+    });
+
     test('callback does not call watchContainer when no matching container found', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       await docker.init();

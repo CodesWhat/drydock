@@ -1069,9 +1069,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // Only match containers owned by THIS watcher's agent — remote-agent rows
     // share the same default watcher name ('local') and would otherwise produce
     // a cross-agent match leaving a stale "update available" badge (#386).
+    // UI/API updates emit the bare container name; the trigger path emits
+    // `${watcher}_${name}`. Accept both forms (#1595).
     const matched = containers.find(
       (c) =>
-        `${c.watcher}_${c.name}` === containerName &&
+        (c.name === containerName || `${c.watcher}_${c.name}` === containerName) &&
         normalizeAgentValue(c.agent) === currentWatcherAgent,
     );
     if (!matched) {
@@ -1091,7 +1093,32 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // the preserveClearedUpdateState guard in container-processing.ts and
     // cannot re-raise a spurious updateAvailable=true badge (#265 regression).
     storeContainer.markPendingFreshStateAfterManualUpdate(matched, Date.now());
+    // The update recreated the container, so the stored record still points at the
+    // removed one. Re-resolve the replacement by name and refresh just that container.
+    const replacementId = await this.findContainerIdByName(matched.name);
+    if (replacementId) {
+      await this.watchContainer(
+        { ...matched, id: replacementId },
+        { emitBatchEvent: false, refreshImageDetails: true },
+      );
+      return;
+    }
     await this.watchContainer(matched, { emitBatchEvent: false });
+  }
+
+  private async findContainerIdByName(containerName: string): Promise<string | undefined> {
+    try {
+      const summaries = await this.dockerApi.listContainers({
+        all: true,
+        filters: { name: [containerName] },
+      });
+      return summaries.find((summary) => summary.Names?.includes(`/${containerName}`))?.Id;
+    } catch (error: unknown) {
+      this.log.debug(
+        `Unable to resolve the replacement container "${containerName}" (${getErrorMessage(error)})`,
+      );
+      return undefined;
+    }
   }
 
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
