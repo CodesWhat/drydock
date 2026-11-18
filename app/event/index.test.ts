@@ -451,6 +451,17 @@ test('container health transition handler unsubscribe prevents later dispatch', 
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('container state alert handlers run by order and unsubscribe cleanly', async () => {
+  const calls: string[] = [];
+  event.registerContainerStateAlert(async () => void calls.push('late'), { id: 'z', order: 20 });
+  event.registerContainerStateAlert(async () => void calls.push('early'), { id: 'a', order: 10 });
+  const removed = vi.fn();
+  event.registerContainerStateAlert(removed)();
+  await event.emitContainerStateAlert({ kind: 'container-exited', containerName: 'web' });
+  expect(calls).toEqual(['early', 'late']);
+  expect(removed).not.toHaveBeenCalled();
+});
+
 test('a timed-out container health transition handler does not block the next handler', async () => {
   event.setHandlerTimeoutMsForTests(20);
   const next = vi.fn();

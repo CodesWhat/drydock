@@ -77,6 +77,7 @@ import mockCron from 'node-cron';
 import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
+import { toEventTimestamp } from './docker-recent-event.js';
 import * as maintenance from './maintenance.js';
 import {
   applyRemoteOidcTokenPayload,
@@ -563,8 +564,6 @@ describe('Docker Watcher', () => {
 
   describe('Recent event history helpers', () => {
     test('should convert docker event timestamps from timeNano and time', () => {
-      const toEventTimestamp = (docker as any).toEventTimestamp.bind(docker);
-
       expect(toEventTimestamp({ timeNano: 1_700_000_000_123_000_000 })).toBe(
         new Date(1_700_000_000_123).toISOString(),
       );

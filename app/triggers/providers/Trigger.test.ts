@@ -2265,6 +2265,150 @@ test('container unhealthy batch title uses its dedicated template', () => {
   ).toBe('2 containers became unhealthy');
 });
 
+describe('container state alerts', () => {
+  const stateContainer = {
+    id: 'state-1',
+    watcher: 'local',
+    name: 'web',
+    labels: {},
+    updateAvailable: false,
+    updateKind: { kind: 'unknown' },
+  };
+
+  test.each([
+    {
+      kind: 'container-stopped',
+      payload: { exitCode: 0, reason: 'exit code 0' },
+      title: 'Container web stopped',
+      body: 'Container web stopped (exit code 0)',
+    },
+    {
+      kind: 'container-exited',
+      payload: { exitCode: 137, reason: 'exit code 137' },
+      title: 'Container web exited unexpectedly',
+      body: 'Container web exited with a non-zero exit code (137)',
+    },
+    {
+      kind: 'container-oom-killed',
+      payload: { exitCode: 137, reason: 'out of memory' },
+      title: 'Container web was OOM killed',
+      body: 'Container web was killed for running out of memory (exit code 137)',
+    },
+    {
+      kind: 'container-restart-loop',
+      payload: { exitCode: 1, restartCount: 3, windowSeconds: 300 },
+      title: 'Container web is in a restart loop',
+      body: 'Container web crashed 3 times in 300 seconds (last exit code 1)',
+    },
+  ])('$kind dispatches, bypasses the threshold and renders its templates', async (item) => {
+    trigger.configuration.threshold = 'major';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerStateAlertEvent({
+      kind: item.kind,
+      containerName: 'local_web',
+      container: stateContainer,
+      ...item.payload,
+    } as any);
+    expect(provider).toHaveBeenCalledTimes(1);
+    const dispatched = provider.mock.calls[0][0] as any;
+    expect(dispatched.notificationEvent).toMatchObject({ kind: item.kind, ...item.payload });
+    expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+      item.kind,
+      trigger.getId(),
+      expect.objectContaining({ allowAllWhenNoTriggers: true }),
+    );
+    expect(trigger.renderSimpleTitle(dispatched)).toBe(item.title);
+    expect(trigger.renderSimpleBody(dispatched)).toBe(item.body);
+  });
+
+  test('a disabled rule does not dispatch', async () => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    } as any);
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerStateAlertEvent({
+      kind: 'container-exited',
+      containerName: 'local_web',
+      container: stateContainer,
+      exitCode: 2,
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('the per-container notification exclude opt-out prevents dispatch', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'ops';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerStateAlertEvent({
+      kind: 'container-exited',
+      containerName: 'local_web',
+      container: { ...stateContainer, notificationTriggerExclude: trigger.getId() },
+      exitCode: 2,
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('a container missing from the store does not dispatch', async () => {
+    storeContainer.getContainers.mockReturnValue([]);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerStateAlertEvent({
+      kind: 'container-stopped',
+      containerName: 'missing',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('getNotificationEvent keeps exit code, reason and loop metadata', () => {
+    expect(
+      getNotificationEvent({
+        notificationEvent: {
+          kind: 'container-restart-loop',
+          exitCode: 1,
+          reason: 'restart loop',
+          restartCount: 3,
+          windowSeconds: 300,
+          ignored: true,
+        },
+      } as any),
+    ).toEqual({
+      kind: 'container-restart-loop',
+      exitCode: 1,
+      reason: 'restart loop',
+      restartCount: 3,
+      windowSeconds: 300,
+    });
+  });
+
+  test('batch titles use a dedicated template per kind', () => {
+    expect(
+      trigger.renderBatchTitle([
+        { name: 'web', notificationEvent: { kind: 'container-oom-killed' } },
+        { name: 'api', notificationEvent: { kind: 'container-oom-killed' } },
+      ]),
+    ).toBe('2 containers were OOM killed');
+  });
+
+  test('component lifecycle registers and unregisters state alert handling', async () => {
+    const unregister = vi.fn();
+    let callback: any;
+    vi.spyOn(event, 'registerContainerStateAlert').mockImplementation((handler) => {
+      callback = handler;
+      return unregister;
+    });
+    const handle = vi.spyOn(trigger, 'handleContainerStateAlertEvent').mockResolvedValue(undefined);
+    trigger.configuration.auto = true;
+    trigger.configuration.mode = 'simple';
+    await trigger.init();
+    const payload = { kind: 'container-exited', containerName: 'web' };
+    await callback(payload);
+    expect(handle).toHaveBeenCalledWith(payload);
+    await trigger.deregisterComponent();
+    expect(unregister).toHaveBeenCalledTimes(1);
+  });
+});
+
 test('getNotificationEvent preserves maturity-cleared metadata', () => {
   expect(
     getNotificationEvent({
@@ -2694,6 +2838,10 @@ test('previewNotificationTemplates supports every notification rule and rejects 
     'agent-disconnect',
     'agent-reconnect',
     'container-unhealthy',
+    'container-stopped',
+    'container-exited',
+    'container-oom-killed',
+    'container-restart-loop',
     'maturity-cleared',
     'update-pending-approval',
   ];

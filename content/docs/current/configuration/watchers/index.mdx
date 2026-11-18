@@ -81,6 +81,8 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_RESTARTLOOP_THRESHOLD` | ⚪ | Crashes inside the window that raise a `container-restart-loop` notification (see [container state alerts](/docs/configuration/triggers#container-state-alerts)) | Integer, 2 or more | `3` |
+| `DD_WATCHER_{watcher_name}_RESTARTLOOP_WINDOW` | ⚪ | Restart loop window in seconds | Integer, 1 or more | `300` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
