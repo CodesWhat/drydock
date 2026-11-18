@@ -11,6 +11,7 @@ import { bindAuditActor } from './audit-actor.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
+import * as cleanupRouter from './cleanup.js';
 import * as configRouter from './config.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
@@ -230,6 +231,9 @@ export function init(): express.Router {
 
   // Mount images router (image inventory and prune, sibling of /containers)
   mountRouter(router, '/images', imagesRouter.init());
+
+  // Mount cleanup policy router (scheduled and threshold cleanup, manual run)
+  mountRouter(router, '/cleanup', cleanupRouter.init());
 
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
   mountRouter(router, '/stats', statsRouter.init());

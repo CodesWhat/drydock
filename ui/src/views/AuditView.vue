@@ -86,6 +86,7 @@ const actionTypes = [
   'api-key-revoked',
   'api-key-auth-failed',
   'image-prune',
+  'cleanup',
 ];
 
 const route = useRoute();

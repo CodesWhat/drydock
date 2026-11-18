@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Ошибка доставки уведомления",
       "security-alert": "Предупреждение безопасности",
       "maturity-cleared": "Период ожидания завершён",
-      "image-prune": "Очистка образа"
+      "image-prune": "Очистка образа",
+      "cleanup": "Очистка"
     },
     "target": {
       "container": "Контейнер",

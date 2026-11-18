@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
       "maturity-cleared": "Bekleme süresi doldu",
-      "image-prune": "İmaj Temizleme"
+      "image-prune": "İmaj Temizleme",
+      "cleanup": "Temizlik"
     },
     "target": {
       "container": "Kapsayıcı",

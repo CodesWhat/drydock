@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Échec de l'envoi de notification",
       "security-alert": "Alerte de sécurité",
       "maturity-cleared": "Période de maturation écoulée",
-      "image-prune": "Nettoyage d'image"
+      "image-prune": "Nettoyage d'image",
+      "cleanup": "Nettoyage"
     },
     "target": {
       "container": "Conteneur",

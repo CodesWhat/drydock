@@ -118,7 +118,8 @@
       "notification-delivery-failed": "通知送信失敗",
       "security-alert": "セキュリティアラート",
       "maturity-cleared": "待機期間が終了",
-      "image-prune": "イメージプルーン"
+      "image-prune": "イメージプルーン",
+      "cleanup": "クリーンアップ"
     },
     "target": {
       "container": "コンテナ",

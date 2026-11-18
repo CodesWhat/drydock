@@ -13,6 +13,7 @@ import { apiKeyPaths } from './api-keys.js';
 import { approvalPaths } from './approvals.js';
 import { authPaths } from './auth.js';
 import { categoryTriggerPaths } from './category-triggers.js';
+import { cleanupPaths } from './cleanup.js';
 import { componentReadPaths } from './component-read.js';
 import { configPaths } from './config.js';
 import { containerPaths } from './containers.js';
@@ -484,6 +485,7 @@ export const openApiPaths = {
   ...containerPaths,
   ...statsPaths,
   ...imagePaths,
+  ...cleanupPaths,
   ...dependencyGroupPaths,
   ...groupPolicyPaths,
   '/api/v1/operations/{id}/cancel': {

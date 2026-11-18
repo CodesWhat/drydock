@@ -461,6 +461,7 @@ const routes = [
   "/docs/v1.8/configuration/authentications/basic",
   "/docs/v1.8/configuration/authentications/oidc",
   "/docs/v1.8/configuration/authentications/two-factor",
+  "/docs/v1.8/configuration/cleanup",
   "/docs/v1.8/configuration/config-file",
   "/docs/v1.8/configuration/dashboard",
   "/docs/v1.8/configuration/dns",
