@@ -754,6 +754,33 @@ test('registerWatchers should register all watchers', async () => {
   ]);
 });
 
+test('registerWatchers should register the provider named by the watcher provider key', async () => {
+  watchers = {
+    staging: { provider: 'FILE', path: '/nonexistent/images.yml', watchfile: false },
+    other: { host: 'host2' },
+  };
+  await registry.testable_registerWatchers();
+
+  expect(Object.keys(registry.getState().watcher).sort()).toEqual(['docker.other', 'file.staging']);
+  const fileWatcher = registry.getState().watcher['file.staging'];
+  expect(fileWatcher.type).toBe('file');
+  expect(fileWatcher.configuration).toEqual(
+    expect.objectContaining({ path: '/nonexistent/images.yml' }),
+  );
+  expect(fileWatcher.configuration).not.toHaveProperty('provider');
+});
+
+test('reconcile registers a file watcher under its own provider id', async () => {
+  watchers = {};
+  await registry.testable_registerWatchers();
+
+  watchers = { staging: { provider: 'file', path: '/nonexistent/images.yml', watchfile: false } };
+  const result = await registry.reconcileComponentsWithConfiguration();
+
+  expect(result.added).toContain('watcher:file.staging');
+  expect(registry.getState().watcher['file.staging']).toBeDefined();
+});
+
 test('registerWatchers should keep remote watcher registered when auth configuration is incomplete', async () => {
   watchers = {
     local: {

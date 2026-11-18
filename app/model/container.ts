@@ -250,6 +250,25 @@ export interface ContainerUpdateOperationState {
 
 export type TriggerCategory = 'action' | 'notification';
 
+/**
+ * Where a container record comes from. Only `file` is ever stored on a record: it marks a
+ * synthetic container produced by the `file` watcher provider (a static image list), which
+ * has no running Docker container behind it and so can never be updated by an action.
+ */
+export type ContainerSource = 'docker' | 'file';
+
+/**
+ * Synthetic file-watcher ids start with this prefix. Docker container ids are lowercase hex,
+ * so the hyphen makes the prefix impossible to collide with, or be spoofed by, a real
+ * container. `source` is derived from it on every `validate()`, which is why no store column
+ * carries it.
+ */
+export const FILE_CONTAINER_ID_PREFIX = 'file-';
+
+export function isFileSourcedContainer(container: { id?: unknown } | undefined | null): boolean {
+  return typeof container?.id === 'string' && container.id.startsWith(FILE_CONTAINER_ID_PREFIX);
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -260,6 +279,8 @@ export interface Container {
   watcher: string;
   agent?: string;
   identityKey?: string;
+  /** `file` for a synthetic container from a static image list; absent for Docker containers. */
+  source?: ContainerSource;
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
@@ -465,6 +486,7 @@ const schema = joi.object({
   watcher: joi.string().min(1).required(),
   agent: joi.string().optional(),
   identityKey: joi.string().optional(),
+  source: joi.string().valid('file').optional(),
   includeTags: joi.string(),
   excludeTags: joi.string(),
   transformTags: joi.string(),
@@ -1216,6 +1238,12 @@ export function validate(container: unknown): Container {
   // through. The schema permits identityKey as an input so persisted store
   // entries round-trip cleanly, but the derived value wins.
   containerValidated.identityKey = deriveContainerIdentityKey(containerValidated);
+  // Derived from the id, like identityKey, so a stored row needs no column for it.
+  if (isFileSourcedContainer(containerValidated)) {
+    containerValidated.source = 'file';
+  } else {
+    delete containerValidated.source;
+  }
   addTagPinnedProperty(containerValidated);
   addSecurityFastLaneProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);

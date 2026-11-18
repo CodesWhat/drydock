@@ -7057,6 +7057,43 @@ test('mustTrigger should return false when agent does not match', async () => {
   expect(trigger.mustTrigger({ agent: 'local-agent' })).toBe(false);
 });
 
+test('getMustTriggerDecision refuses action triggers for a container from a file watcher', () => {
+  const fileContainer = { id: 'file-0123456789abcdef01234567', name: 'nginx' };
+
+  for (const type of ['docker', 'dockercompose', 'command']) {
+    trigger.type = type;
+    expect((trigger as any).getMustTriggerDecision(fileContainer)).toEqual({
+      allowed: false,
+      reason: 'file-sourced container is notification-only',
+    });
+    expect(trigger.mustTrigger(fileContainer as any)).toBe(false);
+  }
+});
+
+test('getMustTriggerDecision still routes notification triggers for a container from a file watcher', () => {
+  trigger.type = 'slack';
+  const fileContainer = {
+    id: 'file-0123456789abcdef01234567',
+    name: 'nginx',
+    notificationTriggerInclude: 'slack.team',
+  };
+  trigger.name = 'team';
+
+  expect((trigger as any).getMustTriggerDecision(fileContainer)).toEqual({ allowed: true });
+  expect(
+    (trigger as any).getMustTriggerDecision({
+      ...fileContainer,
+      notificationTriggerInclude: 'slack.ops',
+    }),
+  ).toMatchObject({ allowed: false });
+  expect(
+    (trigger as any).getMustTriggerDecision({
+      ...fileContainer,
+      notificationTriggerExclude: 'slack.team',
+    }),
+  ).toMatchObject({ allowed: false });
+});
+
 test('getMustTriggerDecision should describe agent mismatches when the container agent is missing', () => {
   trigger.agent = 'remote-agent';
 

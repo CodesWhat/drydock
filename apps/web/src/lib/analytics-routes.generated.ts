@@ -523,6 +523,7 @@ const routes = [
   "/docs/v1.8/configuration/triggers/telegram",
   "/docs/v1.8/configuration/ui",
   "/docs/v1.8/configuration/watchers",
+  "/docs/v1.8/configuration/watchers/file",
   "/docs/v1.8/configuration/watchers/popular-imgsets",
   "/docs/v1.8/configuration/webhooks",
   "/docs/v1.8/deprecations",

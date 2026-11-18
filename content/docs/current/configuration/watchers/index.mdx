@@ -8,7 +8,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/watchers/docker.png)
 
-The `docker` watcher lets you configure the Docker hosts you want to watch.
+The `docker` watcher lets you configure the Docker hosts you want to watch. Set `DD_WATCHER_{watcher_name}_PROVIDER=file` to watch a static list of images instead, see [File Watcher](/docs/configuration/watchers/file).
 
 ## Edit a watcher schedule in the UI
 
@@ -73,6 +73,7 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
 | `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | v1.8.0-rc.1: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | v1.8.0-rc.1: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
+| `DD_WATCHER_{watcher_name}_PROVIDER` | ⚪ | Watcher provider. `file` reads a static image list instead of a Docker host, see [File Watcher](/docs/configuration/watchers/file) | `docker`, `file` | `docker` |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |

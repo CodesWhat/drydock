@@ -2432,3 +2432,45 @@ describe('computeUpdateEligibility — maintenance-window-closed', () => {
     expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
   });
 });
+
+describe('computeUpdateEligibility — file-sourced containers', () => {
+  const trigger = makeTrigger();
+
+  test('blocks an update on a container from a file watcher, with or without a trigger', () => {
+    for (const triggers of [undefined, { 'docker.update': trigger }]) {
+      const eligibility = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ id: 'file-0123456789abcdef01234567' }),
+        makeContext({ triggers: triggers as never, now: FIXED_NOW }),
+      );
+
+      expect(eligibility.eligible).toBe(false);
+      expect(eligibility.blockers).toHaveLength(1);
+      expect(eligibility.blockers[0]).toMatchObject({
+        reason: 'no-update-trigger-configured',
+        severity: 'hard',
+        actionable: false,
+        details: { source: 'file' },
+      });
+      expect(eligibility.blockers[0].message).toContain('notification-only');
+      expect(hasHardBlocker(eligibility)).toBe(true);
+    }
+  });
+
+  test('still reports the update mode that binds the container', () => {
+    const eligibility = computeUpdateEligibility(
+      makeContainerWithTagUpdate({ id: 'file-0123456789abcdef01234567' }),
+      makeContext({ updateMode: 'auto', now: FIXED_NOW }),
+    );
+
+    expect(eligibility.updateMode).toMatchObject({ value: 'auto', source: 'global' });
+  });
+
+  test('a container without an update still reports that nothing is available', () => {
+    const eligibility = computeUpdateEligibility(
+      makeContainer({ id: 'file-0123456789abcdef01234567' }),
+      makeContext({ now: FIXED_NOW }),
+    );
+
+    expect(eligibility.blockers[0].reason).toBe('no-update-available');
+  });
+});

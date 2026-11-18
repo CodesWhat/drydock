@@ -3812,3 +3812,30 @@ describe('locally built image base image updates', () => {
     expect(container.isLocalBuildContainer(undefined)).toBe(false);
   });
 });
+
+describe('file-sourced containers', () => {
+  function validateWithId(id: string, extra: Record<string, unknown> = {}) {
+    return container.validate({ ...createContainerWithError('x'), id, ...extra });
+  }
+
+  test('derives source from the synthetic id prefix', () => {
+    const fileContainer = validateWithId(`${container.FILE_CONTAINER_ID_PREFIX}0123456789abcdef`);
+
+    expect(fileContainer.source).toBe('file');
+    expect(container.isFileSourcedContainer(fileContainer)).toBe(true);
+  });
+
+  test('leaves a Docker container without a source, even when one is supplied', () => {
+    const dockerContainer = validateWithId('0123456789abcdef', { source: 'file' });
+
+    expect(dockerContainer.source).toBeUndefined();
+    expect(Object.hasOwn(dockerContainer, 'source')).toBe(false);
+    expect(container.isFileSourcedContainer(dockerContainer)).toBe(false);
+  });
+
+  test('isFileSourcedContainer tolerates missing and non-string ids', () => {
+    expect(container.isFileSourcedContainer(undefined)).toBe(false);
+    expect(container.isFileSourcedContainer(null)).toBe(false);
+    expect(container.isFileSourcedContainer({ id: 42 })).toBe(false);
+  });
+});
