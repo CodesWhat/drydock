@@ -37,6 +37,7 @@ const configurationValid = {
     discovery: false,
     agenttopicsegment: true,
     commands: false,
+    buttons: false,
     devicepercontainer: true,
     enabled: false,
     prefix: 'homeassistant',
@@ -129,6 +130,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     discovery: true,
     agenttopicsegment: true,
     commands: false,
+    buttons: false,
     devicepercontainer: true,
     attributes: 'short',
     filter: {
@@ -237,13 +239,20 @@ test('initTrigger should init Mqtt client', async () => {
       },
     },
   };
-  const spy = vi.spyOn(mqttClient, 'connectAsync');
+  const brokerClient = { publish: vi.fn(), on: vi.fn(), removeListener: vi.fn() };
+  const spy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(brokerClient as never);
   await mqtt.initTrigger();
   expect(spy).toHaveBeenCalledWith('mqtt://host:1883', {
     clientId: 'dd',
     username: 'user',
     password: 'password',
     rejectUnauthorized: true,
+    will: {
+      topic: 'dd/container/status',
+      payload: Buffer.from('offline'),
+      qos: 1,
+      retain: true,
+    },
   });
 });
 
@@ -593,6 +602,7 @@ describe('agent state topic parity with hass discovery', () => {
         prefix: 'homeassistant',
         agenttopicsegment,
         commands: false,
+        buttons: false,
         attributes: 'full',
         filter: {
           include: '',
@@ -729,6 +739,7 @@ describe('plain MQTT topic scoped per agent (DR-130)', () => {
         prefix: 'homeassistant',
         agenttopicsegment: false,
         commands: false,
+        buttons: false,
         attributes: 'full',
         filter: {
           include: '',
@@ -1600,6 +1611,7 @@ describe('hass update progress (#210)', () => {
       discovery: true,
       agenttopicsegment: true,
       commands: false,
+      buttons: false,
       devicepercontainer: true,
       prefix: 'homeassistant',
       attributes: 'full',
@@ -1622,6 +1634,7 @@ describe('hass update progress (#210)', () => {
     vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
     vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
     await mqtt.initTrigger();
+    publish.mockClear(); // drop the birth message
     return publish;
   }
 
@@ -1924,5 +1937,134 @@ describe('hass update progress (#210)', () => {
 
     expect(getContainer).not.toHaveBeenCalled();
     expect(triggerSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('hass availability (LWT and birth)', () => {
+  const hassConfiguration = {
+    ...configurationValid,
+    clientid: 'dd',
+    hass: {
+      enabled: true,
+      discovery: true,
+      commands: false,
+      buttons: true,
+      prefix: 'homeassistant',
+      attributes: 'short',
+      filter: { include: '', exclude: '' },
+    },
+  };
+
+  function fakeBroker() {
+    return {
+      publish: vi.fn().mockResolvedValue(undefined),
+      endAsync: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(),
+      removeListener: vi.fn(),
+    };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
+  });
+
+  afterEach(async () => {
+    await mqtt.deregister();
+    vi.restoreAllMocks();
+  });
+
+  test('connects with an offline Last Will and publishes a retained online birth message', async () => {
+    mqtt.configuration = hassConfiguration;
+    const broker = fakeBroker();
+    const connectSpy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
+
+    await mqtt.initTrigger();
+
+    expect(connectSpy.mock.calls[0][1]).toMatchObject({
+      will: {
+        topic: 'dd/container/status',
+        payload: Buffer.from('offline'),
+        qos: 1,
+        retain: true,
+      },
+    });
+    expect(broker.publish).toHaveBeenCalledWith('dd/container/status', 'online', {
+      retain: true,
+      qos: 1,
+    });
+  });
+
+  test('without Home Assistant there is no Will and no birth message', async () => {
+    mqtt.configuration = {
+      ...hassConfiguration,
+      hass: { ...hassConfiguration.hass, enabled: false },
+    };
+    const broker = fakeBroker();
+    const connectSpy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
+
+    await mqtt.initTrigger();
+
+    expect(connectSpy.mock.calls[0][1]).not.toHaveProperty('will');
+    expect(broker.publish).not.toHaveBeenCalled();
+    expect(broker.on).not.toHaveBeenCalled();
+  });
+
+  test('a reconnect republishes the birth message', async () => {
+    mqtt.configuration = hassConfiguration;
+    const broker = fakeBroker();
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
+    await mqtt.initTrigger();
+    broker.publish.mockClear();
+
+    const [event, listener] = broker.on.mock.calls[0];
+    expect(event).toBe('connect');
+    listener();
+    await Promise.resolve();
+
+    expect(broker.publish).toHaveBeenCalledWith('dd/container/status', 'online', {
+      retain: true,
+      qos: 1,
+    });
+  });
+
+  test('re-init drops the connect listener from the old client so births are not duplicated', async () => {
+    mqtt.configuration = hassConfiguration;
+    const oldBroker = fakeBroker();
+    const newBroker = fakeBroker();
+    vi.spyOn(mqttClient, 'connectAsync')
+      .mockResolvedValueOnce(oldBroker as never)
+      .mockResolvedValueOnce(newBroker as never);
+
+    await mqtt.initTrigger();
+    const [, oldListener] = oldBroker.on.mock.calls[0];
+    await mqtt.initTrigger();
+
+    expect(oldBroker.removeListener).toHaveBeenCalledWith('connect', oldListener);
+    expect(newBroker.on).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed birth publish is logged and does not fail init', async () => {
+    mqtt.configuration = hassConfiguration;
+    const broker = fakeBroker();
+    broker.publish.mockRejectedValue(new Error('broker refused'));
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
+    const warnSpy = vi.spyOn(mqtt.log, 'warn').mockImplementation(() => {});
+
+    await mqtt.initTrigger();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(warnSpy).toHaveBeenCalledWith('Failed to publish MQTT birth message (broker refused)');
+  });
+
+  test('hass.buttons defaults to false and accepts true', () => {
+    expect(mqtt.validateConfiguration({ ...configurationValid }).hass.buttons).toBe(false);
+    expect(
+      mqtt.validateConfiguration({
+        ...configurationValid,
+        hass: { ...configurationValid.hass, buttons: true },
+      }).hass.buttons,
+    ).toBe(true);
   });
 });
