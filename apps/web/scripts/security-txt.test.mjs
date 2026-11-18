@@ -40,7 +40,7 @@ test(`security.txt Expires is at least ${MIN_DAYS_LEFT} days away`, () => {
   );
 });
 
-test("vercel.json and the proxy leave /.well-known/security.txt alone", async () => {
+test("vercel.json and next.config leave /.well-known/security.txt alone", async () => {
   const vercel = JSON.parse(readFileSync(new URL("vercel.json", webRoot), "utf8"));
   for (const key of ["redirects", "rewrites"]) {
     for (const rule of vercel[key] ?? []) {
@@ -60,5 +60,4 @@ test("vercel.json and the proxy leave /.well-known/security.txt alone", async ()
   ]) {
     assert.doesNotMatch(String(rule.source), /well-known|security\.txt/);
   }
-  assert.doesNotMatch(readFileSync(new URL("src/proxy.ts", webRoot), "utf8"), /well-known/);
 });

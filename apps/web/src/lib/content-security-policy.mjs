@@ -1,14 +1,18 @@
-const CSP_NONCE_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/u;
-
-export function buildContentSecurityPolicy(nonce, isDevelopment) {
-  if (!CSP_NONCE_PATTERN.test(nonce)) {
-    throw new Error("Content Security Policy nonce must be a base64 or base64url value");
-  }
-
+// Static site-wide Content Security Policy, served from next.config.mjs headers().
+//
+// Why 'unsafe-inline' instead of a nonce or hashes: a per-request nonce forced
+// every page to render dynamically (one function invocation per hit, bot crawls
+// included). Hashes can't replace it either. Next streams per-page inline
+// bootstrap scripts (self.__next_f.push(...) flight data) whose contents differ
+// on every page and change every build, so a single static header can't
+// enumerate them. Everything else stays strict: scripts load only from 'self'
+// and the analytics proxy, and object-src, base-uri, frame-ancestors, form-action
+// and connect-src stay locked to known origins. 'strict-dynamic' is omitted on
+// purpose because browsers ignore 'unsafe-inline' when it is present.
+export function buildContentSecurityPolicy(isDevelopment) {
   const scriptSources = [
     "'self'",
-    `'nonce-${nonce}'`,
-    "'strict-dynamic'",
+    "'unsafe-inline'",
     ...(isDevelopment ? ["'unsafe-eval'"] : []),
     "https://e.codeswhat.com",
   ];
