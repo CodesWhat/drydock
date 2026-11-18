@@ -188,7 +188,7 @@ test('trigger should use anonymous registry mode when registry URL is provided',
   expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
   expect(executeSelfUpdateSpy).toHaveBeenCalled();
   const [contextArg] = executeSelfUpdateSpy.mock.calls[0];
-  expect(contextArg.newImage).toBe('localhost:5000/drydock:bad');
+  expect(contextArg.newImage).toMatch(/^localhost:5000\/drydock:bad@sha256:/);
   expect(contextArg.auth).toBeUndefined();
 });
 

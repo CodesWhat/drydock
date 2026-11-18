@@ -343,6 +343,7 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'prepareSelfUpdateOperation',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
+  'pullAndBindSpecialUpdateImage',
   'markSelfUpdateOperationFailed',
   'markSelfUpdateOperationSkipped',
   'runPreRuntimeUpdateLifecycle',
@@ -735,6 +736,7 @@ class Docker<
         prepareSelfUpdateOperation: updateLifecycleCallbacks.prepareSelfUpdateOperation,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
+        pullAndBindSpecialUpdateImage: updateLifecycleCallbacks.pullAndBindSpecialUpdateImage,
         markSelfUpdateOperationFailed: updateLifecycleCallbacks.markSelfUpdateOperationFailed,
         markSelfUpdateOperationSkipped: updateLifecycleCallbacks.markSelfUpdateOperationSkipped,
       },
@@ -2172,6 +2174,16 @@ class Docker<
     _runtimeContext?: unknown,
   ) {
     return this.selfUpdateOrchestrator.execute(context, container, logContainer, operationId);
+  }
+
+  async pullAndBindSpecialUpdateImage(context, container, logContainer) {
+    await this.pullImage(context.dockerApi, context.auth, context.newImage, logContainer);
+    return this.bindPulledImageIdentity(
+      context.dockerApi,
+      context.newImage,
+      container,
+      logContainer,
+    );
   }
 
   async maybeNotifySelfUpdate(container, logContainer, operationId?: string) {
