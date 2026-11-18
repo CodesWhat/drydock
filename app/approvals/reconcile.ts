@@ -44,6 +44,7 @@ import {
   buildApprovalRecordInput,
   classifyApprovalCandidate,
   isApprovalResolved,
+  isSameApprovalCandidate,
 } from '../model/approval.js';
 import type { Container, ContainerReport } from '../model/container.js';
 import * as registry from '../registry/index.js';
@@ -85,22 +86,6 @@ function isOpen(record: ApprovalRecord): boolean {
   return record.decision === 'pending' || record.decision === 'deferred';
 }
 
-/**
- * Whether a stored row is the candidate the container reports now. The ref is digest-first,
- * so the same tag update reads as a different ref on any cycle where the digest lookup
- * failed (a registry 429). For a tag update the target tag is the identity: it survives the
- * digest coming and going. A digest update has nothing else to go on, so its ref must match.
- */
-function isSameCandidate(
-  row: ApprovalRecord,
-  input: { candidateRef: string; toRef: string; updateKind: ApprovalRecord['updateKind'] },
-): boolean {
-  if (row.candidateRef === input.candidateRef) {
-    return true;
-  }
-  return row.updateKind === 'tag' && input.updateKind === 'tag' && row.toRef === input.toRef;
-}
-
 function resolveRows(
   records: ApprovalRecord[],
   resolution: ApprovalResolution,
@@ -130,7 +115,8 @@ function reconcileContainer(reported: Container | undefined): void {
   // a stale read that the dedupe on container and candidate below never requeues.
   const container = withCurrentGroupPolicy(reported);
 
-  const openRows = findApprovalsByContainerId(container.id).filter(isOpen);
+  const rows = findApprovalsByContainerId(container.id);
+  const openRows = rows.filter(isOpen);
   const verdict = classifyApprovalCandidate(
     container,
     getActionTriggers(),
@@ -158,15 +144,29 @@ function reconcileContainer(reported: Container | undefined): void {
   // fate is — the operator would otherwise be asked to approve a version that is no
   // longer the one on offer.
   resolveRows(
-    openRows.filter((row) => !isSameCandidate(row, input)),
+    openRows.filter((row) => !isSameApprovalCandidate(row, input)),
     'superseded',
   );
-  const currentRows = openRows.filter((row) => isSameCandidate(row, input));
+  const currentRows = openRows.filter((row) => isSameApprovalCandidate(row, input));
 
   if (verdict === 'auto-dispatch') {
     // The normal trigger path owns this candidate now, so the row would sit pending
     // forever behind an update that is about to happen without an operator.
     resolveRows(currentRows, 'auto-applied', { decidedBy: 'system' });
+    return;
+  }
+
+  // An operator's answer stands for the candidate, not for the ref spelling it was minted
+  // under: a digest-backed row and the same tag reported without its digest are one
+  // candidate. A compatible approved or rejected row therefore keeps the candidate out of
+  // the queue, and a pending duplicate of it (minted under the other spelling) is stale.
+  const decided = rows.some(
+    (row) =>
+      (row.decision === 'approved' || row.decision === 'rejected') &&
+      isSameApprovalCandidate(row, input),
+  );
+  if (decided) {
+    resolveRows(currentRows, 'superseded');
     return;
   }
 

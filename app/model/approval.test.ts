@@ -12,6 +12,7 @@ import {
   buildApprovalRecordInput,
   classifyApprovalCandidate,
   getApprovalCandidateRef,
+  isSameApprovalCandidate,
   isApprovalDeferred,
   isApprovalPending,
   isApprovalResolved,
@@ -732,5 +733,33 @@ describe('approval state predicates', () => {
 
     expect(isApprovalDeferred(record, now)).toBe(false);
     expect(isApprovalPending(record, now)).toBe(false);
+  });
+});
+
+describe('isSameApprovalCandidate', () => {
+  const tagOnly = { candidateRef: '1.2.4', toRef: '1.2.4', updateKind: 'tag' } as const;
+  const digestA = { candidateRef: 'sha256:aaa', toRef: '1.2.4', updateKind: 'tag' } as const;
+  const digestB = { candidateRef: 'sha256:bbb', toRef: '1.2.4', updateKind: 'tag' } as const;
+
+  test('matches equal refs', () => {
+    expect(isSameApprovalCandidate(digestA, digestA)).toBe(true);
+  });
+
+  test('matches a tag-only identity against a digest-backed one for the same tag, either way', () => {
+    expect(isSameApprovalCandidate(tagOnly, digestA)).toBe(true);
+    expect(isSameApprovalCandidate(digestA, tagOnly)).toBe(true);
+  });
+
+  test('never matches two different known digests', () => {
+    expect(isSameApprovalCandidate(digestA, digestB)).toBe(false);
+  });
+
+  test('does not match a different target tag', () => {
+    expect(isSameApprovalCandidate(tagOnly, { ...digestA, toRef: '1.2.5' })).toBe(false);
+  });
+
+  test('does not match across update kinds', () => {
+    expect(isSameApprovalCandidate(tagOnly, { ...digestA, updateKind: 'digest' })).toBe(false);
+    expect(isSameApprovalCandidate({ ...tagOnly, updateKind: 'digest' }, digestA)).toBe(false);
   });
 });

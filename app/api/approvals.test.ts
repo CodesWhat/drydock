@@ -609,6 +609,80 @@ describe('decision preconditions', () => {
     expect(status).not.toBe(409);
     expect(mockDecideApprovalIfPending).toHaveBeenCalled();
   });
+
+  describe('a ref that flipped between tag and digest', () => {
+    const live = (result: Record<string, string> | undefined, remote = '1.2.4') =>
+      createContainer({
+        result,
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: remote },
+      } as Partial<Container>);
+
+    beforeEach(() => {
+      mockDecideApprovalIfPending.mockImplementation(
+        (_id: string, patch: Partial<ApprovalRecord>) => ({
+          status: 'decided',
+          record: { ...createRecord(), ...patch },
+        }),
+      );
+    });
+
+    test.each(DECISION_PATHS)(
+      '%s decides a tag-only row once the same tag carries a digest',
+      async (path) => {
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:abc' }));
+
+        const { status } = await callDecision(path);
+
+        expect(status).not.toBe(409);
+        expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s 409s a tag-only row when the tag changed, with no side effects',
+      async (path) => {
+        mockGetContainer.mockReturnValue(
+          live({ tag: '1.2.5', digest: 'sha256:abc' }, '1.2.5'),
+        );
+
+        const { status } = await callDecision(path);
+
+        expect(status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+        expect(mockRequestContainerUpdate).not.toHaveBeenCalled();
+        expect(mockApplyContainerUpdatePolicyAction).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s 409s a digest-backed row when the live digest changed',
+      async (path) => {
+        mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: 'sha256:abc' }));
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:def' }));
+
+        const { status } = await callDecision(path);
+
+        expect(status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s refuses a digest-backed row while the digest is missing, and decides once it returns',
+      async (path) => {
+        mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: 'sha256:abc' }));
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4' }));
+
+        expect((await callDecision(path)).status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:abc' }));
+
+        expect((await callDecision(path)).status).not.toBe(409);
+        expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+      },
+    );
+  });
 });
 
 describe('POST /:id/approve', () => {
