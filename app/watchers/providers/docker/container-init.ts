@@ -3,6 +3,7 @@ import log from '../../../log/index.js';
 import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import * as registry from '../../../registry/index.js';
+import { isObservationMode } from '../../../runtime/observation-mode.js';
 import * as storeContainer from '../../../store/container.js';
 import type { DockerApiBindMountInspector } from '../../../triggers/providers/dockercompose/ComposePathBindMounts.js';
 import { getTriggerCategoryForType } from '../../../triggers/trigger-category.js';
@@ -1002,8 +1003,15 @@ export function getSettledContainersToWatch<T extends DockerContainerSummaryLike
   containersFromTheStore: Container[],
   watcher: DiscoverySettlingWatcher,
 ): T[] {
+  // A one-shot observation (`drydock scan`) starts from an empty in-memory
+  // store, so every container is "new" and would be held back until the
+  // process had already exited. Settling debounces containers appearing and
+  // disappearing in a long-running daemon, which doesn't apply there.
+  const settleMs = isObservationMode()
+    ? 0
+    : (watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS);
   return filterPendingDiscoveries(containers, containersFromTheStore, {
-    settleMs: watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS,
+    settleMs,
     pendingDiscoveries: watcher.pendingDiscoveries,
     debug: (message) => watcher.log.debug(message),
   }).containersToWatch;
