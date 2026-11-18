@@ -641,9 +641,7 @@ describe('decision preconditions', () => {
     test.each(DECISION_PATHS)(
       '%s 409s a tag-only row when the tag changed, with no side effects',
       async (path) => {
-        mockGetContainer.mockReturnValue(
-          live({ tag: '1.2.5', digest: 'sha256:abc' }, '1.2.5'),
-        );
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.5', digest: 'sha256:abc' }, '1.2.5'));
 
         const { status } = await callDecision(path);
 

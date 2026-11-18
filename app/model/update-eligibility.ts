@@ -457,7 +457,8 @@ export function computeUpdateEligibility(
   if (
     container.updateKind?.kind === 'tag' &&
     remoteTag &&
-    isTagSkipped(remoteTag, skipTags, container.transformTags)) {
+    isTagSkipped(remoteTag, skipTags, container.transformTags)
+  ) {
     blockers.push(
       makeBlocker({
         reason: 'skip-tag',
