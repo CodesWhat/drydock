@@ -97,3 +97,27 @@ The realm authority is validated against the registry's own configured authority
 The `dd.registry.lookup.image` container label redirects tag and manifest queries to an alternative image reference (e.g. check Docker Hub's `library/nextcloud` for a container running from a private mirror). In v1.5.0, this substitution is applied only at query boundaries (`getTags`, `getImageManifestDigest`, `getImagePublishedAt`) and no longer overwrites the container's deploy identity (`image.name`, `image.registry.url`). This means compose-file rewrites and container recreates always use the original image, not the lookup target.
 
 Un-prefixed images (e.g. `nginx:1.0`) now default to `docker.io` for the registry URL.
+
+### Locally built images (base image updates)
+
+An image you build on the host and never push has no registry copy, so Drydock normally skips the registry lookup for it and reports no update. Set `dd.registry.lookup.image` to the upstream base you built from and Drydock looks that image up instead. The tag of your local image is treated as the base version it was built from (for example a local `myapp:1.25.0` built `FROM nginx:1.25.0` with `dd.registry.lookup.image=library/nginx`), so a newer tag of the base is reported as an update. The pin gate and strict floating-alias rules do not apply to these images, because there is no registry digest to compare against. `dd.tag.include`, `dd.tag.exclude` and `dd.tag.transform` still apply.
+
+The update is labelled a **base image update** (`updateKind.baseImage` is `true` in the API, with `kind` still `tag`), and the default notification title and body say so. It is notification-only. The Docker and Docker Compose actions never run for a locally built image, automatically or by hand, because pulling the upstream base would replace your build with the stock image. The update button is refused with a `409`, and automatic dispatch skips the container.
+
+To act on the update, wire a rebuild yourself with a [command action](/docs/configuration/triggers/command), which is not blocked. Point it at your own rebuild script and include the container, for example:
+
+```yaml
+services:
+  myapp:
+    build: .
+    image: myapp:1.25.0
+    labels:
+      - dd.registry.lookup.image=library/nginx
+      - dd.action.include=rebuild
+```
+
+```bash
+DD_ACTION_COMMAND_REBUILD_CMD=/scripts/rebuild.sh "${display_name}" "${update_kind_remote_value}"
+```
+
+The script should rebuild with the new base (`docker compose build --pull myapp && docker compose up -d myapp`, or your CI). Drydock does not rebuild images for you.

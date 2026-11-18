@@ -3779,3 +3779,36 @@ test('deriveContainerIdRetentionKey keys on the Docker id so an identity change 
 test('deriveContainerIdRetentionKey returns undefined when the id is missing', () => {
   expect(container.deriveContainerIdRetentionKey({ id: '' } as never)).toBeUndefined();
 });
+
+describe('locally built image base image updates', () => {
+  function localBuild(isLocalImage: boolean | undefined) {
+    const input = createValidContainer({ result: { tag: '1.26.0' } });
+    Object.assign(input.image, { isLocalImage });
+    input.image.tag.value = '1.25.0';
+    return container.validate(input);
+  }
+
+  test('flags a tag update on a locally built image as a base image update', () => {
+    const validated = localBuild(true);
+    expect(validated.updateKind).toEqual({
+      kind: 'tag',
+      baseImage: true,
+      localValue: '1.25.0',
+      remoteValue: '1.26.0',
+      semverDiff: 'minor',
+    });
+    expect(container.isLocalBuildContainer(validated)).toBe(true);
+  });
+
+  test('leaves the update kind of a registry-backed image unchanged', () => {
+    const validated = localBuild(false);
+    expect(validated.updateKind).toEqual({
+      kind: 'tag',
+      localValue: '1.25.0',
+      remoteValue: '1.26.0',
+      semverDiff: 'minor',
+    });
+    expect(container.isLocalBuildContainer(validated)).toBe(false);
+    expect(container.isLocalBuildContainer(undefined)).toBe(false);
+  });
+});

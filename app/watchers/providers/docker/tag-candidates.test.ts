@@ -273,6 +273,23 @@ describe('docker tag candidates module', () => {
     expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Floating tag alias'));
   });
 
+  test('climbs a floating tag of a locally built image that declares an upstream base', () => {
+    const container = createContainer({
+      image: {
+        isLocalImage: true,
+        registry: { lookupImage: 'library/postgres' },
+        tag: { value: '16', semver: true, tagPrecision: 'floating' },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['16', '17', '18'], log);
+
+    expect(result.noUpdateReason).toBeUndefined();
+    expect(result.tags[0]).toBe('18');
+  });
+
   test('suppresses noUpdateReason for floating strict-mode when digest watch is enabled', () => {
     const container = createContainer({
       image: {

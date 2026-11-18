@@ -151,6 +151,23 @@ describe('trigger-expression-parser', () => {
     expect(output).toBe('not digest');
   });
 
+  test('renderSimple exposes the base image label and note for a base image update', () => {
+    const output = renderSimple('${updateKindLabel}|${updateKindNote}', {
+      ...baseContainer,
+      updateKind: { ...baseContainer.updateKind, baseImage: true },
+    } as any);
+    expect(output).toBe(
+      'base image update| (base image of a locally built image, notification only)',
+    );
+  });
+
+  test('renderSimple label falls back to the update kind with no note', () => {
+    expect(renderSimple('${updateKindLabel}|${updateKindNote}', baseContainer as any)).toBe('tag|');
+    expect(
+      renderSimple('[${updateKindLabel}]', { ...baseContainer, updateKind: undefined } as any),
+    ).toBe('[]');
+  });
+
   test('renderSimple should default currentTag to empty when image has no tag', () => {
     const output = renderSimple('Tag=[${currentTag}]', baseContainer as any);
     expect(output).toBe('Tag=[]');

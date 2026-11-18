@@ -526,6 +526,8 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `currentTag` | Current image tag (top-level shortcut for `container.image.tag.value`) | `1.24.0` |
 | `suggestedTag` | Suggested new tag from the registry (top-level shortcut for `container.result.tag`) | `1.25.0` |
 | `isDigestUpdate` | Whether this update is digest-only rather than a tag change | `false` |
+| `updateKindLabel` | `base image update` for a locally built image whose upstream base has a newer tag, otherwise the update kind (`tag` or `digest`) | `base image update` |
+| `updateKindNote` | Extra note the default body appends for a base image update, empty otherwise | `(base image of a locally built image, notification only)` |
 | `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `container-stopped`, `container-exited`, `container-oom-killed`, `container-restart-loop`, `auth-abuse`, `agent-version-mismatch`, `maturity-cleared`, `update-pending-approval`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
 | `event.error` | Error message (`event.kind` = `update-failed`) | `Pull failed: 401 Unauthorized` |
 | `event.selfUpdate` | `true` when an `update-applied` or `update-failed` event reports an update of Drydock itself; unset otherwise | `true` |

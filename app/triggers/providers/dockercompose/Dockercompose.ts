@@ -3,7 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
 import { buildDependencyGraph, topologicalSort } from '../../../dependencies/dependency-graph.js';
-import type { Container, ContainerImage } from '../../../model/container.js';
+import {
+  type Container,
+  type ContainerImage,
+  isLocalBuildContainer,
+  LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE,
+} from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
@@ -2590,6 +2595,11 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // into a service's runtime context (DR-52). trigger() delegates to this
     // method, so this is the one place both public entries have to guard.
     const sanitizedRuntimeContext = sanitizeComposeCallerRuntimeContext(runtimeContext);
+    // Never replace a locally built image (compose `build:` service) with the pulled
+    // upstream base: a base image update is notification-only.
+    if (containers.some((container) => isLocalBuildContainer(container))) {
+      throw new Error(LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
+    }
     const configuredComposeFilePath = await this.resolveDefaultComposeFilePathForRuntime();
     const containersByComposeFile = await this.resolveAndGroupContainersByComposeFile(
       containers,

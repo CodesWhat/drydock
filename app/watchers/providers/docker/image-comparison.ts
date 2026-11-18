@@ -11,6 +11,7 @@ import type Registry from '../../../registries/Registry.js';
 import type { RegistryLookupOptions } from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
 import { isCredentialedInstance } from '../../../registry/index.js';
+import { isLocalBaseLookup } from '../../../tag/family.js';
 import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { computeUpdateCandidates } from '../../../tag/update-candidates.js';
@@ -460,7 +461,12 @@ export async function findNewVersion(
   // RepoDigests), NOT from digest.repo directly: many registry-backed
   // containers simply have digest watching disabled and never populate
   // digest.repo, so gating on its absence would wrongly skip real registries.
-  if (container.image.isLocalImage) {
+  //
+  // Exception: an explicit dd.registry.lookup.image label declares the upstream
+  // base the user built from, so that reference is a real registry target. The
+  // lookup then reports base image updates (notification-only, see
+  // isLocalBuildContainer guards in the update actions).
+  if (container.image.isLocalImage && !isLocalBaseLookup(container)) {
     logContainer.debug('Locally-built image (no repository digest) — registry not queried');
     result.noUpdateReason = 'Locally-built image (no repository digest) — registry not queried';
     return result;

@@ -21,7 +21,13 @@ import {
   resolveForTrigger,
   selectActionTrigger,
 } from '../model/action-policy.js';
-import { type Container, fullName, hasRawUpdate } from '../model/container.js';
+import {
+  type Container,
+  fullName,
+  hasRawUpdate,
+  isLocalBuildContainer,
+  LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE,
+} from '../model/container.js';
 import {
   groupTriggerExcludedMessage,
   groupUpdateModeRejectionMessage,
@@ -376,6 +382,13 @@ function prepareContainerUpdateRequest(
         ? MANUAL_MODE_REJECTION_MESSAGE
         : groupUpdateModeRejectionMessage(groupCeiling, 'manual'),
     );
+  }
+
+  // A locally built image has no registry copy to pull. Its candidate is the declared
+  // upstream base (dd.registry.lookup.image), so an update action would replace the user's
+  // build with stock upstream. Restart-kind dependents never pull and stay admitted.
+  if (isLocalBuildContainer(container) && container.dependsOnAction !== 'restart') {
+    throw new UpdateRequestError(409, LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
   }
 
   // A user-initiated request may intentionally override a soft policy gate. Those

@@ -1447,6 +1447,66 @@ describe('image-comparison', () => {
     expect(result.tag).toBe('0.3.0-qa');
   });
 
+  test('looks up the declared upstream base for a locally-built image with an explicit lookup label', async () => {
+    const getTags = vi.fn().mockResolvedValue(['1.25.0', '1.26.0']);
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags,
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub', lookupImage: 'library/nginx' },
+        name: 'myapp',
+        tag: { value: '1.25.0', semver: true, tagPrecision: 'specific' },
+        digest: { watch: false },
+        isLocalImage: true,
+      },
+    };
+
+    const result = await findNewVersion(container as never, log);
+
+    expect(getTags).toHaveBeenCalledTimes(1);
+    expect(getTags.mock.calls[0][0].name).toBe('library/nginx');
+    expect(result.tag).toBe('1.26.0');
+    expect(result.noUpdateReason).toBeUndefined();
+  });
+
+  test('keeps the local-image short circuit when the lookup label is blank', async () => {
+    const getTags = vi.fn().mockResolvedValue(['1.0.0']);
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags,
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub', lookupImage: '   ' },
+        name: 'myapp',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+        isLocalImage: true,
+      },
+    };
+
+    const result = await findNewVersion(container as never, log);
+
+    expect(getTags).not.toHaveBeenCalled();
+    expect(result.noUpdateReason).toContain('Locally-built image');
+  });
+
   test('does not short-circuit a registry-backed container that merely lacks digest.repo', async () => {
     // Regression guard: many registry-backed fixtures don't populate digest.repo
     // (digest watching is off), so the gate must key off the explicit

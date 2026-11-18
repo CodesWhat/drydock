@@ -860,6 +860,19 @@ describe('Dockercompose Trigger', () => {
   // triggerBatch
   // -----------------------------------------------------------------------
 
+  test('triggerBatch refuses a locally built image instead of pulling the upstream base', async () => {
+    const container = {
+      name: 'myapp',
+      watcher: 'local',
+      image: { isLocalImage: true },
+      updateAvailable: true,
+    };
+
+    await expect(trigger.triggerBatch([container])).rejects.toThrow('locally built image');
+    await expect(trigger.trigger(container)).rejects.toThrow('locally built image');
+    expect(getState).not.toHaveBeenCalled();
+  });
+
   test('triggerBatch should skip containers not on local host', async () => {
     const container = { name: 'remote-container', watcher: 'remote' };
 

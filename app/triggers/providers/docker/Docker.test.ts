@@ -2144,6 +2144,15 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
 });
 
+test('trigger refuses a locally built image instead of replacing it with the upstream base', async () => {
+  const createTriggerContext = vi.spyOn(docker, 'createTriggerContext');
+
+  await expect(
+    docker.trigger({ name: 'myapp', image: { isLocalImage: true }, updateAvailable: true }),
+  ).rejects.toThrow('locally built image');
+  expect(createTriggerContext).not.toHaveBeenCalled();
+});
+
 test('triggerBatch defaults to concurrency 1 (serialises) when nothing is configured', async () => {
   const prevConcurrency = ddEnvVars.DD_UPDATE_CONCURRENCY;
   delete ddEnvVars.DD_UPDATE_CONCURRENCY;
