@@ -118,6 +118,18 @@ class Mqtt extends Trigger<MqttConfiguration> {
   private unregisterContainerUpdated?: () => void;
   private unregisterUpdateOperationChanged?: () => void;
 
+  /**
+   * Force-close the connection to the previous broker so a re-init (broker
+   * URL change, replaced broker) or a deregister doesn't leave the old client
+   * reconnecting in the background next to the new one. Forced because a
+   * replaced broker may never answer a graceful disconnect.
+   */
+  private endClient(): Promise<void> | undefined {
+    return this.client?.endAsync?.(true).catch((error: unknown) => {
+      this.log.warn(`Failed to close the previous MQTT connection (${getErrorMessage(error)})`);
+    });
+  }
+
   private clearContainerEventSubscriptions() {
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
@@ -321,6 +333,10 @@ class Mqtt extends Trigger<MqttConfiguration> {
     this.clearContainerEventSubscriptions();
     await this.hass?.deregister();
     this.hass = undefined;
+    const endingClient = this.endClient();
+    if (endingClient) {
+      await endingClient;
+    }
 
     // Enforce simple mode
     this.configuration.mode = 'simple';
@@ -388,6 +404,10 @@ class Mqtt extends Trigger<MqttConfiguration> {
     this.clearContainerEventSubscriptions();
     await this.hass?.deregister();
     this.hass = undefined;
+    const endingClient = this.endClient();
+    if (endingClient) {
+      await endingClient;
+    }
     await super.deregisterComponent();
   }
 
