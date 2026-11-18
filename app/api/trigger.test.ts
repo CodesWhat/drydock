@@ -1595,6 +1595,32 @@ describe('Trigger Router', () => {
       spy.mockRestore();
     });
 
+    test('scope is checked again against the resolved trigger and refuses a key that no longer holds it', async () => {
+      // The route-level check passes on the first read; the post-resolution
+      // check reads the scopes again and must be the one that refuses.
+      let reads = 0;
+      const principal = {
+        kind: 'api-key',
+        keyId: 'abcdef012345',
+        name: 'ci',
+        get scopes() {
+          reads += 1;
+          return reads === 1 ? ['triggers:test'] : [];
+        },
+      };
+      const trigger = { type: 'slack', name: 'x', trigger: vi.fn() };
+      registry.getState.mockReturnValue({ trigger: { 'slack.x': trigger } });
+      const res = createMockResponse();
+
+      await runTrigger(
+        { params: { type: 'slack', name: 'x' }, body: { id: 'c1' }, principal },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
     test('a notification trigger still fires when actions are disabled', async () => {
       mockActionsEnabled.mockReturnValue(false);
       const trigger = { type: 'slack', name: 'x', trigger: vi.fn().mockResolvedValue(undefined) };

@@ -1176,6 +1176,30 @@ describe('api/container/triggers', () => {
       },
     );
 
+    test('scope is checked again against the resolved trigger and refuses a key that no longer holds it', async () => {
+      let reads = 0;
+      const principal = {
+        kind: 'api-key',
+        keyId: 'abcdef012345',
+        name: 'ci',
+        get scopes() {
+          reads += 1;
+          return reads === 1 ? ['triggers:test'] : [];
+        },
+      };
+      const trigger = createTrigger();
+      const harness = createHarness({ triggerMap: { 'slack.notify': trigger } });
+
+      const res = await callRunTrigger(
+        harness.handlers,
+        { id: 'c1', triggerType: 'slack', triggerName: 'notify' },
+        principal,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
     test('a notification trigger still fires when container actions are disabled', async () => {
       mockActionsEnabled.mockReturnValue(false);
       const trigger = createTrigger();
