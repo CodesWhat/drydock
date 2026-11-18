@@ -12,9 +12,14 @@ import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorStatusCode } from '../util/error.js';
 import * as component from './component.js';
+import {
+  areContainerActionsEnabled,
+  CONTAINER_ACTIONS_DISABLED_MESSAGE,
+} from './container-update-dispatch.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
 import { DYNAMIC_SCOPE, enforceApiKeyScope, scoped } from './route-scopes.js';
+import { doesTriggerMatchRoute } from './trigger-identity.js';
 import { registerTriggerSkipRoutes } from './trigger-skips.js';
 
 const log = logger.child({ component: 'trigger' });
@@ -182,7 +187,15 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     return;
   }
 
-  const triggerToRun = registry.getState().trigger[`${triggerType}.${triggerName}`];
+  const resolvedTrigger = registry.getState().trigger[`${triggerType}.${triggerName}`];
+  // The local route only reaches local components, and only the one its path
+  // names. An agent-qualified key such as `edge1.docker.update` is reachable
+  // through type=`edge1.docker`, which the scope check files under notification.
+  const triggerToRun =
+    resolvedTrigger &&
+    doesTriggerMatchRoute(resolvedTrigger, { type: triggerType, name: triggerName, agent: '' })
+      ? resolvedTrigger
+      : undefined;
   if (!triggerToRun) {
     log.warn(
       `No trigger found(type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)})`,
@@ -192,6 +205,16 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
       404,
       `Error when running trigger ${triggerType}.${triggerName} (trigger not found)`,
     );
+    return;
+  }
+
+  // Scope and dispatch follow the component that was actually resolved.
+  const resolvedCategoryIsAction = getTriggerCategoryForType(triggerToRun.type) === 'action';
+  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerToRun.type))) {
+    return;
+  }
+  if (resolvedCategoryIsAction && !areContainerActionsEnabled()) {
+    sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
   }
 
@@ -212,7 +235,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
   }
 
   try {
-    if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
+    if (UPDATE_TRIGGER_TYPES.has(triggerToRun.type.toLowerCase())) {
       const storedContainer = storeContainer.getContainer(containerToTrigger.id);
       if (!storedContainer) {
         sendErrorResponse(res, 404, 'Container not found');
@@ -269,6 +292,14 @@ export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res
     return;
   }
 
+  if (
+    getTriggerCategoryForType(triggerType) === 'action' &&
+    !areContainerActionsEnabled()
+  ) {
+    sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
+    return;
+  }
+
   const agentClient = agent.getAgent(agentName);
   if (!agentClient) {
     sendErrorResponse(res, 404, `Agent ${agentName} not found`);
@@ -307,7 +338,16 @@ export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res
       }
 
       const triggerId = buildAgentQualifiedTriggerId(agentName, triggerType, triggerName);
-      const triggerToRun = registry.getState().trigger[triggerId];
+      const resolvedTrigger = registry.getState().trigger[triggerId];
+      const triggerToRun =
+        resolvedTrigger &&
+        doesTriggerMatchRoute(resolvedTrigger, {
+          type: triggerType,
+          name: triggerName,
+          agent: agentName,
+        })
+          ? resolvedTrigger
+          : undefined;
       if (!triggerToRun) {
         sendErrorResponse(res, 404, `Remote update trigger ${triggerId} not found`);
         return;

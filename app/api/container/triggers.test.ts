@@ -8,6 +8,12 @@ import {
 import * as requestUpdate from '../../updates/request-update.js';
 import { createTriggerHandlers } from './triggers.js';
 
+const mockActionsEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('../container-update-dispatch.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../container-update-dispatch.js')>()),
+  areContainerActionsEnabled: mockActionsEnabled,
+}));
+
 function createTrigger(overrides: Record<string, unknown> = {}) {
   const trigger = {
     id: 'slack.notify',
@@ -111,6 +117,7 @@ async function flushAcceptedUpdateWork() {
 describe('api/container/triggers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockActionsEnabled.mockReturnValue(true);
   });
 
   describe('getContainerTriggers', () => {
@@ -917,6 +924,7 @@ describe('api/container/triggers', () => {
     test('resolves and executes an agent-qualified trigger id', async () => {
       const trigger = createTrigger({
         id: 'agent-1.slack.notify',
+        agent: 'agent-1',
         name: 'notify',
         trigger: vi.fn().mockResolvedValue(undefined),
       });
@@ -1042,6 +1050,145 @@ describe('api/container/triggers', () => {
       const responseBody = JSON.stringify(res.json.mock.calls[0][0]);
       expect(responseBody).not.toContain('sk-secret-abc123');
       expect(responseBody).not.toContain('hunter2');
+    });
+  });
+
+  describe('runTrigger identity and feature flag', () => {
+    const PROVIDERS = ['docker', 'dockercompose', 'portainer', 'command'];
+    const testOnlyKey = {
+      kind: 'api-key',
+      keyId: 'abcdef012345',
+      name: 'ci',
+      scopes: ['triggers:test'],
+    };
+    const updateKey = { ...testOnlyKey, scopes: ['containers:update', 'triggers:test'] };
+
+    function agentProxy(agentName: string, type: string, name: string) {
+      return createTrigger({
+        id: `${agentName}.${type}.${name}`,
+        agent: agentName,
+        type,
+        name,
+      });
+    }
+
+    test.each(PROVIDERS)(
+      'a triggers:test key cannot reach an agent %s proxy by folding the agent into the type',
+      async (provider) => {
+        const proxy = agentProxy('edge1', provider, 'update');
+        const harness = createHarness({
+          container: { id: 'c1', agent: 'edge1' },
+          triggerMap: { [`edge1.${provider}.update`]: proxy },
+        });
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+
+        const res = await callRunTrigger(
+          harness.handlers,
+          { id: 'c1', triggerAgent: '', triggerType: `edge1.${provider}`, triggerName: 'update' },
+          testOnlyKey,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(proxy.trigger).not.toHaveBeenCalled();
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test('folding the agent and type into the name segment is refused', async () => {
+      const proxy = agentProxy('slack', 'docker', 'update');
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'slack' },
+        triggerMap: { 'slack.docker.update': proxy },
+      });
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+
+      const res = await callRunTrigger(
+        harness.handlers,
+        { id: 'c1', triggerAgent: '', triggerType: 'slack', triggerName: 'docker.update' },
+        testOnlyKey,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test('a resolved component whose agent differs from the route agent is refused', async () => {
+      const proxy = agentProxy('edge2', 'slack', 'notify');
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'edge1' },
+        triggerMap: { 'edge1.slack.notify': proxy },
+      });
+
+      const res = await callRunTrigger(
+        harness.handlers,
+        { id: 'c1', triggerAgent: 'edge1', triggerType: 'slack', triggerName: 'notify' },
+        testOnlyKey,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a canonical explicit-agent update is accepted once through requestContainerUpdate', async () => {
+      const proxy = agentProxy('edge1', 'docker', 'update');
+      const harness = createHarness({
+        container: { id: 'c1', agent: 'edge1' },
+        triggerMap: { 'edge1.docker.update': proxy },
+      });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockResolvedValue({ operationId: 'op-1' } as never);
+
+      const res = await callRunTrigger(
+        harness.handlers,
+        { id: 'c1', triggerAgent: 'edge1', triggerType: 'docker', triggerName: 'update' },
+        updateKey,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test.each(['docker', 'command'])(
+      'refuses a %s trigger with 403 when container actions are disabled',
+      async (type) => {
+        mockActionsEnabled.mockReturnValue(false);
+        const trigger = createTrigger({ id: `${type}.x`, type, name: 'x' });
+        const harness = createHarness({ triggerMap: { [`${type}.x`]: trigger } });
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+
+        const res = await callRunTrigger(
+          harness.handlers,
+          { id: 'c1', triggerType: type, triggerName: 'x' },
+          updateKey,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
+        expect(spy).not.toHaveBeenCalled();
+        expect(trigger.trigger).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test('a notification trigger still fires when container actions are disabled', async () => {
+      mockActionsEnabled.mockReturnValue(false);
+      const trigger = createTrigger();
+      const harness = createHarness({ triggerMap: { 'slack.notify': trigger } });
+
+      const res = await callRunTrigger(
+        harness.handlers,
+        { id: 'c1', triggerType: 'slack', triggerName: 'notify' },
+        testOnlyKey,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(trigger.trigger).toHaveBeenCalledTimes(1);
     });
   });
 });

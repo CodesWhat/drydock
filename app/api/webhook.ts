@@ -36,7 +36,7 @@ function normalizeRequestPath(req: Request): string {
 }
 
 function getWebhookActionFromRequest(req: Request): WebhookAction | undefined {
-  const requestPath = normalizeRequestPath(req);
+  const requestPath = normalizeRequestPath(req).toLowerCase();
   if (
     requestPath === '/watch' ||
     requestPath.endsWith('/webhook/watch') ||
