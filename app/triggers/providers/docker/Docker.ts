@@ -66,6 +66,7 @@ import {
 } from './pull-pacing.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
+import { cancelRollbackMonitor } from './rollback-monitor-registry.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
 import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
@@ -2783,6 +2784,9 @@ class Docker<
     const lifecycle = withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
+        // The update replaces the container a health or liveness monitor is
+        // watching; a rollback queued behind this lock would undo this update.
+        cancelRollbackMonitor(container);
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         try {
           const lifecycleResult: unknown = await this.updateLifecycleExecutor.run(

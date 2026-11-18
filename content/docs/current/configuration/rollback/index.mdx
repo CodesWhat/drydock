@@ -89,6 +89,18 @@ For containers with no `HEALTHCHECK`, you can opt in to a liveness watch. After 
 
 The watch works with both the Docker and Docker Compose actions, doesn't need `dd.rollback.auto`, and never applies to containers that have a `HEALTHCHECK`, which keep the health-based behavior above. With neither setting, containers without a healthcheck behave as before.
 
+The Portainer action doesn't support the liveness watch, because a rollback would recreate the container through Docker and bypass the stack Portainer manages. `LIVENESSWINDOW` is rejected on a Portainer action at startup, and `dd.rollback.liveness` on a container it updates is ignored with a warning.
+
+A container that was stopped before the update isn't watched. Rollbacks put the container back the way it was before the update: a container that was running is started again, and the rollback is only recorded as a success once the restored container is seen running. If it isn't, the audit entry says so and records a failure.
+
+### Rollbacks and later updates
+
+A rollback, whether automatic or from the manual rollback action, remembers the candidate it undid. Drydock then blocks that same candidate with the "last update rolled back" reason until a different version shows up or you set `dd.update.rollback-gate=off` on the container, so the failed update isn't applied again once the recently-applied window passes.
+
+Rollbacks take the same per-container lock updates do, so a rollback never runs at the same time as an update of that container. Starting an update, or a manual rollback, cancels any health or liveness watch still running for that container. An operator stopping the container by hand during a watch window still counts as an exit and triggers the rollback, the same as before.
+
+Each rollback is recorded as an operation, so container state alerts don't report the stop and restart Drydock does for it.
+
 ## Examples
 
 <Tabs items={["Docker Compose", "Docker"]}>

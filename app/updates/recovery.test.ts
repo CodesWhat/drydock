@@ -89,6 +89,24 @@ describe('recoverQueuedOperationsOnStartup', () => {
     expect(mockFindDockerTriggerForContainer).not.toHaveBeenCalled();
   });
 
+  test('leaves an interrupted rollback operation to the TTL sweep', async () => {
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-rollback',
+        kind: 'rollback',
+        status: 'in-progress',
+        phase: 'rollback-started',
+        containerName: 'web',
+      },
+    ]);
+
+    await expect(recoverInProgressOperationsOnStartup()).resolves.toEqual({
+      reconciled: 0,
+      abandoned: 0,
+    });
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
   test('skips self-update operations entirely', () => {
     mockListActiveOperations.mockReturnValue([
       {

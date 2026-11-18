@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import RollbackMonitor from './RollbackMonitor.js';
+import { cancelRollbackMonitor } from './rollback-monitor-registry.js';
 
 function createLogger() {
   return {
@@ -231,6 +232,7 @@ describe('RollbackMonitor', () => {
       },
       window: 120_000,
       interval: 3_000,
+      wasRunning: true,
       triggerInstance: { triggerMarker: true },
       log: { info, warn: expect.any(Function) },
     });
@@ -419,6 +421,86 @@ describe('RollbackMonitor', () => {
       expect(warn).toHaveBeenCalledWith(
         'Auto-rollback enabled but container has no HEALTHCHECK defined — skipping health monitoring',
       );
+    });
+
+    describe('pre-update running state', () => {
+      const config = {
+        autoRollback: false,
+        rollbackWindow: 300_000,
+        rollbackInterval: 5_000,
+        livenessWindow: 30_000,
+      };
+
+      test.each(['exited', 'created', 'dead'])(
+        'does not arm for a container that was %s before the update',
+        async (status) => {
+          const info = vi.fn();
+          const { monitor, startHealthMonitor } = createLivenessMonitor({
+            Id: 'new-container-id',
+            State: { Running: false },
+          });
+
+          await monitor.start({}, createContainer({ status }), config, { info, warn: vi.fn() });
+
+          expect(startHealthMonitor).not.toHaveBeenCalled();
+          expect(info).toHaveBeenCalledWith(
+            'Container was not running before the update — skipping rollback monitoring',
+          );
+        },
+      );
+
+      test.each(['running', 'restarting', 'paused'])(
+        'arms for a container that was %s before the update, even if the replacement already died',
+        async (status) => {
+          const { monitor, startHealthMonitor } = createLivenessMonitor({
+            Id: 'new-container-id',
+            State: { Running: false },
+          });
+
+          await monitor.start({}, createContainer({ status }), config, {
+            info: vi.fn(),
+            warn: vi.fn(),
+          });
+
+          expect(startHealthMonitor).toHaveBeenCalledWith(
+            expect.objectContaining({ mode: 'liveness', wasRunning: true }),
+          );
+        },
+      );
+
+      test('without a usable status, an explicitly stopped replacement means it was stopped', async () => {
+        const { monitor, startHealthMonitor } = createLivenessMonitor({
+          Id: 'new-container-id',
+          State: { Running: false },
+        });
+
+        await monitor.start({}, createContainer({ status: 'unknown' }), config, {
+          info: vi.fn(),
+          warn: vi.fn(),
+        });
+
+        expect(startHealthMonitor).not.toHaveBeenCalled();
+      });
+
+      test('registers the monitor so a later update can cancel it', async () => {
+        const controller = new AbortController();
+        const startHealthMonitor = vi.fn().mockReturnValue(controller);
+        const monitor = createMonitor({
+          getCurrentContainer: vi.fn().mockResolvedValue({ id: 'new-container' }),
+          inspectContainer: vi
+            .fn()
+            .mockResolvedValue({ Id: 'new-container-id', State: { Running: true } }),
+          startHealthMonitor,
+        });
+
+        await monitor.start({}, createContainer({ status: 'running' }), config, {
+          info: vi.fn(),
+          warn: vi.fn(),
+        });
+
+        expect(cancelRollbackMonitor({ name: 'web', watcher: 'local' })).toBe(true);
+        expect(controller.signal.aborted).toBe(true);
+      });
     });
   });
 });
