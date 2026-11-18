@@ -58,6 +58,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Documentation
 
+- The getting started guide now says a fresh install starts in `manual` update mode and that action triggers default to `AUTO=oninclude`, so containers need a `dd.action.include` label before they auto-update. The combined example notes the socket proxy needs `POST=1` and `NETWORKS=1`, and the quickstart tells you to change the default `admin` / `password` after your first login.
 - Recommend the latest supported Portwing v1.x release for new Standard enrollments, with a link to its security policy. Preserve v1.0.1 as the historical enrollment-fix minimum.
 
 ## [1.8.0-rc.15] - 2026-11-13
