@@ -1282,17 +1282,25 @@ class Docker<
           endpointNetworkNames,
         );
 
-        containerToCreatePayload = {
-          ...containerToCreate,
-          NetworkingConfig: {
-            EndpointsConfig: {
-              [primaryNetworkName]: endpointsConfig[primaryNetworkName],
-            },
-          },
-        };
-        additionalNetworkNames.push(
-          ...endpointNetworkNames.filter((networkName) => networkName !== primaryNetworkName),
+        const secondaryNetworkNames = endpointNetworkNames.filter(
+          (networkName) => networkName !== primaryNetworkName,
         );
+        // Network connect ignores an endpoint MAC below API 1.54, so when a
+        // secondary endpoint pins one, create every endpoint at once (API 1.44+).
+        const secondaryPinsMac = secondaryNetworkNames.some((networkName) =>
+          Boolean(endpointsConfig[networkName]?.MacAddress),
+        );
+        if (!secondaryPinsMac) {
+          containerToCreatePayload = {
+            ...containerToCreate,
+            NetworkingConfig: {
+              EndpointsConfig: {
+                [primaryNetworkName]: endpointsConfig[primaryNetworkName],
+              },
+            },
+          };
+          additionalNetworkNames.push(...secondaryNetworkNames);
+        }
       }
 
       newContainer = await dockerApi.createContainer(containerToCreatePayload);
@@ -1372,6 +1380,7 @@ class Docker<
       runtimeFieldOrigins,
       defaultRuntime,
       hookLabelProvenance,
+      explicitEndpointMacAddresses,
       logContainer,
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
@@ -1398,6 +1407,14 @@ class Docker<
       },
       {},
     );
+    // Explicit operator intent (Compose `mac_address`) is the one signal that
+    // can pin a MAC on any endpoint, never a MAC copied from inspect.
+    for (const [networkName, macAddress] of Object.entries(explicitEndpointMacAddresses || {})) {
+      const endpointConfig = endpointsConfig[networkName] as Record<string, unknown> | undefined;
+      if (endpointConfig && macAddress) {
+        endpointConfig.MacAddress = macAddress;
+      }
+    }
     const sanitizedContainerConfig = this.runtimeConfigManager.sanitizeClonedRuntimeConfig(
       currentContainer.Config,
       sourceImageConfig,
@@ -1729,7 +1746,14 @@ class Docker<
    * Create a new container from the cloned spec and start it if
    * the previous container was running.
    */
-  async recreateContainer(dockerApi, currentContainerSpec, newImage, container, logContainer) {
+  async recreateContainer(
+    dockerApi,
+    currentContainerSpec,
+    newImage,
+    container,
+    logContainer,
+    explicitEndpointMacAddresses?: Record<string, string>,
+  ) {
     // DR-126: resolve clone options through the same helper the update path
     // uses (ContainerUpdateExecutor.prepareContainerUpdateExecution) instead
     // of passing logContainer as the runtime-config options. Without this,
@@ -1749,7 +1773,9 @@ class Docker<
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
       newImage,
-      cloneRuntimeConfigOptions,
+      explicitEndpointMacAddresses
+        ? { ...cloneRuntimeConfigOptions, explicitEndpointMacAddresses }
+        : cloneRuntimeConfigOptions,
     );
 
     const newContainer = await this.createContainer(

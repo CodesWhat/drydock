@@ -35,6 +35,7 @@ import ComposeFileParser, {
   YAML_MAX_ALIAS_COUNT,
 } from './ComposeFileParser.js';
 import { expandComposeFilesWithIncludes } from './ComposeIncludes.js';
+import { resolveExplicitComposeMacAddresses } from './ComposeMacIntent.js';
 import {
   getSelfContainerIdentifier as getRuntimeSelfContainerIdentifier,
   getSelfContainerBindMounts,
@@ -3830,17 +3831,25 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
           endpointNetworkNames,
         );
 
-        containerToCreatePayload = {
-          ...containerToCreate,
-          NetworkingConfig: {
-            EndpointsConfig: {
-              [primaryNetworkName]: endpointsConfig[primaryNetworkName],
-            },
-          },
-        };
-        additionalNetworkNames.push(
-          ...endpointNetworkNames.filter((networkName) => networkName !== primaryNetworkName),
+        const secondaryNetworkNames = endpointNetworkNames.filter(
+          (networkName) => networkName !== primaryNetworkName,
         );
+        // Network connect ignores an endpoint MAC below API 1.54, so when a
+        // secondary endpoint pins one, create every endpoint at once (API 1.44+).
+        const secondaryPinsMac = secondaryNetworkNames.some((networkName) =>
+          Boolean(endpointsConfig[networkName]?.MacAddress),
+        );
+        if (!secondaryPinsMac) {
+          containerToCreatePayload = {
+            ...containerToCreate,
+            NetworkingConfig: {
+              EndpointsConfig: {
+                [primaryNetworkName]: endpointsConfig[primaryNetworkName],
+              },
+            },
+          };
+          additionalNetworkNames.push(...secondaryNetworkNames);
+        }
       }
 
       newContainer = await dockerApi.createContainer(containerToCreatePayload);
@@ -4003,6 +4012,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
     updateError: unknown,
+    explicitEndpointMacAddresses?: Record<string, string>,
   ): Promise<ComposeRollbackOutcome> {
     const containerName = container.name;
     const lastError = getErrorMessage(updateError);
@@ -4016,6 +4026,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         originalImage,
         container,
         logContainer,
+        explicitEndpointMacAddresses,
       );
       logContainer.info(
         `Original container ${containerName} restored successfully after failed update`,
@@ -4047,6 +4058,49 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         rollbackReason: COMPOSE_RUNTIME_REFRESH_ROLLBACK_REASON,
         lastError,
       };
+    }
+  }
+
+  /**
+   * Docker inspect cannot tell a Compose-configured MAC from a generated one,
+   * so read the explicit `mac_address` settings from the service definition.
+   * A compose read failure must not block the update: the MAC is then simply
+   * not pinned, as it was before.
+   */
+  private async resolveExplicitEndpointMacAddresses(
+    composeFile: string,
+    composeFiles: string[] | undefined,
+    service: string,
+    currentContainerSpec,
+    logContainer: { warn: (msg: string) => void },
+  ): Promise<Record<string, string>> {
+    try {
+      const runtimeNetworkNames = Object.keys(
+        currentContainerSpec?.NetworkSettings?.Networks || {},
+      );
+      if (runtimeNetworkNames.length === 0) {
+        return {};
+      }
+      const composeDocuments = [] as unknown[];
+      for (const file of this.normalizeComposeFileChain(composeFile, composeFiles)) {
+        composeDocuments.push(await this.getComposeFileAsObject(file));
+      }
+      return resolveExplicitComposeMacAddresses({
+        composeDocuments,
+        service,
+        project: currentContainerSpec?.Config?.Labels?.[COMPOSE_PROJECT_LABEL],
+        runtimeNetworkNames,
+        primaryNetworkName: this.runtimeConfigManager.getPrimaryNetworkName(
+          currentContainerSpec,
+          runtimeNetworkNames,
+        ),
+        warn: (message) => logContainer.warn(message),
+      });
+    } catch (error: unknown) {
+      logContainer.warn(
+        `Unable to read explicit MAC addresses for ${service} (${getErrorMessage(error)})`,
+      );
+      return {};
     }
   }
 
@@ -4402,12 +4456,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       // rather than at create, which is past the stop/remove below (DR-110).
       { requireLocalImage: skipPull },
     );
-    const cloneRuntimeConfigOptions = await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
-      dockerApi,
+    const explicitEndpointMacAddresses = await this.resolveExplicitEndpointMacAddresses(
+      composeFile,
+      options.composeFiles,
+      service,
       currentContainerSpec,
-      pinnedImage,
       logContainer,
     );
+    const cloneRuntimeConfigOptions = {
+      ...(await this.runtimeConfigManager.getCloneRuntimeConfigOptions(
+        dockerApi,
+        currentContainerSpec,
+        pinnedImage,
+        logContainer,
+      )),
+      explicitEndpointMacAddresses,
+    };
 
     // Capture the original container spec for rollback before we do anything
     // destructive. The Config.Image field holds the old image reference.
@@ -4488,6 +4552,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         container,
         logContainer,
         recreateError,
+        explicitEndpointMacAddresses,
       );
       Dockercompose.attachComposeRollbackOutcome(recreateError, rollbackOutcome);
       throw recreateError;

@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- The Docker Compose action keeps the `mac_address` you configure per network (and at service level) when it recreates a container. Drydock now reads the explicit address from the Compose service definition, including override files, and pins it on the matching network. Generated MAC addresses are still never copied, and a secondary network that pins a MAC is attached at create time because network connect ignores it on older Docker APIs. ([#1581](https://github.com/CodesWhat/drydock/issues/1581))
 - A failed digest lookup now stores its error on the container and keeps the last good verdict, including a digest update found earlier, instead of showing the container as up to date. The error was being set on a copy the watcher threw away. (#1590)
 - Docker Hub images keep their `hub.public` provider across repeated image normalization, because the Hub provider now also matches its own canonical `https://registry-1.docker.io/v2` URL. An image whose registry matches no configured provider now records a "no configured registry matches" error instead of looking up to date. (#1591)
 - After an update from the UI or API, the watcher's fast resync now matches the bare container name, looks up the recreated container by name and refreshes just that container, so the row no longer keeps the removed container's id and old tag when `WATCHEVENTS` is false. (#1595)
