@@ -2570,7 +2570,11 @@ describe('Container Router', () => {
     });
 
     test('should run trigger successfully', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({ watcher: {}, trigger: { 'slack.default': mockTrigger } });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
@@ -2579,7 +2583,11 @@ describe('Container Router', () => {
     });
 
     test('should return 500 when trigger execution fails', async () => {
-      const mockTrigger = { trigger: vi.fn().mockRejectedValue(new Error('trigger error')) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockRejectedValue(new Error('trigger error')),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({ watcher: {}, trigger: { 'slack.default': mockTrigger } });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
@@ -2590,7 +2598,12 @@ describe('Container Router', () => {
     });
 
     test('should use triggerAgent in trigger id when provided', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        agent: 'myagent',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({
         watcher: {},
