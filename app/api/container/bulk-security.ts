@@ -7,6 +7,7 @@ import type { ContainerSecurityScan } from '../../security/scan.js';
 import { uuidv7 } from '../../util/uuid.js';
 import { sendErrorResponse } from '../error-response.js';
 import type { BulkScanProgress } from '../sse.js';
+import { resolveCurrentImageScanTarget } from './shared.js';
 
 export const MAX_CONCURRENT_BULK_SCANS = 4;
 
@@ -52,7 +53,7 @@ interface BulkSecurityHandlerDependencies {
     cycleId?: string,
     progress?: BulkScanProgress,
   ) => void;
-  getContainerImageFullName: (container: Container) => string;
+  getContainerImageFullName: (container: Container, tagOverride?: string) => string;
   getContainerRegistryAuth: (
     container: Container,
   ) => Promise<{ username?: string; password?: string } | undefined>;
@@ -210,9 +211,13 @@ async function runBulkScan(
         deps.broadcastScanStarted(containerId, cycleId);
         let status = 'error';
         try {
-          const image = deps.getContainerImageFullName(container);
+          const { displayImage, scanImage } = resolveCurrentImageScanTarget(
+            container,
+            deps.getContainerImageFullName,
+          );
           const auth = await deps.getContainerRegistryAuth(container);
-          const scanResult = await deps.scanImageForVulnerabilities({ image, auth });
+          const rawScanResult = await deps.scanImageForVulnerabilities({ image: scanImage, auth });
+          const scanResult = { ...rawScanResult, image: displayImage };
           status = scanResult.status;
 
           try {
