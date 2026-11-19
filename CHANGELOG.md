@@ -8,12 +8,18 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.16] - 2026-11-19
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes every rc.15 change and upgrade warning. It closes a trigger-alias scope bypass, scans the running digest instead of the mutable tag, pins Alpine openssl to 3.5.9-r1 and serves the getdrydock.com site statically. Its soak starts when this candidate is published.
+
 ### Security
 
 - An API key with only the `triggers:test` scope could fire an agent's action trigger (`docker`, `dockercompose`, `portainer` or `command`) by putting the agent name in the type segment, for example `edge1.docker`, which skipped the update gate. The trigger routes now require the resolved trigger's type, name and agent to match the request path exactly, and check scope and dispatch against the trigger that was actually resolved.
 - Pin Alpine openssl to 3.5.9-r1. Alpine replaced 3.5.9-r0 in the v3.24 repository, which broke every image build with a `libcrypto3 breaks` error. The r1 package carries the upstream fixes for CVE-2026-107496, CVE-2026-88823, CVE-2026-95691 and CVE-2026-95692, so the earlier `not_affected` classification is replaced by a `fixed` OpenVEX statement scoped to 3.5.9-r1. Grype only has the NVD range (< 3.5.10) for these CVEs and would otherwise flag the patched Alpine package.
 - Scans of a container's running image now scan the pinned running digest instead of resolving the mutable tag, which could scan a newer image and store its result as the running one. That let the allow-no-worse update gate compare a candidate against its own scan and pass a worse update. The stored scan keeps the tag-form image. The SBOM endpoint also stops writing back a stale container snapshot after a long generation, so it no longer reverts newer state or brings back a removed container.
-- Classify four Alpine OpenSSL 3.5.9-r0 advisories (CVE-2026-107496, CVE-2026-88823, CVE-2026-95691, CVE-2026-95692) as `not_affected` through an OpenVEX document. The affected CMS encryption, AES-GCM-SIV and QUIC client code is not reachable in Drydock, and Node bundles its own OpenSSL. This stays in place until Alpine ships a fixed openssl.
 - Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
 
 ### Fixed
@@ -3796,7 +3802,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.16...HEAD
+[1.8.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...v1.8.0-rc.16
 [1.8.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...v1.8.0-rc.15
 [1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
