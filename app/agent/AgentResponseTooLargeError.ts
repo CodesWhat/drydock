@@ -5,7 +5,7 @@
  */
 export const AGENT_RESPONSE_TOO_LARGE_CODE = 'response_too_large';
 
-export const AGENT_RESPONSE_TOO_LARGE_MESSAGE =
+const AGENT_RESPONSE_TOO_LARGE_MESSAGE =
   'Agent response exceeds the 16 MiB limit for a buffered request; use a streaming request';
 
 export class AgentResponseTooLargeError extends Error {
