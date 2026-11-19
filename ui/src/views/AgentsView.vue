@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
+import AgentEdgeKeysPanel from '../components/agents/AgentEdgeKeysPanel.vue';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
 import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
@@ -62,6 +63,7 @@ const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const router = useRouter();
 let activeAgentStatusListener: EventListener | null = null;
 
+const showEdgeKeys = ref(false);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const agentsData = ref<Agent[]>([]);
@@ -708,6 +710,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                           @clear="searchQuery = ''" />
             </template>
           </DataTable>
+
+          <AppButton variant="outlined" size="sm" class="mt-4" data-testid="edge-keys-toggle" @click="showEdgeKeys = !showEdgeKeys">
+            {{ showEdgeKeys ? t('agentsView.edgeKeys.hide') : t('agentsView.edgeKeys.toggle') }}
+          </AppButton>
+          <AgentEdgeKeysPanel v-if="showEdgeKeys" />
 
     <template #panel>
         <!-- Detail panel -->
