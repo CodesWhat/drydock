@@ -37,6 +37,7 @@ import {
   ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
+  ddTagCeiling,
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
@@ -80,6 +81,7 @@ interface ResolvedContainerLabelOverrides {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: string;
+  tagCeiling?: string;
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
@@ -151,6 +153,7 @@ interface DockerWatcherSourceLike {
 
 interface WatcherTagDefaults {
   family?: string;
+  ceiling?: string;
   pin?: { info?: boolean };
 }
 
@@ -181,6 +184,11 @@ const containerLabelOverrideMappings = [
     key: 'tagPinInfo',
     ddKey: ddTagPinInfo,
     overrideKey: 'tagPinInfo',
+  },
+  {
+    key: 'tagCeiling',
+    ddKey: ddTagCeiling,
+    overrideKey: 'tagCeiling',
   },
   {
     key: 'inspectTagPath',
@@ -1075,7 +1083,7 @@ export function resolveLabelsFromContainer(
 export function applyDerivedLabelFieldsToContainer(
   container: Container,
   labels: Record<string, string>,
-  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean } = {},
+  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean; tagCeiling?: string } = {},
 ): void {
   const resolved = resolveLabelsFromContainer(labels);
   container.includeTags = resolved.includeTags;
@@ -1084,6 +1092,7 @@ export function applyDerivedLabelFieldsToContainer(
   container.tagFamily = resolved.tagFamily ?? tagPolicyFallbacks.tagFamily;
   const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
   container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
+  container.tagCeiling = resolved.tagCeiling ?? tagPolicyFallbacks.tagCeiling;
   container.linkTemplate = resolved.linkTemplate;
   container.portLabel = resolved.portLabel;
   container.actionTriggerInclude = resolved.actionTriggerInclude;
@@ -1137,6 +1146,7 @@ export function resolveEffectiveContainerTagPolicy(
   const usePersistedFallbacks = container.labels === undefined;
   const persistedFallbacks = {
     family: (usePersistedFallbacks ? container.tagFamily : undefined) ?? watcherDefaults.family,
+    ceiling: (usePersistedFallbacks ? container.tagCeiling : undefined) ?? watcherDefaults.ceiling,
     pin: {
       info: (usePersistedFallbacks ? container.tagPinInfo : undefined) ?? watcherDefaults.pin?.info,
     },
@@ -1166,6 +1176,7 @@ function applyEffectiveTagPolicyFromLabels(
   applyDerivedLabelFieldsToContainer(container, labels, {
     tagFamily: tagPolicy.tagFamily,
     tagPinInfo: tagPolicy.tagPinInfo,
+    tagCeiling: tagPolicy.tagCeiling,
   });
 }
 
@@ -1379,6 +1390,10 @@ export function mergeConfigWithImgset(
       getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily) ||
       getContainerConfigValue(undefined, watcherTagDefaults.family) ||
       'strict',
+    tagCeiling:
+      getContainerConfigValue(labelOverrides.tagCeiling, matchingImgset?.tagCeiling) ||
+      getContainerConfigValue(undefined, watcherTagDefaults.ceiling) ||
+      undefined,
     tagPinInfo:
       getContainerConfigBooleanValue(
         labelOverrides.tagPinInfo,

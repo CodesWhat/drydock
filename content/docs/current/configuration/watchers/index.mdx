@@ -77,6 +77,7 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
 | `DD_WATCHER_{watcher_name}_TAG_FAMILY` | ⚪ | Default actionable tag-family policy for this watcher; imgsets and labels can override it | `strict`, `loose` | `strict` |
+| `DD_WATCHER_{watcher_name}_TAG_CEILING` | ⚪ | Default running-version ceiling for this watcher; imgsets and labels can override it. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | unset |
 | `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Default for computing informational `updateInsight` on pinned containers; imgsets and labels can override it | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
@@ -151,7 +152,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - Label-derived watcher fields (`tagFamily`, `tagPinInfo`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle; removing a tag-policy label restores its imgset/watcher default.
 - Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
 - Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include`, `dd.tag.family=loose`, or the actionable watcher default `DD_WATCHER_{watcher_name}_TAG_FAMILY=loose`. The watcher-wide `loose` setting can make cross-version candidates actionable and therefore eligible for configured action triggers; use it deliberately. Drydock separately computes an informational `updateInsight` — the best newer same-family tag available in the registry — which never triggers an update or notification and never changes `updateAvailable`/`updateKind`. The UI renders that insight as an informational Major/Minor/Patch state rather than **Current**, but does not expose an update action; the pinned tag itself is indicated separately by a persistent pin glyph on the Tag cell, whose tooltip names `dd.tag.family=loose` / `dd.tag.include` as the remedy. Control the informational channel with `dd.tag.pin.info`, matching-imgset `TAG_PIN_INFO`, or the watcher default `TAG_PIN_INFO`.
-- A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
+- A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling on its own. Add `dd.tag.ceiling` for that. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
 - As of v1.8 (#1133), a candidate tag has to carry the same variant suffix as the current tag, letter for letter: `-alpine` never climbs to `-alpine-perl` or `-alpine-slim`, and it doesn't climb the other way either. Digit runs inside a suffix count as precision, not identity, so `1.27-alpine3.20` can climb to `1.28-alpine3.21`, `12.1-cuda12` can climb to `12.2-cuda13`, and a bare `-alpine` can refine to `-alpine3.21` when that's the only newer build published. When both an exact-suffix and a digit-shifted candidate exist, the exact suffix ranks first. A trailing dot or other punctuation-only difference is never the same family, so `1.3.0-alpine.` is not `1.3.0-alpine`. Users who need a digit to be part of the identity, for example pinning to `-cuda12`, should use `dd.tag.include` with a regex that fixes that digit.
 
 <Callout type="warn">
@@ -868,6 +869,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_ICON`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_CEILING`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_PIN_INFO`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_WATCH_DIGEST`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INSPECT_TAG_PATH`
@@ -884,8 +886,8 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 
 - `dd.*` labels on the container (or swarm service/container merged labels) are highest priority.
 - Matching `IMGSET` values apply when the corresponding label is not set.
-- Watcher-level `TAG_FAMILY` and `TAG_PIN_INFO` values apply when neither a label nor imgset sets that policy.
-- Built-in defaults are `strict` for tag family and `true` for pin insight.
+- Watcher-level `TAG_FAMILY`, `TAG_CEILING` and `TAG_PIN_INFO` values apply when neither a label nor imgset sets that policy.
+- Built-in defaults are `strict` for tag family, no ceiling, and `true` for pin insight.
 
 ### Imgset example
 
@@ -917,10 +919,11 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
 | `dd.link.template` | ⚪ | Browsable link associated to the container version. A matching imgset's `LINK_TEMPLATE` is used when this label is absent — see [Associate a link to the container version](#associate-a-link-to-the-container-version) | String template with placeholders `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | Matching imgset `LINK_TEMPLATE` → none |
-| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
-| `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags. May use `${major}`, `${minor}`, `${patch}` and `${flavor}` from the running tag, see [Running-version variables](#running-version-variables-in-include-and-exclude) | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only. May use `${major}`, `${minor}`, `${patch}` and `${flavor}` from the running tag, see [Running-version variables](#running-version-variables-in-include-and-exclude) | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. Suffix variants must still match exactly, digit runs excepted. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
+| `dd.tag.ceiling` | ⚪ | Never offer a tag outside the running major (`major`) or running major.minor (`minor`). Overrides matching imgset and watcher defaults. An invalid value logs a warning and is ignored. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | Matching imgset → watcher default → none |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
@@ -1234,6 +1237,53 @@ docker run -d --name mariadb --label 'dd.tag.include=^\d+\.\d+\.\d+$' mariadb:10
 ```
 </Tab>
 </Tabs>
+
+### Cap updates at the running major or minor {#cap-updates-at-the-running-major-or-minor}
+
+`dd.tag.ceiling` keeps candidates inside the version you're running:
+
+- `major`: never offer a tag outside the running major, so `1.2.3` can move to `1.9.0` but not `2.0.0`.
+- `minor`: stay inside the running major.minor, so `1.2.3` can move to `1.2.9` but not `1.3.0`.
+
+```yaml
+services:
+  app:
+    image: myorg/app:1.2.3
+    labels:
+      - dd.tag.family=loose
+      - dd.tag.ceiling=major
+```
+
+The ceiling is read from the transformed tag, so a `dd.tag.transform` that turns `release-1.2.3` into `1.2.3` is what the ceiling compares. It composes with `dd.tag.family`, `dd.tag.include` and `dd.tag.exclude`: those still decide which tags are eligible, and the ceiling only removes the ones outside the running line. It also bounds the informational pinned-tag insight.
+
+A ceiling only narrows candidates. It doesn't make a fully-pinned tag climb: a specific tag such as `1.2.3` still compares by digest unless `dd.tag.family=loose` or `dd.tag.include` opts it into version climbing.
+
+The ceiling applies to semver tags only. If the running tag isn't semver, or has too few numeric segments (a `minor` ceiling needs `major.minor`), the ceiling can't apply and is ignored, with one debug log line per container. A value other than `major` or `minor` logs a warning and is ignored. At the watcher level, an invalid `DD_WATCHER_{watcher_name}_TAG_CEILING` (or imgset `TAG_CEILING`) stops startup with a configuration error.
+
+This is not a required-upgrade stop. A ceiling never suggests an intermediate version to visit first.
+
+### Running-version variables in include and exclude {#running-version-variables-in-include-and-exclude}
+
+`dd.tag.include` and `dd.tag.exclude` (and their imgset `TAG_INCLUDE`/`TAG_EXCLUDE` forms) can reference the running version, so one pattern follows the container as it updates:
+
+| Variable | Value |
+|----------|-------|
+| `${major}` | First numeric segment of the transformed running tag |
+| `${minor}` | Second numeric segment |
+| `${patch}` | Third numeric segment |
+| `${flavor}` | The variant suffix after the version, without its leading separator (`alpine3.19` for `1.2.3-alpine3.19`) |
+
+```yaml
+labels:
+  # Stay on the running major line, whatever it currently is
+  - dd.tag.include=^$${major}\.\d+\.\d+$$
+```
+
+In a Compose file, write `$${major}` (and `$$` for the end anchor). Compose treats a single `${...}` as its own variable interpolation and would replace it before Drydock sees the label. With `docker run --label`, single quotes keep the shell from touching it: `--label 'dd.tag.include=^${major}\.\d+\.\d+$'`.
+
+Values are substituted before the pattern is compiled with RE2, and every substituted value is escaped, so a running tag can never inject regex syntax into the filter. The variable is matched literally, even if the tag contains characters such as `.`, `*` or `|`.
+
+If the running tag can't supply a variable the pattern uses (a non-semver tag such as `latest`, no third segment for `${patch}`, or no suffix for `${flavor}`), the filter fails safe. No candidates are offered from that filter and a warning names the pattern and the missing variable. It never falls back to matching everything. This applies to both include and exclude. Names other than these four are left in the pattern as written.
 
 ### Transform the tags before performing the analysis
 

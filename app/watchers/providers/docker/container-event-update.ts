@@ -205,6 +205,7 @@ const LABEL_DERIVED_PATCH_FIELDS = [
   'transformTags',
   'tagFamily',
   'tagPinInfo',
+  'tagCeiling',
   'linkTemplate',
   'portLabel',
   'actionTriggerInclude',

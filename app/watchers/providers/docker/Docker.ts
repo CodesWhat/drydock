@@ -152,6 +152,7 @@ import {
   ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
+  ddTagCeiling,
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
@@ -462,6 +463,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
+        ceiling: this.joi.string().valid('major', 'minor'),
         pin: this.joi.object({
           info: this.joi.boolean().default(true),
         }),
@@ -480,6 +482,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
               exclude: this.joi.string(),
               transform: this.joi.string(),
               family: this.joi.string().valid('strict', 'loose'),
+              ceiling: this.joi.string().valid('major', 'minor'),
               pin: this.joi.object({
                 info: this.joi.boolean(),
               }),
@@ -1506,6 +1509,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         transformTags: getLabel(container.Labels, ddTagTransform),
         tagFamily: getLabel(container.Labels, ddTagFamily),
         tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
+        tagCeiling: getLabel(container.Labels, ddTagCeiling),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate),
         portLabel: getLabel(container.Labels, ddPortLabel),
         displayName: getLabel(container.Labels, ddDisplayName),
@@ -1677,7 +1681,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // The watcher enumerates containers fresh from Docker, so a rejected major/minor line
     // lives only in the stored policy; fold it in so candidate selection can skip the line.
     const watchedContainer = withStoredSkipTags(
-      { ...container, tagFamily: tagPolicy.tagFamily },
+      { ...container, tagFamily: tagPolicy.tagFamily, tagCeiling: tagPolicy.tagCeiling },
       storeContainer.getContainer(container.id)?.updatePolicy?.skipTags,
     );
     return findNewVersionState(watchedContainer, logContainer, {

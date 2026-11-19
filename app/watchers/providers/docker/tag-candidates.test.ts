@@ -2397,3 +2397,308 @@ describe('include-filter recovery never offers downgrades (#1499)', () => {
     });
   });
 });
+
+describe('running-version ceilings (dd.tag.ceiling)', () => {
+  const makeLog = () => ({ warn: vi.fn(), debug: vi.fn() });
+  const tags = ['1.2.3', '1.2.4', '1.3.0', '1.9.9', '2.0.0', '2.1.0', '3.0.0'];
+
+  function ceilingContainer(overrides: Record<string, unknown> = {}) {
+    return createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      tagFamily: 'loose',
+      ...overrides,
+    });
+  }
+
+  test('without a ceiling every higher tag is offered', () => {
+    const result = getTagCandidates(ceilingContainer(), tags, makeLog());
+    expect(result.tags).toEqual(['3.0.0', '2.1.0', '2.0.0', '1.9.9', '1.3.0', '1.2.4']);
+  });
+
+  test('major ceiling stays inside the running major', () => {
+    const result = getTagCandidates(ceilingContainer({ tagCeiling: 'major' }), tags, makeLog());
+    expect(result.tags).toEqual(['1.9.9', '1.3.0', '1.2.4']);
+  });
+
+  test('minor ceiling stays inside the running major.minor', () => {
+    const result = getTagCandidates(ceilingContainer({ tagCeiling: 'minor' }), tags, makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+
+  test('ceiling value is case and whitespace tolerant', () => {
+    const result = getTagCandidates(ceilingContainer({ tagCeiling: ' Minor ' }), tags, makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+
+  test('ceiling is evaluated on the transformed tag', () => {
+    const container = ceilingContainer({
+      image: { tag: { value: 'release-1.2.3', semver: true } },
+      transformTags: '^release-(.*)$ => $1',
+      tagCeiling: 'minor',
+    });
+    const result = getTagCandidates(
+      container,
+      ['release-1.2.4', 'release-1.3.0', 'release-2.0.0'],
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['release-1.2.4']);
+  });
+
+  test('ceiling composes with strict family matching', () => {
+    const container = ceilingContainer({
+      image: { tag: { value: '1.2.3-alpine', semver: true } },
+      tagFamily: 'strict',
+      includeTags: '^\\d',
+      tagCeiling: 'major',
+    });
+    const result = getTagCandidates(
+      container,
+      ['1.2.4-alpine', '1.9.0-alpine', '1.9.0-slim', '2.0.0-alpine', '1.9.5'],
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['1.9.0-alpine', '1.2.4-alpine']);
+  });
+
+  test('ceiling composes with prefixes', () => {
+    const container = ceilingContainer({
+      image: { tag: { value: 'v1.2.3', semver: true } },
+      tagCeiling: 'major',
+    });
+    const result = getTagCandidates(container, ['v1.2.4', 'v2.0.0'], makeLog());
+    expect(result.tags).toEqual(['v1.2.4']);
+  });
+
+  test('candidate without enough segments is rejected under a minor ceiling', () => {
+    const container = ceilingContainer({ tagCeiling: 'minor' });
+    const result = getTagCandidates(container, ['1', '1.2.4'], makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+
+  test('invalid ceiling warns and is ignored', () => {
+    const log = makeLog();
+    const result = getTagCandidates(ceilingContainer({ tagCeiling: 'patch' }), tags, log);
+    expect(result.tags).toContain('3.0.0');
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid tag ceiling "patch"'));
+  });
+
+  test('blank ceiling is treated as unset without a warning', () => {
+    const log = makeLog();
+    const result = getTagCandidates(ceilingContainer({ tagCeiling: '  ' }), tags, log);
+    expect(result.tags).toContain('3.0.0');
+    expect(log.warn).not.toHaveBeenCalled();
+  });
+
+  test('non-semver running tag cannot apply the ceiling: ignored and logged once at debug', () => {
+    const container = createContainer({
+      image: { name: 'ceiling/nonsemver', tag: { value: 'latest', semver: false } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagCeiling: 'major',
+    });
+    const log = makeLog();
+    const first = getTagCandidates(container, ['1.0.0', '2.0.0'], log);
+    getTagCandidates(container, ['1.0.0', '2.0.0'], log);
+    expect(first.tags).toEqual(['2.0.0', '1.0.0']);
+    const ignored = log.debug.mock.calls.filter(([message]) =>
+      String(message).includes('dd.tag.ceiling=major ignored'),
+    );
+    expect(ignored).toHaveLength(1);
+  });
+
+  test('too few segments for a minor ceiling is ignored', () => {
+    const container = ceilingContainer({
+      image: { name: 'ceiling/short', tag: { value: '1', semver: true } },
+      tagCeiling: 'minor',
+    });
+    const log = makeLog();
+    const result = getTagCandidates(container, ['2', '3'], log);
+    expect(result.tags).toEqual(['3', '2']);
+  });
+
+  test('debug is optional on the logger', () => {
+    const container = createContainer({
+      image: { name: 'ceiling/nodebug', tag: { value: 'latest', semver: false } },
+      includeTags: '^\\d',
+      tagCeiling: 'major',
+    });
+    expect(() => getTagCandidates(container, ['1.0.0'], { warn: vi.fn() })).not.toThrow();
+  });
+
+  test('the once-log set resets when it reaches capacity', () => {
+    const log = makeLog();
+    for (let i = 0; i < 1005; i += 1) {
+      getTagCandidates(
+        createContainer({
+          image: { name: `ceiling/flood-${i}`, tag: { value: 'latest', semver: false } },
+          includeTags: '^\\d',
+          tagCeiling: 'major',
+        }),
+        ['1.0.0'],
+        log,
+      );
+    }
+    expect(log.debug.mock.calls.length).toBe(1005);
+  });
+
+  test('ceiling also bounds the pin-gate insight', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true, tagPrecision: 'specific' } },
+      tagFamily: 'strict',
+      tagCeiling: 'major',
+    });
+    const result = getTagCandidates(container, ['2.0.0', '1.4.0'], makeLog());
+    expect(result.insight).toEqual({ tag: '1.4.0', kind: 'minor' });
+  });
+});
+
+describe('running-version variables in include/exclude', () => {
+  const makeLog = () => ({ warn: vi.fn(), debug: vi.fn() });
+  const tags = ['1.2.3', '1.2.4', '1.3.0', '2.0.0', '1.2.5-alpine', '1.2.6-alpine', '1.2.7-slim'];
+
+  test('${major} and ${minor} in include follow the running version', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      includeTags: '^${major}\\.${minor}\\.\\d+$',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, tags, makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+
+  test('${patch} is substituted', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      includeTags: '^\\d+\\.\\d+\\.${patch}$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+    const result = getTagCandidates(container, ['1.2.3', '1.9.3', '1.9.4'], log);
+    expect(result.tags).toEqual(['1.9.3']);
+    expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining('cannot supply'));
+  });
+
+  test('${flavor} keeps candidates in the running variant, and works in exclude', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3-alpine', semver: true } },
+      includeTags: '-${flavor}$',
+      excludeTags: '^${major}\\.${minor}\\.6',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, tags, makeLog());
+    expect(result.tags).toEqual(['1.2.5-alpine']);
+  });
+
+  test('exclude variables follow the running version', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      excludeTags: '^${major}\\.',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, tags, makeLog());
+    expect(result.tags).toEqual(['2.0.0']);
+  });
+
+  test('variables use the transformed running tag', () => {
+    const container = createContainer({
+      image: { tag: { value: 'build-1.2.3', semver: true } },
+      transformTags: '^build-(.*)$ => $1',
+      includeTags: '^build-${major}\\.${minor}\\.',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(
+      container,
+      ['build-1.2.3', 'build-1.2.4', 'build-1.3.0'],
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['build-1.2.4']);
+  });
+
+  test('a malicious running flavor cannot widen the filter', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3-.*', semver: true } },
+      includeTags: '${flavor}$',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, ['1.2.4-alpine', '1.2.5-.*'], makeLog());
+    expect(result.tags).toEqual(['1.2.5-.*']);
+  });
+
+  test('a malicious running flavor with alternation and anchors stays literal', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3-a|^', semver: true } },
+      includeTags: '${flavor}',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, ['1.2.4-b', '1.2.5-zzz', '1.2.6-a|^'], makeLog());
+    expect(result.tags).toEqual(['1.2.6-a|^']);
+  });
+
+  test('missing include variable fails safe: no candidates and a warning', () => {
+    const container = createContainer({
+      image: { tag: { value: 'latest', semver: false } },
+      includeTags: '^${major}\\.',
+    });
+    const log = makeLog();
+    const result = getTagCandidates(container, ['1.0.0', '2.0.0'], log);
+    expect(result.tags).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('dd.tag.include "^${major}\\." uses ${major}'),
+    );
+  });
+
+  test('missing patch on a two-segment running tag fails safe', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2', semver: true } },
+      includeTags: '^1\\.2\\.${patch}',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+    const result = getTagCandidates(container, ['1.2.5', '1.3.0'], log);
+    expect(result.tags).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('uses ${patch}'));
+  });
+
+  test('missing flavor on a bare running tag fails safe', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      includeTags: '-${flavor}$',
+      tagFamily: 'loose',
+    });
+    const log = makeLog();
+    expect(getTagCandidates(container, ['1.2.4-alpine'], log).tags).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('uses ${flavor}'));
+  });
+
+  test('missing exclude variable fails safe: no candidates and a warning', () => {
+    const container = createContainer({
+      image: { tag: { value: 'latest', semver: false } },
+      includeTags: '^\\d',
+      excludeTags: '^${minor}',
+    });
+    const log = makeLog();
+    const result = getTagCandidates(container, ['1.0.0'], log);
+    expect(result.tags).toEqual([]);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('dd.tag.exclude'));
+  });
+
+  test('filters without variables are untouched', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      includeTags: '^1\\.',
+      excludeTags: 'x',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, ['1.2.4', '1.2.5x'], makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+
+  test('variables and a ceiling can be combined', () => {
+    const container = createContainer({
+      image: { tag: { value: '1.2.3', semver: true } },
+      includeTags: '^${major}\\.',
+      tagCeiling: 'minor',
+      tagFamily: 'loose',
+    });
+    const result = getTagCandidates(container, ['1.2.4', '1.3.0', '2.0.0'], makeLog());
+    expect(result.tags).toEqual(['1.2.4']);
+  });
+});

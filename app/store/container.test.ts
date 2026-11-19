@@ -87,6 +87,11 @@ describe('rowToContainer defensive fallbacks', () => {
     expect(containerRead?.actionTriggerInclude).toBeUndefined();
   });
 
+  test('round-trips the persisted tag ceiling', () => {
+    seedContainer(createContainerFixture({ id: 'ceiling-container', tagCeiling: 'minor' }));
+    expect(container.getContainer('ceiling-container')?.tagCeiling).toBe('minor');
+  });
+
   test('preserves a persisted error message', () => {
     seedContainer(
       createContainerFixture({

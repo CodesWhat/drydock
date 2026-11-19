@@ -130,6 +130,12 @@ test.each([{}, [], true, 'v'.repeat(257)])(
   },
 );
 
+test('validate round-trips effective tagCeiling', () => {
+  expect(container.validate(createValidContainer({ tagCeiling: 'minor' })).tagCeiling).toBe(
+    'minor',
+  );
+});
+
 test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
   expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
 });

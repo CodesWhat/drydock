@@ -288,6 +288,13 @@ describe('docker helper extraction module', () => {
     ).toBe('loose');
   });
 
+  test('resolves nested imgset tag.ceiling', () => {
+    expect(
+      getResolvedImgsetConfiguration('service', { tag: { ceiling: 'minor' } }).tagCeiling,
+    ).toBe('minor');
+    expect(getResolvedImgsetConfiguration('service', {}).tagCeiling).toBeUndefined();
+  });
+
   test('resolves nested imgset tag.pin.info booleans without reviving flat aliases (#498)', () => {
     expect(
       getResolvedImgsetConfiguration('service', {

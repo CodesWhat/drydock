@@ -398,6 +398,27 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
 
+    test('validates the watcher-level tag.ceiling default and rejects unknown values', () => {
+      expect(
+        docker.validateConfiguration({ socket: '/var/run/docker.sock', tag: { ceiling: 'minor' } })
+          .tag.ceiling,
+      ).toBe('minor');
+      expect(() =>
+        docker.validateConfiguration({ socket: '/var/run/docker.sock', tag: { ceiling: 'patch' } }),
+      ).toThrow();
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        imgset: { service: { image: 'ghcr.io/team/service', tag: { ceiling: 'major' } } },
+      });
+      expect(validated.imgset.service.tag.ceiling).toBe('major');
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          imgset: { service: { image: 'ghcr.io/team/service', tag: { ceiling: 'x' } } },
+        }),
+      ).toThrow();
+    });
+
     test('should validate configuration with tag.pin.info override (#498)', async () => {
       const config = {
         socket: '/var/run/docker.sock',
