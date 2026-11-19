@@ -28,7 +28,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - HTTP trigger proxy URLs that carry credentials (for example `http://user:pass@proxy.local:3128`) no longer appear in registration logs, trigger API responses, debug dumps or the configuration endpoint. The userinfo is replaced with `[REDACTED]` where the proxy URL is shown, and the lower-scope trigger views redact the whole value. A value that cannot be parsed as a URL is redacted entirely.
 
-- Classify four Alpine OpenSSL 3.5.9-r0 advisories (CVE-2026-107496, CVE-2026-88823, CVE-2026-95691, CVE-2026-95692) as `not_affected` through an OpenVEX document. The affected CMS encryption, AES-GCM-SIV and QUIC client code is not reachable in Drydock, and Node bundles its own OpenSSL. This stays in place until Alpine ships a fixed openssl.
+- Pin Alpine openssl to 3.5.9-r1. Alpine replaced 3.5.9-r0 in the v3.24 repository, which broke every image build with a `libcrypto3 breaks` error. The r1 package carries the upstream fixes for CVE-2026-107496, CVE-2026-88823, CVE-2026-95691 and CVE-2026-95692, so the OpenVEX document that classified them as `not_affected` is removed.
 - Pin minimatch in development and test tooling to `11.0.8` for GHSA-cf2h-pxjq-68xw (quadratic compilation of long wildcard patterns) and GHSA-hqmv-qgp3-jx75 (compiled-pattern cache memory exhaustion). The published RC15 runtime SBOM contains no minimatch; this updates the tooling used to build and test the project.
 
 ### Fixed
