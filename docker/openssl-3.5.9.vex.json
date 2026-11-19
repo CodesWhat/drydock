@@ -1,0 +1,81 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/CodesWhat/drydock/security/openssl-3.5.9-r1",
+  "author": "https://github.com/CodesWhat",
+  "timestamp": "2026-11-18T22:00:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-107496"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "CMS_encrypt and CMS_encrypt_ex can loop forever with an EC recipient certificate whose group order is 1. Alpine fixed this in openssl 3.5.9-r1 (listed under 3.5.9-r1 in the Alpine v3.24 secdb) by backporting the patch. Grype only has the NVD CPE range (< 3.5.10) for this package, so it flags the patched revision. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Remove this document (and its vex-documents entry) when the Dockerfile pin reaches an upstream release at or above the NVD fixed version or Grype reads the Alpine fix."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-88823"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "AES-GCM-SIV resets the AAD on a zero-length AAD update. Alpine fixed this in openssl 3.5.9-r1 (listed under 3.5.9-r1 in the Alpine v3.24 secdb) by backporting the patch. Grype only has the NVD CPE range (< 3.5.10) for this package, so it flags the patched revision. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Remove this document (and its vex-documents entry) when the Dockerfile pin reaches an upstream release at or above the NVD fixed version or Grype reads the Alpine fix."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-95692"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "AES-GCM-SIV with a short IV can over-read the heap. Alpine fixed this in openssl 3.5.9-r1 (listed under 3.5.9-r1 in the Alpine v3.24 secdb) by backporting the patch. Grype only has the NVD CPE range (< 3.5.10) for this package, so it flags the patched revision. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Remove this document (and its vex-documents entry) when the Dockerfile pin reaches an upstream release at or above the NVD fixed version or Grype reads the Alpine fix."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-95691"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "fixed",
+      "impact_statement": "The OpenSSL QUIC client can hit a use-after-free against a malicious QUIC server. Alpine fixed this in openssl 3.5.9-r1 (listed under 3.5.9-r1 in the Alpine v3.24 secdb) by backporting the patch. Grype only has the NVD CPE range (< 3.5.10) for this package, so it flags the patched revision. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Remove this document (and its vex-documents entry) when the Dockerfile pin reaches an upstream release at or above the NVD fixed version or Grype reads the Alpine fix."
+    }
+  ]
+}

@@ -7,6 +7,7 @@ const UUID_V7_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}
 const AUTH = { username: 'user', password: 'token' };
 const CURRENT_IMAGE = 'my-registry/test/app:1.2.3';
 const UPDATE_IMAGE = 'my-registry/test/app:2.0.0';
+const RUNNING_DIGEST = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 function createContainer(overrides: Record<string, unknown> = {}) {
   return {
@@ -424,6 +425,70 @@ describe('api/container/security', () => {
       expect(persisted.documentRefs['spdx-json']).toEqual(expect.objectContaining({ bytes: 123 }));
     });
 
+    test('scans the pinned running digest for SBOM generation but stores the tag-form image', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          security: undefined,
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { value: RUNNING_DIGEST },
+          },
+        }),
+      });
+      harness.deps.generateImageSbom.mockResolvedValueOnce(
+        createSbomResult(`my-registry/test/app@${RUNNING_DIGEST}`),
+      );
+
+      await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.deps.generateImageSbom).toHaveBeenCalledWith(
+        expect.objectContaining({ image: `my-registry/test/app:${RUNNING_DIGEST}` }),
+      );
+      expect(harness.storeContainer.updateContainer.mock.calls[0][0].security.sbom.image).toBe(
+        CURRENT_IMAGE,
+      );
+    });
+
+    test('skips SBOM persistence but still answers when the container was removed during generation', async () => {
+      const harness = createHarness({ container: createContainer({ security: undefined }) });
+      harness.deps.generateImageSbom.mockImplementationOnce(async () => {
+        harness.storeContainer.getContainerRaw.mockReturnValue(undefined as never);
+        return createSbomResult(CURRENT_IMAGE);
+      });
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(harness.storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(harness.deps.log.info).toHaveBeenCalledWith(
+        expect.stringContaining('removed container'),
+      );
+    });
+
+    test('merges only security.sbom onto the live record when it changed during generation', async () => {
+      const harness = createHarness({ container: createContainer({ security: undefined }) });
+      harness.deps.generateImageSbom.mockImplementationOnce(async () => {
+        harness.storeContainer.getContainerRaw.mockReturnValue(
+          createContainer({
+            result: { tag: '3.0.0' },
+            updateAvailable: false,
+            security: { scan: createScanResult() },
+          }) as never,
+        );
+        return createSbomResult(CURRENT_IMAGE);
+      });
+
+      await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.result).toEqual({ tag: '3.0.0' });
+      expect(persisted.updateAvailable).toBe(false);
+      expect(persisted.security.scan).toEqual(createScanResult());
+      expect(persisted.security.sbom.status).toBe('generated');
+    });
+
     test('generates sbom and persists merged documents when requested format is missing', async () => {
       const existingSbom = createSbomResult(CURRENT_IMAGE, {
         status: 'generated',
@@ -512,6 +577,54 @@ describe('api/container/security', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Error generating SBOM',
       });
+    });
+  });
+
+  describe('scanContainer digest pinning', () => {
+    test('scans the pinned running digest and stores the tag-form image with the digest', async () => {
+      const harness = createHarness({
+        container: createContainer({
+          image: {
+            registry: { name: 'hub', url: 'my-registry' },
+            name: 'test/app',
+            tag: { value: '1.2.3' },
+            digest: { value: RUNNING_DIGEST },
+          },
+          updateAvailable: false,
+        }),
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: true },
+          sbom: { enabled: true, formats: ['spdx-json'] },
+        },
+      });
+      const pinned = `my-registry/test/app:${RUNNING_DIGEST}`;
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ image: pinned }),
+      );
+      harness.deps.verifyImageSignature.mockResolvedValueOnce(createSignatureResult(pinned));
+      harness.deps.generateImageSbom.mockResolvedValueOnce(createSbomResult(pinned));
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledWith({
+        image: pinned,
+        auth: AUTH,
+      });
+      expect(harness.deps.verifyImageSignature).toHaveBeenCalledWith({ image: pinned, auth: AUTH });
+      expect(harness.deps.generateImageSbom).toHaveBeenCalledWith(
+        expect.objectContaining({ image: pinned }),
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.scan.image).toBe(CURRENT_IMAGE);
+      expect(persisted.security.scan.imageDigest).toBe(RUNNING_DIGEST);
+      expect(persisted.security.sbom.image).toBe(CURRENT_IMAGE);
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        RUNNING_DIGEST,
+        expect.objectContaining({ image: CURRENT_IMAGE }),
+        expect.any(String),
+      );
     });
   });
 

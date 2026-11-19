@@ -30,6 +30,12 @@ vi.mock('../store/container.js', () => ({
   getContainer: mockGetContainer,
 }));
 
+const mockActionsEnabled = vi.hoisted(() => vi.fn(() => true));
+vi.mock('./container-update-dispatch.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./container-update-dispatch.js')>()),
+  areContainerActionsEnabled: mockActionsEnabled,
+}));
+
 vi.mock('../agent', () => ({
   getAgent: vi.fn(),
 }));
@@ -76,6 +82,7 @@ describe('Trigger Router', () => {
       error instanceof Error ? error.message : String(error),
     );
     mockGetContainer.mockReturnValue(undefined);
+    mockActionsEnabled.mockReturnValue(true);
   });
 
   describe('init', () => {
@@ -242,7 +249,11 @@ describe('Trigger Router', () => {
     test('a manual send clears the recorded skip, a failed one keeps it', async () => {
       resetNotificationSkips();
       recordNotificationSkip('slack.default', 'c1', 'rule-disabled');
-      const mockTrigger = { trigger: vi.fn().mockRejectedValueOnce(new Error('down')) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockRejectedValueOnce(new Error('down')),
+      };
       registry.getState.mockReturnValue({ trigger: { 'slack.default': mockTrigger } });
       const req = { params: { type: 'slack', name: 'default' }, body: { id: 'c1' } };
 
@@ -256,6 +267,8 @@ describe('Trigger Router', () => {
 
     test('should run trigger successfully', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
@@ -277,6 +290,7 @@ describe('Trigger Router', () => {
     test('should accept docker update triggers against the stored container state', async () => {
       const mockTrigger = {
         type: 'docker',
+        name: 'update',
         trigger: vi.fn().mockResolvedValue(undefined),
         getId: () => 'docker.update',
       };
@@ -310,6 +324,7 @@ describe('Trigger Router', () => {
     test('should honor caller-supplied operationId in body (#289)', async () => {
       const mockTrigger = {
         type: 'docker',
+        name: 'update',
         trigger: vi.fn().mockResolvedValue(undefined),
         getId: () => 'docker.update',
       };
@@ -341,6 +356,7 @@ describe('Trigger Router', () => {
     test('should reject a caller-supplied operationId that already exists with 409', async () => {
       const mockTrigger = {
         type: 'docker',
+        name: 'update',
         trigger: vi.fn().mockResolvedValue(undefined),
         getId: () => 'docker.update',
       };
@@ -396,6 +412,7 @@ describe('Trigger Router', () => {
     test('should surface UpdateRequestError responses from accepted docker update triggers', async () => {
       const mockTrigger = {
         type: 'docker',
+        name: 'update',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
@@ -426,6 +443,7 @@ describe('Trigger Router', () => {
 
     test('should return 404 when docker update trigger targets a container missing from the store', async () => {
       const mockTrigger = {
+        name: 'update',
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
@@ -448,6 +466,8 @@ describe('Trigger Router', () => {
 
     test('should set default updateKind when missing', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
@@ -477,6 +497,8 @@ describe('Trigger Router', () => {
 
     test('should not override existing updateKind', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
@@ -504,6 +526,8 @@ describe('Trigger Router', () => {
 
     test('should return 409 when local trigger targets a temporary rollback container', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
@@ -527,6 +551,8 @@ describe('Trigger Router', () => {
 
     test('should return 500 when trigger throws', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockRejectedValue(new Error('trigger failed')),
       };
       registry.getState.mockReturnValue({
@@ -551,6 +577,8 @@ describe('Trigger Router', () => {
 
     test('should stringify non-Error trigger failures in logs', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockRejectedValue(503),
       };
       registry.getState.mockReturnValue({
@@ -571,6 +599,8 @@ describe('Trigger Router', () => {
 
     test('should use shared getErrorMessage helper for trigger failures', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockRejectedValue({ message: 'trigger failed from object' }),
       };
       registry.getState.mockReturnValue({
@@ -593,6 +623,8 @@ describe('Trigger Router', () => {
 
     test('should include error details when trigger execution fails', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockRejectedValue(new Error('watcher not found')),
       };
       registry.getState.mockReturnValue({
@@ -616,6 +648,8 @@ describe('Trigger Router', () => {
 
     test('should omit trigger error details when helper returns empty message', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi.fn().mockRejectedValue(new Error('hidden error')),
       };
       registry.getState.mockReturnValue({
@@ -639,6 +673,8 @@ describe('Trigger Router', () => {
 
     test('should scrub credentials embedded in the thrown error message before sending to the client', async () => {
       const mockTrigger = {
+        type: 'slack',
+        name: 'default',
         trigger: vi
           .fn()
           .mockRejectedValue(
@@ -1200,6 +1236,7 @@ describe('Trigger Router', () => {
       };
       agent.getAgent.mockReturnValue(mockAgentClient);
       const mockTrigger = {
+        name: 'update',
         type: 'docker',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
@@ -1377,6 +1414,223 @@ describe('Trigger Router', () => {
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
 
       requestSpy.mockRestore();
+    });
+  });
+
+  describe('agent-qualified aliases cannot reach an agent action trigger', () => {
+    const PROVIDERS = ['docker', 'dockercompose', 'portainer', 'command'];
+
+    function keyRequest(scopes: string[], params: Record<string, string>) {
+      return {
+        params,
+        body: { id: 'c1' },
+        principal: { kind: 'api-key', keyId: 'abcdef012345', name: 'ci', scopes },
+      };
+    }
+
+    function registerAgentProxy(agentName: string, type: string, name: string) {
+      const proxy = {
+        type,
+        name,
+        agent: agentName,
+        configuration: {},
+        getId: () => `${agentName}.${type}.${name}`,
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({ trigger: { [`${agentName}.${type}.${name}`]: proxy } });
+      return proxy;
+    }
+
+    test.each(PROVIDERS)(
+      'a triggers:test key folding the agent into the type of a %s proxy is refused',
+      async (provider) => {
+        const proxy = registerAgentProxy('edge1', provider, 'update');
+        const agentClient = { runRemoteTrigger: vi.fn() };
+        agent.getAgent.mockReturnValue(agentClient);
+        mockGetContainer.mockReturnValue({ id: 'c1', agent: 'edge1' });
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+        const res = createMockResponse();
+
+        await runTrigger(
+          keyRequest(['triggers:test'], { type: `edge1.${provider}`, name: 'update' }),
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(proxy.trigger).not.toHaveBeenCalled();
+        expect(agentClient.runRemoteTrigger).not.toHaveBeenCalled();
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test('folding the agent and type into the name segment is refused too', async () => {
+      const proxy = registerAgentProxy('slack', 'docker', 'update');
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+      const res = createMockResponse();
+
+      await runTrigger(
+        keyRequest(['triggers:test'], { type: 'slack', name: 'docker.update' }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test('the same alias on the explicit agent route is refused', async () => {
+      const proxy = registerAgentProxy('edge1', 'docker', 'update');
+      const agentClient = { runRemoteTrigger: vi.fn() };
+      agent.getAgent.mockReturnValue(agentClient);
+      mockGetContainer.mockReturnValue({ id: 'c1', agent: 'edge1' });
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+      const handler = getRemoteTriggerHandler();
+      const res = createMockResponse();
+
+      await handler(
+        keyRequest(['triggers:test'], { type: 'edge1.docker', name: 'update', agent: 'x' }),
+        res,
+      );
+
+      expect(res.status).not.toHaveBeenCalledWith(202);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test('a remote registry entry whose identity differs from the route is not run', async () => {
+      // The registry key matches the route, but the component's own agent does not.
+      const proxy = {
+        type: 'docker',
+        name: 'update',
+        agent: 'other',
+        trigger: vi.fn(),
+      };
+      registry.getState.mockReturnValue({ trigger: { 'my-agent.docker.update': proxy } });
+      agent.getAgent.mockReturnValue({ runRemoteTrigger: vi.fn() });
+      mockGetContainer.mockReturnValue({ id: 'c1', agent: 'my-agent' });
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+      const res = createMockResponse();
+
+      await getRemoteTriggerHandler()(
+        { params: { agent: 'my-agent', type: 'docker', name: 'update' }, body: { id: 'c1' } },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test('a canonical explicit-agent update with containers:update is accepted once, trigger not invoked directly', async () => {
+      const proxy = registerAgentProxy('edge1', 'docker', 'update');
+      agent.getAgent.mockReturnValue({ runRemoteTrigger: vi.fn() });
+      mockGetContainer.mockReturnValue({ id: 'c1', agent: 'edge1' });
+      const spy = vi
+        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .mockResolvedValue({ operationId: 'op-1' } as never);
+      const res = createMockResponse();
+
+      await getRemoteTriggerHandler()(
+        keyRequest(['containers:update'], { type: 'docker', name: 'update', agent: 'edge1' }),
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(proxy.trigger).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
+
+  describe('container actions feature flag', () => {
+    function localKeyRequest(type: string) {
+      return {
+        params: { type, name: 'x' },
+        body: { id: 'c1' },
+        principal: {
+          kind: 'api-key',
+          keyId: 'abcdef012345',
+          name: 'ci',
+          scopes: ['containers:update', 'triggers:test'],
+        },
+      };
+    }
+
+    test.each(['docker', 'command'])(
+      'refuses a local %s trigger with 403 when actions are disabled',
+      async (type) => {
+        mockActionsEnabled.mockReturnValue(false);
+        const trigger = { type, name: 'x', trigger: vi.fn() };
+        registry.getState.mockReturnValue({ trigger: { [`${type}.x`]: trigger } });
+        const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+        const res = createMockResponse();
+
+        await runTrigger(localKeyRequest(type), res);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
+        expect(spy).not.toHaveBeenCalled();
+        expect(trigger.trigger).not.toHaveBeenCalled();
+        spy.mockRestore();
+      },
+    );
+
+    test('refuses a remote action trigger with 403 when actions are disabled', async () => {
+      mockActionsEnabled.mockReturnValue(false);
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+      const res = createMockResponse();
+
+      await getRemoteTriggerHandler()(
+        { ...localKeyRequest('docker'), params: { type: 'docker', name: 'x', agent: 'a' } },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
+      expect(agent.getAgent).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    test('scope is checked again against the resolved trigger and refuses a key that no longer holds it', async () => {
+      // The route-level check passes on the first read; the post-resolution
+      // check reads the scopes again and must be the one that refuses.
+      let reads = 0;
+      const principal = {
+        kind: 'api-key',
+        keyId: 'abcdef012345',
+        name: 'ci',
+        get scopes() {
+          reads += 1;
+          return reads === 1 ? ['triggers:test'] : [];
+        },
+      };
+      const trigger = { type: 'slack', name: 'x', trigger: vi.fn() };
+      registry.getState.mockReturnValue({ trigger: { 'slack.x': trigger } });
+      const res = createMockResponse();
+
+      await runTrigger(
+        { params: { type: 'slack', name: 'x' }, body: { id: 'c1' }, principal },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a notification trigger still fires when actions are disabled', async () => {
+      mockActionsEnabled.mockReturnValue(false);
+      const trigger = { type: 'slack', name: 'x', trigger: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({ trigger: { 'slack.x': trigger } });
+      const res = createMockResponse();
+
+      await runTrigger(localKeyRequest('slack'), res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(trigger.trigger).toHaveBeenCalledTimes(1);
     });
   });
 });

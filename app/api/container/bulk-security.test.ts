@@ -68,7 +68,8 @@ function createHarness(options: { containers?: Record<string, unknown>[] } = {})
     broadcastScanStarted: vi.fn(),
     broadcastScanCompleted: vi.fn(),
     getContainerImageFullName: vi.fn(
-      (c: any) => `my-registry/${c.image.name}:${c.image.tag.value}`,
+      (c: any, tagOverride?: string) =>
+        `my-registry/${c.image.name}${tagOverride?.includes(':') ? '@' : ':'}${tagOverride || c.image.tag.value}`,
     ),
     getContainerRegistryAuth: vi.fn(async () => ({ username: 'user', password: 'token' })),
     getErrorMessage: vi.fn((e: unknown) => (e instanceof Error ? e.message : 'unknown error')),
@@ -956,6 +957,36 @@ describe('api/container/bulk-security', () => {
       for (const [arg] of calls) {
         expect(arg.security.scan).toEqual(scan);
       }
+    });
+
+    test('scans the pinned running digest and stores the tag-form image', async () => {
+      const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: digest },
+            },
+          },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(
+        createScanResult({ image: `my-registry/test/app@${digest}` }),
+      );
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({ image: `my-registry/test/app@${digest}` }),
+      );
+      const [[arg]] = harness.storeContainer.updateContainer.mock.calls;
+      expect(arg.security.scan.image).toBe('my-registry/test/app:1.2.3');
     });
 
     test('writes scan when container has no prior security field', async () => {

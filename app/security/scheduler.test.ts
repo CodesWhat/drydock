@@ -54,7 +54,10 @@ vi.mock('../registry/index.js', () => ({
   getState: (...args: unknown[]) => mockGetState(...args),
 }));
 
-vi.mock('../api/container/shared.js', () => ({
+vi.mock('../api/container/shared.js', async (importOriginal) => ({
+  resolveCurrentImageScanTarget: (
+    await importOriginal<typeof import('../api/container/shared.js')>()
+  ).resolveCurrentImageScanTarget,
   resolveContainerImageFullName: (...args: unknown[]) => mockResolveContainerImageFullName(...args),
   resolveContainerRegistryAuth: (...args: unknown[]) => mockResolveContainerRegistryAuth(...args),
 }));
@@ -1480,6 +1483,32 @@ describe('runScheduledScans', () => {
       }),
       86400000,
     );
+  });
+
+  test('scans the pinned running digest and stores the tag-form image per container', async () => {
+    const digest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const container = createContainer({
+      image: { ...createContainer().image, digest: { watch: true, value: digest } },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    mockGetContainerRaw.mockReturnValue(container);
+    mockResolveContainerImageFullName.mockImplementation(
+      (_c: unknown, _r: unknown, tagOverride?: string) =>
+        tagOverride ? `docker.io/library/nginx@${tagOverride}` : 'docker.io/library/nginx:1.25',
+    );
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({ image: `docker.io/library/nginx@${digest}` }),
+      fromCache: false,
+    });
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ image: `docker.io/library/nginx@${digest}`, digest }),
+      expect.anything(),
+    );
+    const written = mockUpdateContainer.mock.calls[0][0];
+    expect(written.security.scan.image).toBe('docker.io/library/nginx:1.25');
   });
 
   test('should preserve existing security state when updating container', async () => {

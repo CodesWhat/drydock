@@ -13,9 +13,7 @@ type FumadocsRootProviderProps = ComponentProps<typeof FumadocsRootProvider>;
  * the current docs version. See docs-search-dialog.tsx for why.
  *
  * A dedicated wrapper, rather than passing `search` directly at the call
- * site in layout.tsx, keeps `<RootProvider theme={{ nonce }}>` there
- * unchanged — content-security-policy.test.mjs pins that exact JSX substring
- * to guard the nonce plumbing, so this is the only prop layout.tsx passes.
+ * site in layout.tsx, keeps `<RootProvider>` there prop-free.
  */
 export function RootProvider({ children, ...props }: FumadocsRootProviderProps) {
   return (
