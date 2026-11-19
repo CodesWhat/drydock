@@ -26,6 +26,7 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 | `DD_NOTIFICATION_MQTT_{trigger_name}_AGENTTOPICSEGMENT` | ⚪ | Insert an `agent/<name>` segment into plain MQTT container state topics for containers owned by a remote agent, so two agents using the same watcher name (typically the default `local`) stop overwriting each other's topics. Controller-local topics are unchanged. Turning this on also turns on `HASS_AGENTTOPICSEGMENT`, so the Home Assistant state topic stays in step. Turning it on moves the retained state topic, and the old unscoped topic is not cleared automatically, because a controller-local container of the same name can legitimately own it, so publish an empty retained message to the old topic yourself. | `true`, `false` | `false` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_DEVICEPERCONTAINER` | ⚪ | Give every watched container its own Home Assistant device, nested under the `drydock` device via `via_device`, instead of hanging every entity off the single `drydock` device. Drydock-level entities (global counts, watcher counts, watcher running status) stay on the `drydock` device either way. Set to `false` to keep the pre-v1.8.0 single-device layout. | `true`, `false` | `true` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_COMMANDS` | ⚪ | Enable bidirectional commands: adds a `command_topic` to each container's discovery payload so Home Assistant's `update` entity shows an Install button, and subscribes drydock to the corresponding command topics so clicking it triggers an update. Requires `HASS_ENABLED`. | `true`, `false` | `false` |
+| `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_BUTTONS` | ⚪ | Add a "Check for updates" button and an "Update now" button to each container's device in Home Assistant, backed by command topics drydock subscribes to. Off by default because anyone who can publish to those topics can make drydock act. Requires `HASS_ENABLED` and `HASS_DISCOVERY`. | `true`, `false` | `false` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_ATTRIBUTES` | ⚪ | Attribute preset controlling which container fields are included in MQTT payloads. `full` sends everything; `short` excludes large fields like SBOM documents, scan vulnerabilities, details, and labels. | `full`, `short` | `short` |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_INCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to keep (include-mode). When set, only these keys are published. | Comma-separated flattened keys | |
 | `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_FILTER_EXCLUDE` | ⚪ | Comma-separated list of flattened MQTT attribute keys to remove (exclude-mode). Used when `HASS_FILTER_INCLUDE` is empty. | Comma-separated flattened keys | |
@@ -303,6 +304,34 @@ A few things worth knowing before you turn this on:
 - Commands only work while drydock is connected to the broker. The MQTT connection is a clean (non-persistent) session, so a click sent while drydock is offline or reconnecting doesn't queue up and replay later, it's just lost.
 - If two containers somehow sanitize down to the same state topic, drydock refuses to guess and drops the command rather than updating the wrong one.
 - Since anyone who can publish to a container's command topic can trigger an update, scope your Home Assistant broker credential tightly: publish-only access to `{topic}/+/+/cmd` and `{topic}/agent/+/+/+/cmd` is all it needs.
+
+### Release summary and link
+
+The update entity carries `release_summary` and `release_url` whenever drydock knows them. The summary is the release title and notes body for the newest version, with whitespace collapsed and cut to Home Assistant's 255 character limit (ending in `…` when it is cut). `release_url` is the container's release link, or the release notes URL when there is no link. A container with neither gets neither field.
+
+### Availability
+
+Every entity drydock publishes names `{topic}/status` as its `availability_topic`. When the trigger connects it publishes a retained `online` there, and it registers an MQTT Last Will of a retained `offline` on the same topic, so the broker marks every drydock entity unavailable the moment drydock disconnects without saying goodbye. A reconnect publishes `online` again. This applies whenever `HASS_ENABLED` is on, and plain MQTT consumers without it see no change.
+
+Two triggers that share a `topic` also share `{topic}/status`, so give each its own `topic` if you run more than one against a broker.
+
+### Check and update buttons
+
+Set `DD_NOTIFICATION_MQTT_{trigger_name}_HASS_BUTTONS=true` to add two button entities per container. Each press publishes the literal payload `PRESS` to a command topic under the container's state topic:
+
+| Button | Command topic | What it does |
+| --- | --- | --- |
+| Check for updates | `{state_topic}/cmd/check` | Runs the same single-container check as the Check now action in the UI. |
+| Update now | `{state_topic}/cmd/update` | Requests an update through the same path as a manual update in the UI. |
+
+Update now is not a shortcut around the rules. Approval, exclusion, update mode and threshold checks apply exactly as they do for a manual update, and a refused request does nothing except say why. Each press also writes its outcome to `{state_topic}/cmd/{check|update}/result` as a retained JSON object, which the button exposes as its attributes in Home Assistant: `status` (`accepted`, `checked`, `refused` or `error`), a `reason` when refused or failed, `operation_id` for an accepted update, `update_available` for a check, and `at`. Accepted updates are written to the audit log as `mqtt-command-update`, the same as the Install button.
+
+- Buttons are only advertised while drydock's command subscription is live. If the broker denies the subscription, no button entities are published.
+- Commands are dropped for containers this trigger excludes, with a refusal on the result topic.
+- Update now shares the Install button's rate limit (one accepted command per container every 30 seconds) and Check has its own. A press inside the window is refused with a result saying so.
+- The subscription is re-established by the MQTT client after a reconnect. Presses sent while drydock was disconnected are lost, because the session is not persistent.
+- Turning `HASS_BUTTONS` off stops advertising the buttons and ignores their topics, but Home Assistant keeps the retained entities until you delete them from its UI or clear their retained discovery topics.
+- Scope the broker credential Home Assistant uses: publish-only access to `{topic}/+/+/cmd/+` and `{topic}/agent/+/+/+/cmd/+` is all it needs, and anyone who can publish there can trigger a check or an update.
 
 ### Update progress
 
