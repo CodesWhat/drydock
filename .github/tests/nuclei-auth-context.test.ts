@@ -67,6 +67,22 @@ test('the metrics exposure template runs without credentials and remains covered
   );
 });
 
+test('both scans run a pinned, verified templates checkout and never restore the template cache', () => {
+  const install = step('Install pinned Nuclei templates');
+  expect(install?.env?.NUCLEI_TEMPLATES_TAG).toMatch(/^v\d+\.\d+\.\d+$/u);
+  expect(install?.env?.NUCLEI_TEMPLATES_SHA).toMatch(/^[0-9a-f]{40}$/u);
+  expect(install?.run).toContain('rev-parse HEAD');
+  const steps = loadWorkflow(workflowPath).jobs?.[job]?.steps ?? [];
+  const installIndex = steps.findIndex((entry) => entry.name === 'Install pinned Nuclei templates');
+  for (const name of ['Run unauthenticated metrics exposure scan', 'Run Nuclei scan']) {
+    const scan = step(name);
+    expect(scan?.with?.cache).toBe(false);
+    expect(scan?.with?.args).toContain('-t ${{ runner.temp }}/nuclei-templates');
+    expect(scan?.with?.args).toContain('-duc');
+    expect(steps.findIndex((entry) => entry.name === name)).toBeGreaterThan(installIndex);
+  }
+});
+
 test('a failure of either scan or report merge fails the existing gate', () => {
   for (const name of [
     'Merge Nuclei scan reports',
