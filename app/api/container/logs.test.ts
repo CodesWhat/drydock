@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, test } from 'vitest';
+import { AgentResponseTooLargeError } from '../../agent/AgentResponseTooLargeError.js';
 import { createMockResponse } from '../../test/helpers.js';
 import {
   createLogHandlers,
@@ -288,6 +289,37 @@ describe('api/container/logs', () => {
         },
         getAgent: vi.fn(() => ({
           getContainerLogs: vi.fn().mockResolvedValue('x'.repeat(16 * 1024 * 1024 + 1)),
+        })),
+        getWatchers: vi.fn(() => ({})),
+        getErrorMessage: vi.fn(() => 'error'),
+      } as any);
+      const res = createMockResponse();
+
+      await handlers.getContainerLogs(
+        { params: { id: 'c1' }, query: {}, headers: {} } as any,
+        res as any,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(413);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container log download exceeds 16 MiB' });
+      expect(res.send).not.toHaveBeenCalled();
+    });
+
+    test('maps an agent response_too_large rejection to 413', async () => {
+      const handlers = createLogHandlers({
+        storeContainer: {
+          getContainer: vi.fn(() => ({
+            id: 'c1',
+            name: 'test',
+            watcher: 'remote',
+            status: 'running',
+            agent: 'edge',
+          })),
+        },
+        getAgent: vi.fn(() => ({
+          getContainerLogs: vi
+            .fn()
+            .mockRejectedValue(new AgentResponseTooLargeError('error: logs exceed 16777216 bytes')),
         })),
         getWatchers: vi.fn(() => ({})),
         getErrorMessage: vi.fn(() => 'error'),

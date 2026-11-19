@@ -31,6 +31,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- A Portwing edge agent's over-cap response now fails with a clear error instead of a generic agent failure. Buffered requests and legacy container log replies that exceed Portwing's 16 MiB cap come back as `response_too_large`; the log download endpoint answers 413 for it, and other buffered requests report that the response was too large and to use a streaming request. Older Portwing versions that don't send the code behave as before.
 - A `dd.tag.include` or `dd.tag.exclude` regex that fails to compile no longer widens the candidate tags. Before, the bad filter was skipped with a log warning and the container could be offered tags the filter was meant to block. Now it gets no update candidates and shows an error naming the pattern until you fix it.
 - Container state alerts (`container-stopped`, `container-exited`, `container-oom-killed` and `container-restart-loop`) now go to notification triggers only. With an empty trigger list the rule means all notification triggers, but a Command action trigger was also running its command for these alerts. Command and the update actions are skipped for them now, as the docs already said.
 - Reloading the configuration from the API or the config editor no longer attributes later scheduled scans and auto-updates to the admin who triggered the reload. Components re-registered by a reload now run outside the request's audit actor, so their cron jobs and timers record as System, not as that user until the next restart.
