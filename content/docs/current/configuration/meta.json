@@ -6,6 +6,7 @@
     "agents",
     "dashboard",
     "authentications",
+    "cleanup",
     "config-file",
     "dns",
     "groups",

@@ -1,0 +1,95 @@
+---
+title: "Cleanup"
+description: "Scheduled and disk-threshold cleanup of unused Docker images, stopped containers, networks, build cache and, behind a second opt-in, volumes."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+## Overview
+
+A cleanup policy prunes unused Docker objects on a host without you running `docker prune` by hand. A policy runs on a cron schedule, when reclaimable space crosses a threshold, or both, and can be run on demand through the API. It covers local watchers and agent watchers alike.
+
+Nothing is pruned by default. Every prune type is its own opt-in, and a policy that enables none is rejected at startup.
+
+The manual image prune on the [Images](/docs/current/configuration/actions/images) page is separate and unchanged.
+
+## Configuration
+
+Policies use `DD_CLEANUP_<POLICY>_<OPTION>`, where `<POLICY>` is a name you pick (letters and digits, no underscore). Cleanup is its own component rather than a watcher option because one policy often spans several hosts, including agent hosts whose watchers you don't configure on the controller.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `DD_CLEANUP_<POLICY>_CRON` | none | Cron expression for scheduled runs |
+| `DD_CLEANUP_<POLICY>_THRESHOLDBYTES` | none | Run when the space the enabled types would reclaim reaches this many bytes |
+| `DD_CLEANUP_<POLICY>_CHECKCRON` | `*/15 * * * *` | How often the threshold is checked |
+| `DD_CLEANUP_<POLICY>_HOSTS` | all hosts | Comma-separated host ids, such as `docker.local` or `edge.docker.local` (`<agent>.docker.<watcher>` for an agent watcher) |
+| `DD_CLEANUP_<POLICY>_DANGLINGIMAGES` | `false` | Remove untagged images no container uses |
+| `DD_CLEANUP_<POLICY>_UNUSEDIMAGES` | `false` | Remove tagged images no container uses |
+| `DD_CLEANUP_<POLICY>_UNUSEDIMAGESOLDERTHANHOURS` | `0` | Only remove unused images created more than this many hours ago |
+| `DD_CLEANUP_<POLICY>_STOPPEDCONTAINERS` | `false` | Remove exited, created and dead containers (their volumes are kept) |
+| `DD_CLEANUP_<POLICY>_NETWORKS` | `false` | Remove user-defined networks with no containers |
+| `DD_CLEANUP_<POLICY>_BUILDCACHE` | `false` | Remove unused build cache |
+| `DD_CLEANUP_<POLICY>_VOLUMES` | `false` | Remove anonymous volumes. Needs `VOLUMESCONFIRM` too |
+| `DD_CLEANUP_<POLICY>_VOLUMESCONFIRM` | `false` | Second opt-in required for `VOLUMES` |
+| `DD_CLEANUP_<POLICY>_PROTECTHOURS` | `168` | Rollback protection window, in hours |
+| `DD_CLEANUP_<POLICY>_DRYRUN` | `false` | Report what would be removed, remove nothing |
+
+A policy needs `CRON`, `THRESHOLDBYTES` or both.
+
+```bash
+# Every night at 03:00, tidy up image leftovers and stopped containers on every host
+DD_CLEANUP_NIGHTLY_CRON=0 3 * * *
+DD_CLEANUP_NIGHTLY_DANGLINGIMAGES=true
+DD_CLEANUP_NIGHTLY_UNUSEDIMAGES=true
+DD_CLEANUP_NIGHTLY_UNUSEDIMAGESOLDERTHANHOURS=168
+DD_CLEANUP_NIGHTLY_STOPPEDCONTAINERS=true
+
+# Also clean the edge agent host when it has 10 GiB to reclaim
+DD_CLEANUP_DISK_HOSTS=edge.docker.local
+DD_CLEANUP_DISK_THRESHOLDBYTES=10737418240
+DD_CLEANUP_DISK_DANGLINGIMAGES=true
+DD_CLEANUP_DISK_BUILDCACHE=true
+```
+
+### Why a bytes threshold
+
+The Docker API reports how much space images, containers, volumes and build cache use, but not how full the filesystem under the Docker data root is. The threshold is therefore a number of reclaimable bytes: Drydock works out what the enabled types would free on the host and runs the policy when that reaches `THRESHOLDBYTES`. A threshold-only policy only checks every `CHECKCRON`; a dry-run policy with a threshold logs and audits on every check that crosses it.
+
+## What gets removed
+
+- **Dangling images**: untagged images no container uses. Images used by any container, running or stopped, are kept.
+- **Unused images**: tagged images no container uses, optionally only those older than `UNUSEDIMAGESOLDERTHANHOURS`.
+- **Stopped containers**: removed without their volumes.
+- **Networks**: user-defined local networks with no attached containers and at least an hour old. Built-in and swarm networks are never touched.
+- **Build cache**: records no build is using.
+- **Volumes**: see below.
+
+## What is never removed
+
+- Anything labeled `dd.cleanup.exclude=true`: containers, images, volumes and networks. Network pruning passes this to Docker as a `label!=` filter; the other types check the label before removing. Build cache has no labels, so it can't be excluded.
+- The rollback backup of a recent Drydock update. An image whose tag or registry digest matches a backup recorded within `PROTECTHOURS` is kept, which also covers the case where a same-tag update left the backup image untagged. Backups are not recorded per host, so this protection applies on every host.
+- A container Drydock renamed to `<name>-old-<timestamp>` during an update, until `PROTECTHOURS` have passed since the rename. The image it uses is kept with it.
+- Anything on a host that has an update in progress. The run is skipped and recorded as skipped, and a scheduled policy tries again at its next run.
+
+## Volumes
+
+<Callout type="warn">
+Volume cleanup can permanently delete data. It is off by default and needs two settings, `VOLUMES=true` and `VOLUMESCONFIRM=true`; either one alone is rejected at startup. Run with `DRYRUN=true` first and read the result.
+</Callout>
+
+Only anonymous volumes (64-character hexadecimal names) with no container reference are removed, and only ones created more than `PROTECTHOURS` ago. Named volumes are never removed. Usage is read once before the run removes anything, so a volume used by a container the same run deletes is still counted as in use, and a volume of a container Drydock just replaced is not touched.
+
+## Agents
+
+Agent watchers are cleaned on the agent host through the controller's Docker connection to the agent, the same path the Images page uses. An agent that doesn't expose its Docker API to the controller is reported as an unsupported host and skipped.
+
+## Results
+
+Each run writes an audit entry (action `cleanup`) with, per type, how many items were removed out of how many matched and the bytes reclaimed, and a log line. Failures on one item or type are recorded and the rest of the run continues. A dry run records what would be removed and removes nothing.
+
+The API exposes the policies and the latest result per policy and host:
+
+- `GET /api/v1/cleanup` (`read` scope)
+- `POST /api/v1/cleanup/run` with `{ "policy": "nightly", "host": "docker.local", "dryRun": true }` (`admin` scope). A real run needs the header `X-DD-Confirm-Action: cleanup-run`; a dry run doesn't.
+
+There is no UI panel for cleanup yet, apart from the audit entries.

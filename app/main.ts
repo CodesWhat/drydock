@@ -4,6 +4,7 @@ import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
 import * as approvalReconciler from './approvals/reconcile.js';
 import { renderBanner } from './banner/index.js';
+import * as cleanupScheduler from './cleanup/scheduler.js';
 import { startConfigFileWatch } from './configuration/file/watch.js';
 import { getDnsMode, validateStartupConfiguration } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
@@ -120,6 +121,9 @@ if (commandExitCode !== null) {
 
     // Init scheduled maturity gate sweep
     maturityScheduler.init();
+
+    // Init scheduled and disk-threshold cleanup policies
+    cleanupScheduler.init();
 
     // Reconcile the approval queue from watch results. Controller-only: the ledger is
     // never written by ingestion, so an enrolled agent can neither mint nor resolve a row.

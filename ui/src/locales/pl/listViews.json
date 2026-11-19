@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
       "security-alert": "Alert bezpieczeństwa",
       "maturity-cleared": "Okres oczekiwania zakończony",
-      "image-prune": "Czyszczenie obrazu"
+      "image-prune": "Czyszczenie obrazu",
+      "cleanup": "Czyszczenie"
     },
     "target": {
       "container": "Kontener",

@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Gửi thông báo thất bại",
       "security-alert": "Cảnh báo bảo mật",
       "maturity-cleared": "Đã hết thời gian chờ",
-      "image-prune": "Dọn dẹp Image"
+      "image-prune": "Dọn dẹp Image",
+      "cleanup": "Dọn dẹp"
     },
     "target": {
       "container": "Container",

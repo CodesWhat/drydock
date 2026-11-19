@@ -118,7 +118,8 @@
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
       "maturity-cleared": "انتهت فترة الانتظار",
-      "image-prune": "تنظيف الصورة"
+      "image-prune": "تنظيف الصورة",
+      "cleanup": "التنظيف"
     },
     "target": {
       "container": "الحاوية",

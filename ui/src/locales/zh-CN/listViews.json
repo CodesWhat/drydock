@@ -118,7 +118,8 @@
       "notification-delivery-failed": "通知发送失败",
       "security-alert": "安全警报",
       "maturity-cleared": "等待期已结束",
-      "image-prune": "镜像清理"
+      "image-prune": "镜像清理",
+      "cleanup": "清理"
     },
     "target": {
       "container": "容器",

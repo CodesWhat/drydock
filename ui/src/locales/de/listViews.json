@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Benachrichtigung fehlgeschlagen",
       "security-alert": "Sicherheitswarnung",
       "maturity-cleared": "Reifezeit abgelaufen",
-      "image-prune": "Image-Bereinigung"
+      "image-prune": "Image-Bereinigung",
+      "cleanup": "Bereinigung"
     },
     "target": {
       "container": "Container",

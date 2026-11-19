@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Notification Delivery Failed",
       "security-alert": "Security Alert",
       "maturity-cleared": "Maturity Cleared",
-      "image-prune": "Image Prune"
+      "image-prune": "Image Prune",
+      "cleanup": "Cleanup"
     },
     "target": {
       "container": "Container",

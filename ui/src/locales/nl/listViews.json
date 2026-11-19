@@ -118,7 +118,8 @@
       "notification-delivery-failed": "Melding mislukt",
       "security-alert": "Beveiligingswaarschuwing",
       "maturity-cleared": "Wachttijd verstreken",
-      "image-prune": "Image-opruiming"
+      "image-prune": "Image-opruiming",
+      "cleanup": "Opruiming"
     },
     "target": {
       "container": "Container",
