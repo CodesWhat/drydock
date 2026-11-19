@@ -243,6 +243,25 @@ describe('container-mapper', () => {
       expect(c.securityScanState).toBe('not-scanned');
     });
 
+    it('reports scanning while the server flags a scan in progress', () => {
+      const c = mapApiContainer(makeApiContainer({ securityScanState: 'scanning' }));
+      expect(c.securityScanState).toBe('scanning');
+    });
+
+    it('keeps the persisted verdict while scanning and ignores unknown flag values', () => {
+      const scanning = mapApiContainer(
+        makeApiContainer({
+          securityScanState: 'scanning',
+          security: { scan: { status: 'blocked', summary: null } },
+        }),
+      );
+      expect(scanning.securityScanState).toBe('scanning');
+      expect(scanning.bouncer).toBe('blocked');
+
+      const ignored = mapApiContainer(makeApiContainer({ securityScanState: 'bogus' }));
+      expect(ignored.securityScanState).toBe('not-scanned');
+    });
+
     it('returns blocked when scan status is blocked', () => {
       const c = mapApiContainer(
         makeApiContainer({

@@ -308,6 +308,12 @@ Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-co
 
 The `cycleId` is used by digest-mode notification triggers to group all findings from one scan cycle into a single summary notification instead of one per container.
 
+## Long-running scans
+
+Scanner and cosign commands that run longer than 30 seconds log a progress line every 30 seconds, for example `Trivy: still scanning registry.example.com/app:1.2.3 (60s)`. The line stops as soon as the command exits, fails or times out.
+
+While a scan of a container runs, Drydock marks it with `securityScanState: "scanning"` and sends a `dd:container-updated` SSE event, so the container list shows a **Scanning** chip on the row. The flag is held in memory only. It clears when the scan finishes, fails or times out, and it is gone after a restart. The same flag shows up in `GET /api/v1/containers` for a scan that is running when the page loads. This covers scheduled, on-demand and bulk scans. The pre-update scan of a candidate image does not mark the running container, because that scan describes the new image and the update has its own progress phase.
+
 ## Security view update button
 
 When a newer image is available for a container shown in the Security view, an inline **Update** button appears directly next to the vulnerability data. This lets you apply the update without leaving the security context.

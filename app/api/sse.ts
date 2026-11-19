@@ -29,11 +29,13 @@ import {
   registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { onContainerScanStateChange, withTransientScanState } from '../security/scan-state.js';
 import { findApiKeyById, isApiKeyExpired } from '../store/api-key.js';
+import { getContainerRaw } from '../store/container.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { stripContainerDetailOnlySecurityFields } from './container/container-projection.js';
-import { projectLabelOwnedForApi } from './container/shared.js';
+import { projectLabelOwnedForApi, redactContainerRuntimeEnv } from './container/shared.js';
 import { sendErrorResponse } from './error-response.js';
 import { scoped } from './route-scopes.js';
 import {
@@ -919,7 +921,9 @@ function projectContainerLifecyclePayload(
   if (!payload || typeof payload !== 'object') {
     return payload;
   }
-  const projected = projectLabelOwnedForApi(stripContainerDetailOnlySecurityFields(payload));
+  const projected = withTransientScanState(
+    projectLabelOwnedForApi(stripContainerDetailOnlySecurityFields(payload)),
+  );
   if (!projected.security) {
     return { ...projected };
   }
@@ -1003,6 +1007,24 @@ export function init(): express.Router {
       broadcastContainerEvent(
         'dd:container-updated',
         enrichContainerLifecyclePayloadWithEligibility(projectContainerLifecyclePayload(payload)),
+      );
+    }),
+  );
+  // Scan start and end ride the existing container-updated event so the UI can show a
+  // scanning state without a new channel. The change is announced straight to SSE clients
+  // rather than through the internal event bus, so MQTT, Prometheus, agents and the audit
+  // log never see a lifecycle update for what is only a transient in-memory flag.
+  trackEventListenerDeregistration(
+    onContainerScanStateChange((containerId) => {
+      const container = getContainerRaw(containerId);
+      if (!container) {
+        return;
+      }
+      broadcastContainerEvent(
+        'dd:container-updated',
+        enrichContainerLifecyclePayloadWithEligibility(
+          projectContainerLifecyclePayload(redactContainerRuntimeEnv(container)),
+        ),
       );
     }),
   );

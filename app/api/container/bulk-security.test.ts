@@ -2,6 +2,10 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  _resetContainerScanStateForTesting,
+  isContainerScanning,
+} from '../../security/scan-state.js';
 import { createMockResponse } from '../../test/helpers.js';
 import { createBulkSecurityHandlers, MAX_CONCURRENT_BULK_SCANS } from './bulk-security.js';
 
@@ -689,6 +693,55 @@ describe('api/container/bulk-security', () => {
         'error',
         expect.any(String),
       );
+    });
+  });
+
+  describe('transient scanning state', () => {
+    beforeEach(() => {
+      _resetContainerScanStateForTesting();
+    });
+
+    test('marks each container while its scan runs and clears it afterwards', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      const scanningDuringScan: Record<string, boolean> = {};
+      harness.deps.scanImageForVulnerabilities.mockImplementation(async () => {
+        for (const id of ['c1', 'c2']) {
+          scanningDuringScan[id] ||= isContainerScanning(id);
+        }
+        return createScanResult();
+      });
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(scanningDuringScan.c1).toBe(true);
+      expect(isContainerScanning('c1')).toBe(false);
+      expect(isContainerScanning('c2')).toBe(false);
+    });
+
+    test('clears the state when the scan or registry auth fails', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      harness.deps.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('scan failed'));
+      harness.deps.getContainerRegistryAuth.mockRejectedValueOnce(new Error('auth failed'));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(isContainerScanning('c1')).toBe(false);
+      expect(isContainerScanning('c2')).toBe(false);
+    });
+
+    test('keeps a container scanning while another scan of it is still running', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }] });
+      const { beginContainerScan } = await import('../../security/scan-state.js');
+      const releaseOnDemand = beginContainerScan('c1');
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+      expect(isContainerScanning('c1')).toBe(true);
+
+      releaseOnDemand();
+      expect(isContainerScanning('c1')).toBe(false);
     });
   });
 

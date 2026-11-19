@@ -162,6 +162,8 @@ export interface ApiContainerInput {
   result?: ApiContainerResult | null;
   updateAvailable?: unknown;
   updateKind?: ApiContainerUpdateKind | null;
+  /** Transient server-side flag, present as `scanning` only while a scan runs. */
+  securityScanState?: unknown;
   security?: {
     scan?: ApiContainerSecurityScan | null;
     updateScan?: ApiContainerSecurityScan | null;
@@ -375,7 +377,10 @@ function deriveBouncer(apiContainer: ApiContainerInput): BouncerStatus {
 }
 
 /** Derive whether a container has a persisted security scan result. */
-function deriveSecurityScanState(apiContainer: ApiContainerInput): 'scanned' | 'not-scanned' {
+function deriveSecurityScanState(
+  apiContainer: ApiContainerInput,
+): 'scanned' | 'not-scanned' | 'scanning' {
+  if (apiContainer.securityScanState === 'scanning') return 'scanning';
   return deriveSecurityScanStateFromScan(getSecurityScan(apiContainer, 'scan'));
 }
 

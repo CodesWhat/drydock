@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import { createScannerAssetManager } from './assets.js';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
 
 const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
 const mockNoteBundledTrivyRemoval = vi.hoisted(() => vi.fn());
@@ -43,7 +44,14 @@ vi.mock('../configuration/index.js', async () => {
 });
 
 vi.mock('../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: {
+    child: () => ({
+      info: (...args: unknown[]) => mockLogInfo(...args),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    }),
+  },
 }));
 
 vi.mock('./backend-resolution.js', async () => {
@@ -3531,5 +3539,147 @@ describe('Docker denial through the real asset manager', () => {
     } finally {
       mockDockerRuntime.assets = originalAssets;
     }
+  });
+});
+
+describe('runCommand heartbeat', () => {
+  type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
+
+  function heartbeatLines(): string[] {
+    return mockLogInfo.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes('still scanning'));
+  }
+
+  function captureExecCallback() {
+    const captured: { callback?: ExecCallback; kill: ReturnType<typeof vi.fn> } = {
+      kill: vi.fn(() => true),
+    };
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      captured.callback = callback as ExecCallback;
+      return { exitCode: null, kill: captured.kill };
+    };
+    return captured;
+  }
+
+  beforeEach(() => {
+    mockLogInfo.mockReset();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('logs every 30 seconds with elapsed time and stops once the scan succeeds', async () => {
+    const captured = captureExecCallback();
+    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:slow' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(captured.callback).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(heartbeatLines()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(heartbeatLines()).toEqual(['Trivy: still scanning registry.example.com/app:slow (30s)']);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toHaveLength(2);
+    expect(heartbeatLines()[1]).toContain('(60s)');
+
+    captured.callback?.(null, JSON.stringify({ Results: [] }), '');
+    await scan;
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(heartbeatLines()).toHaveLength(2);
+  });
+
+  test('stops after a command failure', async () => {
+    const captured = captureExecCallback();
+    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:fails' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toHaveLength(1);
+
+    captured.callback?.(new Error('boom'), '', 'scanner exploded');
+    const result = await scan;
+    expect(result.status).toBe('error');
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(heartbeatLines()).toHaveLength(1);
+  });
+
+  test('stops after a process timeout', async () => {
+    const captured = captureExecCallback();
+    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:timeout' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toHaveLength(1);
+
+    captured.callback?.(
+      Object.assign(new Error('timed out'), { code: 'ETIMEDOUT', killed: true, signal: 'SIGTERM' }),
+      '',
+      '',
+    );
+    const result = await scan;
+    expect(result.status).toBe('error');
+    expect(result.error).toContain('timed out');
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(heartbeatLines()).toHaveLength(1);
+  });
+
+  test('stops when the scan is aborted', async () => {
+    const captured = captureExecCallback();
+    const controller = new AbortController();
+    const scan = scanImageForVulnerabilities({
+      image: 'registry.example.com/app:abort',
+      signal: controller.signal,
+    });
+    const outcome = scan.then(
+      () => 'resolved',
+      () => 'rejected',
+    );
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toHaveLength(1);
+
+    controller.abort(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
+    await expect(outcome).resolves.toBe('rejected');
+    expect(captured.kill).toHaveBeenCalledWith('SIGTERM');
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(90_000);
+    expect(heartbeatLines()).toHaveLength(1);
+  });
+
+  test('covers cosign verification as well', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      signature: {
+        verify: true,
+        cosign: { command: 'cosign', timeout: 600000, key: '', identity: '', issuer: '' },
+      },
+    });
+    const captured = captureExecCallback();
+    const verification = verifyImageSignature({ image: 'registry.example.com/app:signed' });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toEqual([
+      'Cosign: still scanning registry.example.com/app:signed (30s)',
+    ]);
+
+    captured.callback?.(null, '{}', '');
+    await verification;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('names the command when no image is given', async () => {
+    const captured = captureExecCallback();
+    const run = warmupFactoryControl.options?.run({
+      command: 'trivy',
+      args: ['image', '--download-db-only'],
+      timeoutMs: 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(heartbeatLines()).toEqual([
+      'Trivy database warm-up: still scanning Trivy database warm-up (30s)',
+    ]);
+    captured.callback?.(null, '', '');
+    await run;
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

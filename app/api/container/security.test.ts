@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  _resetContainerScanStateForTesting,
+  beginContainerScan,
+  isContainerScanning,
+} from '../../security/scan-state.js';
 import { createMockResponse } from '../../test/helpers.js';
 import { createSecurityHandlers } from './security.js';
 
@@ -625,6 +630,64 @@ describe('api/container/security', () => {
         expect.objectContaining({ image: CURRENT_IMAGE }),
         expect.any(String),
       );
+    });
+  });
+
+  describe('scanContainer transient scanning state', () => {
+    beforeEach(() => {
+      _resetContainerScanStateForTesting();
+    });
+
+    test('marks the container while the scan runs and clears it on success', async () => {
+      const harness = createHarness();
+      let scanningDuringScan = false;
+      harness.deps.scanImageForVulnerabilities.mockImplementation(async () => {
+        scanningDuringScan = isContainerScanning('c1');
+        return createScanResult();
+      });
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(scanningDuringScan).toBe(true);
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('clears the state when the scan fails', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockRejectedValue(new Error('scan failed'));
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('does not mark the container when the request is rejected before the scan starts', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: false,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      await callScanContainer(harness.handlers);
+
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('stays scanning while an overlapping scan of the same container is still running', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      const releaseScheduled = beginContainerScan('c1');
+
+      await callScanContainer(harness.handlers);
+      expect(isContainerScanning('c1')).toBe(true);
+
+      releaseScheduled();
+      expect(isContainerScanning('c1')).toBe(false);
     });
   });
 
