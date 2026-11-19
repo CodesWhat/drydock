@@ -1580,6 +1580,38 @@ jobs:
         if: always()
         run: mkdir -p artifacts/dast
 
+      - name: Install pinned Nuclei templates
+        # nuclei-action's cache restores ~/nuclei-templates under a fixed,
+        # never-refreshed key. A 196 byte (empty) copy got saved on 2026-11-19
+        # and every scan since restored it, so nuclei believed templates were
+        # installed and failed with "no templates provided for scan". Fetch a
+        # pinned release at a verified commit instead and hand it to -t.
+        id: nuclei_templates
+        if: always()
+        env:
+          NUCLEI_TEMPLATES_TAG: v10.5.2
+          NUCLEI_TEMPLATES_SHA: 5442582a875f96887bfe403c6de562de460897e7
+          NUCLEI_TEMPLATES_DIR: ${{ runner.temp }}/nuclei-templates
+        run: |
+          set -euo pipefail
+
+          rm -rf "${NUCLEI_TEMPLATES_DIR}"
+          git clone --quiet --depth 1 --branch "${NUCLEI_TEMPLATES_TAG}" \
+            https://github.com/projectdiscovery/nuclei-templates.git "${NUCLEI_TEMPLATES_DIR}"
+
+          actual_sha="$(git -C "${NUCLEI_TEMPLATES_DIR}" rev-parse HEAD)"
+          if [ "${actual_sha}" != "${NUCLEI_TEMPLATES_SHA}" ]; then
+            echo "::error::nuclei-templates ${NUCLEI_TEMPLATES_TAG} resolved to ${actual_sha}, expected ${NUCLEI_TEMPLATES_SHA}"
+            exit 1
+          fi
+
+          template_count="$(git -C "${NUCLEI_TEMPLATES_DIR}" ls-files 'http/*.yaml' | wc -l)"
+          if [ "${template_count}" -lt 1000 ]; then
+            echo "::error::nuclei-templates http/ holds ${template_count} templates, expected at least 1000"
+            exit 1
+          fi
+          echo "Installed ${template_count} http templates from ${NUCLEI_TEMPLATES_TAG} (${actual_sha})"
+
       - name: Run unauthenticated metrics exposure scan
         # This template checks public exposure. Run it without the admin
         # session that the remaining vulnerability templates use below.
@@ -1589,8 +1621,11 @@ jobs:
         uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538  # v3.1.1
         with:
           version: v3.8.0
+          cache: false
           args: >-
             -u http://localhost:3333
+            -t ${{ runner.temp }}/nuclei-templates
+            -duc
             -severity medium,high,critical
             -type http
             -id prometheus-metrics
@@ -1644,8 +1679,11 @@ jobs:
         uses: projectdiscovery/nuclei-action@cc153d0541e1adf8a42bbe31c0a4fb2376147538  # v3.1.1
         with:
           version: v3.8.0
+          cache: false
           args: >-
             -u http://localhost:3333
+            -t ${{ runner.temp }}/nuclei-templates
+            -duc
             -severity medium,high,critical
             -type http
             -exclude-id prometheus-metrics
