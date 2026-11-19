@@ -31,6 +31,8 @@
       "challengeExpired": "A verificação expirou. Entre novamente.",
       "challengeLocked": "Muitas tentativas. Tente novamente em {time}.",
       "challengeLockedLater": "Muitas tentativas. Tente novamente mais tarde.",
+      "rateLimited": "Muitas tentativas. Tente novamente em {time}.",
+      "rateLimitedLater": "Muitas tentativas. Tente novamente mais tarde.",
       "challengeUnavailable": "A verificação está indisponível no momento. Tente novamente em instantes."
     },
     "connectionLost": {

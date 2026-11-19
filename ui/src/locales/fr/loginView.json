@@ -31,6 +31,8 @@
       "challengeExpired": "La vérification a expiré. Reconnectez-vous.",
       "challengeLocked": "Trop de tentatives. Réessayez dans {time}.",
       "challengeLockedLater": "Trop de tentatives. Réessayez plus tard.",
+      "rateLimited": "Trop de tentatives. Réessayez dans {time}.",
+      "rateLimitedLater": "Trop de tentatives. Réessayez plus tard.",
       "challengeUnavailable": "La vérification est indisponible pour le moment. Réessayez dans un instant."
     },
     "connectionLost": {

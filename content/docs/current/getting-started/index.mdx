@@ -215,6 +215,11 @@ environment:
 
 <Callout type="warn">Auto-updates modify running containers. Start with `DRYRUN=true` to preview what would happen before enabling real updates.</Callout>
 
+Two defaults decide whether anything updates on its own, and a fresh install trips on both:
+
+- **The global update mode starts as `manual`.** Automatic action triggers are suppressed until you switch it to `auto` under **Settings → General → Update mode**. Manual updates from the UI still work in `manual` mode. See [Global update mode](/docs/configuration/actions/update-eligibility#global-update-mode).
+- **Action triggers default to `AUTO=oninclude`.** A container is only auto-updated when it carries a `dd.action.include` label naming the trigger. Add `dd.action.include=<trigger-name>` to each container you want updated, use `dd.action.auto` when the trigger runs with `AUTO=onauto`, or set `AUTO=true` on the trigger to cover every matching container. See [Update eligibility](/docs/configuration/actions/update-eligibility#auto-update-isnt-firing-on-any-of-my-compose-managed-containers).
+
 Drydock can pull new images and recreate containers automatically. The trigger type depends on how your containers are deployed:
 
 ### Standalone containers (docker run)
@@ -435,6 +440,8 @@ secrets:
   admin_hash:
     file: ./secrets/admin_hash.txt
 ```
+
+This example does not auto-update anything yet. The global update mode on a fresh install is `manual`, so switch it to `auto` under **Settings → General → Update mode**, and add a `dd.action.include=<trigger-name>` label to each container you want updated (the trigger name is the `STACK` part of `DD_ACTION_DOCKERCOMPOSE_STACK_FILE`, so `dd.action.include=stack`), because action triggers default to `AUTO=oninclude`. The socket proxy needs `POST=1` for Drydock to create and remove containers and `NETWORKS=1` to reattach them to their networks when it recreates them.
 
 ## What to explore next
 

@@ -1263,6 +1263,88 @@ test('cloneContainer should drop the auto-assigned endpoint MacAddress when Conf
   expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
 });
 
+test('cloneContainer should pin explicit per-network MACs and never copy generated ones', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'internal' },
+      Config: { configA: 'a' },
+      NetworkSettings: {
+        Networks: {
+          internal: { MacAddress: '02:42:c0:a8:01:01' },
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+          generated: { MacAddress: '02:42:c0:a8:01:77' },
+        },
+      },
+    },
+    'test/test:2.0.0',
+    {
+      explicitEndpointMacAddresses: {
+        macvlan_net: '02:42:ac:11:00:aa',
+        missing: '02:42:ac:11:00:bb',
+        empty: '',
+      },
+    },
+  );
+
+  const endpoints = clone.NetworkingConfig.EndpointsConfig;
+  expect(endpoints.macvlan_net.MacAddress).toBe('02:42:ac:11:00:aa');
+  expect(endpoints.macvlan_net.IPAMConfig).toEqual({ IPv4Address: '192.168.1.50' });
+  expect(endpoints.internal).not.toHaveProperty('MacAddress');
+  expect(endpoints.generated).not.toHaveProperty('MacAddress');
+  expect(endpoints).not.toHaveProperty('missing');
+  expect(clone).not.toHaveProperty('MacAddress');
+});
+
+test('createContainer should create every endpoint at once when a secondary network pins a MAC', async () => {
+  const connect = vi.fn().mockResolvedValue(undefined);
+  const getNetwork = vi.fn().mockReturnValue({ connect });
+  const createContainer = vi.fn().mockResolvedValue({ start: () => Promise.resolve() });
+  const containerToCreate = {
+    name: 'container-name',
+    HostConfig: { NetworkMode: 'cloud_default' },
+    NetworkingConfig: {
+      EndpointsConfig: {
+        cloud_default: {},
+        macvlan_net: { MacAddress: '02:42:ac:11:00:aa' },
+      },
+    },
+  };
+
+  await docker.createContainer(
+    { createContainer, getNetwork },
+    containerToCreate,
+    'container-name',
+    createMockLog('info', 'warn'),
+  );
+
+  expect(createContainer).toHaveBeenCalledWith(containerToCreate);
+  expect(getNetwork).not.toHaveBeenCalled();
+  expect(connect).not.toHaveBeenCalled();
+});
+
+test('recreateContainer should hand explicit MAC addresses to the clone', async () => {
+  const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'c' } as any);
+  vi.spyOn(docker.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({
+    defaultRuntime: 'runc',
+  });
+  vi.spyOn(docker, 'createContainer').mockResolvedValue({ start: vi.fn() } as any);
+  const spec = { Name: '/c', Id: 'id', State: { Running: false } };
+
+  await docker.recreateContainer({}, spec, 'img:1', { name: 'c' }, createMockLog('info', 'warn'), {
+    net: '02:42:ac:11:00:aa',
+  });
+
+  expect(cloneSpy).toHaveBeenCalledWith(spec, 'img:1', {
+    defaultRuntime: 'runc',
+    explicitEndpointMacAddresses: { net: '02:42:ac:11:00:aa' },
+  });
+});
+
 test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config and retain the root field for API < 1.44 back-compat', () => {
   const clone = docker.cloneContainer(
     {

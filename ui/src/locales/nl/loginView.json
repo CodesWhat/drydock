@@ -31,6 +31,8 @@
       "challengeExpired": "De verificatie is verlopen. Log opnieuw in.",
       "challengeLocked": "Te veel pogingen. Probeer het over {time} opnieuw.",
       "challengeLockedLater": "Te veel pogingen. Probeer het later opnieuw.",
+      "rateLimited": "Te veel pogingen. Probeer het over {time} opnieuw.",
+      "rateLimitedLater": "Te veel pogingen. Probeer het later opnieuw.",
       "challengeUnavailable": "Verificatie is momenteel niet beschikbaar. Probeer het zo meteen opnieuw."
     },
     "connectionLost": {

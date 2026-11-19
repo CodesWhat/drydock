@@ -22,6 +22,9 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Signing in from the UI with a non-ASCII password (for example `pässword` or `秘密`) works. The Basic credentials are now sent as UTF-8 bytes, matching what the server decodes, instead of failing in the browser or arriving as Latin-1.
+- The login page no longer shows Connection Lost when the server answers 429 (rate limited). It shows how long to wait, from the `Retry-After` header, and retries when that time is up. Real network failures still show the connection-lost overlay. ([#1592](https://github.com/CodesWhat/drydock/issues/1592))
+- The Docker Compose action keeps the `mac_address` you configure per network (and at service level) when it recreates a container. Drydock now reads the explicit address from the Compose service definition, including override files, and pins it on the matching network. Generated MAC addresses are still never copied, and a secondary network that pins a MAC is attached at create time because network connect ignores it on older Docker APIs. ([#1581](https://github.com/CodesWhat/drydock/issues/1581))
 - A failed digest lookup now stores its error on the container and keeps the last good verdict, including a digest update found earlier, instead of showing the container as up to date. The error was being set on a copy the watcher threw away. (#1590)
 - Docker Hub images keep their `hub.public` provider across repeated image normalization, because the Hub provider now also matches its own canonical `https://registry-1.docker.io/v2` URL. An image whose registry matches no configured provider now records a "no configured registry matches" error instead of looking up to date. (#1591)
 - After an update from the UI or API, the watcher's fast resync now matches the bare container name, looks up the recreated container by name and refreshes just that container, so the row no longer keeps the removed container's id and old tag when `WATCHEVENTS` is false. (#1595)
@@ -56,6 +59,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Documentation
 
+- The getting started guide now says a fresh install starts in `manual` update mode and that action triggers default to `AUTO=oninclude`, so containers need a `dd.action.include` label before they auto-update. The combined example notes the socket proxy needs `POST=1` and `NETWORKS=1`, and the quickstart tells you to change the default `admin` / `password` after your first login.
 - Recommend the latest supported Portwing v1.x release for new Standard enrollments, with a link to its security policy. Preserve v1.0.1 as the historical enrollment-fix minimum.
 
 ## [1.8.0-rc.15] - 2026-11-13

@@ -31,6 +31,8 @@
       "challengeExpired": "Doğrulama süresi doldu. Tekrar oturum açın.",
       "challengeLocked": "Çok fazla deneme yapıldı. {time} sonra tekrar deneyin.",
       "challengeLockedLater": "Çok fazla deneme yapıldı. Daha sonra tekrar deneyin.",
+      "rateLimited": "Çok fazla deneme yapıldı. {time} sonra tekrar deneyin.",
+      "rateLimitedLater": "Çok fazla deneme yapıldı. Daha sonra tekrar deneyin.",
       "challengeUnavailable": "Doğrulama şu anda kullanılamıyor. Biraz sonra tekrar deneyin."
     },
     "connectionLost": {

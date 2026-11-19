@@ -31,6 +31,8 @@
       "challengeExpired": "確認の有効期限が切れました。もう一度サインインしてください。",
       "challengeLocked": "試行回数が多すぎます。{time}後にもう一度お試しください。",
       "challengeLockedLater": "試行回数が多すぎます。しばらくしてからもう一度お試しください。",
+      "rateLimited": "試行回数が多すぎます。{time}後にもう一度お試しください。",
+      "rateLimitedLater": "試行回数が多すぎます。しばらくしてからもう一度お試しください。",
       "challengeUnavailable": "現在、確認を利用できません。しばらくしてからもう一度お試しください。"
     },
     "connectionLost": {

@@ -31,6 +31,8 @@
       "challengeExpired": "La verifica è scaduta. Accedi di nuovo.",
       "challengeLocked": "Troppi tentativi. Riprova tra {time}.",
       "challengeLockedLater": "Troppi tentativi. Riprova più tardi.",
+      "rateLimited": "Troppi tentativi. Riprova tra {time}.",
+      "rateLimitedLater": "Troppi tentativi. Riprova più tardi.",
       "challengeUnavailable": "La verifica non è disponibile al momento. Riprova tra poco."
     },
     "connectionLost": {

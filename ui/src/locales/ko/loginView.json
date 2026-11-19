@@ -31,6 +31,8 @@
       "challengeExpired": "인증 시간이 만료되었습니다. 다시 로그인하세요.",
       "challengeLocked": "시도 횟수가 너무 많습니다. {time} 후에 다시 시도하세요.",
       "challengeLockedLater": "시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.",
+      "rateLimited": "시도 횟수가 너무 많습니다. {time} 후에 다시 시도하세요.",
+      "rateLimitedLater": "시도 횟수가 너무 많습니다. 나중에 다시 시도하세요.",
       "challengeUnavailable": "지금은 인증을 사용할 수 없습니다. 잠시 후 다시 시도하세요."
     },
     "connectionLost": {
