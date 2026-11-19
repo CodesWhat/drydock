@@ -479,7 +479,7 @@ export async function findNewVersion(
     error: tagFilterError,
   } = getTagCandidates(container, tags, logContainer, pinInfoEnabled);
   if (tagFilterError) {
-    container.error = { message: tagFilterError };
+    result.lookupError = tagFilterError;
   }
   if (noUpdateReason) {
     result.noUpdateReason = noUpdateReason;

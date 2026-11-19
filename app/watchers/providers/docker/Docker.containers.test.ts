@@ -2994,7 +2994,7 @@ describe('Docker Watcher', () => {
       // An invalid includeTags regex fails closed: no candidates, and the lookup error
       // names the bad pattern.
       expect(result.tag).toBe('1.0.0');
-      expect(container.error?.message).toContain('Tag include filter "[invalid" is invalid');
+      expect(result.lookupError).toContain('Tag include filter "[invalid" is invalid');
     });
 
     test('should warn when excludeTags regex is invalid', async () => {

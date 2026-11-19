@@ -1680,16 +1680,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       { ...container, tagFamily: tagPolicy.tagFamily },
       storeContainer.getContainer(container.id)?.updatePolicy?.skipTags,
     );
-    const result = await findNewVersionState(watchedContainer, logContainer, {
+    return findNewVersionState(watchedContainer, logContainer, {
       ...options,
       pinInfoEnabled: tagPolicy.tagPinInfo,
     });
-    // The lookup ran on a copy; hand its error (bad tag filter, digest watch
-    // failure) back to the container the caller reports on.
-    if (watchedContainer.error) {
-      container.error = watchedContainer.error;
-    }
-    return result;
   }
 
   /**
