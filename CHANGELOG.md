@@ -10,6 +10,11 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [1.8.0-rc.16] - 2026-11-19
 
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the intended pre-upgrade JSON snapshot and any separate session file; changes made only in SQLite are not carried back. A fresh v1.8 installation has no pre-upgrade JSON snapshot. Start with a copy of your store and test containers.
+
+This candidate includes every rc.15 change and upgrade warning. It closes a trigger-alias scope bypass, scans the running digest instead of the mutable tag, pins Alpine openssl to 3.5.9-r1 and serves the getdrydock.com site statically. Its soak starts when this candidate is published.
+
 ### Security
 
 - An API key with only the `triggers:test` scope could fire an agent's action trigger (`docker`, `dockercompose`, `portainer` or `command`) by putting the agent name in the type segment, for example `edge1.docker`, which skipped the update gate. The trigger routes now require the resolved trigger's type, name and agent to match the request path exactly, and check scope and dispatch against the trigger that was actually resolved.
@@ -3797,7 +3802,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.16...HEAD
+[1.8.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...v1.8.0-rc.16
 [1.8.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...v1.8.0-rc.15
 [1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
