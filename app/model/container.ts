@@ -103,6 +103,11 @@ export interface ContainerResult {
   publishedAtTrusted?: boolean;
   link?: string;
   noUpdateReason?: string;
+  /**
+   * Transient: set by findNewVersion when a lookup failed. watchContainer moves
+   * it onto container.error and strips it, so it is never persisted (#1590).
+   */
+  lookupError?: string;
   releaseNotes?: ContainerReleaseNotes;
   // #498: pure information about the best newer same-family tag for a
   // container caught by the pin gate. Additive only — never consulted by

@@ -728,21 +728,40 @@ describe('image-comparison', () => {
     expect(result.publishedAtTrusted).toBeUndefined();
   });
 
-  test('returns current tag when registry is unsupported', async () => {
+  test('returns current tag with a lookup error when registry is unsupported (#1591)', async () => {
     mockGetState.mockReturnValue({ registry: {} });
     const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
     const container = {
       image: {
         id: 'image-1',
-        registry: { name: 'unknown-registry' },
+        registry: { name: 'unknown-registry', url: 'registry.example.com' },
         name: 'library/nginx',
         tag: { value: '1.0.0', semver: false },
         digest: { watch: false },
       },
     };
     const result = await findNewVersion(container as never, log);
-    expect(result).toEqual({ tag: '1.0.0' });
+    expect(result).toEqual({
+      tag: '1.0.0',
+      lookupError: 'no configured registry matches registry.example.com',
+    });
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Unsupported registry'));
+  });
+
+  test('names the registry in the lookup error when it has no url (#1591)', async () => {
+    mockGetState.mockReturnValue({ registry: {} });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'unknown' },
+        name: 'library/nginx',
+        tag: { value: '1.0.0', semver: false },
+        digest: { watch: false },
+      },
+    };
+    const result = await findNewVersion(container as never, log);
+    expect(result.lookupError).toBe('no configured registry matches unknown');
   });
 
   test('returns early with no-update reason when tag is "unknown"', async () => {
@@ -1107,9 +1126,7 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
-      expect((container as { error?: { message: string } }).error?.message).toContain(
-        'anchor-b manifest unknown',
-      );
+      expect(result.lookupError).toContain('anchor-b manifest unknown');
       // getTags only returns the container's own current tag, so there is no
       // newer tag to fabricate — the tag-based result stands unchanged.
       expect(result.tag).toBe(container.image.tag.value);
@@ -1189,7 +1206,7 @@ describe('image-comparison', () => {
   });
 
   describe('digest watch failure degrades to container.error instead of erasing the tag result (#814, #808)', () => {
-    test('digest lookup throws, a newer tag was found — findNewVersion resolves with the new tag and records container.error', async () => {
+    test('digest lookup throws, a newer tag was found — findNewVersion resolves with the new tag and returns the lookup error', async () => {
       const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
       mockGetState.mockReturnValue({
         registry: {
@@ -1214,13 +1231,11 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(result.tag).toBe('2.0.0');
-      expect((container as { error?: { message: string } }).error?.message).toBe(
-        'registry unavailable',
-      );
+      expect(result.lookupError).toBe('registry unavailable');
       expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'));
     });
 
-    test('digest lookup throws, no newer tag available — findNewVersion resolves with the tag unchanged and records container.error', async () => {
+    test('digest lookup throws, no newer tag available — findNewVersion resolves with the tag unchanged and returns the lookup error', async () => {
       const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
       mockGetState.mockReturnValue({
         registry: {
@@ -1245,9 +1260,7 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(result.tag).toBe('2.0.0');
-      expect((container as { error?: { message: string } }).error?.message).toBe(
-        'registry unavailable',
-      );
+      expect(result.lookupError).toBe('registry unavailable');
     });
 
     test('regression: a digest-only (sha256-pinned) container still rejects when its digest lookup fails', async () => {
