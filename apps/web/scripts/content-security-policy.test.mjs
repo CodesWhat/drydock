@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import nextConfig from "../next.config.mjs";
@@ -103,11 +103,11 @@ test("no request-time proxy or nonce plumbing remains, so pages can prerender", 
 
   const offenders = [];
   const visit = (dir) => {
-    for (const entry of readdirSync(dir)) {
-      const path = new URL(entry, dir);
-      if (statSync(path).isDirectory()) {
-        visit(new URL(`${entry}/`, dir));
-      } else if (/\.(tsx?|mjs)$/u.test(entry)) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        visit(new URL(`${entry.name}/`, dir));
+      } else if (/\.(tsx?|mjs)$/u.test(entry.name)) {
+        const path = new URL(entry.name, dir);
         const text = readFileSync(path, "utf8");
         if (/next\/headers|x-nonce|force-dynamic/u.test(text)) {
           offenders.push(path.pathname);
