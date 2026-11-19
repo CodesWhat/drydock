@@ -13,7 +13,12 @@ import {
   emitSecurityAlert,
   emitSelfUpdateStarting,
 } from '../../../event/index.js';
-import { deriveContainerIdentityKey, fullName } from '../../../model/container.js';
+import {
+  deriveContainerIdentityKey,
+  fullName,
+  isLocalBuildContainer,
+  LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE,
+} from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { buildImageReference, cleanRegistryUrl } from '../../../registries/image-reference.js';
@@ -2832,6 +2837,10 @@ class Docker<
       onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
     },
   ) {
+    // Never replace a locally built image with the pulled upstream base.
+    if (isLocalBuildContainer(container)) {
+      throw new Error(LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
+    }
     const selfUpdateClassification =
       options?.selfUpdateClassification ?? (await this.classifySelfUpdate(container));
     if (selfUpdateClassification === 'indeterminate') {

@@ -460,6 +460,33 @@ describe('request-update', () => {
     });
   });
 
+  test('requestContainerUpdate refuses a locally built image base update with 409', async () => {
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    const localBuild = createContainer({
+      image: { ...(createContainer().image as object), isLocalImage: true },
+    });
+
+    await expect(requestContainerUpdate(localBuild, { trigger })).rejects.toMatchObject<
+      Partial<UpdateRequestError>
+    >({
+      statusCode: 409,
+      message: expect.stringContaining('locally built image'),
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate refuses a locally built image on the automatic path too', async () => {
+    const trigger = { type: 'dockercompose', trigger: vi.fn() };
+    const localBuild = createContainer({
+      image: { ...(createContainer().image as object), isLocalImage: true },
+    });
+
+    await expect(
+      requestContainerUpdate(localBuild, { trigger, source: 'automatic' }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({ statusCode: 409 });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
   test('requestContainerUpdate rejects with 409 when getActiveOperationByContainerId returns a queued operation', async () => {
     mockGetActiveOperationByContainerId.mockReturnValue({ id: 'op-existing', status: 'queued' });
 

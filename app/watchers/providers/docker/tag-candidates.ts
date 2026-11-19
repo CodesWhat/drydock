@@ -3,7 +3,7 @@ import semver from 'semver';
 
 import type { Container, ContainerResult } from '../../../model/container.js';
 import { filterLineSkippedTags } from '../../../model/skip-scope.js';
-import { isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
+import { isLocalBaseLookup, isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
 import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import {
   diff as diffSemver,
@@ -1156,7 +1156,11 @@ export function getTagCandidates(
   let filteredTags = baseTags;
   const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
 
-  if (container.image.tag.tagPrecision === 'floating' && tagFamilyPolicy === 'strict') {
+  if (
+    container.image.tag.tagPrecision === 'floating' &&
+    tagFamilyPolicy === 'strict' &&
+    !isLocalBaseLookup(container)
+  ) {
     const digestWatchEnabled = Boolean(container.image.digest?.watch);
     const noUpdateReason = digestWatchEnabled
       ? `Floating tag alias "${container.image.tag.value}" is compared by digest in strict tag-family mode. Set dd.tag.family=loose to allow cross-tag semver updates.`

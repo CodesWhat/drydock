@@ -16560,3 +16560,77 @@ describe('separateupdatetypes', () => {
     expect(trigger.withSeparateUpdateType(report)).toBe(report);
   });
 });
+
+describe('locally built image base image updates', () => {
+  const baseImageContainer = {
+    name: 'myapp',
+    watcher: 'local',
+    image: { isLocalImage: true, registry: { name: 'hub' }, tag: { value: '1.25.0' } },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+      baseImage: true,
+      localValue: '1.25.0',
+      remoteValue: '1.26.0',
+      semverDiff: 'minor',
+    },
+  } as any;
+
+  test('default notification templates label the update as a base image update', () => {
+    const notifier = new Trigger();
+    notifier.log = log;
+    notifier.type = 'discord';
+    notifier.name = 'update';
+    notifier.configuration = new Trigger().validateConfiguration({}) as any;
+
+    expect(notifier.renderSimpleTitle(baseImageContainer)).toBe(
+      'New base image update found for container myapp',
+    );
+    expect(notifier.renderSimpleBody(baseImageContainer)).toBe(
+      'Container myapp running with tag 1.25.0 can be updated to tag 1.26.0 (base image of a locally built image, notification only)',
+    );
+  });
+
+  test('default notification templates are unchanged for a registry-backed image', () => {
+    const notifier = new Trigger();
+    notifier.log = log;
+    notifier.type = 'discord';
+    notifier.name = 'update';
+    notifier.configuration = new Trigger().validateConfiguration({}) as any;
+    const registryContainer = {
+      ...baseImageContainer,
+      image: { registry: { name: 'hub' }, tag: { value: '1.25.0' } },
+      updateKind: { ...baseImageContainer.updateKind, baseImage: undefined },
+    };
+
+    expect(notifier.renderSimpleTitle(registryContainer)).toBe('New tag found for container myapp');
+    expect(notifier.renderSimpleBody(registryContainer)).toBe(
+      'Container myapp running with tag 1.25.0 can be updated to tag 1.26.0',
+    );
+  });
+
+  test.each(['docker', 'dockercompose'])(
+    'the %s update action refuses a locally built image, even with auto=all',
+    (type) => {
+      const action = new Trigger();
+      action.log = log;
+      action.configuration = { ...configurationValid, auto: 'all' };
+      action.type = type;
+      action.name = 'update';
+
+      expect(action.mustTrigger({ ...baseImageContainer, image: { registry: {} } })).toBe(true);
+      expect(action.mustTrigger(baseImageContainer)).toBe(false);
+    },
+  );
+
+  test('a command trigger and a notification trigger still fire for a locally built image', () => {
+    for (const type of ['command', 'discord']) {
+      const other = new Trigger();
+      other.log = log;
+      other.configuration = { ...configurationValid, auto: 'all' };
+      other.type = type;
+      other.name = 'update';
+      expect(other.mustTrigger(baseImageContainer)).toBe(true);
+    }
+  });
+});

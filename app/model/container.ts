@@ -48,6 +48,18 @@ function createUnknownUpdateKind(): ContainerUpdateKind {
   };
 }
 
+/**
+ * True for an image that was built or loaded locally (no RepoDigests). The
+ * registry only holds its declared upstream base, so an update action that
+ * pulled a registry image would replace the local build with stock upstream.
+ */
+export function isLocalBuildContainer(container: Pick<Container, 'image'> | undefined): boolean {
+  return container?.image?.isLocalImage === true;
+}
+
+export const LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE =
+  'This container runs a locally built image. A base image update is notification-only; rebuild the image to apply it.';
+
 export function isTagUpdateKind(updateKind: ContainerUpdateKind): boolean {
   return updateKind.kind === UPDATE_KIND_TAG_VALUE;
 }
@@ -137,6 +149,9 @@ export interface ContainerReleaseNotes {
 
 export interface ContainerUpdateKind {
   kind: 'tag' | 'digest' | 'unknown';
+  // True when the update is a newer tag of the declared upstream base of a
+  // locally built image (dd.registry.lookup.image). Additive: kind stays 'tag'.
+  baseImage?: boolean;
   localValue?: string;
   remoteValue?: string;
   semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
@@ -626,6 +641,7 @@ const schema = joi.object({
   updateKind: joi
     .object({
       kind: joi.string().valid('tag', 'digest', 'unknown').required(),
+      baseImage: joi.boolean(),
       localValue: joi.string(),
       remoteValue: joi.string(),
       semverDiff: joi.string().valid('major', 'minor', 'patch', 'prerelease', 'unknown'),
@@ -725,6 +741,7 @@ function getRawTagUpdate(container: Container): ContainerUpdateKind {
 
   return {
     kind: UPDATE_KIND_TAG_VALUE as ContainerUpdateKind['kind'],
+    ...(isLocalBuildContainer(container) ? { baseImage: true } : {}),
     localValue: container.image.tag.value,
     remoteValue: container.result.tag,
     semverDiff: semverDiffResult,

@@ -16,6 +16,7 @@ import {
 import {
   type Container,
   fullName,
+  isLocalBuildContainer,
   isRollbackContainer as isRollbackContainerHelper,
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
@@ -431,11 +432,11 @@ export function buildLiteralTemplateExpression(expression: string): string {
 const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
   'container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")"';
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
+  'container.notificationAgentPrefix + "New " + updateKindLabel + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
   'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
+  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue + updateKindNote';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
 const SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION =
@@ -2652,6 +2653,14 @@ class Trigger<
     // `UPDATE_ACTION_TRIGGER_TYPES`), so they fall through to the unchanged
     // plain include/exclude path below, preserving today's behavior exactly.
     if (category === 'action' && this.isUpdateActionTrigger()) {
+      // A locally built image is never replaced by a pulled registry image. Command
+      // triggers skip this branch, which is how a user wires a rebuild.
+      if (isLocalBuildContainer(containerResult)) {
+        return {
+          allowed: false,
+          reason: 'locally built image: base image updates are notification-only',
+        };
+      }
       if (!this.isActionPolicyDispatchWinner(containerResult)) {
         return {
           allowed: false,
