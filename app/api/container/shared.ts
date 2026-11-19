@@ -230,6 +230,28 @@ export function resolveContainerImageFullName(
   return buildImageReference(container.image.registry.url, container.image.name, tag);
 }
 
+const SHA256_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/;
+
+/**
+ * Resolve the references for scanning a container's currently running image.
+ * `scanImage` pins the running digest so the scanner inspects the image that is
+ * actually running even when the mutable tag has since moved. `displayImage`
+ * keeps the tag form that is stored on the scan result and compared by the
+ * security gate's relative baseline check.
+ */
+export function resolveCurrentImageScanTarget(
+  container: Container,
+  getImageFullName: (container: Container, tagOverride?: string) => string,
+): { displayImage: string; scanImage: string } {
+  const displayImage = getImageFullName(container);
+  const digest = container.image?.digest?.value;
+  const scanImage =
+    typeof digest === 'string' && SHA256_DIGEST_PATTERN.test(digest)
+      ? getImageFullName(container, digest)
+      : displayImage;
+  return { displayImage, scanImage };
+}
+
 export async function resolveContainerRegistryAuth(
   container: Container,
   registryState: Record<string, RegistryComponentLike>,

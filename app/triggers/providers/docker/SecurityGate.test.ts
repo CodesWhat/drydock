@@ -950,6 +950,45 @@ describe('SecurityGate', () => {
       );
     });
 
+    test('keeps a worse candidate blocked when the baseline is the clean running-digest scan', async () => {
+      const container = createPreviouslyScannedContainer({
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+      });
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on', allowNoWorse: true } },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          scanner: 'trivy',
+          image: 'ghcr.io/acme/web:2.0.0',
+          scannedAt: '2026-07-12T01:00:00.000Z',
+          status: 'blocked',
+          summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+          blockingCount: 1,
+          blockSeverities: ['CRITICAL', 'HIGH'],
+          vulnerabilities: [],
+        }),
+      });
+
+      await expect(
+        harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-blocked' });
+      expect(harness.updateContainer).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          security: expect.objectContaining({
+            updateScan: expect.objectContaining({
+              relativeGate: expect.objectContaining({
+                decision: 'blocked',
+                reason: 'candidate-worse',
+              }),
+            }),
+          }),
+        }),
+      );
+    });
+
     test('blocks when any severity count is worse than current', async () => {
       const container = createPreviouslyScannedContainer();
       const harness = createGateHarness({
