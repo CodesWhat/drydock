@@ -22,10 +22,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- The webhook credential check now treats `/UPDATE/x` and `/Watch` the same as the lowercase paths. Before, with per-endpoint webhook credentials set, the shared webhook credential still worked on a differently cased path because Express routes case-insensitively and the credential selection did not.
+- Running an action trigger through `POST /api/v1/containers/:id/triggers/:type/:name` or the trigger routes now returns 403 when `DD_SERVER_FEATURE_CONTAINERACTIONS` is `false`, like the other update paths. Notification triggers can still be test-fired.
 - The MQTT trigger now closes its connection to the previous broker when it re-initializes (for example after the broker URL changes or the broker is replaced) and when it is deregistered. Before, the old client kept reconnecting in the background next to the new one.
 
 ### Security
 
+- An API key with only the `triggers:test` scope could fire an agent's action trigger (`docker`, `dockercompose`, `portainer` or `command`) by putting the agent name in the type segment, for example `edge1.docker`, which skipped the update gate. The trigger routes now require the resolved trigger's type, name and agent to match the request path exactly, and check scope and dispatch against the trigger that was actually resolved.
 - HTTP trigger proxy URLs that carry credentials (for example `http://user:pass@proxy.local:3128`) no longer appear in registration logs, trigger API responses, debug dumps or the configuration endpoint. The userinfo is replaced with `[REDACTED]` where the proxy URL is shown, and the lower-scope trigger views redact the whole value. A value that cannot be parsed as a URL is redacted entirely.
 
 - Pin Alpine openssl to 3.5.9-r1. Alpine replaced 3.5.9-r0 in the v3.24 repository, which broke every image build with a `libcrypto3 breaks` error. The r1 package carries the upstream fixes for CVE-2026-107496, CVE-2026-88823, CVE-2026-95691 and CVE-2026-95692, so the OpenVEX document that classified them as `not_affected` is removed.
