@@ -15,7 +15,7 @@ const DOCKER_LIST = 'application/vnd.docker.distribution.manifest.list.v2+json';
 const OCI_MANIFEST = 'application/vnd.oci.image.manifest.v1+json';
 
 const NODE_REF =
-  'node:24-alpine@sha256:8a32c8cf649a49915a66e81e7a609223c708d0adabf288ee3f4077d765542f85';
+  'node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5';
 const ALPINE_REF =
   'alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b';
 
@@ -108,7 +108,7 @@ test('passes when every pinned base image is an index covering both platforms', 
   });
 
   assert.equal(result.code, 0);
-  assert.match(result.output, /ok: node:24-alpine@sha256:8a32c8cf/u);
+  assert.match(result.output, /ok: node:24-alpine@sha256:116b800c/u);
   assert.match(result.output, /All base image pins/u);
 });
 
