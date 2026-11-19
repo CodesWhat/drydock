@@ -1841,6 +1841,7 @@ export function requestOperationCancellation(
       status: 'failed',
       phase: 'failed',
       lastError: 'Cancelled by operator',
+      cancelRequested: true,
     });
     return cancelled ? { outcome: 'cancelled', operation: cancelled } : undefined;
   }

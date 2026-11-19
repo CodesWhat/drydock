@@ -1521,6 +1521,166 @@ describe('request-update', () => {
       expect(triggerFn).not.toHaveBeenCalled();
     });
 
+    test('skips a queued entry that was cancelled before dispatch without failing its dependents', async () => {
+      mockGetOperationById.mockImplementation((id: string) =>
+        id === 'op-db' ? { id, status: 'failed', cancelRequested: true } : undefined,
+      );
+      const dbTrigger = vi.fn().mockResolvedValue(undefined);
+      const apiTrigger = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'db', name: 'db' }),
+          trigger: { type: 'docker', trigger: dbTrigger },
+        },
+        {
+          operationId: 'op-api',
+          container: createDependentContainer({
+            id: 'api',
+            name: 'api',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+          }),
+          trigger: { type: 'docker', trigger: apiTrigger },
+        },
+      ]);
+
+      expect(dbTrigger).not.toHaveBeenCalled();
+      expect(apiTrigger).toHaveBeenCalledTimes(1);
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    describe('no-work and restart-only admission', () => {
+      const trigger = () => ({
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      });
+      const redis = () =>
+        createDependentContainer({ id: 'redis', name: 'redis', updateAvailable: false });
+      const db = () => createDependentContainer({ id: 'db', name: 'db' });
+      const web = (overrides: Record<string, unknown> = {}) =>
+        createDependentContainer({
+          id: 'web',
+          name: 'web',
+          dependsOn: ['redis', 'db'],
+          dependsOnSource: 'label',
+          ...overrides,
+        });
+
+      test('a current upstream does not reject dependents that have other work', async () => {
+        const result = await enqueueContainerUpdates([redis(), db(), web()], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['db', 'web']);
+        expect(result.rejected).toEqual([
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'redis' }),
+            statusCode: 400,
+          }),
+        ]);
+      });
+
+      test('a restart-only dependent runs when another upstream has an update', async () => {
+        const result = await enqueueContainerUpdates(
+          [redis(), db(), web({ updateAvailable: false, dependsOnAction: 'restart' })],
+          { trigger: trigger(), source: 'manual' },
+        );
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['db', 'web']);
+        expect(result.rejected.map((entry) => entry.container.id)).toEqual(['redis']);
+      });
+
+      test('a restart-only dependent chain activates through an updating upstream', async () => {
+        const cache = createDependentContainer({
+          id: 'cache',
+          name: 'cache',
+          dependsOn: ['db'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'restart',
+          updateAvailable: false,
+        });
+        const worker = createDependentContainer({
+          id: 'worker',
+          name: 'worker',
+          dependsOn: ['cache'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'restart',
+          updateAvailable: false,
+        });
+
+        const result = await enqueueContainerUpdates([worker, cache, db()], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id).sort()).toEqual([
+          'cache',
+          'db',
+          'worker',
+        ]);
+        expect(result.rejected).toEqual([]);
+      });
+
+      test('rejects a restart-only dependent whose only upstream is current', async () => {
+        const result = await enqueueContainerUpdates(
+          [
+            redis(),
+            web({ dependsOn: ['redis'], updateAvailable: false, dependsOnAction: 'restart' }),
+          ],
+          { trigger: trigger(), source: 'manual' },
+        );
+
+        expect(result.accepted).toEqual([]);
+        expect(result.rejected).toEqual([
+          expect.objectContaining({ statusCode: 400 }),
+          expect.objectContaining({ statusCode: 409 }),
+        ]);
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      });
+
+      test('rejects a restart-labelled container requested alone with no update', async () => {
+        const dependent = web({
+          dependsOn: ['db'],
+          updateAvailable: false,
+          dependsOnAction: 'restart',
+        });
+        const triggerFn = vi.fn().mockResolvedValue(undefined);
+
+        await expect(
+          requestContainerUpdate(dependent, {
+            trigger: { type: 'docker', trigger: triggerFn, getId: () => 'docker.update' },
+          }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+        await flushAsyncWork();
+
+        const batch = await requestContainerUpdates([dependent], {
+          trigger: { type: 'docker', trigger: triggerFn, getId: () => 'docker.update' },
+        });
+        await flushAsyncWork();
+
+        expect(batch.accepted).toEqual([]);
+        expect(batch.rejected).toEqual([expect.objectContaining({ statusCode: 400 })]);
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+        expect(triggerFn).not.toHaveBeenCalled();
+        expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+      });
+
+      test('a restart-labelled container with its own update stays admissible alone', async () => {
+        const dependent = web({ dependsOn: ['db'], dependsOnAction: 'restart' });
+
+        const result = await enqueueContainerUpdates([dependent], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['web']);
+      });
+    });
+
     test('rejects every transitive dependent when an upstream operation is already active', async () => {
       mockGetActiveOperationByContainerId.mockImplementation((id: string) =>
         id === 'db' ? { status: 'in-progress' } : undefined,

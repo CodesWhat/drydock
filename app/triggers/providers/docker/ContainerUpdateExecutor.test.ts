@@ -1641,6 +1641,33 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute does not reopen an operator-cancelled operation', async () => {
+    const context = createContext();
+    mockGetOperationById.mockReturnValue({
+      id: 'cancelled-op',
+      containerId: 'container-id',
+      containerName: 'web',
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'Cancelled by operator',
+      cancelRequested: true,
+    });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const pullImage = vi.spyOn(executor as any, 'pullImage');
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), { operationId: 'cancelled-op' }),
+    ).resolves.toBe(false);
+
+    expect(mockReopenTerminalOperation).not.toHaveBeenCalled();
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+    expect(pullImage).not.toHaveBeenCalled();
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+  });
+
   test('execute rolls back and rethrows original error when rollback succeeds', async () => {
     const context = createContext();
     const createContainerError = new Error('create failed');
