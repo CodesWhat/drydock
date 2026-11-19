@@ -31,6 +31,8 @@ function handlers() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-03-01T12:00:00Z'));
   silenceStore.resetSilencesForTests();
   resetSuppressionForTests();
   mockRecordAuditEvent.mockClear();
@@ -39,6 +41,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   silenceStore.resetSilencesForTests();
   delete ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE;
 });
