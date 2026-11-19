@@ -236,10 +236,7 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
 
   // A synthetic container from a file watcher has nothing running to act on. Update triggers
   // are refused further down by the eligibility blockers; this covers the other actions.
-  if (
-    isFileSourcedContainer(containerToTrigger) &&
-    getTriggerCategoryForType(triggerType.toLowerCase()) === 'action'
-  ) {
+  if (isFileSourcedContainer(containerToTrigger) && resolvedCategoryIsAction) {
     sendErrorResponse(res, 409, 'Containers from a file watcher are notification-only');
     return;
   }

@@ -525,9 +525,10 @@ describe('Trigger Router', () => {
     });
 
     test('refuses an action trigger run on a container from a file watcher', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const commandTrigger = { type: 'command', name: 'deploy', trigger: vi.fn() };
+      const dockerTrigger = { type: 'docker', name: 'update', trigger: vi.fn() };
       registry.getState.mockReturnValue({
-        trigger: { 'command.deploy': mockTrigger, 'docker.update': mockTrigger },
+        trigger: { 'command.deploy': commandTrigger, 'docker.update': dockerTrigger },
       });
 
       for (const type of ['command', 'docker']) {
@@ -546,11 +547,16 @@ describe('Trigger Router', () => {
           error: 'Containers from a file watcher are notification-only',
         });
       }
-      expect(mockTrigger.trigger).not.toHaveBeenCalled();
+      expect(commandTrigger.trigger).not.toHaveBeenCalled();
+      expect(dockerTrigger.trigger).not.toHaveBeenCalled();
     });
 
     test('runs a notification trigger on a container from a file watcher', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
       registry.getState.mockReturnValue({ trigger: { 'slack.default': mockTrigger } });
       const res = createMockResponse();
 
