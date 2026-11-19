@@ -88,6 +88,8 @@ const actionTypes = [
   'api-key-auth-failed',
   'image-prune',
   'cleanup',
+  'notification-silence-set',
+  'notification-silence-cleared',
 ];
 
 const route = useRoute();

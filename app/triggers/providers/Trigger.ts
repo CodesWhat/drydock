@@ -130,6 +130,8 @@ type NotificationRuleId =
   | 'container-exited'
   | 'container-oom-killed'
   | 'container-restart-loop'
+  | 'auth-abuse'
+  | 'agent-version-mismatch'
   | 'maturity-cleared'
   | 'update-pending-approval';
 
@@ -145,6 +147,8 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'container-exited',
   'container-oom-killed',
   'container-restart-loop',
+  'auth-abuse',
+  'agent-version-mismatch',
   'maturity-cleared',
   'update-pending-approval',
 ]);
@@ -236,6 +240,24 @@ interface ContainerUnhealthyNotificationEvent {
   previousHealth?: string;
 }
 
+interface AuthAbuseNotificationEvent {
+  kind: 'auth-abuse';
+  scope: 'account' | 'ip';
+  source?: string;
+  username?: string;
+  failedAttempts: number;
+  windowSeconds: number;
+  lockoutSeconds: number;
+}
+
+interface AgentVersionMismatchNotificationEvent {
+  kind: 'agent-version-mismatch';
+  agentName: string;
+  agentVersion: string;
+  controllerVersion: string;
+  difference: 'major' | 'minor' | 'patch';
+}
+
 interface ContainerStateNotificationEvent {
   kind: event.ContainerStateAlertKind;
   exitCode?: number;
@@ -267,6 +289,8 @@ type TriggerNotificationEvent =
   | AgentReconnectedNotificationEvent
   | ContainerUnhealthyNotificationEvent
   | ContainerStateNotificationEvent
+  | AuthAbuseNotificationEvent
+  | AgentVersionMismatchNotificationEvent
   | MaturityGateClearedNotificationEvent
   | UpdatePendingApprovalNotificationEvent;
 
@@ -442,6 +466,10 @@ const CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpres
 const CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} was killed for running out of memory${buildLiteralTemplateExpression('event.exitCode ? " (exit code " + event.exitCode + ")" : ""')}`;
 const CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is in a restart loop`;
 const CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} crashed ${buildLiteralTemplateExpression('event.restartCount')} times in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds${buildLiteralTemplateExpression('event.exitCode ? " (last exit code " + event.exitCode + ")" : ""')}`;
+const AUTH_ABUSE_SIMPLE_TITLE_TEMPLATE = `Repeated failed logins${buildLiteralTemplateExpression('event.source ? " from " + event.source : ""')}`;
+const AUTH_ABUSE_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('event.source ? "Source " + event.source : "Account " + event.username')} was locked out after ${buildLiteralTemplateExpression('event.failedAttempts')} failed login attempts in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds. The lockout lasts ${buildLiteralTemplateExpression('event.lockoutSeconds')} seconds.`;
+const AGENT_VERSION_MISMATCH_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} version mismatch`;
+const AGENT_VERSION_MISMATCH_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} runs ${buildLiteralTemplateExpression('event.agentVersion')} but the controller runs ${buildLiteralTemplateExpression('event.controllerVersion')} (${buildLiteralTemplateExpression('event.difference')} difference)`;
 const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
 const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}${buildLiteralTemplateExpression(SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION)}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update awaiting approval for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
@@ -459,6 +487,8 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'container-exited': CONTAINER_EXITED_SIMPLE_TITLE_TEMPLATE,
   'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE,
   'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE,
+  'auth-abuse': AUTH_ABUSE_SIMPLE_TITLE_TEMPLATE,
+  'agent-version-mismatch': AGENT_VERSION_MISMATCH_SIMPLE_TITLE_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE,
 };
@@ -475,6 +505,8 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'container-exited': CONTAINER_EXITED_SIMPLE_BODY_TEMPLATE,
   'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE,
   'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE,
+  'auth-abuse': AUTH_ABUSE_SIMPLE_BODY_TEMPLATE,
+  'agent-version-mismatch': AGENT_VERSION_MISMATCH_SIMPLE_BODY_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE,
 };
@@ -551,7 +583,7 @@ function truncateReleaseNotesBody(body: string, maxLength: number) {
 function buildAgentContainer(
   agentName: string,
   state: 'connected' | 'disconnected',
-  eventKind: TriggerNotificationEvent['kind'],
+  eventKind: 'agent-disconnect' | 'agent-reconnect',
   reason?: string,
 ): TriggerNotificationContainer {
   return {
@@ -605,6 +637,45 @@ function buildAgentDisconnectedContainer(
 
 function buildAgentReconnectedContainer(agentName: string): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
+}
+
+function buildAgentVersionMismatchContainer(
+  payload: event.AgentVersionMismatchEventPayload,
+): TriggerNotificationContainer {
+  return {
+    ...buildAgentContainer(payload.agentName, 'connected', 'agent-reconnect'),
+    displayIcon: 'mdi:server-network-off',
+    notificationEvent: {
+      kind: 'agent-version-mismatch',
+      agentName: payload.agentName,
+      agentVersion: payload.agentVersion,
+      controllerVersion: payload.controllerVersion,
+      difference: payload.difference,
+    },
+  };
+}
+
+function buildAuthAbuseContainer(
+  payload: event.AuthAbuseEventPayload,
+): TriggerNotificationContainer {
+  const subject =
+    payload.scope === 'ip' ? (payload.source ?? 'unknown') : (payload.username ?? 'unknown');
+  return {
+    ...buildAgentContainer(`auth-${payload.scope}-${subject}`, 'disconnected', 'agent-disconnect'),
+    name: 'authentication',
+    displayName: 'Authentication',
+    displayIcon: 'mdi:shield-alert',
+    watcher: 'auth',
+    notificationEvent: {
+      kind: 'auth-abuse',
+      scope: payload.scope,
+      source: payload.source,
+      username: payload.username,
+      failedAttempts: payload.failedAttempts,
+      windowSeconds: payload.windowSeconds,
+      lockoutSeconds: payload.lockoutSeconds,
+    },
+  };
 }
 
 function withNotificationEvent(
@@ -684,6 +755,35 @@ function getContainerStateNotificationEvent(
     reason: getNonEmptyString(notificationEvent, 'reason'),
     restartCount: getFiniteNumber(notificationEvent, 'restartCount'),
     windowSeconds: getFiniteNumber(notificationEvent, 'windowSeconds'),
+  };
+}
+
+function getAuthAbuseNotificationEvent(notificationEvent: unknown): AuthAbuseNotificationEvent {
+  return {
+    kind: 'auth-abuse',
+    scope: safeGet(notificationEvent, 'scope') === 'ip' ? 'ip' : 'account',
+    source: getNonEmptyString(notificationEvent, 'source'),
+    username: getNonEmptyString(notificationEvent, 'username'),
+    failedAttempts: getFiniteNumber(notificationEvent, 'failedAttempts') ?? 0,
+    windowSeconds: getFiniteNumber(notificationEvent, 'windowSeconds') ?? 0,
+    lockoutSeconds: getFiniteNumber(notificationEvent, 'lockoutSeconds') ?? 0,
+  };
+}
+
+function getAgentVersionMismatchNotificationEvent(
+  notificationEvent: unknown,
+): AgentVersionMismatchNotificationEvent | undefined {
+  const agentName = getNonEmptyString(notificationEvent, 'agentName');
+  if (!agentName) {
+    return undefined;
+  }
+  const difference = safeGet(notificationEvent, 'difference');
+  return {
+    kind: 'agent-version-mismatch',
+    agentName,
+    agentVersion: getNonEmptyString(notificationEvent, 'agentVersion') ?? 'unknown',
+    controllerVersion: getNonEmptyString(notificationEvent, 'controllerVersion') ?? 'unknown',
+    difference: difference === 'major' || difference === 'patch' ? difference : 'minor',
   };
 }
 
@@ -769,6 +869,14 @@ export function getNotificationEvent(
     );
   }
 
+  if (kind === 'auth-abuse') {
+    return getAuthAbuseNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'agent-version-mismatch') {
+    return getAgentVersionMismatchNotificationEvent(notificationEvent);
+  }
+
   if (kind === 'maturity-cleared') {
     return getMaturityGateClearedNotificationEvent(notificationEvent);
   }
@@ -852,6 +960,8 @@ class Trigger<
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerHealthTransition?: () => void;
   private unregisterContainerStateAlert?: () => void;
+  private unregisterAuthAbuse?: () => void;
+  private unregisterAgentVersionMismatch?: () => void;
   private unregisterMaturityGateCleared?: () => void;
   private unregisterApprovalPendingNotification?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
@@ -1154,8 +1264,14 @@ class Trigger<
   private isTriggerEnabledForRule(
     ruleId: NotificationRuleId,
     options: notificationStore.NotificationRuleDispatchOptions = {},
+    countSuppression = false,
   ) {
-    return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), options);
+    return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), {
+      ...options,
+      // Quiet hours and silences mute what Drydock says, never what an action trigger does.
+      applyQuietHours: this.getCategory() === 'notification',
+      countSuppression,
+    });
   }
 
   private getUpdateAvailableAutoTriggerDispatchDecision() {
@@ -1165,7 +1281,12 @@ class Trigger<
     const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
       'update-available',
       this.getId(),
-      { allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true },
+      {
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+        applyQuietHours: true,
+        countSuppression: true,
+      },
     );
     this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
     return dispatchDecision;
@@ -1337,7 +1458,9 @@ class Trigger<
   ) {
     return (
       notificationEvent?.kind !== 'agent-disconnect' &&
-      notificationEvent?.kind !== 'agent-reconnect'
+      notificationEvent?.kind !== 'agent-reconnect' &&
+      notificationEvent?.kind !== 'auth-abuse' &&
+      notificationEvent?.kind !== 'agent-version-mismatch'
     );
   }
 
@@ -1431,7 +1554,7 @@ class Trigger<
       return false;
     }
 
-    if (!this.isTriggerEnabledForRule(ruleId, options)) {
+    if (!this.isTriggerEnabledForRule(ruleId, options, true)) {
       this.recordSkip(container, 'rule-disabled', ruleId);
       return false;
     }
@@ -1757,6 +1880,26 @@ class Trigger<
     await this.dispatchContainerForEvent(
       'agent-reconnect',
       buildAgentReconnectedContainer(payload.agentName),
+      {
+        allowAllWhenNoTriggers: true,
+        defaultWhenRuleMissing: true,
+        skipThreshold: true,
+      },
+    );
+  }
+
+  async handleAuthAbuseEvent(payload: event.AuthAbuseEventPayload) {
+    await this.dispatchContainerForEvent('auth-abuse', buildAuthAbuseContainer(payload), {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+      skipThreshold: true,
+    });
+  }
+
+  async handleAgentVersionMismatchEvent(payload: event.AgentVersionMismatchEventPayload) {
+    await this.dispatchContainerForEvent(
+      'agent-version-mismatch',
+      buildAgentVersionMismatchContainer(payload),
       {
         allowAllWhenNoTriggers: true,
         defaultWhenRuleMissing: true,
@@ -3884,6 +4027,22 @@ class Trigger<
       },
     );
 
+    this.unregisterAuthAbuse = event.registerAuthAbuse(
+      async (payload) => this.handleAuthAbuseEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+
+    this.unregisterAgentVersionMismatch = event.registerAgentVersionMismatch(
+      async (payload) => this.handleAgentVersionMismatchEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
+
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
       this.unregisterContainerUpdateAppliedForResolution = event.registerContainerUpdateApplied(
@@ -3933,6 +4092,12 @@ class Trigger<
 
     this.unregisterContainerStateAlert?.();
     this.unregisterContainerStateAlert = undefined;
+
+    this.unregisterAuthAbuse?.();
+    this.unregisterAuthAbuse = undefined;
+
+    this.unregisterAgentVersionMismatch?.();
+    this.unregisterAgentVersionMismatch = undefined;
 
     this.unregisterMaturityGateCleared?.();
     this.unregisterMaturityGateCleared = undefined;
@@ -4590,22 +4755,39 @@ class Trigger<
                       ? { kind: ruleId, exitCode: 137, reason: 'out of memory' }
                       : ruleId === 'container-restart-loop'
                         ? { kind: ruleId, exitCode: 1, restartCount: 3, windowSeconds: 300 }
-                        : ruleId === 'maturity-cleared'
+                        : ruleId === 'auth-abuse'
                           ? {
                               kind: ruleId,
-                              pendingSince: '2026-01-01T00:00:00.000Z',
-                              minAgeDays: 7,
+                              scope: 'ip',
+                              source: '203.0.113.7',
+                              failedAttempts: 25,
+                              windowSeconds: 900,
+                              lockoutSeconds: 900,
                             }
-                          : ruleId === 'update-pending-approval'
+                          : ruleId === 'agent-version-mismatch'
                             ? {
                                 kind: ruleId,
-                                approvalId: 'preview-approval',
-                                approvalUrl:
-                                  'https://drydock.example.com/approvals?id=preview-approval',
-                                fromRef: '1.0.0',
-                                toRef: '1.1.0',
+                                agentName: 'preview-agent',
+                                agentVersion: '1.8.0',
+                                controllerVersion: '1.9.0',
+                                difference: 'minor',
                               }
-                            : { kind: ruleId };
+                            : ruleId === 'maturity-cleared'
+                              ? {
+                                  kind: ruleId,
+                                  pendingSince: '2026-01-01T00:00:00.000Z',
+                                  minAgeDays: 7,
+                                }
+                              : ruleId === 'update-pending-approval'
+                                ? {
+                                    kind: ruleId,
+                                    approvalId: 'preview-approval',
+                                    approvalUrl:
+                                      'https://drydock.example.com/approvals?id=preview-approval',
+                                    fromRef: '1.0.0',
+                                    toRef: '1.1.0',
+                                  }
+                                : { kind: ruleId };
 
     return {
       id: 'drydock-preview',

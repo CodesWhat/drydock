@@ -2451,6 +2451,225 @@ describe('container state alerts', () => {
   });
 });
 
+describe('auth abuse alerts', () => {
+  const payload = {
+    scope: 'account' as const,
+    username: 'scott',
+    failedAttempts: 5,
+    windowSeconds: 900,
+    lockoutSeconds: 900,
+  };
+
+  test('an account lockout dispatches and renders its templates', async () => {
+    trigger.configuration.threshold = 'major';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAuthAbuseEvent(payload);
+    expect(provider).toHaveBeenCalledTimes(1);
+    const dispatched = provider.mock.calls[0][0] as any;
+    expect(dispatched.notificationEvent).toMatchObject({ kind: 'auth-abuse', ...payload });
+    expect(trigger.renderSimpleTitle(dispatched)).toBe('Repeated failed logins');
+    expect(trigger.renderSimpleBody(dispatched)).toBe(
+      'Account scott was locked out after 5 failed login attempts in 900 seconds. The lockout lasts 900 seconds.',
+    );
+  });
+
+  test('an ip lockout names the source', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAuthAbuseEvent({
+      scope: 'ip',
+      source: '203.0.113.7',
+      failedAttempts: 25,
+      windowSeconds: 900,
+      lockoutSeconds: 900,
+    });
+    const dispatched = provider.mock.calls[0][0] as any;
+    expect(trigger.renderSimpleTitle(dispatched)).toBe('Repeated failed logins from 203.0.113.7');
+    expect(trigger.renderSimpleBody(dispatched)).toContain('Source 203.0.113.7 was locked out');
+  });
+
+  test.each([{ scope: 'ip' as const }, { scope: 'account' as const }])(
+    'a $scope event missing its subject still dispatches',
+    async ({ scope }) => {
+      const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      await trigger.handleAuthAbuseEvent({
+        scope,
+        failedAttempts: 5,
+        windowSeconds: 900,
+        lockoutSeconds: 900,
+      });
+      expect(provider).toHaveBeenCalledTimes(1);
+      expect((provider.mock.calls[0][0] as any).id).toBe(`agent-auth-${scope}-unknown`);
+    },
+  );
+
+  test('a disabled rule does not dispatch', async () => {
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAuthAbuseEvent(payload);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('is never batched, even when the trigger batches', async () => {
+    trigger.configuration.mode = 'batch';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAuthAbuseEvent(payload);
+    await Promise.resolve();
+    expect(provider).toHaveBeenCalledTimes(1);
+  });
+
+  test('getNotificationEvent keeps the lockout metadata and defaults a bare event', () => {
+    expect(
+      getNotificationEvent({
+        notificationEvent: { kind: 'auth-abuse', ...payload, ignored: true },
+      } as any),
+    ).toEqual({ kind: 'auth-abuse', source: undefined, ...payload });
+    expect(getNotificationEvent({ notificationEvent: { kind: 'auth-abuse' } } as any)).toEqual({
+      kind: 'auth-abuse',
+      scope: 'account',
+      source: undefined,
+      username: undefined,
+      failedAttempts: 0,
+      windowSeconds: 0,
+      lockoutSeconds: 0,
+    });
+  });
+
+  test('component lifecycle registers and unregisters auth abuse handling', async () => {
+    const unregister = vi.fn();
+    let callback: any;
+    vi.spyOn(event, 'registerAuthAbuse').mockImplementation((handler) => {
+      callback = handler;
+      return unregister;
+    });
+    const handle = vi.spyOn(trigger, 'handleAuthAbuseEvent').mockResolvedValue(undefined);
+    trigger.configuration.auto = true;
+    trigger.configuration.mode = 'simple';
+    await trigger.init();
+    await callback(payload);
+    expect(handle).toHaveBeenCalledWith(payload);
+    await trigger.deregisterComponent();
+    expect(unregister).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('agent version mismatch alerts', () => {
+  const payload = {
+    agentName: 'edge',
+    agentVersion: '1.8.0',
+    controllerVersion: '1.9.0',
+    difference: 'minor' as const,
+  };
+
+  test('dispatches and renders its templates', async () => {
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAgentVersionMismatchEvent(payload);
+    expect(provider).toHaveBeenCalledTimes(1);
+    const dispatched = provider.mock.calls[0][0] as any;
+    expect(dispatched.notificationEvent).toEqual({ kind: 'agent-version-mismatch', ...payload });
+    expect(trigger.renderSimpleTitle(dispatched)).toBe('Agent edge version mismatch');
+    expect(trigger.renderSimpleBody(dispatched)).toBe(
+      'Agent edge runs 1.8.0 but the controller runs 1.9.0 (minor difference)',
+    );
+  });
+
+  test('a disabled rule does not dispatch', async () => {
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAgentVersionMismatchEvent(payload);
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('getNotificationEvent keeps the versions, rejects a nameless event and defaults gaps', () => {
+    expect(
+      getNotificationEvent({
+        notificationEvent: { kind: 'agent-version-mismatch', ...payload, ignored: true },
+      } as any),
+    ).toEqual({ kind: 'agent-version-mismatch', ...payload });
+    expect(
+      getNotificationEvent({
+        notificationEvent: {
+          kind: 'agent-version-mismatch',
+          agentName: 'edge',
+          difference: 'major',
+        },
+      } as any),
+    ).toEqual({
+      kind: 'agent-version-mismatch',
+      agentName: 'edge',
+      agentVersion: 'unknown',
+      controllerVersion: 'unknown',
+      difference: 'major',
+    });
+    expect(
+      getNotificationEvent({ notificationEvent: { kind: 'agent-version-mismatch' } } as any),
+    ).toBeUndefined();
+  });
+
+  test('component lifecycle registers and unregisters version mismatch handling', async () => {
+    const unregister = vi.fn();
+    let callback: any;
+    vi.spyOn(event, 'registerAgentVersionMismatch').mockImplementation((handler) => {
+      callback = handler;
+      return unregister;
+    });
+    const handle = vi
+      .spyOn(trigger, 'handleAgentVersionMismatchEvent')
+      .mockResolvedValue(undefined);
+    trigger.configuration.auto = true;
+    trigger.configuration.mode = 'simple';
+    await trigger.init();
+    await callback(payload);
+    expect(handle).toHaveBeenCalledWith(payload);
+    await trigger.deregisterComponent();
+    expect(unregister).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('quiet hours and silences', () => {
+  test('a notification trigger asks the store to apply quiet hours and count suppression', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'ops';
+    vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAgentVersionMismatchEvent({
+      agentName: 'edge',
+      agentVersion: '1.8.0',
+      controllerVersion: '1.9.0',
+      difference: 'minor',
+    });
+    expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+      'agent-version-mismatch',
+      trigger.getId(),
+      expect.objectContaining({ applyQuietHours: true, countSuppression: true }),
+    );
+  });
+
+  test('an action trigger is never muted by quiet hours', () => {
+    trigger.type = 'command';
+    trigger.name = 'hook';
+    (trigger as any).isTriggerEnabledForRule('maturity-cleared', { allowAllWhenNoTriggers: true });
+    expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+      'maturity-cleared',
+      trigger.getId(),
+      expect.objectContaining({ applyQuietHours: false, countSuppression: false }),
+    );
+  });
+
+  test('a suppressed notification is not dispatched', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'ops';
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleAuthAbuseEvent({
+      scope: 'ip',
+      source: '203.0.113.7',
+      failedAttempts: 25,
+      windowSeconds: 900,
+      lockoutSeconds: 900,
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+});
+
 test('getNotificationEvent preserves maturity-cleared metadata', () => {
   expect(
     getNotificationEvent({
@@ -2919,6 +3138,8 @@ test('previewNotificationTemplates supports every notification rule and rejects 
     'container-exited',
     'container-oom-killed',
     'container-restart-loop',
+    'auth-abuse',
+    'agent-version-mismatch',
     'maturity-cleared',
     'update-pending-approval',
   ];

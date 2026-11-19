@@ -120,7 +120,9 @@
       "security-alert": "セキュリティアラート",
       "maturity-cleared": "待機期間が終了",
       "image-prune": "イメージプルーン",
-      "cleanup": "クリーンアップ"
+      "cleanup": "クリーンアップ",
+      "notification-silence-set": "通知のミュートを設定",
+      "notification-silence-cleared": "通知のミュートを解除"
     },
     "target": {
       "container": "コンテナ",

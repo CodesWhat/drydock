@@ -31,6 +31,7 @@ import * as labelOverrideRouter from './label-override.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
+import * as notificationSilenceRouter from './notification-silence.js';
 import { withRouteScopes } from './openapi-scopes.js';
 import * as operationRouter from './operation.js';
 import { createOuterApiRateLimitKeyGenerator } from './outer-api-rate-limit-key.js';
@@ -263,6 +264,9 @@ export function init(): express.Router {
 
   // Mount notification outbox (DLQ) router
   mountRouter(router, '/notifications/outbox', notificationOutboxRouter.init());
+
+  // Mount notification silences (ad-hoc mutes with an expiry)
+  mountRouter(router, '/notifications/silences', notificationSilenceRouter.init());
 
   // Mount operations router (cancel queued operations)
   mountRouter(router, '/operations', operationRouter.init());

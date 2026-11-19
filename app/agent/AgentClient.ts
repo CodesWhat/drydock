@@ -64,6 +64,7 @@ import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
+import { checkAgentVersion } from './agent-version-alerts.js';
 import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
@@ -1488,6 +1489,7 @@ export class AgentClient {
       }).catch((error: unknown) => {
         this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
+      checkAgentVersion(this.name, this.info.version);
     }
   }
 

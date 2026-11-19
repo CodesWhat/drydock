@@ -120,7 +120,9 @@
       "security-alert": "Sicherheitswarnung",
       "maturity-cleared": "Reifezeit abgelaufen",
       "image-prune": "Image-Bereinigung",
-      "cleanup": "Bereinigung"
+      "cleanup": "Bereinigung",
+      "notification-silence-set": "Benachrichtigungs-Stummschaltung gesetzt",
+      "notification-silence-cleared": "Benachrichtigungs-Stummschaltung aufgehoben"
     },
     "target": {
       "container": "Container",

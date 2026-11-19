@@ -14,6 +14,7 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
+import { checkAgentVersion } from './agent-version-alerts.js';
 import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
 
@@ -485,6 +486,7 @@ export class EdgeAgentAdapter {
           log.debug(`Failed to emit agentConnected: ${getErrorMessage(err)}`);
         },
       );
+      checkAgentVersion(this.agentName, this.client.info.version);
     }
   }
 

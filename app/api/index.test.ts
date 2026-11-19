@@ -239,6 +239,7 @@ function mockActualApiRouterStatsLifecycle() {
     './portwing.js',
     './notification.js',
     './notification-outbox.js',
+    './notification-silence.js',
     './operation.js',
     './preview.js',
     './preferences.js',

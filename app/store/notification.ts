@@ -15,6 +15,7 @@
  */
 import joi from 'joi';
 import { byString } from 'sort-es';
+import { getNotificationSuppression, recordSuppressed } from '../notifications/suppression.js';
 import { doesNotificationTriggerReferenceMatchId } from '../notifications/trigger-policy.js';
 import { uniqStrings } from '../util/string-array.js';
 import type { Database, Row } from './db/driver.js';
@@ -48,6 +49,13 @@ export interface NotificationRule {
 export interface NotificationRuleDispatchOptions {
   allowAllWhenNoTriggers?: boolean;
   defaultWhenRuleMissing?: boolean;
+  /**
+   * Hold the notification back during quiet hours or an active silence. Only notification
+   * triggers set this: an action trigger runs something and is never muted.
+   */
+  applyQuietHours?: boolean;
+  /** Count a suppressed notification. Left off by pre-checks so one event is counted once. */
+  countSuppression?: boolean;
 }
 
 type NotificationRuleDispatchReason =
@@ -59,7 +67,9 @@ type NotificationRuleDispatchReason =
   | 'empty-trigger-list'
   | 'matched-allow-list'
   | 'excluded-from-allow-list'
-  | 'action-trigger-exempt-from-allow-list';
+  | 'action-trigger-exempt-from-allow-list'
+  | 'quiet-hours'
+  | 'silenced';
 
 export interface NotificationRuleDispatchDecision {
   enabled: boolean;
@@ -176,6 +186,26 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     bellThreshold: 'all',
     templates: {},
     description: 'When a watched container keeps crashing and restarting',
+  },
+  {
+    id: 'auth-abuse',
+    name: 'Repeated Failed Logins',
+    enabled: false,
+    triggers: [],
+    bellEnabled: false,
+    bellThreshold: 'all',
+    templates: {},
+    description: 'When failed logins lock out an account or a source address',
+  },
+  {
+    id: 'agent-version-mismatch',
+    name: 'Agent Version Mismatch',
+    enabled: false,
+    triggers: [],
+    bellEnabled: false,
+    bellThreshold: 'all',
+    templates: {},
+    description: 'When a remote agent connects on a different version than this controller',
   },
   {
     id: 'maturity-cleared',
@@ -515,9 +545,10 @@ export function updateNotificationRule(
 }
 
 /**
- * Explain whether a trigger should execute for a given notification rule.
+ * The rule half of the dispatch decision: is the rule on, and does its trigger allow-list
+ * include this trigger. Quiet hours and silences are layered on top by the exported wrapper.
  */
-export function getTriggerDispatchDecisionForRule(
+function getRuleAllowListDecision(
   ruleId: string,
   triggerId: string,
   options: NotificationRuleDispatchOptions = {},
@@ -561,6 +592,28 @@ export function getTriggerDispatchDecisionForRule(
     enabled: matched,
     reason: matched ? 'matched-allow-list' : 'excluded-from-allow-list',
   };
+}
+
+/**
+ * Explain whether a trigger should execute for a given notification rule.
+ */
+export function getTriggerDispatchDecisionForRule(
+  ruleId: string,
+  triggerId: string,
+  options: NotificationRuleDispatchOptions = {},
+): NotificationRuleDispatchDecision {
+  const decision = getRuleAllowListDecision(ruleId, triggerId, options);
+  if (!decision.enabled || !options.applyQuietHours) {
+    return decision;
+  }
+  const suppression = getNotificationSuppression(ruleId.toLowerCase());
+  if (!suppression.suppressed || !suppression.reason) {
+    return decision;
+  }
+  if (options.countSuppression) {
+    recordSuppressed(ruleId.toLowerCase(), suppression.reason);
+  }
+  return { enabled: false, reason: suppression.reason };
 }
 
 /**

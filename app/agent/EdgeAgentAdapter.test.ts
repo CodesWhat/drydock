@@ -13,6 +13,7 @@ import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import * as registry from '../registry/index.js';
 import * as ids from '../util/uuid.js';
 import { AgentClient } from './AgentClient.js';
+import { checkAgentVersion } from './agent-version-alerts.js';
 import {
   buildEdgeSentinelConfig,
   EdgeAgentAdapter,
@@ -27,6 +28,7 @@ vi.mock('../log/index.js', () => ({
     child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
   },
 }));
+vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
@@ -884,6 +886,23 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(emitAgentConnected).toHaveBeenCalledWith(expect.objectContaining({ reconnected: true }));
+  });
+
+  test('checks the agent version once, when the agent first connects', async () => {
+    const { adapter, ws, client } = createAdapter();
+    client.info = { ...client.info, version: '1.8.0' };
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 0));
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(checkAgentVersion).toHaveBeenCalledTimes(1);
+    expect(checkAgentVersion).toHaveBeenCalledWith(
+      expect.stringContaining('portwing-edge-'),
+      '1.8.0',
+    );
   });
 
   test('does not emit agentConnected twice', async () => {

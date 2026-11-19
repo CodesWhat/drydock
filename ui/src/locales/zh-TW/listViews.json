@@ -120,7 +120,9 @@
       "security-alert": "安全警報",
       "maturity-cleared": "等待期已結束",
       "image-prune": "映像檔清理",
-      "cleanup": "清理"
+      "cleanup": "清理",
+      "notification-silence-set": "已設定通知靜音",
+      "notification-silence-cleared": "已取消通知靜音"
     },
     "target": {
       "container": "容器",
