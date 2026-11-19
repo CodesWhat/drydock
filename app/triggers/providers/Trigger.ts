@@ -286,6 +286,12 @@ type TriggerTemplateContainer = Container & {
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
+  /**
+   * Alert-style rules reach notification triggers only. An empty rule trigger
+   * list means "all notification triggers", so action triggers (Command) must
+   * not fire for it.
+   */
+  notificationTriggersOnly?: boolean;
 }
 
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
@@ -1420,6 +1426,11 @@ class Trigger<
       return false;
     }
 
+    if (options.notificationTriggersOnly && this.getCategory() === 'action') {
+      this.log.debug(`Skipping ${ruleId} dispatch for action trigger (notification rules only)`);
+      return false;
+    }
+
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
       this.recordSkip(container, 'rule-disabled', ruleId);
       return false;
@@ -1786,6 +1797,7 @@ class Trigger<
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
       skipThreshold: true,
+      notificationTriggersOnly: true,
     });
   }
 

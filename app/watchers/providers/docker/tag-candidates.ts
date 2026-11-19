@@ -29,37 +29,67 @@ interface TagCandidatesLogger {
 }
 
 /**
+ * Compile an include/exclude filter with the shared RE2 helper, keeping the
+ * reason it logged so a failure can be reported as the container's lookup error.
+ */
+function compileFilter(
+  kind: 'include' | 'exclude',
+  pattern: string,
+  logger: TagCandidatesLogger,
+): { regex: { test(value: string): boolean } } | { error: string } {
+  let reason = '';
+  const regex = compileFilterRegex(pattern, {
+    warn: (message) => {
+      reason = message;
+      logger.warn(message);
+    },
+  });
+  if (regex === null) {
+    return {
+      error: `Tag ${kind} filter "${pattern}" is invalid, so no tags were considered: ${reason}`,
+    };
+  }
+  return { regex };
+}
+
+/**
  * Apply include/exclude regex filters to tags.
  * Returns the filtered tags and whether include-filter recovery mode is active.
+ * A pattern that does not compile fails closed: no tag survives and `filterError`
+ * names the bad pattern, so a typo never widens the candidate set.
  */
 function applyIncludeExcludeFilters(
   container: Container,
   tags: string[],
   logContainer: TagCandidatesLogger,
-): { filteredTags: string[]; allowIncludeFilterRecovery: boolean } {
+): { filteredTags: string[]; allowIncludeFilterRecovery: boolean; filterError?: string } {
   let filteredTags = tags;
   let allowIncludeFilterRecovery = false;
 
   if (container.includeTags) {
-    const includeTagsRegex = compileFilterRegex(container.includeTags, logContainer);
-    if (includeTagsRegex) {
-      filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
-      if (container.image.tag.semver && !includeTagsRegex.test(container.image.tag.value)) {
-        logContainer.warn(
-          `Current tag "${container.image.tag.value}" does not match includeTags regex "${container.includeTags}". Looking for a newer tag within the filtered tags.`,
-        );
-        allowIncludeFilterRecovery = true;
-      }
+    const includeTagsRegex = compileFilter('include', container.includeTags, logContainer);
+    if ('error' in includeTagsRegex) {
+      return { filteredTags: [], allowIncludeFilterRecovery, filterError: includeTagsRegex.error };
+    }
+    const { regex } = includeTagsRegex;
+    filteredTags = filteredTags.filter((tag) => regex.test(tag));
+    if (container.image.tag.semver && !regex.test(container.image.tag.value)) {
+      logContainer.warn(
+        `Current tag "${container.image.tag.value}" does not match includeTags regex "${container.includeTags}". Looking for a newer tag within the filtered tags.`,
+      );
+      allowIncludeFilterRecovery = true;
     }
   } else {
     filteredTags = filteredTags.filter((tag) => !tag.startsWith('sha'));
   }
 
   if (container.excludeTags) {
-    const excludeTagsRegex = compileFilterRegex(container.excludeTags, logContainer);
-    if (excludeTagsRegex) {
-      filteredTags = filteredTags.filter((tag) => !excludeTagsRegex.test(tag));
+    const excludeTagsRegex = compileFilter('exclude', container.excludeTags, logContainer);
+    if ('error' in excludeTagsRegex) {
+      return { filteredTags: [], allowIncludeFilterRecovery, filterError: excludeTagsRegex.error };
     }
+    const { regex } = excludeTagsRegex;
+    filteredTags = filteredTags.filter((tag) => !regex.test(tag));
   }
 
   filteredTags = filteredTags.filter((tag) => !tag.endsWith('.sig'));
@@ -193,6 +223,8 @@ interface TagInsight {
 interface TagCandidatesResult {
   tags: string[];
   noUpdateReason?: string;
+  /** Set when an include/exclude regex is invalid; surfaced as the container's lookup error. */
+  error?: string;
   insight?: TagInsight;
 }
 
@@ -954,11 +986,14 @@ export function getTagCandidates(
   logContainer: TagCandidatesLogger,
   computeInsight = true,
 ): TagCandidatesResult {
-  const { filteredTags: includedTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
-    container,
-    tags,
-    logContainer,
-  );
+  const {
+    filteredTags: includedTags,
+    allowIncludeFilterRecovery,
+    filterError,
+  } = applyIncludeExcludeFilters(container, tags, logContainer);
+  if (filterError) {
+    return { tags: [], error: filterError };
+  }
   // Rejected major/minor lines never compete, so the next eligible tag is the one offered.
   const baseTags = filterLineSkippedTags(
     includedTags,

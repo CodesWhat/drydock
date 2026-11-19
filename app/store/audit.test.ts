@@ -640,3 +640,29 @@ describe('retention configuration', () => {
     expect(audit.getAuditEntries().total).toBe(1);
   });
 });
+
+describe('runOutsideAuditActor', () => {
+  test('hides the bound actor from the callback and from timers it arms, and restores it after', async () => {
+    const { getAuditActor, runOutsideAuditActor, runWithAuditActor } = await import(
+      './audit-actor.js'
+    );
+    let inside: string | undefined = 'unset';
+    let timer: string | undefined = 'unset';
+    let after: string | undefined;
+    await runWithAuditActor('admin', async () => {
+      await new Promise<void>((resolve) => {
+        runOutsideAuditActor(() => {
+          inside = getAuditActor();
+          setTimeout(() => {
+            timer = getAuditActor();
+            resolve();
+          }, 0);
+        });
+      });
+      after = getAuditActor();
+    });
+    expect(inside).toBeUndefined();
+    expect(timer).toBeUndefined();
+    expect(after).toBe('admin');
+  });
+});

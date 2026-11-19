@@ -803,8 +803,7 @@ describe('docker tag candidates module', () => {
     expect(avgMs).toBeLessThan(200);
   });
 
-  // Coverage for branch: excludeTags compile fails (safeRegExp returns null) → no filtering
-  test('skips exclude filtering when excludeTags regex fails to compile', () => {
+  test('fails closed when excludeTags regex fails to compile', () => {
     const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementationOnce(() => {
       throw new Error('bad regex');
     });
@@ -816,9 +815,37 @@ describe('docker tag candidates module', () => {
       log,
     );
 
-    // With failed excludeTags compile, all tags pass through unfiltered (sorted descending)
-    expect(result.tags).toEqual(['1.0.2', '1.0.1']);
+    expect(result.tags).toEqual([]);
+    expect(result.error).toContain('Tag exclude filter "[invalid" is invalid');
+    expect(result.error).toContain('bad regex');
     compileSpy.mockRestore();
+  });
+
+  test('fails closed when includeTags regex fails to compile', () => {
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      createContainer({ includeTags: '[invalid' }),
+      ['1.0.1', '1.0.2'],
+      log,
+    );
+
+    expect(result.tags).toEqual([]);
+    expect(result.error).toContain('Tag include filter "[invalid" is invalid');
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
+  });
+
+  test('fails closed when a filter pattern exceeds the maximum length', () => {
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      createContainer({ excludeTags: 'a'.repeat(1025) }),
+      ['1.0.1'],
+      log,
+    );
+
+    expect(result.tags).toEqual([]);
+    expect(result.error).toContain('exceeds maximum length');
   });
 
   // Coverage for branch: specific-tag pin gate without debug function

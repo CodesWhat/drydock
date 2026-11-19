@@ -25,6 +25,7 @@ import {
   getWatcherConfigurations,
 } from '../configuration/index.js';
 import type Registry from '../registries/Registry.js';
+import { runOutsideAuditActor } from '../store/audit-actor.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import type Watcher from '../watchers/Watcher.js';
@@ -1163,7 +1164,16 @@ async function applyReconcilePlanForKind(
  * the same reasoning that makes this diff-based rather than
  * deregister-all-and-reinit in the first place.
  */
-export async function reconcileComponentsWithConfiguration(): Promise<ComponentReconcileResult> {
+export function reconcileComponentsWithConfiguration(): Promise<ComponentReconcileResult> {
+  // Reloads run inside the API request that asked for them. Registering a
+  // component arms its own schedulers, and async context flows into those
+  // timers, so without leaving the request's audit actor here every later
+  // scheduled scan or auto-update would be attributed to the admin who
+  // triggered the reload.
+  return runOutsideAuditActor(reconcileComponents);
+}
+
+async function reconcileComponents(): Promise<ComponentReconcileResult> {
   const result: ComponentReconcileResult = {
     added: [],
     changed: [],

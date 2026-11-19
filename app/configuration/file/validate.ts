@@ -346,13 +346,18 @@ async function validateEntry(
  * standalone candidate map — the caller is responsible for it already being
  * the merged (env-over-file) result when validating a running instance's
  * effective configuration; this function does no merging of its own.
+ * `watchersOnly` limits the walk to watcher schemas (the env-only startup gate).
  */
 export async function validateConfiguration(
   envMap: Record<string, string | undefined>,
+  options: { watchersOnly?: boolean } = {},
 ): Promise<ConfigurationValidationResult> {
   const errors: ConfigurationValidationError[] = [];
 
   const discoveryEntries = withCandidateEnv(envMap, () => {
+    if (options.watchersOnly) {
+      return collectWatcherEntries(getWatcherConfigurations());
+    }
     validateSectionSchemas(errors);
     return [
       ...collectWatcherEntries(getWatcherConfigurations()),

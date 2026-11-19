@@ -235,8 +235,9 @@ getDefaultDigestWatch();
  *
  * Scoped to configurations a file actually touched: when `configFileSources`
  * has no `'file'`-sourced key (a pure env-only deployment, no drydock.yml or
- * an empty one), this returns `{ errors: [] }` without constructing a single
- * component. That's deliberate, not an optimization — every one of today's
+ * an empty one), only watcher configurations are validated (an invalid watcher
+ * must stop startup on every install). Every other kind is skipped, which is
+ * deliberate, not an optimization — every one of today's
  * env-only call sites (registerComponents' try/warn/continue for triggers,
  * registries and authentications; api.init()'s unconditional section-schema
  * reads) already runs unchanged, so gating on "did a file contribute
@@ -256,10 +257,13 @@ export async function validateStartupConfiguration(): Promise<{
   errors: Array<{ path: string; envKey: string; message: string }>;
 }> {
   const hasFileSourcedValue = Object.values(configFileSources).includes('file');
-  if (!hasFileSourcedValue) {
-    return { errors: [] };
-  }
   const { validateConfiguration } = await import('./file/validate.js');
+  if (!hasFileSourcedValue) {
+    // Env-only: every other kind keeps its register-time try/warn/continue,
+    // but an invalid watcher (bad filter regex, restart-loop threshold) must
+    // stop startup the same way it does with a drydock.yml.
+    return validateConfiguration(ddEnvVars, { watchersOnly: true });
+  }
   return validateConfiguration(ddEnvVars);
 }
 
