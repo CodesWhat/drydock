@@ -988,4 +988,76 @@ describe('CSRF middleware', () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
   });
+
+  describe('cookie-free unsafe requests', () => {
+    function run(headers: Record<string, string | undefined>, cookie?: string) {
+      const req = createReq({
+        method: 'POST',
+        protocol: 'https',
+        headers: {
+          host: 'drydock.example.com',
+          ...(cookie === undefined ? {} : { cookie }),
+          ...headers,
+        },
+      });
+      const res = createRes();
+      const next = vi.fn();
+      requireSameOriginForMutations(req as any, res as any, next);
+      return { res, next };
+    }
+
+    test.each([undefined, '   '])(
+      'rejects cross-site Fetch Metadata even with cookie %j',
+      (cookie) => {
+        const { res, next } = run({ 'sec-fetch-site': 'cross-site' }, cookie);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+      },
+    );
+
+    test.each([undefined, '   '])('rejects a mismatched Origin with cookie %j', (cookie) => {
+      const { res, next } = run({ origin: 'https://evil.example.com' }, cookie);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test.each([
+      ['invalid Origin', { origin: 'not a url' }],
+      ['null Origin', { origin: 'null' }],
+      ['empty Origin', { origin: '' }],
+      ['mismatched Referer', { referer: 'https://evil.example.com/page' }],
+      ['unparseable Referer', { referer: '::' }],
+    ])('rejects %s without cookies', (_name, headers) => {
+      const { res, next } = run(headers);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test('allows a matching Origin without cookies', () => {
+      const { res, next } = run({
+        origin: 'https://drydock.example.com',
+        'sec-fetch-site': 'same-origin',
+      });
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('allows header-free CLI and integration requests', () => {
+      const { res, next } = run({});
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('leaves safe methods unchanged', () => {
+      const req = createReq({
+        method: 'GET',
+        protocol: 'https',
+        headers: { host: 'drydock.example.com', 'sec-fetch-site': 'cross-site' },
+      });
+      const res = createRes();
+      const next = vi.fn();
+      requireSameOriginForMutations(req as any, res as any, next);
+      expect(next).toHaveBeenCalled();
+    });
+  });
 });

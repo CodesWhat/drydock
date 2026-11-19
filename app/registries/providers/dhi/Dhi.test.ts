@@ -74,6 +74,7 @@ describe('DHI Registry', () => {
       method: 'GET',
       url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -97,6 +98,7 @@ describe('DHI Registry', () => {
       method: 'GET',
       url: 'https://dhi.io/token?service=registry.docker.io&scope=repository%3Apython%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
       },
