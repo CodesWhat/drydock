@@ -75,6 +75,7 @@ import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import { PORTWING_CONTAINER_EVENT, PortwingStateAlerts } from './portwing-container-events.js';
 import { StandardKeyRotation } from './standard-key-rotation.js';
 import { createRotationRequest } from './standard-key-rotation-client.js';
 
@@ -437,6 +438,7 @@ export class AgentClient {
   private readonly inventory: AgentInventoryRefresh;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
+  private portwingStateAlerts?: PortwingStateAlerts;
   /**
    * Set by portwing-ws.ts immediately after EdgeAgentAdapter.activate() for
    * edge-mode connections. When present, container-op methods that have a
@@ -1541,6 +1543,8 @@ export class AgentClient {
     }
     clearTimeout(this.statsChangedTimer);
     this.statsChangedTimer = undefined;
+    this.portwingStateAlerts?.dispose();
+    this.portwingStateAlerts = undefined;
   }
 
   private scheduleStatsChanged(): void {
@@ -2694,6 +2698,11 @@ export class AgentClient {
         }
         return;
       }
+      case PORTWING_CONTAINER_EVENT:
+        // Portwing sends this only when it advertises the dd:container-event capability.
+        this.portwingStateAlerts ??= new PortwingStateAlerts(this.name, this.log);
+        this.portwingStateAlerts.observe(data);
+        return;
       case 'dd:security-scan-cycle-complete': {
         const payload = this.parseSecurityScanCycleCompleteEventPayload(data);
         if (payload) {

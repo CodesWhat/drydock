@@ -528,6 +528,20 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     ).toHaveBeenCalledWith('dd:container-added', container);
   });
 
+  test('dd:container_event reaches handleEvent with hyphenated name', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    const payload = { containerId: 'c1', name: 'test', action: 'die', exitCode: 1, time: 1 };
+    sendFrame(ws, 'dd:container_event', payload);
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(
+      (client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent,
+    ).toHaveBeenCalledWith('dd:container-event', payload);
+  });
+
   test('dd:container_updated reaches handleEvent with hyphenated name', async () => {
     const { adapter, ws, client } = createAdapter();
     adapter.activate();
