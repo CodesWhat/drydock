@@ -14,6 +14,10 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
+import {
+  AGENT_RESPONSE_TOO_LARGE_CODE,
+  AgentResponseTooLargeError,
+} from './AgentResponseTooLargeError.js';
 import { checkAgentVersion } from './agent-version-alerts.js';
 import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
@@ -673,6 +677,12 @@ export class EdgeAgentAdapter {
     const liveStream = requestId ? this.liveContainerLogStreams.get(requestId) : undefined;
     if (requestId && liveStream?.containerId === containerId) {
       this.liveContainerLogStreams.delete(requestId);
+      if (data.code === AGENT_RESPONSE_TOO_LARGE_CODE) {
+        liveStream.handlers.onError(
+          new AgentResponseTooLargeError(typeof data.logs === 'string' ? data.logs : undefined),
+        );
+        return;
+      }
       if (typeof data.logs === 'string' && data.logs.length > 0) {
         liveStream.handlers.onChunk({ stream: 'stdout', logs: data.logs });
       }
@@ -681,6 +691,12 @@ export class EdgeAgentAdapter {
     }
     const pending = this.takePendingContainerResponse('log', containerId, data);
     if (!pending) {
+      return;
+    }
+    if (data.code === AGENT_RESPONSE_TOO_LARGE_CODE) {
+      pending.reject(
+        new AgentResponseTooLargeError(typeof data.logs === 'string' ? data.logs : undefined),
+      );
       return;
     }
     pending.resolve(data.logs);
@@ -887,7 +903,12 @@ export class EdgeAgentAdapter {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(pendingKey);
-      pending.reject(new Error(typeof data.message === 'string' ? data.message : 'agent error'));
+      const message = typeof data.message === 'string' ? data.message : undefined;
+      pending.reject(
+        data.code === AGENT_RESPONSE_TOO_LARGE_CODE
+          ? new AgentResponseTooLargeError(message)
+          : new Error(message ?? 'agent error'),
+      );
     }
   }
 

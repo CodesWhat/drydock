@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import type { Request, Response } from 'express';
 import type { AgentClient } from '../../agent/AgentClient.js';
+import { AgentResponseTooLargeError } from '../../agent/AgentResponseTooLargeError.js';
 import { getOutboundHttpTimeoutMs } from '../../configuration/runtime-defaults.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
@@ -356,6 +357,10 @@ async function handleAgentContainerLogs({
       logs,
     });
   } catch (error: unknown) {
+    if (error instanceof AgentResponseTooLargeError) {
+      sendErrorResponse(res, 413, CONTAINER_LOG_TOO_LARGE_MESSAGE);
+      return true;
+    }
     log.warn(`Error fetching logs from agent (${sanitizeLogParam(getErrorMessage(error), 500)})`);
     sendErrorResponse(res, 500, CONTAINER_LOG_ERROR_MESSAGE);
   }
