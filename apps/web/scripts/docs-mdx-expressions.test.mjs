@@ -66,8 +66,8 @@ test("without the plugin the bare identifier is an expression (guards the test i
 });
 
 // MDX compiles {identifier} to a JS expression that throws ReferenceError when the
-// page renders. The docs render per request (layout.tsx awaits headers() for the CSP
-// nonce), so `next build` never catches it and the page 500s in production.
+// page renders. Docs are prerendered by `next build`, which would fail on it too, but
+// this catches it in seconds without a full build.
 test("no docs page contains an unresolved MDX expression after the remark pipeline", async () => {
   assert.ok(existsSync(docsRoot), "run `npm run sync:docs` first: content/docs is generated");
   const files = listMdx(docsRoot);

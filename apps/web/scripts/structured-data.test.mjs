@@ -199,10 +199,10 @@ test("docs crumbs come from pages that exist, not slug text", () => {
   assert.doesNotMatch(source, /charAt\(0\)\.toUpperCase/);
 });
 
-test("every JSON-LD script goes through the nonce component", () => {
+test("every JSON-LD script goes through the shared component", () => {
   const component = read("../src/components/json-ld.tsx");
-  assert.match(component, /x-nonce/);
-  assert.match(component, /nonce=\{nonce\}/);
+  assert.doesNotMatch(component, /headers\(/);
+  assert.match(component, /replace\(\/<\/g/);
   const offenders = [];
   const visit = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
