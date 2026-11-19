@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- Update the base image to Node 24.22.3 (`node:24-alpine` digest `116b800c`, Alpine 3.24.4). Node 24.22.2 is affected by CVE-2026-123863, CVE-2026-123864, CVE-2026-123865, CVE-2026-123866, CVE-2026-123872, CVE-2026-123874 and CVE-2026-126051, all rated high and fixed in 24.22.3.
+
 ## [1.8.0-rc.16] - 2026-11-19
 
 > [!WARNING]
