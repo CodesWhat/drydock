@@ -25,7 +25,10 @@ import { useContainersViewTemplateContext } from './containersViewTemplateContex
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { updateInsightColor } from '../../utils/display';
-import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
+import {
+  findDryRunActionTrigger,
+  isManagedUpdateTrigger,
+} from '../../views/containers/useContainerTriggers';
 import { enrichContainerPorts } from '../../utils/ports';
 import { useAgentHosts } from '../../composables/useAgentHosts';
 
@@ -201,10 +204,6 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
 function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
-}
-
-function isManagedUpdateTrigger(trigger: { type: string }) {
-  return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
 function getUpdateKindLabel(kind: Container['updateKind']) {

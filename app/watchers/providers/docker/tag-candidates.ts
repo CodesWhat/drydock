@@ -4,6 +4,7 @@ import semver from 'semver';
 import type { Container, ContainerResult } from '../../../model/container.js';
 import { filterLineSkippedTags } from '../../../model/skip-scope.js';
 import { isPinGateGoverned, type TagFamilyPolicy } from '../../../tag/family.js';
+import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import {
   diff as diffSemver,
   isGreater as isGreaterSemver,
@@ -21,39 +22,10 @@ import {
   selectVersionPopulation,
   type VersionTagSource,
 } from '../../../tag/version-population.js';
-import { getErrorMessage } from '../../../util/error.js';
-
-interface SafeRegex {
-  test(s: string): boolean;
-}
 
 interface TagCandidatesLogger {
   warn(message: string): void;
   debug?: (message: string) => void;
-}
-
-/**
- * Safely compile a user-supplied regex pattern.
- * Returns null (and logs a warning) when the pattern is invalid.
- * Uses RE2 (via re2js), which is inherently immune to ReDoS backtracking attacks.
- */
-function safeRegExp(pattern: string, logger: TagCandidatesLogger): SafeRegex | null {
-  const MAX_PATTERN_LENGTH = 1024;
-  if (pattern.length > MAX_PATTERN_LENGTH) {
-    logger.warn(`Regex pattern exceeds maximum length of ${MAX_PATTERN_LENGTH} characters`);
-    return null;
-  }
-  try {
-    const compiled = RE2JS.compile(pattern);
-    return {
-      test(s: string): boolean {
-        return compiled.matcher(s).find();
-      },
-    };
-  } catch (e: unknown) {
-    logger.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(e, String(e))}`);
-    return null;
-  }
 }
 
 /**
@@ -69,7 +41,7 @@ function applyIncludeExcludeFilters(
   let allowIncludeFilterRecovery = false;
 
   if (container.includeTags) {
-    const includeTagsRegex = safeRegExp(container.includeTags, logContainer);
+    const includeTagsRegex = compileFilterRegex(container.includeTags, logContainer);
     if (includeTagsRegex) {
       filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
       if (container.image.tag.semver && !includeTagsRegex.test(container.image.tag.value)) {
@@ -84,7 +56,7 @@ function applyIncludeExcludeFilters(
   }
 
   if (container.excludeTags) {
-    const excludeTagsRegex = safeRegExp(container.excludeTags, logContainer);
+    const excludeTagsRegex = compileFilterRegex(container.excludeTags, logContainer);
     if (excludeTagsRegex) {
       filteredTags = filteredTags.filter((tag) => !excludeTagsRegex.test(tag));
     }
