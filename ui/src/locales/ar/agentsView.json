@@ -87,6 +87,60 @@
         "lastSeen": "آخر ظهور",
         "never": "أبداً"
       }
+    },
+    "edgeKeys": {
+      "toggle": "مفاتيح وكلاء edge",
+      "hide": "إخفاء مفاتيح وكلاء edge",
+      "title": "مفاتيح وكلاء edge",
+      "description": "سجّل المفتاح العام لوكيل Portwing edge ليتمكن من الاتصال بوحدة التحكم هذه. تُخزَّن المفاتيح العامة فقط، لذلك لا يظهر هنا أي شيء سري.",
+      "registerButton": "تسجيل مفتاح",
+      "loading": "جارٍ تحميل المفاتيح...",
+      "empty": "لا توجد مفاتيح وكلاء edge مسجلة",
+      "loadError": "تعذر تحميل مفاتيح وكلاء edge",
+      "forbidden": "تتطلب إدارة مفاتيح وكلاء edge جلسة مسؤول مسجَّل الدخول. لا تستطيع مفاتيح API ولا تسجيلات دخول الاسترداد ذلك.",
+      "registered": "تم تسجيل {label} كمفتاح {keyId}.",
+      "revokeButton": "إلغاء",
+      "errors": {
+        "register": "تعذر تسجيل المفتاح",
+        "revoke": "تعذر إلغاء المفتاح"
+      },
+      "columns": {
+        "label": "التسمية",
+        "keyId": "معرّف المفتاح",
+        "created": "تاريخ الإنشاء",
+        "status": "الحالة"
+      },
+      "status": {
+        "active": "نشط",
+        "revoked": "ملغى"
+      },
+      "form": {
+        "title": "تسجيل مفتاح وكيل edge",
+        "label": "التسمية",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "المفتاح العام",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "الصق مفتاح base64 المكوّن من 44 حرفًا، أو السطر الكامل الذي يطبعه portwing keygen -pub-from.",
+        "submit": "تسجيل",
+        "invalidKey": "يجب أن يكون المفتاح العام بصيغة base64 وأن يُفك ترميزه إلى 32 بايت بالضبط."
+      },
+      "revoke": {
+        "header": "إلغاء المفتاح",
+        "message": "هل تريد إلغاء {label}؟ سيُفصل وكيله الآن ولن يتمكن من إعادة الاتصال.",
+        "accept": "إلغاء"
+      },
+      "snippet": {
+        "show": "إظهار مقتطف الوكيل",
+        "hide": "إخفاء مقتطف الوكيل",
+        "title": "إعداد الوكيل",
+        "description": "أنشئ زوج المفاتيح على مضيف الوكيل باستخدام portwing keygen، وسجّل مفتاحه العام هنا، ثم شغّل الوكيل بأحد هذين المقتطفين.",
+        "controllerUrl": "عنوان URL لوحدة التحكم",
+        "agentName": "اسم الوكيل",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "نسخ",
+        "copied": "تم النسخ"
+      }
     }
   }
 }

@@ -87,6 +87,60 @@
         "lastSeen": "마지막 접속",
         "never": "없음"
       }
+    },
+    "edgeKeys": {
+      "toggle": "엣지 에이전트 키",
+      "hide": "엣지 에이전트 키 숨기기",
+      "title": "엣지 에이전트 키",
+      "description": "Portwing 엣지 에이전트의 공개 키를 등록하면 이 컨트롤러에 접속할 수 있습니다. 공개 키만 저장되므로 여기에는 비밀 정보가 표시되지 않습니다.",
+      "registerButton": "키 등록",
+      "loading": "키를 불러오는 중...",
+      "empty": "등록된 엣지 에이전트 키가 없습니다",
+      "loadError": "엣지 에이전트 키를 불러오지 못했습니다",
+      "forbidden": "엣지 에이전트 키 관리에는 로그인된 관리자 세션이 필요합니다. API 키와 복구 로그인으로는 할 수 없습니다.",
+      "registered": "{label}을(를) 키 {keyId}로 등록했습니다.",
+      "revokeButton": "폐기",
+      "errors": {
+        "register": "키를 등록하지 못했습니다",
+        "revoke": "키를 폐기하지 못했습니다"
+      },
+      "columns": {
+        "label": "레이블",
+        "keyId": "키 ID",
+        "created": "생성일",
+        "status": "상태"
+      },
+      "status": {
+        "active": "활성",
+        "revoked": "폐기됨"
+      },
+      "form": {
+        "title": "엣지 에이전트 키 등록",
+        "label": "레이블",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "공개 키",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "44자 base64 키 또는 portwing keygen -pub-from이 출력한 전체 줄을 붙여넣으세요.",
+        "submit": "등록",
+        "invalidKey": "공개 키는 base64여야 하며 디코딩하면 정확히 32바이트여야 합니다."
+      },
+      "revoke": {
+        "header": "키 폐기",
+        "message": "{label}을(를) 폐기할까요? 해당 에이전트는 즉시 연결이 끊기며 다시 연결할 수 없습니다.",
+        "accept": "폐기"
+      },
+      "snippet": {
+        "show": "에이전트 스니펫 보기",
+        "hide": "에이전트 스니펫 숨기기",
+        "title": "에이전트 설정",
+        "description": "에이전트 호스트에서 portwing keygen으로 키 쌍을 만들고, 공개 키를 여기에 등록한 다음 아래 중 하나로 에이전트를 시작하세요.",
+        "controllerUrl": "컨트롤러 URL",
+        "agentName": "에이전트 이름",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "복사",
+        "copied": "복사됨"
+      }
     }
   }
 }

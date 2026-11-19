@@ -37,6 +37,12 @@ vi.mock('@/services/agent', () => ({
   getAgents: vi.fn(),
 }));
 
+vi.mock('@/services/portwing-key', () => ({
+  listPortwingKeys: vi.fn().mockResolvedValue([]),
+  registerPortwingKey: vi.fn(),
+  revokePortwingKey: vi.fn(),
+}));
+
 vi.mock('@/services/log', () => ({
   getLogEntries: vi.fn(),
 }));
@@ -797,5 +803,15 @@ describe('AgentsView', () => {
     expect(wrapper.find('.agent-sort-control').exists()).toBe(false);
     expect(wrapper.get('.agent-card-table').attributes('data-hoist-card-sort')).toBe('false');
     expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+  });
+
+  it('toggles the edge agent keys panel', async () => {
+    const wrapper = await mountAgentsView();
+    expect(wrapper.find('[data-testid="edge-keys-panel"]').exists()).toBe(false);
+    await wrapper.get('[data-testid="edge-keys-toggle"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="edge-keys-panel"]').exists()).toBe(true);
+    await wrapper.get('[data-testid="edge-keys-toggle"]').trigger('click');
+    expect(wrapper.find('[data-testid="edge-keys-panel"]').exists()).toBe(false);
   });
 });

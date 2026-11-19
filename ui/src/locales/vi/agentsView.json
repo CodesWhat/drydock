@@ -87,6 +87,60 @@
         "lastSeen": "Lần cuối thấy",
         "never": "chưa bao giờ"
       }
+    },
+    "edgeKeys": {
+      "toggle": "Khóa agent edge",
+      "hide": "Ẩn khóa agent edge",
+      "title": "Khóa agent edge",
+      "description": "Đăng ký khóa công khai của một agent edge Portwing để nó có thể kết nối tới bộ điều khiển này. Chỉ khóa công khai được lưu, nên ở đây không hiển thị gì bí mật.",
+      "registerButton": "Đăng ký khóa",
+      "loading": "Đang tải khóa...",
+      "empty": "Chưa có khóa agent edge nào được đăng ký",
+      "loadError": "Không tải được khóa agent edge",
+      "forbidden": "Quản lý khóa agent edge cần một phiên quản trị viên đã đăng nhập. Khóa API và đăng nhập khôi phục không làm được việc này.",
+      "registered": "Đã đăng ký {label} với khóa {keyId}.",
+      "revokeButton": "Thu hồi",
+      "errors": {
+        "register": "Không đăng ký được khóa",
+        "revoke": "Không thu hồi được khóa"
+      },
+      "columns": {
+        "label": "Nhãn",
+        "keyId": "ID khóa",
+        "created": "Ngày tạo",
+        "status": "Trạng thái"
+      },
+      "status": {
+        "active": "Đang hoạt động",
+        "revoked": "Đã thu hồi"
+      },
+      "form": {
+        "title": "Đăng ký khóa agent edge",
+        "label": "Nhãn",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "Khóa công khai",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "Dán khóa base64 dài 44 ký tự hoặc cả dòng do portwing keygen -pub-from in ra.",
+        "submit": "Đăng ký",
+        "invalidKey": "Khóa công khai phải ở dạng base64 và giải mã thành đúng 32 byte."
+      },
+      "revoke": {
+        "header": "Thu hồi khóa",
+        "message": "Thu hồi {label}? Agent của khóa này bị ngắt ngay và không thể kết nối lại.",
+        "accept": "Thu hồi"
+      },
+      "snippet": {
+        "show": "Hiện đoạn mã agent",
+        "hide": "Ẩn đoạn mã agent",
+        "title": "Thiết lập agent",
+        "description": "Tạo cặp khóa trên máy agent bằng portwing keygen, đăng ký khóa công khai tại đây, rồi khởi chạy agent bằng một trong các đoạn mã này.",
+        "controllerUrl": "URL bộ điều khiển",
+        "agentName": "Tên agent",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "Sao chép",
+        "copied": "Đã sao chép"
+      }
     }
   }
 }

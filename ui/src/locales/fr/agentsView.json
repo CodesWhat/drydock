@@ -87,6 +87,60 @@
         "lastSeen": "Dernière activité",
         "never": "jamais"
       }
+    },
+    "edgeKeys": {
+      "toggle": "Clés d'agents edge",
+      "hide": "Masquer les clés d'agents edge",
+      "title": "Clés d'agents edge",
+      "description": "Enregistrez la clé publique d'un agent edge Portwing pour qu'il puisse se connecter à ce contrôleur. Seules les clés publiques sont stockées, rien de secret n'est donc affiché ici.",
+      "registerButton": "Enregistrer une clé",
+      "loading": "Chargement des clés...",
+      "empty": "Aucune clé d'agent edge enregistrée",
+      "loadError": "Échec du chargement des clés d'agents edge",
+      "forbidden": "La gestion des clés d'agents edge nécessite une session administrateur connectée. Les clés d'API et les connexions de récupération ne le permettent pas.",
+      "registered": "{label} enregistrée sous la clé {keyId}.",
+      "revokeButton": "Révoquer",
+      "errors": {
+        "register": "Échec de l'enregistrement de la clé",
+        "revoke": "Échec de la révocation de la clé"
+      },
+      "columns": {
+        "label": "Libellé",
+        "keyId": "ID de clé",
+        "created": "Créée",
+        "status": "Statut"
+      },
+      "status": {
+        "active": "Active",
+        "revoked": "Révoquée"
+      },
+      "form": {
+        "title": "Enregistrer une clé d'agent edge",
+        "label": "Libellé",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "Clé publique",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "Collez la clé base64 de 44 caractères ou la ligne complète affichée par portwing keygen -pub-from.",
+        "submit": "Enregistrer",
+        "invalidKey": "La clé publique doit être en base64 et faire exactement 32 octets une fois décodée."
+      },
+      "revoke": {
+        "header": "Révoquer la clé",
+        "message": "Révoquer {label} ? Son agent est déconnecté immédiatement et ne pourra plus se reconnecter.",
+        "accept": "Révoquer"
+      },
+      "snippet": {
+        "show": "Afficher l'extrait de l'agent",
+        "hide": "Masquer l'extrait de l'agent",
+        "title": "Configuration de l'agent",
+        "description": "Générez la paire de clés sur l'hôte de l'agent avec portwing keygen, enregistrez ici sa clé publique, puis démarrez l'agent avec l'un de ces extraits.",
+        "controllerUrl": "URL du contrôleur",
+        "agentName": "Nom de l'agent",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "Copier",
+        "copied": "Copié"
+      }
     }
   }
 }
