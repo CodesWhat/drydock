@@ -1367,6 +1367,23 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Pinned image digest has no newer tag');
   });
 
+  it('lists the per-type update candidates under the version row', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      newTag: '3.0.0',
+      updateCandidates: [
+        { kind: 'patch', tag: '1.2.9' },
+        { kind: 'major', tag: '3.0.0' },
+      ],
+    };
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.get('[data-test="update-candidate-patch"]').text()).toContain('1.2.9');
+    expect(wrapper.get('[data-test="update-candidate-major"]').text()).toContain('3.0.0');
+  });
+
   it('shows pinned-tag insight as a current-to-newer version row and kind pill (#498)', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = {

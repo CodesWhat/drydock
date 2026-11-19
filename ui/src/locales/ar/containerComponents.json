@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "تتوفر نسخة أحدث: {tag}. هذا الـ Tag مثبّت، ولن يقوم drydock بتحديثه تلقائيًا."
     },
+    "updateCandidates": {
+      "title": "المرشحون حسب نوع التحديث"
+    },
     "eligibilityBadges": {
       "securityBlocked": "محظور أمنياً",
       "rolledBack": "تم التراجع",

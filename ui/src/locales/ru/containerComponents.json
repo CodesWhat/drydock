@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Доступна новая версия: {tag}. Этот Tag закреплён, drydock не обновит его автоматически."
     },
+    "updateCandidates": {
+      "title": "Кандидаты по типу обновления"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Заблокировано безопасностью",
       "rolledBack": "Откат выполнен",

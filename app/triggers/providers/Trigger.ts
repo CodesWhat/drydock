@@ -20,6 +20,7 @@ import {
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
 import { getGroupExcludeEntries, resolveUpdateModeCeiling } from '../../model/group-policy.js';
+import { applySeparateUpdateTypes } from '../../model/separate-update-types.js';
 import { withCurrentGroupPolicy } from '../../store/group-policy.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
@@ -905,6 +906,7 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   manual?: 'all' | 'oninclude';
   order?: number;
   threshold?: string;
+  separateupdatetypes?: boolean;
   mode?: string;
   once?: boolean;
   disabletitle?: boolean;
@@ -2945,7 +2947,9 @@ class Trigger<
   async handleContainerReport(emittedReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(emittedReport);
-    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
+    const containerReport = this.withSeparateUpdateType(
+      Trigger.withCurrentGroupPolicy(emittedReport),
+    );
 
     // Confirmation cleanup must run regardless of the current global mode or
     // notification-rule routing. Otherwise an auto -> manual/notify -> auto
@@ -3020,7 +3024,9 @@ class Trigger<
     for (const report of emittedReports) {
       Trigger.canonicalizeReportName(report);
     }
-    const containerReports = emittedReports.map((report) => Trigger.withCurrentGroupPolicy(report));
+    const containerReports = emittedReports.map((report) =>
+      this.withSeparateUpdateType(Trigger.withCurrentGroupPolicy(report)),
+    );
 
     // Mirror the simple/digest suppression-lift (#408): a watcher report
     // confirming updateAvailable=false means the post-update state has landed,
@@ -3217,7 +3223,9 @@ class Trigger<
    */
   async handleContainerReportDigest(emittedReport: ContainerReport) {
     Trigger.canonicalizeReportName(emittedReport);
-    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
+    const containerReport = this.withSeparateUpdateType(
+      Trigger.withCurrentGroupPolicy(emittedReport),
+    );
 
     const { container } = containerReport;
     const containerName = getContainerNotificationKey(container) || fullName(container);
@@ -3858,6 +3866,19 @@ class Trigger<
     return container === report.container ? report : { ...report, container };
   }
 
+  /**
+   * With `separateupdatetypes`, a report whose primary update is above the threshold carries
+   * the best candidate inside it instead, so everything downstream (the once gate, the
+   * notification text, the update itself) names that tag. Returns the same report otherwise.
+   */
+  private withSeparateUpdateType(report: ContainerReport): ContainerReport {
+    if (!report.container) {
+      return report;
+    }
+    const container = applySeparateUpdateTypes(report.container, this);
+    return container === report.container ? report : { ...report, container };
+  }
+
   static canonicalizeReportName(report: ContainerReport): void {
     const name = report.container?.name;
     if (typeof name !== 'string') return;
@@ -4167,6 +4188,7 @@ class Trigger<
         .valid('simple', 'batch', 'digest', 'batch+digest')
         .default('simple'),
       once: this.joi.boolean().default(true),
+      separateupdatetypes: this.joi.boolean(),
       digestcron: this.joi
         .string()
         .default('0 8 * * *')

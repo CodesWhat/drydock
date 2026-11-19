@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "有更新版本可用：{tag}。此 Tag 已固定，drydock 不會自動更新。"
     },
+    "updateCandidates": {
+      "title": "依更新類型列出的候選版本"
+    },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",
       "rolledBack": "已回滾",

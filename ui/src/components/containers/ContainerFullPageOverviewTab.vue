@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppButton from '../AppButton.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateCandidatesList from './UpdateCandidatesList.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import ContainerPortEntry from './ContainerPortEntry.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
@@ -156,6 +157,7 @@ const enrichedPorts = computed(() =>
           <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
           <span class="font-medium" style="color: var(--dd-success-badge);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
         </div>
+        <UpdateCandidatesList :candidates="selectedContainer.updateCandidates" />
         <NoUpdateReasonBadge
           v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
           :reason="selectedContainer.noUpdateReason"

@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Nieuwere versie beschikbaar: {tag}. Deze Tag is vastgezet, drydock werkt hem niet automatisch bij."
     },
+    "updateCandidates": {
+      "title": "Kandidaten per updatetype"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Beveiliging geblokkeerd",
       "rolledBack": "Teruggedraaid",

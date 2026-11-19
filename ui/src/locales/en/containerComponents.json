@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
+    "updateCandidates": {
+      "title": "Candidates by update type"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
       "rolledBack": "Rolled back",

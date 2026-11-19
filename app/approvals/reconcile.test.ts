@@ -713,6 +713,48 @@ describe('trigger threshold under auto mode', () => {
   });
 });
 
+describe('a trigger that separates update types', () => {
+  function separateTriggers(auto: 'all' | 'none') {
+    return {
+      trigger: {
+        'docker.local': {
+          type: 'docker',
+          configuration: { auto, threshold: 'minor', separateupdatetypes: true },
+          getId: () => 'docker.local',
+        } as unknown as ActionPolicyTrigger,
+      },
+    };
+  }
+
+  const majorPrimary = () =>
+    createContainer({
+      result: {
+        tag: '2.0.0',
+        updateCandidates: { minor: { tag: '1.3.0', semverDiff: 'minor' } },
+      },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '2.0.0', semverDiff: 'major' },
+    });
+
+  test('queues the candidate inside the threshold instead of the primary', async () => {
+    getStateMock.mockReturnValue(separateTriggers('none'));
+
+    await emitContainerReport({ container: majorPrimary(), changed: true });
+
+    expect(allRows()).toMatchObject([
+      { candidateRef: '1.3.0', toRef: '1.3.0', semverDiff: 'minor', decision: 'pending' },
+    ]);
+  });
+
+  test('queues nothing under auto mode, where the trigger applies the candidate itself', async () => {
+    getUpdateModeMock.mockReturnValue('auto');
+    getStateMock.mockReturnValue(separateTriggers('all'));
+
+    await emitContainerReport({ container: majorPrimary(), changed: true });
+
+    expect(allRows()).toHaveLength(0);
+  });
+});
+
 describe('update-mode flips', () => {
   test('auto to manual queues the previously auto-dispatched candidate, without duplicating', async () => {
     getUpdateModeMock.mockReturnValue('auto');

@@ -16456,3 +16456,107 @@ describe('action-policy dispatch winner gate (spec-6.0.1 slice 4)', () => {
     expect(notifierB.trigger).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('separateupdatetypes', () => {
+  const candidates = {
+    patch: { tag: '1.2.9', semverDiff: 'patch' },
+    minor: { tag: '1.5.0', semverDiff: 'minor' },
+    major: { tag: '3.0.0', semverDiff: 'major' },
+  };
+
+  function majorPrimaryContainer() {
+    return validateContainer({
+      id: 'c-separate',
+      name: 'container1',
+      watcher: 'local',
+      image: {
+        id: 'image-separate',
+        registry: { name: 'hub', url: 'https://hub' },
+        name: 'organization/image',
+        tag: { value: '1.2.3', semver: true },
+        digest: { watch: false },
+        architecture: 'arch',
+        os: 'os',
+      },
+      result: { tag: '3.0.0', updateCandidates: candidates },
+    });
+  }
+
+  async function register(configuration: Record<string, unknown>) {
+    await trigger.register('trigger', 'test', 'trigger1', {
+      ...configurationValid,
+      ...configuration,
+    });
+    trigger.init();
+  }
+
+  test('is off unless set and validates as a boolean', () => {
+    expect(
+      trigger.validateConfiguration({ ...configurationValid }).separateupdatetypes,
+    ).toBeUndefined();
+    expect(() =>
+      trigger.validateConfiguration({
+        ...configurationValid,
+        separateupdatetypes: 'maybe',
+      } as never),
+    ).toThrow();
+    expect(
+      trigger.validateConfiguration({ ...configurationValid, separateupdatetypes: true })
+        .separateupdatetypes,
+    ).toBe(true);
+  });
+
+  test('does nothing for a major primary above the threshold when off', async () => {
+    await register({ threshold: 'minor' });
+    const spy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerReport({ changed: true, container: majorPrimaryContainer() });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test('simple mode acts on the best candidate within the threshold and names its tag', async () => {
+    await register({ threshold: 'minor', separateupdatetypes: true });
+    const spy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const original = majorPrimaryContainer();
+    await trigger.handleContainerReport({ changed: true, container: original });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const sent = spy.mock.calls[0][0];
+    expect(sent.result?.tag).toBe('1.5.0');
+    expect(sent.updateKind?.semverDiff).toBe('minor');
+    expect(trigger.renderSimpleBody(sent)).toContain('can be updated to tag 1.5.0');
+    expect(trigger.renderSimpleBody(sent)).not.toContain('3.0.0');
+    // The stored container keeps its primary.
+    expect(original.result?.tag).toBe('3.0.0');
+  });
+
+  test('keeps the primary when it already reaches the threshold', async () => {
+    await register({ threshold: 'major', separateupdatetypes: true });
+    const spy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerReport({ changed: true, container: majorPrimaryContainer() });
+    expect(spy.mock.calls[0][0].result?.tag).toBe('3.0.0');
+  });
+
+  test('batch mode sends the chosen candidate', async () => {
+    await register({ threshold: 'patch', separateupdatetypes: true, mode: 'batch' });
+    const batchSpy = vi.fn().mockResolvedValue(undefined);
+    trigger.triggerBatch = batchSpy;
+    await trigger.handleContainerReports([{ changed: true, container: majorPrimaryContainer() }]);
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    expect(batchSpy.mock.calls[0][0][0].result.tag).toBe('1.2.9');
+  });
+
+  test('digest mode buffers the chosen candidate', async () => {
+    await register({ threshold: 'minor', separateupdatetypes: true, mode: 'digest' });
+    await trigger.handleContainerReportDigest({
+      changed: true,
+      container: majorPrimaryContainer(),
+    });
+    expect(trigger.digestBuffer.size).toBe(1);
+    expect(trigger.digestBuffer.get('c-separate')?.result?.tag).toBe('1.5.0');
+  });
+
+  test('passes a report without a container through', async () => {
+    await register({ threshold: 'minor', separateupdatetypes: true });
+    const report = { changed: true } as never;
+    expect(trigger.withSeparateUpdateType(report)).toBe(report);
+  });
+});

@@ -13,6 +13,7 @@ import * as registry from '../../../registry/index.js';
 import { isCredentialedInstance } from '../../../registry/index.js';
 import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
+import { computeUpdateCandidates } from '../../../tag/update-candidates.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
 import {
@@ -510,6 +511,23 @@ export async function findNewVersion(
       const errorMessage = getErrorMessage(error);
       logContainer.warn(`Digest watch failed (${errorMessage})`);
       result.lookupError = errorMessage;
+    }
+  }
+
+  // Per-type candidates are additive: the primary result.tag above is untouched.
+  // Only tag updates have types; digest-only and non-semver updates keep just
+  // the primary. Recorded only when two or more types are on offer, since a
+  // lone candidate is the primary. The primary's digest is the only one the
+  // lookup resolves.
+  if (container.image.tag.semver && tagsCandidates && tagsCandidates.length > 0) {
+    const updateCandidates = computeUpdateCandidates(
+      tagsCandidates,
+      container.image.tag.value,
+      container.transformTags,
+      { tag: result.tag, digest: result.digest },
+    );
+    if (updateCandidates) {
+      result.updateCandidates = updateCandidates;
     }
   }
 

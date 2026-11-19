@@ -10,6 +10,7 @@ import type {
 import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
+import type { UpdateCandidates } from '../tag/update-candidates.js';
 import type { ReleaseMaturityEvidence } from '../tag/version-population.js';
 import type {
   ActiveContainerUpdateOperationPhase,
@@ -119,6 +120,11 @@ export interface ContainerResult {
     tag: string;
     kind: 'major' | 'minor' | 'patch';
   };
+  // Best newer tag per update type relative to the running version. The
+  // primary tag above stays the highest allowed candidate; this only adds the
+  // narrower options. Absent for digest-only and non-semver updates, and when
+  // fewer than two types are on offer.
+  updateCandidates?: UpdateCandidates;
 }
 
 export interface ContainerReleaseNotes {
@@ -315,6 +321,12 @@ export interface ContainerReport {
   container: Container;
   changed: boolean;
 }
+
+const updateCandidateSchema = joi.object({
+  tag: joi.string().min(1).required(),
+  digest: joi.string(),
+  semverDiff: joi.string().valid('major', 'minor', 'patch').required(),
+});
 
 const containerSecurityVulnerabilitySchema = joi.object({
   id: joi.string().required(),
@@ -600,6 +612,11 @@ const schema = joi.object({
     updateInsight: joi.object({
       tag: joi.string().min(1).required(),
       kind: joi.string().valid('major', 'minor', 'patch').required(),
+    }),
+    updateCandidates: joi.object({
+      patch: updateCandidateSchema,
+      minor: updateCandidateSchema,
+      major: updateCandidateSchema,
     }),
   }),
   error: joi.object({

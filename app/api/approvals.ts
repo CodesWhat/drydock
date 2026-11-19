@@ -41,10 +41,12 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { announceApprovalEvent } from '../approvals/events.js';
+import type { ActionPolicyTrigger } from '../model/action-policy.js';
 import {
   type ApprovalRecord,
   type ApprovalSemverDiff,
   buildApprovalRecordInput,
+  chooseApprovalCandidate,
   isSameApprovalCandidate,
 } from '../model/approval.js';
 import type { AuditEntry } from '../model/audit.js';
@@ -52,6 +54,7 @@ import type { Container } from '../model/container.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { isRejectScope, type RejectScope } from '../model/skip-scope.js';
 import { computeUpdateEligibility, getSoftBlockers } from '../model/update-eligibility.js';
+import * as registry from '../registry/index.js';
 import {
   type ApprovalPatch,
   type ApprovalStatusFilter,
@@ -80,6 +83,10 @@ import { scoped } from './route-scopes.js';
 import { buildEligibilityContext } from './sse-container-enrichment.js';
 
 const router = express.Router();
+
+function getActionTriggers(): Record<string, ActionPolicyTrigger> {
+  return registry.getState().trigger as unknown as Record<string, ActionPolicyTrigger>;
+}
 
 const APPROVAL_BASE_PATH = '/api/v1/approvals';
 const APPROVAL_LIST_MAX_LIMIT = 200;
@@ -256,14 +263,15 @@ function getApproval(req: Request<{ id: string }>, res: Response): void {
     return;
   }
 
-  const container = getContainer(approval.containerId);
-  if (container === undefined) {
+  const stored = getContainer(approval.containerId);
+  if (stored === undefined) {
     // The row outlived its container, which is the `container-removed` resolution. There
     // is nothing live to report, and an empty hold list is the honest answer.
     res.status(200).json({ approval, holdReasons: [] });
     return;
   }
 
+  const container = chooseApprovalCandidate(stored, getActionTriggers());
   const eligibility = computeUpdateEligibility(container, buildEligibilityContext(container));
   res.status(200).json({
     approval: withSecurityFastLane(approval),
@@ -461,13 +469,16 @@ function reserveApproval(
     return failure(404, APPROVAL_NOT_FOUND_MESSAGE);
   }
 
-  const container = getContainer(previous.containerId);
-  if (container === undefined) {
+  const stored = getContainer(previous.containerId);
+  if (stored === undefined) {
     // A row whose container is gone has already been resolved `container-removed` by the
     // reconciler in the normal case; this answers the race where it has not.
     return failure(404, CONTAINER_NOT_FOUND_MESSAGE);
   }
 
+  // The row names the candidate the queue chose for this container, which is the primary
+  // unless the winning trigger separates update types.
+  const container = chooseApprovalCandidate(stored, getActionTriggers());
   if (!isCandidateStillOnOffer(previous, container)) {
     return failure(409, APPROVAL_SUPERSEDED_MESSAGE);
   }

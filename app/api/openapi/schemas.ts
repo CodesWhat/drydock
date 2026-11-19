@@ -1146,6 +1146,18 @@ export const openApiSchemas = {
       updateAvailable: { type: 'boolean' },
       tagPinGated: { type: 'boolean' },
       updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
+      result: {
+        type: 'object',
+        description:
+          'Latest registry lookup. result.tag is the highest allowed update; ' +
+          'result.updateCandidates adds the best newer tag per update type.',
+        properties: {
+          tag: { type: 'string' },
+          digest: { type: 'string' },
+          updateCandidates: { $ref: '#/components/schemas/UpdateCandidates' },
+        },
+        additionalProperties: true,
+      },
       notificationSkips: {
         type: 'array',
         items: { $ref: '#/components/schemas/ContainerNotificationSkip' },
@@ -1221,6 +1233,32 @@ export const openApiSchemas = {
     },
     required: ['id', 'name'],
     additionalProperties: true,
+  },
+  UpdateCandidate: {
+    type: 'object',
+    properties: {
+      tag: { type: 'string' },
+      digest: {
+        type: 'string',
+        description: 'Only set when the lookup resolved a digest for this tag.',
+      },
+      semverDiff: { type: 'string', enum: ['patch', 'minor', 'major'] },
+    },
+    required: ['tag', 'semverDiff'],
+    additionalProperties: false,
+  },
+  UpdateCandidates: {
+    type: 'object',
+    description:
+      'Best newer tag per update type relative to the running version, after include/exclude, ' +
+      'family, ceiling and skip rules. A type with no candidate is omitted. Only present for ' +
+      'semver tag updates with candidates of at least two types.',
+    properties: {
+      patch: { $ref: '#/components/schemas/UpdateCandidate' },
+      minor: { $ref: '#/components/schemas/UpdateCandidate' },
+      major: { $ref: '#/components/schemas/UpdateCandidate' },
+    },
+    additionalProperties: false,
   },
   ReleaseNotesResource: {
     type: 'object',

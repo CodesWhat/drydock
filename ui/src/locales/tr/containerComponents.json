@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Daha yeni sürüm mevcut: {tag}. Bu Tag sabitlendi, drydock onu otomatik olarak güncellemez."
     },
+    "updateCandidates": {
+      "title": "Güncelleme türüne göre adaylar"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",
       "rolledBack": "Geri alındı",

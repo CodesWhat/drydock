@@ -8,6 +8,13 @@ import { createMigratedMemoryDatabase } from '../../../test/sqlite-db.js';
 import Docker from './Docker.js';
 
 vi.mock('../../../log');
+// The release-notes enrichment after a watch does live registry/GitHub lookups. Its 5s budget
+// equals the default test timeout, so a slow network turned this test into a CI timeout.
+vi.mock('../../../release-notes/index.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../release-notes/index.js')>()),
+  resolveSourceRepoForContainer: vi.fn(async () => undefined),
+  getReleaseNotesForTag: vi.fn(async () => undefined),
+}));
 
 // #1595 follow-up: after a GUI/API update recreates a container under a new id, the fast
 // resync must leave exactly one row for it (the replacement), never both ids.

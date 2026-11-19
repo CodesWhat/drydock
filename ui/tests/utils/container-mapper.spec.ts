@@ -1736,6 +1736,54 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('updateCandidates', () => {
+    it('maps the per-type candidates in patch, minor, major order', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '3.0.0',
+            updateCandidates: {
+              major: { tag: '3.0.0', semverDiff: 'major' },
+              patch: { tag: '1.2.9', semverDiff: 'patch' },
+              minor: { tag: '1.5.0', semverDiff: 'minor' },
+            },
+          },
+        }),
+      );
+      expect(c.updateCandidates).toEqual([
+        { kind: 'patch', tag: '1.2.9' },
+        { kind: 'minor', tag: '1.5.0' },
+        { kind: 'major', tag: '3.0.0' },
+      ]);
+    });
+
+    it('drops entries without a usable tag', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '1.5.0',
+            updateCandidates: { patch: { tag: '  ' }, minor: { tag: '1.5.0' }, major: null },
+          },
+        }),
+      );
+      expect(c.updateCandidates).toEqual([{ kind: 'minor', tag: '1.5.0' }]);
+    });
+
+    it('is undefined when missing, not an object, or empty', () => {
+      expect(mapApiContainer(makeApiContainer({ result: { tag: '1' } })).updateCandidates).toBe(
+        undefined,
+      );
+      expect(
+        mapApiContainer(makeApiContainer({ result: { tag: '1', updateCandidates: 'nope' } }))
+          .updateCandidates,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ result: { tag: '1', updateCandidates: {} } }))
+          .updateCandidates,
+      ).toBeUndefined();
+    });
+  });
+
   describe('updateInsight (#498)', () => {
     it('maps updateInsight from result when tag and kind are valid', () => {
       const c = mapApiContainer(

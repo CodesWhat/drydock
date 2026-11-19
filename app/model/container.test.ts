@@ -1539,6 +1539,43 @@ test('model should reject an invalid result.updateInsight.kind value (#498)', as
   ).toThrow();
 });
 
+function createContainerWithCandidates(updateCandidates) {
+  return {
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: '1.2.3', semver: true },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: { tag: '2.0.0', updateCandidates },
+  };
+}
+
+test('model should keep result.updateCandidates per update type', async () => {
+  const updateCandidates = {
+    patch: { tag: '1.2.4', semverDiff: 'patch' },
+    minor: { tag: '1.3.0', digest: 'sha256:abc', semverDiff: 'minor' },
+    major: { tag: '2.0.0', semverDiff: 'major' },
+  };
+  const containerValidated = container.validate(createContainerWithCandidates(updateCandidates));
+  expect(containerValidated.result?.updateCandidates).toEqual(updateCandidates);
+  expect(containerValidated.updateKind.semverDiff).toBe('major');
+});
+
+test('model should reject an invalid result.updateCandidates entry', async () => {
+  expect(() =>
+    container.validate(
+      createContainerWithCandidates({ patch: { tag: '1.2.4', semverDiff: 'prerelease' } }),
+    ),
+  ).toThrow();
+});
+
 test('model should flag updateAvailable when digest is different', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',
