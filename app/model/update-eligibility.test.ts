@@ -703,6 +703,20 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
     });
 
+    test.each([
+      ['exact', '1.0.0'],
+      ['minor', 'minor:1.0'],
+      ['major', 'major:1'],
+    ])('no skip-tag blocker on a same-tag digest update with a %s entry', (_scope, entry) => {
+      const container = makeContainerWithDigestUpdate({
+        result: { tag: BASE_IMAGE.tag.value, digest: 'sha256:bbb' },
+        updatePolicy: { skipTags: [entry] },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
+      expect(result.blockers.find((b) => b.reason === 'skip-digest')).toBeUndefined();
+    });
+
     test('no skip-tag blocker when container has no result tag', () => {
       const container = makeContainerWithDigestUpdate({
         updatePolicy: { skipTags: ['1.1.0'] },

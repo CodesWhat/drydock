@@ -44,7 +44,8 @@ import { announceApprovalEvent } from '../approvals/events.js';
 import {
   type ApprovalRecord,
   type ApprovalSemverDiff,
-  getApprovalCandidateRef,
+  buildApprovalRecordInput,
+  isSameApprovalCandidate,
 } from '../model/approval.js';
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
@@ -397,6 +398,23 @@ function resolveDeferralExpiry(
 }
 
 /**
+ * Whether the container still offers the candidate a row names. A row minted while the
+ * digest lookup failed is tag-only and keeps binding to the same target tag once the digest
+ * is back. A row that holds a digest binds to exactly that digest: a missing or different
+ * live digest refuses the decision.
+ */
+function isCandidateStillOnOffer(previous: ApprovalRecord, container: Container): boolean {
+  const current = buildApprovalRecordInput(container);
+  if (current === undefined) {
+    return false;
+  }
+  if (previous.candidateRef === current.candidateRef) {
+    return true;
+  }
+  return previous.candidateRef === previous.toRef && isSameApprovalCandidate(previous, current);
+}
+
+/**
  * Take the row for one decision, or answer why it could not be taken.
  *
  * Everything that can refuse the decision is checked before the row is written, and
@@ -436,7 +454,7 @@ function reserveApproval(
     return failure(404, CONTAINER_NOT_FOUND_MESSAGE);
   }
 
-  if (getApprovalCandidateRef(container) !== previous.candidateRef) {
+  if (!isCandidateStillOnOffer(previous, container)) {
     return failure(409, APPROVAL_SUPERSEDED_MESSAGE);
   }
 

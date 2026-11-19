@@ -243,6 +243,36 @@ export function getApprovalCandidateRef(container: Container): string | undefine
   return container.result?.digest ?? container.result?.tag;
 }
 
+/** The fields of a record that identify its candidate. */
+export type ApprovalCandidateIdentity = Pick<
+  ApprovalRecordInput,
+  'candidateRef' | 'toRef' | 'updateKind'
+>;
+
+/**
+ * Whether a stored record and the candidate a container reports now are the same
+ * candidate. The ref is digest-first, so one tag update reads as a different ref on a cycle
+ * where the digest lookup failed (a registry 429). Equal refs always match. Otherwise both
+ * must be tag updates to the same target tag, and at least one side must be the tag-only
+ * form (its ref is its own target tag). Two different known digests never match merely
+ * because their tags agree, and a digest update has nothing but its ref to go on.
+ */
+export function isSameApprovalCandidate(
+  stored: ApprovalCandidateIdentity,
+  current: ApprovalCandidateIdentity,
+): boolean {
+  if (stored.candidateRef === current.candidateRef) {
+    return true;
+  }
+  if (stored.updateKind !== 'tag' || current.updateKind !== 'tag') {
+    return false;
+  }
+  if (stored.toRef !== current.toRef) {
+    return false;
+  }
+  return stored.candidateRef === stored.toRef || current.candidateRef === current.toRef;
+}
+
 function getScanFields(container: Container): Partial<ApprovalRecordInput> {
   const updateScan = container.security?.updateScan;
   if (!updateScan) {

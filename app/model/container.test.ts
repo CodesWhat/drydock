@@ -420,6 +420,17 @@ test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-dige
   ).toBe(true);
 });
 
+test('testable_isUpdateSuppressed ignores skipTags for a same-tag digest update', () => {
+  for (const entry of ['1.0.0', 'minor:1.0', 'major:1']) {
+    expect(
+      container.testable_isUpdateSuppressed(
+        { updatePolicy: { skipTags: [entry] }, result: { tag: '1.0.0', digest: 'sha256:next' } },
+        { kind: 'digest', remoteValue: 'sha256:next', semverDiff: 'unknown' },
+      ),
+    ).toBe(false);
+  }
+});
+
 test('testable_isUpdateSuppressed should return false when no suppression rule applies', () => {
   const pastSnooze = new Date(Date.now() - daysToMs(1)).toISOString();
   const matureEnough = new Date(Date.now() - daysToMs(10)).toISOString();
