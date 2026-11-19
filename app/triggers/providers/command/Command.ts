@@ -123,7 +123,7 @@ export function resetShellExecutionWarningStateForTests() {
 }
 
 function describeCommandFailure(error: unknown): string {
-  const failure = (error ?? {}) as { code?: unknown; signal?: unknown; killed?: unknown };
+  const failure = error as { code?: unknown; signal?: unknown; killed?: unknown };
   if (failure.killed === true || failure.signal === 'SIGTERM') {
     return 'Command execution failed (timed out)';
   }
