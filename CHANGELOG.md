@@ -88,6 +88,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - HTTP trigger proxy credentials in the proxy URL are now sent to the proxy. Previously only the host and port were used, so an authenticated proxy rejected the request.
+- The getdrydock.com site now prerenders every marketing and docs page at build instead of rendering each request on a function. A per-request CSP nonce had forced every page dynamic, which produced about 449,000 function invocations in 30 days against roughly 2,000 real pageviews, mostly bot crawls of old docs versions. The site now sends a static CSP header (scripts from the site and the analytics proxy, every other directive unchanged), `/api/search` is rate limited per IP, archived docs versions canonicalize to the current docs and are disallowed in robots.txt, and the sitemap lists only current pages.
 - The getdrydock.com site now honors Do Not Track and Global Privacy Control. When either signal is set the browser never loads PostHog, and any event that would still reach it is dropped. PostHog ignored its own `respect_dnt` setting in cookieless mode, so the check now lives in the site code.
 
 ### Documentation
