@@ -1,6 +1,6 @@
 import { createMDX } from "fumadocs-mdx/next";
-
 import { escapeRegExp, versions } from "./scripts/docs-versions.mjs";
+import { buildContentSecurityPolicy } from "./src/lib/content-security-policy.mjs";
 
 // apps/web/package.json's "version" field stays 0.1.0 on purpose and is not
 // bumped alongside the root release. It's a private, never-published npm
@@ -35,7 +35,7 @@ const nextConfig = {
   // Nothing hydrates: homepage reveal sections stay invisible, docs nav goes
   // dead. Open upstream bug: vercel/next.js#91633. Removed in #236, re-added by
   // mistake in v1.5.1-rc.1 (#454). Only safe to re-enable once #91633 ships a
-  // fix. The request-scoped nonce CSP in src/proxy.ts is the script hardening.
+  // fix. The static CSP below (src/lib/content-security-policy.mjs) is the script hardening.
   images: {
     remotePatterns: [
       {
@@ -44,6 +44,20 @@ const nextConfig = {
       },
     ],
   },
+  // Static CSP so no page needs a function to mint a nonce. /api/* gets its own
+  // stricter policy from vercel.json, so it is excluded here to avoid two
+  // Content-Security-Policy headers on one response.
+  headers: async () => [
+    {
+      source: "/((?!api/).*)",
+      headers: [
+        {
+          key: "Content-Security-Policy",
+          value: buildContentSecurityPolicy(process.env.NODE_ENV === "development"),
+        },
+      ],
+    },
+  ],
   // All docs redirects stay temporary: their target is the current version,
   // which changes every release, and browsers cache a permanent redirect.
   // Internal links go straight to DOCS_ROOT, so there is no hop to optimise.

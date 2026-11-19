@@ -13,10 +13,15 @@ import Trigger from '../../triggers/providers/Trigger.js';
 import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../updates/request-update.js';
 import type { ApiComponent } from '../component.js';
+import {
+  areContainerActionsEnabled,
+  CONTAINER_ACTIONS_DISABLED_MESSAGE,
+} from '../container-update-dispatch.js';
 import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
 import { enforceApiKeyScope } from '../route-scopes.js';
+import { doesTriggerMatchRoute } from '../trigger-identity.js';
 import { getPathParamValue } from './request-helpers.js';
 
 interface TriggerStoreContainerApi {
@@ -326,9 +331,30 @@ function createRunTriggerHandler({
     }
 
     const triggerId = buildTriggerId(triggerAgent, triggerType, triggerName);
-    const triggerToRun = getTriggers()[triggerId];
+    const resolvedTrigger = getTriggers()[triggerId];
+    // A dotted type or name can fold an agent into the path and land on an
+    // agent-owned component the early scope check filed under notification.
+    const triggerToRun =
+      resolvedTrigger &&
+      doesTriggerMatchRoute(resolvedTrigger, {
+        type: triggerType,
+        name: triggerName,
+        agent: triggerAgent,
+      })
+        ? resolvedTrigger
+        : undefined;
     if (!triggerToRun) {
       sendErrorResponse(res, 404, 'Trigger not found');
+      return;
+    }
+
+    // Scope and dispatch follow the component that was actually resolved.
+    const isActionTrigger = getTriggerCategoryForType(triggerToRun.type) === 'action';
+    if (!enforceApiKeyScope(req, res, isActionTrigger ? 'containers:update' : 'triggers:test')) {
+      return;
+    }
+    if (isActionTrigger && !areContainerActionsEnabled()) {
+      sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
       return;
     }
 
@@ -338,7 +364,7 @@ function createRunTriggerHandler({
     }
 
     try {
-      if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
+      if (UPDATE_TRIGGER_TYPES.has(triggerToRun.type.toLowerCase())) {
         const accepted = await requestContainerUpdate(containerToTrigger, {
           trigger: triggerToRun as { type: string; trigger: TriggerRuntimeComponent['trigger'] },
         });

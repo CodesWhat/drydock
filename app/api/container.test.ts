@@ -1400,6 +1400,7 @@ describe('Container Router', () => {
         },
         security: {},
       });
+      storeContainer.getContainerRaw.mockImplementation(() => storeContainer.getContainer());
       const handler = getHandler('get', '/:id/sbom');
       const res = createResponse();
       await handler({ params: { id: 'c1' }, query: { format: 'spdx-json' } }, res);
@@ -1834,7 +1835,9 @@ describe('Container Router', () => {
       );
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
-          security: expect.objectContaining({ scan: scanResult }),
+          security: expect.objectContaining({
+            scan: { ...scanResult, image: 'my-registry/test/app:1.2.3' },
+          }),
         }),
       );
       expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'scanned');
@@ -2008,7 +2011,7 @@ describe('Container Router', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           security: expect.objectContaining({
-            scan: scanResult,
+            scan: { ...scanResult, image: 'my-registry/test/app:1.2.3' },
             signature: signatureResult,
           }),
         }),
@@ -2047,7 +2050,7 @@ describe('Container Router', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           security: expect.objectContaining({
-            scan: scanResult,
+            scan: { ...scanResult, image: 'my-registry/test/app:1.2.3' },
             sbom: expect.objectContaining({
               status: 'generated',
               documents: undefined,
@@ -2081,7 +2084,9 @@ describe('Container Router', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
-          security: expect.objectContaining({ scan: scanResult }),
+          security: expect.objectContaining({
+            scan: { ...scanResult, image: 'my-registry/test/app:1.2.3' },
+          }),
         }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -2239,7 +2244,7 @@ describe('Container Router', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           security: expect.objectContaining({
-            scan: currentScanResult,
+            scan: { ...currentScanResult, image: 'my-registry/test/app:1.2.3' },
             updateScan: updateScanResult,
           }),
         }),
@@ -2278,7 +2283,7 @@ describe('Container Router', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
           security: expect.objectContaining({
-            scan: scanResult,
+            scan: { ...scanResult, image: 'my-registry/test/app:1.2.3' },
             updateScan: undefined,
             updateSignature: undefined,
             updateSbom: undefined,
@@ -2330,7 +2335,9 @@ describe('Container Router', () => {
 
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(
         expect.objectContaining({
-          security: expect.objectContaining({ scan: currentScanResult }),
+          security: expect.objectContaining({
+            scan: { ...currentScanResult, image: 'my-registry/test/app:1.2.3' },
+          }),
         }),
       );
       expect(res.status).toHaveBeenCalledWith(200);
@@ -2570,7 +2577,11 @@ describe('Container Router', () => {
     });
 
     test('should run trigger successfully', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({ watcher: {}, trigger: { 'slack.default': mockTrigger } });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
@@ -2579,7 +2590,11 @@ describe('Container Router', () => {
     });
 
     test('should return 500 when trigger execution fails', async () => {
-      const mockTrigger = { trigger: vi.fn().mockRejectedValue(new Error('trigger error')) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockRejectedValue(new Error('trigger error')),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({ watcher: {}, trigger: { 'slack.default': mockTrigger } });
       const res = await callRunTrigger({ id: 'c1', triggerType: 'slack', triggerName: 'default' });
@@ -2590,7 +2605,12 @@ describe('Container Router', () => {
     });
 
     test('should use triggerAgent in trigger id when provided', async () => {
-      const mockTrigger = { trigger: vi.fn().mockResolvedValue(undefined) };
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        agent: 'myagent',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
       storeContainer.getContainer.mockReturnValue({ id: 'c1' });
       registry.getState.mockReturnValue({
         watcher: {},
