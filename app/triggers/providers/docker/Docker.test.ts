@@ -795,6 +795,28 @@ test('createContainer should connect additional networks after create', async ()
   });
 });
 
+test('pullAndBindSpecialUpdateImage pulls the image then binds its identity', async () => {
+  const pull = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
+  const bind = vi
+    .spyOn(docker, 'bindPulledImageIdentity')
+    .mockResolvedValue({ imageIdentity: 'test/test:1.2.3@sha256:abc' });
+  const dockerApi = {};
+  const container = { name: 'drydock' };
+  const log = { info: vi.fn(), warn: vi.fn() };
+
+  const result = await docker.pullAndBindSpecialUpdateImage(
+    { dockerApi, auth: 'a', newImage: 'test/test:1.2.3' },
+    container,
+    log,
+  );
+
+  expect(pull).toHaveBeenCalledWith(dockerApi, 'a', 'test/test:1.2.3', log);
+  expect(bind).toHaveBeenCalledWith(dockerApi, 'test/test:1.2.3', container, log);
+  expect(result).toEqual({ imageIdentity: 'test/test:1.2.3@sha256:abc' });
+  pull.mockRestore();
+  bind.mockRestore();
+});
+
 // --- pullImage ---
 
 test('pull should pull image from dockerApi', async () => {
@@ -1729,7 +1751,7 @@ test('trigger should use anonymous registry mode when registry URL is provided',
   expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
   expect(executeSelfUpdateSpy).toHaveBeenCalled();
   const [contextArg] = executeSelfUpdateSpy.mock.calls[0];
-  expect(contextArg.newImage).toBe('localhost:5000/drydock:bad');
+  expect(contextArg.newImage).toMatch(/^localhost:5000\/drydock:bad@sha256:/);
   expect(contextArg.auth).toBeUndefined();
 });
 
