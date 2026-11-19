@@ -1396,6 +1396,8 @@ describe('HealthMonitor', () => {
       'getCurrentContainer',
       'stopAndRemoveContainer',
       'recreateContainer',
+      // The restored container is looked up again to confirm it is running.
+      'getCurrentContainer',
     ]);
     expect(log.error).not.toHaveBeenCalled();
 

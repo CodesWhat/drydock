@@ -1,12 +1,15 @@
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
+import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { type ContainerBackupScope, resolveRollbackImageReference } from '../../../util/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from './created-container-candidate.js';
+import { finishRollbackOperation, startRollbackOperation } from './rollback-operation.js';
+import { getRollbackCandidateTarget, recordUpdateRollback } from './rollback-state.js';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -33,6 +36,11 @@ interface TriggerInstanceLike {
   ): Promise<void>;
   getCurrentContainer(dockerApi: DockerApiLike, containerRef: ContainerRef): Promise<unknown>;
   inspectContainer(container: unknown, log: LoggerLike): Promise<unknown>;
+  /**
+   * Keys serialising this container's update lifecycle. Optional so trigger
+   * doubles without it fall back to the plain per-container key.
+   */
+  getUpdateLockKeys?(container: ContainerRef): string[];
   stopAndRemoveContainer(
     container: unknown,
     containerSpec: unknown,
@@ -92,6 +100,13 @@ interface HealthMonitorOptions {
    */
   mode?: MonitorMode;
   baselineRestartCount?: number;
+  /**
+   * Whether the container was running before the update. A rollback restores
+   * that state: the container the monitor sees at failure time is usually dead
+   * (liveness) and recreating from its spec would leave the service down.
+   * Defaults to true, since a monitor is only armed for a running container.
+   */
+  wasRunning?: boolean;
   triggerInstance: unknown;
   log: unknown;
 }
@@ -108,8 +123,10 @@ type MonitorMode = 'health' | 'liveness';
  * along under the index signature.
  */
 interface MonitoredContainer {
+  id?: string;
   watcher: string;
   agent?: string;
+  result?: { digest?: string; tag?: string };
   labels: Record<string, string>;
   image: { registry: { name: string }; tag: { value: string } };
   [field: string]: unknown;
@@ -129,6 +146,10 @@ interface RollbackContext {
   dockerApi: DockerApiLike;
   triggerInstance: TriggerInstanceLike;
   containerRef: ContainerRef;
+  /** The container as the update saw it, before the replacement's id replaced its own. */
+  monitoredContainer: MonitoredContainer;
+  signal: AbortSignal;
+  wasRunning: boolean;
   containerName: string;
   backupImageTag: string;
   backupImageDigest?: string;
@@ -221,11 +242,51 @@ function recordRollbackError(containerName: string, message: string): void {
   getAuditCounter()?.inc({ action: 'auto-rollback' });
 }
 
+/**
+ * Rollbacks take the same per-container lock updates do, so one can't
+ * interleave with an update or a manual rollback of the same container. A
+ * monitor cancelled while it waited (a newer update or a manual rollback took
+ * over) stands down once it holds the lock.
+ */
 async function performRollback(context: RollbackContext): Promise<void> {
+  const { triggerInstance, containerRef } = context;
+  const lockKeys = triggerInstance.getUpdateLockKeys?.(containerRef) ?? [
+    buildContainerLockKey(containerRef),
+  ];
+  await withContainerUpdateLocks(lockKeys, () => runRollback(context), {
+    bypassGlobalCap: true,
+  });
+}
+
+/**
+ * The restored container must actually be up before the rollback counts as a
+ * success. Looked up by name: the replacement's id is gone.
+ */
+async function assertRestoredContainerRunning(
+  context: RollbackContext,
+  containerName: string,
+): Promise<void> {
+  const { dockerApi, triggerInstance, log } = context;
+  const restoredContainer = await triggerInstance.getCurrentContainer(dockerApi, {
+    ...context.containerRef,
+    id: containerName,
+  });
+  const restoredSpec = restoredContainer
+    ? asUnknownRecord(await triggerInstance.inspectContainer(restoredContainer, log))
+    : null;
+  if (asUnknownRecord(restoredSpec?.State)?.Running !== true) {
+    throw new Error(`restored container ${containerName} is not running after the rollback`);
+  }
+}
+
+async function runRollback(context: RollbackContext): Promise<void> {
   const {
     dockerApi,
     triggerInstance,
     containerRef,
+    monitoredContainer,
+    signal,
+    wasRunning,
     containerName,
     backupImageTag,
     backupImageDigest,
@@ -234,6 +295,14 @@ async function performRollback(context: RollbackContext): Promise<void> {
     log,
   } = context;
 
+  if (signal.aborted) {
+    log.info(
+      `Auto-rollback of container ${containerName} skipped: monitoring was cancelled by a newer update or rollback`,
+    );
+    return;
+  }
+
+  let operationId: string | undefined;
   try {
     const backups = backupStore.getBackupsForContainer(backupScope);
     if (backups.length === 0) {
@@ -278,19 +347,43 @@ async function performRollback(context: RollbackContext): Promise<void> {
     }
 
     const currentContainerSpec = await triggerInstance.inspectContainer(currentContainer, log);
+    // Opened just before the container is stopped: state alerts hold off while
+    // an operation covers the container, so Drydock's own stop isn't reported.
+    operationId = startRollbackOperation(containerRef, {
+      fromVersion: backupImageTag,
+      toVersion: latestBackup.imageTag,
+      reason: mode === 'liveness' ? 'liveness-failure' : 'health-check-failure',
+    });
     await triggerInstance.stopAndRemoveContainer(
       currentContainer,
       currentContainerSpec,
       containerRef,
       log,
     );
+    // The container the monitor found is usually dead (liveness) and a spec
+    // that says it isn't running makes both recreate paths leave the restored
+    // container stopped. Restore the state it had before the update.
+    const specToRestore = (
+      wasRunning
+        ? {
+            ...(currentContainerSpec as UnknownRecord),
+            State: {
+              ...asUnknownRecord((currentContainerSpec as UnknownRecord).State),
+              Running: true,
+            },
+          }
+        : currentContainerSpec
+    ) as UnknownRecord;
     await triggerInstance.recreateContainer(
       dockerApi,
-      currentContainerSpec,
+      specToRestore,
       backupImage,
       containerRef,
       log,
     );
+    if (wasRunning) {
+      await assertRestoredContainerRunning(context, containerName);
+    }
     await triggerInstance.recreateSharedNamespaceDependents?.(
       dockerApi,
       (currentContainerSpec as { Id: string }).Id,
@@ -299,6 +392,19 @@ async function performRollback(context: RollbackContext): Promise<void> {
       containerRef,
     );
 
+    recordUpdateRollback(
+      {
+        id: monitoredContainer.id,
+        name: containerName,
+        watcher: monitoredContainer.watcher,
+        agent: monitoredContainer.agent,
+      },
+      {
+        targetDigest: getRollbackCandidateTarget(monitoredContainer, backupImageTag),
+        reason: mode === 'liveness' ? 'liveness-failure' : 'health-check-failure',
+      },
+    );
+    finishRollbackOperation(operationId, {});
     recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag, mode);
     log.info(`Auto-rollback of container ${containerName} completed successfully`);
   } catch (error: unknown) {
@@ -308,6 +414,7 @@ async function performRollback(context: RollbackContext): Promise<void> {
     // just reclaim the orphan so it doesn't squat the container name.
     await cleanupCreatedContainerCandidate(getCreatedContainerCandidate(error), containerName, log);
     const message = getErrorMessage(error);
+    finishRollbackOperation(operationId, { error: message });
     log.error(`Auto-rollback failed for container ${containerName}: ${message}`);
     recordRollbackError(containerName, message);
   }
@@ -430,6 +537,7 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
     interval,
     mode = 'health',
     baselineRestartCount = 0,
+    wasRunning = true,
     triggerInstance: triggerInstanceOption,
     log: logOption,
   } = options;
@@ -456,6 +564,9 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
         dockerApi,
         triggerInstance,
         containerRef,
+        monitoredContainer: container,
+        signal,
+        wasRunning,
         containerName,
         backupImageTag,
         backupImageDigest,

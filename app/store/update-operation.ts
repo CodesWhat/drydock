@@ -824,6 +824,11 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
   if (operation.kind === 'self-update') {
     return;
   }
+  // A rollback is announced by its own auto-rollback or rollback audit entry.
+  // Telling subscribers an update was applied or failed would mislabel it.
+  if (operation.kind === 'rollback') {
+    return;
+  }
   dispatchTerminalLifecycleEvent(operation, batchId, {});
 }
 

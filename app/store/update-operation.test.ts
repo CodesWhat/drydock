@@ -1082,6 +1082,42 @@ describe('Update Operation Store', () => {
     }
   });
 
+  test.each([
+    ['rolled-back', 'rolled-back'],
+    ['failed', 'rollback-failed'],
+  ] as const)(
+    'a rollback operation closed as %s emits no update lifecycle event',
+    async (status, phase) => {
+      const inserted = insertOp(updateOperation, {
+        kind: 'rollback',
+        containerName: 'myapp',
+        containerId: 'ctr-rb',
+        status: 'in-progress',
+        phase: 'rollback-started',
+      });
+      const applied: unknown[] = [];
+      const failed: unknown[] = [];
+      const unsubscribeApplied = registerContainerUpdateApplied((payload) => {
+        applied.push(payload);
+      });
+      const unsubscribeFailed = registerContainerUpdateFailed((payload) => {
+        failed.push(payload);
+      });
+
+      try {
+        updateOperation.markOperationTerminal(inserted.id, { status, phase } as never);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(applied).toEqual([]);
+        expect(failed).toEqual([]);
+      } finally {
+        unsubscribeApplied();
+        unsubscribeFailed();
+      }
+    },
+  );
+
   test('markOperationTerminal emits update-failed with stored container snapshot (issue #385)', async () => {
     const containerSnapshot = {
       id: 'ctr-2',

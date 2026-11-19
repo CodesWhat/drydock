@@ -1,6 +1,7 @@
 import type { ContainerBackupScope } from '../../../util/backup.js';
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
+import { registerRollbackMonitor } from './rollback-monitor-registry.js';
 
 type RollbackMonitorLogger = {
   info: (message: string) => void;
@@ -17,6 +18,8 @@ type RollbackContainer = {
   watcher: string;
   agent?: string;
   identityKey?: string;
+  /** Docker state the watcher recorded before the update ran. */
+  status?: string;
   labels: Record<string, string>;
   image: {
     // Not read here, declared because the rollback the health monitor performs
@@ -53,7 +56,10 @@ type RollbackMonitorDependencies = {
   inspectContainer: (
     container: unknown,
     logContainer: RollbackMonitorLogger,
-  ) => Promise<{ Id: string; RestartCount?: number; State?: { Health?: unknown } } | undefined>;
+  ) => Promise<
+    | { Id: string; RestartCount?: number; State?: { Health?: unknown; Running?: boolean } }
+    | undefined
+  >;
   startHealthMonitor: (options: {
     dockerApi: unknown;
     container: RollbackContainer;
@@ -66,9 +72,10 @@ type RollbackMonitorDependencies = {
     interval: number;
     mode?: 'health' | 'liveness';
     baselineRestartCount?: number;
+    wasRunning?: boolean;
     triggerInstance: unknown;
     log: RollbackMonitorLogger;
-  }) => void;
+  }) => AbortController | undefined;
   getTriggerInstance: () => unknown;
   resolveContainerBackupScope: (container: RollbackContainer) => ContainerBackupScope;
 };
@@ -214,6 +221,15 @@ class RollbackMonitor {
     }
 
     const newContainerSpec = await this.inspectContainer(newContainer, logContainer);
+    if (!this.wasRunningBeforeUpdate(container, newContainerSpec)) {
+      // A rollback restores the pre-update running state, and a container that
+      // was stopped before the update is stopped now by design. Watching it
+      // would roll back on the first poll.
+      logContainer.info(
+        'Container was not running before the update — skipping rollback monitoring',
+      );
+      return;
+    }
     const hasHealthcheck = !!newContainerSpec?.State?.Health;
     if (hasHealthcheck && !rollbackConfig.autoRollback) {
       // The liveness watch is only for containers without a healthcheck.
@@ -248,6 +264,23 @@ class RollbackMonitor {
     });
   }
 
+  private wasRunningBeforeUpdate(
+    container: RollbackContainer,
+    newContainerSpec: { State?: { Running?: boolean } } | undefined,
+  ): boolean {
+    const status = container.status;
+    if (status === 'exited' || status === 'created' || status === 'dead') {
+      return false;
+    }
+    if (status === 'running' || status === 'restarting' || status === 'paused') {
+      return true;
+    }
+    // No usable status: the recreate only starts the replacement when the old
+    // container was running, so an explicitly stopped replacement means it
+    // wasn't.
+    return newContainerSpec?.State?.Running !== false;
+  }
+
   private startLivenessWatch(
     dockerApi: unknown,
     container: RollbackContainer,
@@ -278,7 +311,7 @@ class RollbackMonitor {
     },
   ) {
     const failingImageTag = container.updateKind?.remoteValue ?? container.image.tag.value;
-    this.startHealthMonitor({
+    const controller = this.startHealthMonitor({
       dockerApi,
       // The whole container, not just its name and the replacement's id: a
       // rollback runs through the trigger's own recreate, which for compose
@@ -295,9 +328,15 @@ class RollbackMonitor {
       ...(options.liveness
         ? { mode: 'liveness' as const, baselineRestartCount: options.liveness.baselineRestartCount }
         : {}),
+      // Only a running container is monitored, and a rollback puts it back
+      // the way it was.
+      wasRunning: true,
       triggerInstance: this.getTriggerInstance(),
       log: options.logContainer,
     });
+    if (controller) {
+      registerRollbackMonitor(container, controller);
+    }
   }
 }
 
