@@ -20,14 +20,14 @@ test('the OpenSSL classification covers exactly the four advisories', () => {
   );
 });
 
-test('each statement is limited to OpenSSL 3.5.9-r0 and names its reason', () => {
+test('each statement is limited to OpenSSL 3.5.9-r1 and names its reason', () => {
   for (const statement of document.statements) {
-    assert.equal(statement.status, 'not_affected');
-    assert.equal(statement.justification, 'vulnerable_code_not_in_execute_path');
+    assert.equal(statement.status, 'fixed');
+    assert.match(statement.impact_statement, /Alpine fixed this/);
     assert.deepEqual(statement.products, [
-      { '@id': 'pkg:apk/alpine/openssl@3.5.9-r0' },
-      { '@id': 'pkg:apk/alpine/libssl3@3.5.9-r0' },
-      { '@id': 'pkg:apk/alpine/libcrypto3@3.5.9-r0' },
+      { '@id': 'pkg:apk/alpine/openssl@3.5.9-r1' },
+      { '@id': 'pkg:apk/alpine/libssl3@3.5.9-r1' },
+      { '@id': 'pkg:apk/alpine/libcrypto3@3.5.9-r1' },
     ]);
     assert.match(statement.impact_statement, reasons[statement.vulnerability.name]);
     assert.match(statement.impact_statement, /No other revision|no other revision/);
