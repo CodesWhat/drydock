@@ -32,6 +32,10 @@
       "prerelease": "プレリリース",
       "unknown": "不明"
     },
+    "securityFastLane": {
+      "badge": "セキュリティ修正",
+      "tooltip": "実行中のイメージの重大または高レベルの脆弱性を修正します。承認は引き続き必要です。"
+    },
     "actions": {
       "notesAriaLabel": "リリースノートと保留理由を表示",
       "approve": "承認",

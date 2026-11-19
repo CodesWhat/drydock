@@ -18,6 +18,7 @@ import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { getAbortReason } from './abort.js';
+import { resetFastLaneCandidateAttempts, scanFastLaneCandidates } from './fast-lane-candidates.js';
 import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 
@@ -551,6 +552,15 @@ export async function runScheduledScans(): Promise<void> {
     totalScannedForCycle = cachedCount + scannedCount;
     totalAlertsForCycle = alertCount;
 
+    // Security fast lane: scan the pending candidate of opted-in containers once, so a held
+    // update that fixes critical/high findings can be recognised. Same worker count as above.
+    if (!batchController.signal.aborted) {
+      await scanFastLaneCandidates({
+        signal: batchController.signal,
+        scanConcurrency,
+      });
+    }
+
     logScheduler.info(
       `Scheduled scan complete: ${digestGroups.size} digests, ${cachedCount} cached, ${scannedCount} scanned fresh, ${errorCount} errors, ${abortedCount} aborted, ${skippedCount} skipped, ${alertCount} alerts emitted`,
     );
@@ -623,6 +633,7 @@ export function shutdown(): void {
     cronTask = undefined;
   }
   clearDigestScanCache();
+  resetFastLaneCandidateAttempts();
   cachedSecurityConfiguration = undefined;
   cachedScanIntervalMs = undefined;
   running = false;

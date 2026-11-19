@@ -245,6 +245,31 @@ describe('GET /', () => {
     });
   });
 
+  test('flags rows whose container is on the security fast lane and leaves the rest alone', () => {
+    const fastLane = { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 };
+    mockListApprovals.mockReturnValue({
+      records: [
+        createRecord({ id: 'a', containerId: 'on-lane' }),
+        createRecord({ id: 'b', containerId: 'off-lane' }),
+        createRecord({ id: 'c', containerId: 'gone' }),
+      ],
+      total: 3,
+    });
+    mockGetContainer.mockImplementation((id: string) =>
+      id === 'on-lane'
+        ? createContainer({ securityFastLane: fastLane } as Partial<Container>)
+        : id === 'off-lane'
+          ? createContainer()
+          : undefined,
+    );
+
+    const { body } = callList({});
+
+    expect(body.data[0].securityFastLane).toStrictEqual(fastLane);
+    expect(body.data[1]).not.toHaveProperty('securityFastLane');
+    expect(body.data[2]).not.toHaveProperty('securityFastLane');
+  });
+
   test('passes every filter through and paginates', () => {
     mockListApprovals.mockReturnValue({ records: [createRecord()], total: 9 });
 
@@ -353,6 +378,25 @@ describe('GET /:id', () => {
     expect(body.holdReasons).toStrictEqual([
       expect.objectContaining({ reason: 'snoozed', severity: 'soft' }),
     ]);
+  });
+
+  test('flags the row and carries the lifted holds when the candidate is a security fix', () => {
+    const fastLane = { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 };
+    mockGetApprovalById.mockReturnValue(createRecord());
+    mockGetContainer.mockReturnValue(
+      createContainer({
+        securityFastLane: fastLane,
+        updatePolicy: { snoozeUntil: '2999-01-01T00:00:00.000Z' },
+      } as Partial<Container>),
+    );
+    const res = createMockResponse();
+
+    getHandler('/:id')({ params: { id: 'approval-1' } }, res);
+
+    const body = vi.mocked(res.json).mock.calls[0][0];
+    expect(body.approval.securityFastLane).toStrictEqual(fastLane);
+    expect(body.holdReasons).toStrictEqual([]);
+    expect(body.eligibility.securityFastLane.bypassedHolds).toStrictEqual(['snoozed']);
   });
 
   test('keeps a hard blocker in eligibility rather than reporting it as a hold reason', () => {

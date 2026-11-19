@@ -105,6 +105,7 @@
       "update-applied-dryrun": "업데이트 미리보기됨(드라이런)",
       "update-failed": "업데이트 실패",
       "auto-update-blocked": "자동 업데이트 차단됨",
+      "security-fast-lane": "보안 패스트 레인",
       "update-policy-override-set": "업데이트 정책 재정의 설정됨",
       "update-policy-override-cleared": "업데이트 정책 재정의 해제됨",
       "group-policy-set": "그룹 정책 설정됨",

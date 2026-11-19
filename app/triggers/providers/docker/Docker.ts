@@ -53,6 +53,7 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from './created-container-candidate.js';
+import { assertFastLaneDigest } from './fast-lane-guard.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import {
@@ -2298,6 +2299,27 @@ class Docker<
   }
 
   protected async capturePulledImageIdentity(
+    dockerApi: PulledImageInspectApi,
+    imageReference: string,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+    options?: PulledImageIdentityOptions,
+    bindingPolicyOverride?: 'required' | 'optional' | 'disabled',
+  ): Promise<PulledImageIdentityOutcome> {
+    const outcome = await this.resolvePulledImageIdentity(
+      dockerApi,
+      imageReference,
+      container,
+      logContainer,
+      options,
+      bindingPolicyOverride,
+    );
+    // A fast-laned update qualified one candidate digest but pulls by tag.
+    assertFastLaneDigest(container, outcome.imageIdentity, options !== undefined);
+    return outcome;
+  }
+
+  private async resolvePulledImageIdentity(
     dockerApi: PulledImageInspectApi,
     imageReference: string,
     container,

@@ -36,6 +36,7 @@ type DigestCacheEntry = {
   digest: string;
   created?: string;
   version?: number;
+  indexDigest?: string;
   fetchedAt: number;
 };
 type BearerChallengeAuthOptions = {
@@ -488,6 +489,7 @@ class BaseRegistry<
         digest: cachedEntry.digest,
         created: cachedEntry.created,
         version: cachedEntry.version,
+        ...(cachedEntry.indexDigest ? { indexDigest: cachedEntry.indexDigest } : {}),
       };
     }
 
@@ -511,6 +513,7 @@ class BaseRegistry<
           digest: manifest.digest,
           created: manifest.created,
           version: manifest.version,
+          indexDigest: manifest.indexDigest,
           fetchedAt: Date.now(),
         });
       }

@@ -778,6 +778,16 @@ onUnmounted(() => {
           <AppBadge :tone="semverTone(row.semverDiff)" size="xs" class="shrink-0">
             {{ t(`approvalsView.semver.${row.semverDiff}`) }}
           </AppBadge>
+          <AppBadge
+            v-if="row.securityFastLane"
+            tone="info"
+            size="xs"
+            class="shrink-0"
+            data-testid="approval-security-fast-lane"
+            :title="t('approvalsView.securityFastLane.tooltip')"
+          >
+            {{ t('approvalsView.securityFastLane.badge') }}
+          </AppBadge>
         </div>
       </template>
       <template #cell-scan="{ row }">

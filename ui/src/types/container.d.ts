@@ -69,12 +69,29 @@ export interface UpdateEligibilityUpdateMode {
   group?: string;
 }
 
+/**
+ * Server-resolved security fast lane verdict: the pending candidate fixes critical or high
+ * vulnerabilities of the running image, so snooze, maturity and the maintenance window do not
+ * hold it. `bypassedHolds` names the holds lifted on this evaluation.
+ */
+export interface SecurityFastLane {
+  fixedIds: string[];
+  fixedCount: number;
+  fixedCritical: number;
+  fixedHigh: number;
+}
+
+export interface UpdateEligibilitySecurityFastLane extends SecurityFastLane {
+  bypassedHolds: UpdateBlockerReason[];
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: ActionPolicy;
   updateMode?: UpdateEligibilityUpdateMode;
+  securityFastLane?: UpdateEligibilitySecurityFastLane;
 }
 
 /** Shared UI container type used across views, composables, and templates. */

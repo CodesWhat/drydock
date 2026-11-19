@@ -32,6 +32,10 @@
       "prerelease": "Préversion",
       "unknown": "Inconnue"
     },
+    "securityFastLane": {
+      "badge": "Correctif de sécurité",
+      "tooltip": "Corrige des vulnérabilités critiques ou élevées de l'image en cours d'exécution. Une approbation reste nécessaire."
+    },
     "actions": {
       "notesAriaLabel": "Afficher les notes de version et les motifs de mise en attente",
       "approve": "Approuver",

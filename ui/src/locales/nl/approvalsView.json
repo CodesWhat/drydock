@@ -32,6 +32,10 @@
       "prerelease": "Voorlopige versie",
       "unknown": "Onbekend"
     },
+    "securityFastLane": {
+      "badge": "Beveiligingsfix",
+      "tooltip": "Verhelpt kritieke of hoge kwetsbaarheden in de draaiende image. Goedkeuring blijft nodig."
+    },
     "actions": {
       "notesAriaLabel": "Uitgaveopmerkingen en redenen voor tegenhouden tonen",
       "approve": "Goedkeuren",

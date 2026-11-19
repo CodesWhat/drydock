@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { SecurityConfiguration } from '../../configuration/index.js';
 import type { SecurityScanCycleCompleteEventPayload } from '../../event/index.js';
 import type { Container } from '../../model/container.js';
+import { isImmutableDigest } from '../../security/digest.js';
 import type { TrivyDatabaseStatus } from '../../security/runtime.js';
 import type { ContainerSecurityScan } from '../../security/scan.js';
 import { uuidv7 } from '../../util/uuid.js';
@@ -215,9 +216,13 @@ async function runBulkScan(
             container,
             deps.getContainerImageFullName,
           );
+          const containerDigest = container.image?.digest?.value;
+          const pinnedDigest = isImmutableDigest(containerDigest) ? containerDigest : undefined;
           const auth = await deps.getContainerRegistryAuth(container);
           const rawScanResult = await deps.scanImageForVulnerabilities({ image: scanImage, auth });
-          const scanResult = { ...rawScanResult, image: displayImage };
+          const scanResult = pinnedDigest
+            ? { ...rawScanResult, image: displayImage, imageDigest: pinnedDigest }
+            : { ...rawScanResult, image: displayImage };
           status = scanResult.status;
 
           try {
@@ -246,7 +251,6 @@ async function runBulkScan(
             );
           }
 
-          const containerDigest = container.image?.digest?.value;
           if (
             deps.updateDigestScanCache &&
             deps.getTrivyDatabaseStatus &&

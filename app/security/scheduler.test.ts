@@ -23,6 +23,8 @@ const mockLogError = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn(async () => {}));
 const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn(async () => {}));
+const mockScanFastLaneCandidates = vi.hoisted(() => vi.fn(async () => 0));
+const mockResetFastLaneCandidateAttempts = vi.hoisted(() => vi.fn());
 
 vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: mockGetSecurityConfiguration,
@@ -78,6 +80,12 @@ vi.mock('../store/container.js', () => ({
 vi.mock('./scan.js', () => ({
   scanImageWithDedup: (...args: unknown[]) => mockScanImageWithDedup(...args),
   clearDigestScanCache: (...args: unknown[]) => mockClearDigestScanCache(...args),
+}));
+
+vi.mock('./fast-lane-candidates.js', () => ({
+  scanFastLaneCandidates: (...args: unknown[]) => mockScanFastLaneCandidates(...args),
+  resetFastLaneCandidateAttempts: (...args: unknown[]) =>
+    mockResetFastLaneCandidateAttempts(...args),
 }));
 
 vi.mock('./runtime.js', () => ({
@@ -385,8 +393,42 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    expect(mockGetContainersRaw).toHaveBeenCalledTimes(1);
+    expect(mockGetContainersRaw).toHaveBeenCalled();
     expect(mockGetContainers).not.toHaveBeenCalled();
+  });
+
+  test('scans fast lane candidates after the batch with the same worker count', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledTimes(1);
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanConcurrency: expect.any(Number),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  test('skips fast lane candidate scans when the batch was aborted', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockImplementation(async () => {
+      shutdown();
+      return { scanResult: createScanResult(), fromCache: false };
+    });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).not.toHaveBeenCalled();
+  });
+
+  test('shutdown forgets which fast lane candidates were attempted', () => {
+    shutdown();
+    expect(mockResetFastLaneCandidateAttempts).toHaveBeenCalled();
   });
 
   test('should process digest scans with configured concurrency', async () => {
@@ -1544,6 +1586,33 @@ describe('runScheduledScans', () => {
         security: { scan: scanResult },
       }),
     );
+  });
+
+  test('scans the running image by its immutable digest, not the mutable tag', async () => {
+    const digest = `sha256:${'e'.repeat(64)}`;
+    const container = createContainer({
+      image: { ...createContainer().image, digest: { watch: true, value: digest } },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, digest);
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest }),
+      expect.any(Number),
+    );
+  });
+
+  test('falls back to the tag when the running digest is not a real digest', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, undefined);
   });
 
   test('should use empty object fallback when registry state has no registry key', async () => {

@@ -79,6 +79,7 @@ const actionTypes = [
   'config-reloaded',
   'config-written',
   'auto-update-blocked',
+  'security-fast-lane',
   'update-approved',
   'update-rejected',
   'update-deferred',

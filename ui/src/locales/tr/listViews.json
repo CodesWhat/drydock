@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Güncelleme önizlendi (deneme)",
       "update-failed": "Güncelleme Başarısız",
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "security-fast-lane": "Güvenlik hızlı hattı",
       "update-policy-override-set": "Güncelleme politikası geçersiz kılma ayarlandı",
       "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
       "group-policy-set": "Grup politikası ayarlandı",

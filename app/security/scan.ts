@@ -19,6 +19,7 @@ import {
   noteBundledTrivyRemoval,
   resolveProviderExecution,
 } from './backend-resolution.js';
+import { isImmutableDigest, isScannedRefPinnedTo } from './digest.js';
 import {
   buildGrypeInvocation,
   buildGrypeOutputLimitMessage,
@@ -59,12 +60,23 @@ export interface ContainerSecurityScan {
   scanner: SecurityScanner;
   image: string;
   imageDigest?: string;
+  /**
+   * The reference that was actually handed to the scanner. Fast lane evidence requires it to be
+   * a digest reference (`@sha256:...`), so a scan of a mutable tag, or a copy of one that the
+   * digest cache stamped with a digest, never counts.
+   */
+  scannedRef?: string;
   scannedAt: string;
   status: SecurityScanStatus;
   blockSeverities: SecuritySeverity[];
   blockingCount: number;
   summary: ContainerVulnerabilitySummary;
   vulnerabilities: ContainerVulnerability[];
+  /**
+   * Every critical and high vulnerability ID of the scan, recorded before `vulnerabilities`
+   * is cut off at the storage limit, so comparisons never rest on a truncated list.
+   */
+  severityIds?: { critical: string[]; high: string[] };
   relativeGate?: {
     decision: 'passed' | 'blocked';
     reason: 'no-worse-than-current' | 'candidate-worse' | 'current-scan-unavailable';
@@ -205,6 +217,19 @@ function normalizeSeverity(severity: string | undefined): SecuritySeverity {
     return severityNormalized as SecuritySeverity;
   }
   return 'UNKNOWN';
+}
+
+function collectSeverityIds(vulnerabilities: ContainerVulnerability[]) {
+  const critical = new Set<string>();
+  const high = new Set<string>();
+  for (const vulnerability of vulnerabilities) {
+    if (vulnerability.severity === 'CRITICAL') {
+      critical.add(vulnerability.id);
+    } else if (vulnerability.severity === 'HIGH') {
+      high.add(vulnerability.id);
+    }
+  }
+  return { critical: [...critical].sort(), high: [...high].sort() };
 }
 
 function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulnerabilitySummary {
@@ -1143,12 +1168,14 @@ export async function scanImageForVulnerabilities(
   return {
     scanner,
     image: options.image,
+    scannedRef: options.image,
     scannedAt: new Date().toISOString(),
     status,
     blockSeverities,
     blockingCount,
     summary: buildSummary(vulnerabilities),
     vulnerabilities: vulnerabilities.slice(0, MAX_STORED_VULNERABILITIES),
+    severityIds: collectSeverityIds(vulnerabilities),
     ...(error ? { error } : {}),
   };
 }
@@ -1395,8 +1422,15 @@ export async function scanImageWithDedup(
   const dbUpdatedAt = options.trivyDbUpdatedAt;
   const scannerFingerprint = getScannerFingerprint(dbUpdatedAt || '');
 
+  // A real digest only serves a scan that was taken by that digest. A tag scan cached under
+  // it (a bulk or on-demand scan of the mutable tag) would otherwise come back stamped as the
+  // digest's scan, so it is skipped and the digest is scanned properly instead.
+  const cacheEntryDescribesDigest =
+    !isImmutableDigest(options.digest) ||
+    isScannedRefPinnedTo(cached?.scanResult.scannedRef, options.digest);
   if (
     cached &&
+    cacheEntryDescribesDigest &&
     cached.scannerFingerprint === scannerFingerprint &&
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {

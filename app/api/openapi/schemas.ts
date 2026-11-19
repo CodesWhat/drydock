@@ -1108,6 +1108,28 @@ export const openApiSchemas = {
       evaluatedAt: { type: 'string', format: 'date-time' },
       actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
       updateMode: { $ref: '#/components/schemas/UpdateEligibilityUpdateMode' },
+      securityFastLane: {
+        type: 'object',
+        description:
+          'Set when the container opted in to the security fast lane and the pending candidate fixes critical or high vulnerabilities present in the running image.',
+        properties: {
+          fixedIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Capped list of fixed vulnerability IDs.',
+          },
+          fixedCount: { type: 'integer', minimum: 1 },
+          fixedCritical: { type: 'integer', minimum: 0 },
+          fixedHigh: { type: 'integer', minimum: 0 },
+          bypassedHolds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Holds (snoozed, maturity, maintenance window) lifted on this evaluation.',
+          },
+        },
+        required: ['fixedIds', 'fixedCount', 'fixedCritical', 'fixedHigh', 'bypassedHolds'],
+        additionalProperties: false,
+      },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,
@@ -1975,6 +1997,23 @@ export const openApiSchemas = {
       scanLow: { type: 'integer', minimum: 0 },
       scanUnknown: { type: 'integer', minimum: 0 },
       scanAt: { type: 'string', format: 'date-time' },
+      securityFastLane: {
+        type: 'object',
+        description:
+          'Set when the container opted in to the security fast lane and the pending candidate fixes critical or high vulnerabilities present in the running image.',
+        properties: {
+          fixedIds: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Capped list of fixed vulnerability IDs.',
+          },
+          fixedCount: { type: 'integer', minimum: 1 },
+          fixedCritical: { type: 'integer', minimum: 0 },
+          fixedHigh: { type: 'integer', minimum: 0 },
+        },
+        required: ['fixedIds', 'fixedCount', 'fixedCritical', 'fixedHigh'],
+        additionalProperties: false,
+      },
       createdAt: { type: 'string', format: 'date-time' },
       createdAtMs: { type: 'integer', minimum: 0 },
       decision: { type: 'string', enum: ['pending', 'approved', 'rejected', 'deferred'] },

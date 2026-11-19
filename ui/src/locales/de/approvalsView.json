@@ -32,6 +32,10 @@
       "prerelease": "Vorabversion",
       "unknown": "Unbekannt"
     },
+    "securityFastLane": {
+      "badge": "Sicherheitsfix",
+      "tooltip": "Behebt kritische oder hohe Schwachstellen im laufenden Image. Es braucht weiterhin eine Freigabe."
+    },
     "actions": {
       "notesAriaLabel": "Versionshinweise und Gründe für das Zurückhalten anzeigen",
       "approve": "Genehmigen",

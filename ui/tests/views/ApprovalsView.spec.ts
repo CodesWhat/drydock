@@ -371,6 +371,30 @@ describe('ApprovalsView', () => {
       expect(from[1].attributes('title')).toBe('registry:5000/team/app:1.2.3');
     });
 
+    it('marks a candidate that is a security fast lane fix, and only that one', async () => {
+      mockListApprovals.mockResolvedValue(
+        makeListResponse([
+          makeApproval({
+            id: 'a',
+            securityFastLane: {
+              fixedIds: ['CVE-1'],
+              fixedCount: 1,
+              fixedCritical: 1,
+              fixedHigh: 0,
+            },
+          }),
+          makeApproval({ id: 'b' }),
+        ]),
+      );
+      const wrapper = await mountView();
+      const badges = wrapper.findAll('[data-testid="approval-security-fast-lane"]');
+      expect(badges).toHaveLength(1);
+      expect(badges[0].text()).toBe(i18n.global.t('approvalsView.securityFastLane.badge'));
+      expect(badges[0].attributes('title')).toBe(
+        i18n.global.t('approvalsView.securityFastLane.tooltip'),
+      );
+    });
+
     it('explains notify mode while keeping approval disabled', async () => {
       mockUpdateMode.value = 'notify';
       const wrapper = await mountView();

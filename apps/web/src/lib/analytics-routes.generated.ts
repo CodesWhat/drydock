@@ -494,6 +494,7 @@ const routes = [
   "/docs/v1.8/configuration/registries/trueforge",
   "/docs/v1.8/configuration/rollback",
   "/docs/v1.8/configuration/security",
+  "/docs/v1.8/configuration/security/fast-lane",
   "/docs/v1.8/configuration/self-update",
   "/docs/v1.8/configuration/server",
   "/docs/v1.8/configuration/storage",

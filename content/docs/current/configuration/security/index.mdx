@@ -61,6 +61,7 @@ services:
 | `DD_SECURITY_TRIVY_ARGS` | ⚪ | Additional Trivy arguments as a JSON string array. Output, timeout, server, scanner, and severity flags cannot be overridden. | JSON string array | `[]` |
 | `DD_SECURITY_TRIVY_IMAGE_SRC` | ⚪ | Override Trivy's image source order. Any value Trivy accepts (e.g. `remote`, `docker`, or comma-separated `remote,docker`). When unset, Trivy uses its default source order (`docker`, `containerd`, `podman`, `remote`) and falls back to a registry pull when the local daemon is unreachable. | string | empty (Trivy auto-detects) |
 | `DD_SECURITY_TRIVY_WORKER_IMAGE` | ⚪ | Digest-pinned Trivy worker used when Trivy runs in a worker | OCI image pinned with `@sha256:` | release-pinned Trivy image |
+| `DD_SECURITY_FASTLANE` | ⚪ | Opt every container without a `dd.security.fastlane` label in to the [security fast lane](/docs/configuration/security/fast-lane), which lets an update that fixes critical or high vulnerabilities skip the maturity, snooze and maintenance window holds. | `true`, `false` | `false` |
 | `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
 | `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |

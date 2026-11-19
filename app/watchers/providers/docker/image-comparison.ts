@@ -30,6 +30,7 @@ interface ContainerTagLookupProvider {
     options?: RegistryLookupOptions,
   ) => Promise<{
     digest?: string;
+    indexDigest?: string;
     created?: string;
     softwareVersion?: string;
     version?: number;
@@ -259,6 +260,9 @@ async function handleDigestWatch(
   );
 
   result.digest = remoteDigest.digest;
+  // Always set together with the digest it belongs to, so a stale index never pairs with a new
+  // platform digest.
+  result.indexDigest = remoteDigest.indexDigest;
   result.created = remoteDigest.created;
   if (remoteDigest.softwareVersion) {
     result.softwareVersion = remoteDigest.softwareVersion;

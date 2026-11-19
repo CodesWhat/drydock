@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Оновлення попередньо переглянуто (dry run)",
       "update-failed": "Помилка оновлення",
       "auto-update-blocked": "Автооновлення заблоковано",
+      "security-fast-lane": "Швидка смуга безпеки",
       "update-policy-override-set": "Перевизначення політики оновлення встановлено",
       "update-policy-override-cleared": "Перевизначення політики оновлення очищено",
       "group-policy-set": "Політику групи встановлено",

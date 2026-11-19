@@ -51,6 +51,7 @@ export interface AuditEntry {
     | 'config-reloaded'
     | 'config-written'
     | 'auto-update-blocked'
+    | 'security-fast-lane'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'
     | 'label-override-set'

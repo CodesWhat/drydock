@@ -32,6 +32,10 @@
       "prerelease": "Ön sürüm",
       "unknown": "Bilinmiyor"
     },
+    "securityFastLane": {
+      "badge": "Güvenlik düzeltmesi",
+      "tooltip": "Çalışan imajdaki kritik veya yüksek açıkları giderir. Yine de onay gerekir."
+    },
     "actions": {
       "notesAriaLabel": "Sürüm notlarını ve bekletme nedenlerini göster",
       "approve": "Onayla",

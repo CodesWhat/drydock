@@ -32,6 +32,10 @@
       "prerelease": "預先發行版本",
       "unknown": "未知"
     },
+    "securityFastLane": {
+      "badge": "安全修復",
+      "tooltip": "修復執行中映像的嚴重或高風險漏洞。仍需要核准。"
+    },
     "actions": {
       "notesAriaLabel": "顯示版本資訊和暫緩原因",
       "approve": "核准",

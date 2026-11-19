@@ -105,6 +105,7 @@
       "update-applied-dryrun": "Đã xem trước cập nhật (Dry Run)",
       "update-failed": "Cập nhật thất bại",
       "auto-update-blocked": "Tự động cập nhật bị chặn",
+      "security-fast-lane": "Làn nhanh bảo mật",
       "update-policy-override-set": "Đã đặt ghi đè chính sách cập nhật",
       "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
       "group-policy-set": "Đã đặt chính sách nhóm",

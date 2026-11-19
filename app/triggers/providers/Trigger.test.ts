@@ -2509,6 +2509,41 @@ test('maturity-cleared uses dedicated simple templates with tag, digest fallback
   ).toBe('Container web can now be updated to sha256:abc: the maturity period has passed');
 });
 
+test('the maturity-cleared body mentions the security fast lane only when the container carries the flag', () => {
+  const base = { name: 'web', watcher: 'local', result: { tag: '2.0.0' } };
+  const securityFastLane = { fixedIds: ['CVE-1'], fixedCount: 3, fixedCritical: 1, fixedHigh: 2 };
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      securityFastLane,
+      notificationEvent: { kind: 'maturity-cleared' },
+    }),
+  ).toBe(
+    'Container web can now be updated to 2.0.0: the maturity period has passed (security fast lane: fixes 3 critical or high vulnerabilities)',
+  );
+});
+
+test('the default simple body mentions the security fast lane only when the container carries the flag', () => {
+  const { simplebody: _simplebody, ...withoutBody } = configurationValid;
+  trigger.configuration = trigger.validateConfiguration(withoutBody);
+  const body = (container: Record<string, unknown>) => trigger.renderSimpleBody(container);
+  const base = {
+    name: 'web',
+    notificationAgentPrefix: '',
+    notificationWatcherSuffix: '',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '2.0.0' },
+  };
+  expect(body(base)).toBe('Container web running with tag 1.0.0 can be updated to tag 2.0.0');
+  expect(
+    body({
+      ...base,
+      securityFastLane: { fixedIds: ['CVE-1'], fixedCount: 3, fixedCritical: 1, fixedHigh: 2 },
+    }),
+  ).toBe(
+    'Container web running with tag 1.0.0 can be updated to tag 2.0.0 (security fast lane: fixes 3 critical or high vulnerabilities)',
+  );
+});
+
 test('maturity-cleared batch title uses its dedicated template', () => {
   expect(
     trigger.renderBatchTitle([
@@ -14769,6 +14804,32 @@ describe('maintenance window auto-apply gate (deferAutoUpdateForMaintenanceWindo
     expect(mockTriggerCounterInc).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'success' }),
     );
+  });
+
+  // Security fast lane: a candidate that fixes critical/high findings is not held by the window.
+  test('action trigger dispatches inside a closed maintenance window for a security fast lane update', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({
+      changed: true,
+      container: {
+        ...container,
+        securityFastLane: { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 },
+      },
+    });
+
+    expect(triggerSpy).toHaveBeenCalled();
   });
 
   // (b) action trigger + window OPEN -> dispatches normally (trigger.trigger called via dispatch chain)

@@ -1082,6 +1082,42 @@ describe('api/container/bulk-security', () => {
       );
     });
 
+    test('scans the running image by its immutable digest and stamps that digest', async () => {
+      const digest = `sha256:${'e'.repeat(64)}`;
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: digest },
+            },
+          },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      harness.storeContainer.getContainerRaw.mockImplementation((id: string) => ({ id }));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        digest,
+      );
+      expect(
+        harness.storeContainer.updateContainer.mock.calls[0][0].security.scan.imageDigest,
+      ).toBe(digest);
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        digest,
+        expect.objectContaining({ imageDigest: digest }),
+        '2026-04-01T00:00:00.000Z',
+      );
+    });
+
     test('skips digest scan cache when scan status is error', async () => {
       const harness = createHarness({
         containers: [
