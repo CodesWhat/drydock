@@ -1,0 +1,20 @@
+{
+  "title": "API",
+  "pages": [
+    "index",
+    "action",
+    "agent",
+    "portwing",
+    "app",
+    "authentication",
+    "api-keys",
+    "approvals",
+    "container",
+    "log",
+    "notification-trigger",
+    "registry",
+    "store",
+    "trigger",
+    "watcher"
+  ]
+}

@@ -1,6 +1,7 @@
 # Versioned docs content
 
 - `current/`: active/default v1.8 RC docs, served as `v1.8`
+- `v1.8/`: pre-staged archive of the v1.8 line, bound to the published `v1.8.0-rc.16` tag by `v1.8-provenance.json`; it is not served until the v1.9.0-rc.1 cut makes `current/` v1.9
 - `v1.7/`: retained docs for the v1.7 line, updated for v1.7.1 GA on 2026-11-11; the line first went GA as v1.7.0 on 2026-10-19
 - `v1.6/`: frozen 1.6 documentation, initialized from the published v1.6.0 docs and corrected only for version-compatible errata; final release is v1.6.1
 - `v1.5/`, `v1.4/`, `v1.3/`: archived documentation
