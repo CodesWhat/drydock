@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import {
-  AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE,
   AgentContainerNotFoundError,
   AgentEnvRevealUnsupportedError,
 } from '../../../agent/AgentClient.js';
@@ -323,7 +322,7 @@ export function createRevealContainerEnvHandler(context: CrudHandlerContext) {
       ) {
         sendErrorResponse(res, 404, 'Container not found');
       } else if (error instanceof AgentEnvRevealUnsupportedError) {
-        sendErrorResponse(res, 501, AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+        sendErrorResponse(res, 501, error.message);
       } else if (error instanceof RevealWatcherMissingError) {
         sendErrorResponse(res, 500, error.message);
       } else {

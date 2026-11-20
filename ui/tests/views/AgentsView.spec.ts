@@ -467,6 +467,20 @@ describe('AgentsView', () => {
     expect(mockGetLogEntries).toHaveBeenCalledWith({ agent: 'edge-1', tail: 100 });
   });
 
+  it('hides the Logs tab for Portwing agents, which have no Drydock log route', async () => {
+    mockGetAgents.mockResolvedValue([
+      makeAgent({ name: 'pw-1', version: '1.3.0', portwing: true }),
+    ]);
+
+    const wrapper = await mountAgentsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const logsTab = wrapper.findAll('button').find((button) => button.text().includes('Logs'));
+    expect(logsTab).toBeUndefined();
+    expect(wrapper.text()).not.toContain('Update agent');
+  });
+
   describe('agent build identity', () => {
     async function openConfigTab(agent: Record<string, unknown>) {
       mockGetAgents.mockResolvedValue([makeAgent(agent)]);

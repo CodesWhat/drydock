@@ -31,6 +31,23 @@ describe('useAgentHosts', () => {
     expect(agentHosts.loaded.value).toBe(true);
   });
 
+  it('tracks Portwing agents and clears them when loading fails', async () => {
+    mockGetAgents.mockResolvedValueOnce([
+      { name: 'pw-1', connected: true, host: 'pw.local', portwing: true },
+      { name: 'dd-1', connected: true, host: 'dd.local', portwing: false },
+      { connected: true, host: 'x.local', portwing: true },
+    ]);
+
+    const { useAgentHosts } = await loadComposable();
+    const agentHosts = useAgentHosts({ autoLoad: false });
+    expect(agentHosts.isPortwingAgent(undefined)).toBe(false);
+    await agentHosts.loadAgentHosts();
+
+    expect(agentHosts.isPortwingAgent('pw-1')).toBe(true);
+    expect(agentHosts.isPortwingAgent('dd-1')).toBe(false);
+    expect(agentHosts.isPortwingAgent(undefined)).toBe(false);
+  });
+
   it('skips agents with a missing or empty name', async () => {
     mockGetAgents.mockResolvedValueOnce([
       { name: '', connected: true, host: 'nameless.local' },

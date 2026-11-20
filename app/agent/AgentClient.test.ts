@@ -2633,6 +2633,22 @@ describe('AgentClient', () => {
       expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('runs 1.6.0;'));
     });
 
+    test.each([
+      ['an edge connection', (c: any) => (c.edgeAdapter = {})],
+      ['ed25519 signing', (c: any) => (c.config.authmode = 'ed25519')],
+      ['a controller Docker transport watcher', (c: any) => c.controllerDockerTransportWatchers.add('w')],
+    ])('should skip the minimum-version warning for Portwing agents (%s)', async (_name, mark) => {
+      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+      mark(client);
+      mockLogChild.warn.mockClear();
+      await client.handleEvent('dd:ack', { version: '1.3.0' });
+      expect(client.isPortwing).toBe(true);
+      expect(client.warnings).toEqual([]);
+      expect(mockLogChild.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('image-baked lifecycle hook labels'),
+      );
+    });
+
     test('should not warn for agents on 1.7.0 or later', async () => {
       vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
       mockLogChild.warn.mockClear();
@@ -5708,8 +5724,16 @@ describe('AgentClient', () => {
 
     test('edge connections cannot reveal env', async () => {
       client.edgeAdapter = { requestContainerLogs: vi.fn(), deleteContainer: vi.fn() };
-      await expect(client.getContainerEnv('c1')).rejects.toBeInstanceOf(
-        AgentEnvRevealUnsupportedError,
+      const failure = await client.getContainerEnv('c1').catch((e: unknown) => e);
+      expect(failure).toBeInstanceOf(AgentEnvRevealUnsupportedError);
+      expect((failure as Error).message).toBe('Env reveal is not supported for Portwing agents');
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    test('standard Portwing agents cannot reveal env', async () => {
+      (client as any).controllerDockerTransportWatchers.add('docker.local');
+      await expect(client.getContainerEnv('c1')).rejects.toThrow(
+        'Env reveal is not supported for Portwing agents',
       );
       expect(axios.get).not.toHaveBeenCalled();
     });

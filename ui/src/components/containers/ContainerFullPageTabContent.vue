@@ -182,7 +182,7 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
-const { resolveHost } = useAgentHosts();
+const { resolveHost, isPortwingAgent } = useAgentHosts();
 const enrichedPorts = computed(() =>
   enrichContainerPorts(
     selectedContainer.value.details.ports,
@@ -716,6 +716,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <AppIconButton
+                      v-if="!isPortwingAgent(selectedContainer.agent)"
                       :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
                       size="toolbar"
                       variant="muted"

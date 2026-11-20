@@ -41,6 +41,7 @@ interface Agent {
   version?: string;
   build?: string;
   hookLabelsTrusted: boolean;
+  portwing: boolean;
   uptime?: string;
   logLevel?: string;
   pollInterval?: string;
@@ -176,6 +177,7 @@ async function fetchAgents() {
       version: typeof a.version === 'string' ? a.version : undefined,
       build: distinctBuild(a.version, a.build),
       hookLabelsTrusted: a.warnings?.includes('hook-labels-trusted') ?? false,
+      portwing: a.portwing === true,
       uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
@@ -429,9 +431,12 @@ const selectedAgent = ref<Agent | null>(null);
 const agentPanelOpen = ref(false);
 const agentDetailTab = ref('overview');
 
+// Portwing agents have no Drydock log route, so their detail panel has no Logs tab.
 const agentDetailTabs = computed(() => [
   { id: 'overview', label: t('agentsView.detail.tabs.overview'), icon: 'info' },
-  { id: 'logs', label: t('agentsView.detail.tabs.logs'), icon: 'logs' },
+  ...(selectedAgent.value?.portwing
+    ? []
+    : [{ id: 'logs', label: t('agentsView.detail.tabs.logs'), icon: 'logs' }]),
   { id: 'config', label: t('agentsView.detail.tabs.config'), icon: 'config' },
 ]);
 
