@@ -49,7 +49,7 @@ preserve_group_add_gids() {
 		_preserved="${_preserved:+$_preserved }$_gid"
 	done
 	if [ -n "$_preserved" ]; then
-		echo "Preserving group_add supplementary GIDs for node: $_preserved"
+		echo "Preserving group_add supplementary GIDs for node: $_preserved" >&2
 	fi
 }
 
@@ -58,7 +58,7 @@ if [ "$(id -u)" = "0" ]; then
 	# Allow opting out of privilege drop for :ro socket compatibility
 	if [ "${DD_RUN_AS_ROOT}" = "true" ]; then
 		require_insecure_root_ack
-		echo "WARNING: insecure root mode enabled (DD_RUN_AS_ROOT + DD_ALLOW_INSECURE_ROOT)"
+		echo "WARNING: insecure root mode enabled (DD_RUN_AS_ROOT + DD_ALLOW_INSECURE_ROOT)" >&2
 	elif [ -S "$DOCKER_SOCK" ]; then
 		DOCKER_GID=$(stat -c '%g' "$DOCKER_SOCK")
 		if [ "$DOCKER_GID" != "0" ]; then
