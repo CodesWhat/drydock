@@ -242,7 +242,8 @@ describe('store/db/migrations', () => {
     migrate(
       db,
       MIGRATIONS.filter(
-        (migration) => migration.version < UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
+        (migration) =>
+          migration.version < UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       ),
     );
 

@@ -2292,9 +2292,7 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
   // path like the ones LokiJS's `{'data.foo.bar': value}` filters used to
   // accept keeps matching identically instead of drifting from a
   // hand-written SQL equivalent.
-  let containerList = rowsToContainersReusingUnchanged(
-    db.prepare(CONTAINER_SELECT_ALL_SQL).all(),
-  );
+  let containerList = rowsToContainersReusingUnchanged(db.prepare(CONTAINER_SELECT_ALL_SQL).all());
   if (exactMatchEntries.length > 0) {
     containerList = containerList.filter((containerItem) =>
       exactMatchEntries.every(

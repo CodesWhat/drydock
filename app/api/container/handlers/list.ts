@@ -283,7 +283,6 @@ function setLatestOperationLookupEntry(
 function buildPreloadedActiveOperationLookup(
   operations: unknown[],
 ): PreloadedActiveOperationLookup | undefined {
-
   const byContainerId = new Map<string, ContainerUpdateOperationState>();
   const byScopedContainerName = new Map<string, ContainerUpdateOperationState>();
   const byLegacyContainerName = new Map<string, ContainerUpdateOperationState>();
