@@ -1505,7 +1505,9 @@ export class AgentClient {
       }).catch((error: unknown) => {
         this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
-      checkAgentVersion(this.name, this.info.version);
+      if (!this.isPortwing) {
+        checkAgentVersion(this.name, this.info.version);
+      }
     }
   }
 

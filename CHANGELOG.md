@@ -36,7 +36,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
-- Portwing agents no longer get the "upgrade to 1.7.0" warning and Update agent badge. The minimum-version check now applies only to Drydock agents, since Portwing versions on its own line.
+- Portwing agents no longer get the "upgrade to 1.7.0" warning and Update agent badge, or an agent-version-mismatch alert. The minimum-version check now applies only to Drydock agents, since Portwing versions on its own line.
 - Env reveal and the agent log view now answer Portwing agents with a clear 501 saying they are not supported, instead of an opaque failure, and the UI hides the env reveal button for containers on Portwing agents and the Logs tab on the agent detail panel. Container log viewing and download already work over the edge connection.
 - **Container list performance** - The container store no longer re-parses and re-validates every stored container (including its vulnerability list) each time its query cache is rebuilt after a write; only rows that changed are re-read. The container list endpoint also stops running three update-operation queries per container when no update is active, the by-identity lookup only reads active operations, and a new migration indexes `update_operations.new_container_id` so the remaining lookup no longer scans the table.
 - GHCR, LSCR and Docker Hub publish-date lookups are now shared per image and tag for each scan, so containers on the same image no longer repeat the GitHub package versions paging or the Docker Hub tag request, and each GHCR versions page now goes through the api.github.com rate limiter. This stops a large fleet from burning the anonymous GitHub API quota in one scan.

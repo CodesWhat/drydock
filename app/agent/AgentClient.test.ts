@@ -1383,6 +1383,20 @@ describe('AgentClient', () => {
       expect(checkAgentVersion).toHaveBeenCalledWith('test-agent', '1.8.0');
     });
 
+    test('skips the version check for Portwing agents', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+      client.info = { ...client.info, version: '1.3.0' };
+      (client as any).config.authmode = 'ed25519';
+
+      await client.handshake();
+
+      expect(checkAgentVersion).not.toHaveBeenCalled();
+    });
+
     test('should emit batched container reports after handshake processing', async () => {
       axios.get
         .mockResolvedValueOnce({

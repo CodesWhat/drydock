@@ -18,7 +18,6 @@ import {
   AGENT_RESPONSE_TOO_LARGE_CODE,
   AgentResponseTooLargeError,
 } from './AgentResponseTooLargeError.js';
-import { checkAgentVersion } from './agent-version-alerts.js';
 import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
 
@@ -495,7 +494,7 @@ export class EdgeAgentAdapter {
           log.debug(`Failed to emit agentConnected: ${getErrorMessage(err)}`);
         },
       );
-      checkAgentVersion(this.agentName, this.client.info.version);
+      // No version check: an edge connection is always Portwing, which versions on its own line.
     }
   }
 
