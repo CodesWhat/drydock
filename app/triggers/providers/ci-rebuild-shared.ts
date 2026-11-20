@@ -146,9 +146,8 @@ export function buildRebuildRequestOptions(
     options.proxy = parseProxyConfiguration(configuration.proxy, label);
   }
   if (configuration.insecure) {
-    // Intentional opt-in for self-hosted GitHub Enterprise / GitLab with private CAs.
-    // lgtm[js/disabling-certificate-validation]
-    options.httpsAgent = new https.Agent({ rejectUnauthorized: false });
+    // Opt-in for self-hosted GitHub Enterprise / GitLab with private CAs.
+    options.httpsAgent = new https.Agent({ rejectUnauthorized: !configuration.insecure });
   }
   return options;
 }
