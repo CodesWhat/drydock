@@ -20,6 +20,21 @@ describe('Dockerfile release defaults', () => {
     );
   });
 
+  test('ui-build stage runs on the build platform with the same pinned index digest as base', () => {
+    // The UI output is static assets, so arm64 images must not compile it under
+    // QEMU (v1.9.0-rc.1 release-cut timed out with vite hung at rendering chunks).
+    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+    const baseDigest = /^FROM (node:24-alpine@sha256:[0-9a-f]{64}) AS base$/mu.exec(
+      dockerfile,
+    )?.[1];
+    const uiFrom = /^FROM --platform=\$BUILDPLATFORM (\S+) AS ui-build$/mu.exec(dockerfile);
+
+    expect(baseDigest).toBeDefined();
+    expect(uiFrom?.[1]).toBe(baseDigest);
+    expect(dockerfile).toMatch(/COPY --from=ui-build \/home\/node\/ui\/dist\/ \.\/ui/u);
+    expect(dockerfile).toMatch(/FROM base AS app-build/u);
+  });
+
   test('base image pins are image index digests, not per-platform manifests', () => {
     // #1021: rc.4 through rc.10 pinned amd64-only manifest digests, so the
     // arm64 stage built on an amd64 rootfs and shipped x86-64 binaries under
