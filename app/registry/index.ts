@@ -47,6 +47,7 @@ import {
   applySharedTriggerConfigurationByName as applySharedTriggerConfigurationByNameHelper,
   applyTriggerGroupDefaults as applyTriggerGroupDefaultsHelper,
 } from './trigger-shared-config.js';
+import { DEFAULT_WATCHER_PROVIDER, splitWatcherProvider } from './watcher-provider.js';
 
 type SharedTriggerConfigurationInput = Parameters<
   typeof applySharedTriggerConfigurationByNameHelper
@@ -357,6 +358,7 @@ function applyTriggerGroupDefaults(
  */
 interface WatcherRegistrationEntry {
   name: string;
+  provider: string;
   configuration: ComponentConfiguration;
 }
 
@@ -382,17 +384,17 @@ function buildWatcherProviderConfigurations(
     }
     configuredLocalWatcherNames.add('local');
     return {
-      entries: [{ name: 'local', configuration: {} }],
+      entries: [{ name: 'local', provider: DEFAULT_WATCHER_PROVIDER, configuration: {} }],
       configuredLocalWatcherNames,
     };
   }
   const entries = Object.keys(configurations).map((watcherKey) => {
     const watcherKeyNormalize = watcherKey.toLowerCase();
     configuredLocalWatcherNames.add(watcherKeyNormalize);
-    return {
-      name: watcherKeyNormalize,
-      configuration: configurations[watcherKeyNormalize] as ComponentConfiguration,
-    };
+    const { provider, configuration } = splitWatcherProvider(
+      configurations[watcherKeyNormalize] as ComponentConfiguration,
+    );
+    return { name: watcherKeyNormalize, provider, configuration };
   });
   return { entries, configuredLocalWatcherNames };
 }
@@ -428,7 +430,7 @@ async function registerWatchers(options: RegistrationOptions = {}): Promise<Set<
     const watchersToRegister = entries.map((entry) =>
       registerComponent({
         kind: 'watcher',
-        provider: 'docker',
+        provider: entry.provider,
         name: entry.name,
         configuration: entry.configuration,
         componentPath: 'watchers/providers',
@@ -1025,8 +1027,8 @@ function buildDesiredEntriesForKind(
       registrationOptions,
     );
     for (const entry of watcherEntries) {
-      entries.set(`docker.${entry.name}`, {
-        provider: 'docker',
+      entries.set(`${entry.provider}.${entry.name}`, {
+        provider: entry.provider,
         name: entry.name,
         configuration: entry.configuration,
         componentPath,

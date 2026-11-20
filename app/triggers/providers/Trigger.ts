@@ -16,6 +16,7 @@ import {
 import {
   type Container,
   fullName,
+  isFileSourcedContainer,
   isLocalBuildContainer,
   isRollbackContainer as isRollbackContainerHelper,
 } from '../../model/container.js';
@@ -2608,6 +2609,14 @@ class Trigger<
       return {
         allowed: false,
         reason: 'rollback-container',
+      };
+    }
+    // A synthetic container from a file watcher has nothing running to act on, so only
+    // notification triggers may fire for it.
+    if (this.getCategory() === 'action' && isFileSourcedContainer(containerResult)) {
+      return {
+        allowed: false,
+        reason: 'file-sourced container is notification-only',
       };
     }
     if (this.agent && this.agent !== containerResult.agent) {

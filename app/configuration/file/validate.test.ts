@@ -204,6 +204,31 @@ describe('validateConfiguration', () => {
     expect(result.errors[0].message).toMatch(/Available trigger providers:/);
   });
 
+  test('validates a watcher against the provider named by its provider key', async () => {
+    const valid = await validateConfiguration({
+      DD_WATCHER_STAGING_PROVIDER: 'file',
+      DD_WATCHER_STAGING_PATH: '/config/images.yml',
+    });
+    expect(valid.errors).toEqual([]);
+
+    const missingPath = await validateConfiguration({ DD_WATCHER_STAGING_PROVIDER: 'file' });
+    expect(missingPath.errors).toHaveLength(1);
+    expect(missingPath.errors[0].message).toMatch(/path/);
+
+    const dockerOption = await validateConfiguration({
+      DD_WATCHER_STAGING_PROVIDER: 'file',
+      DD_WATCHER_STAGING_PATH: '/config/images.yml',
+      DD_WATCHER_STAGING_SOCKET: '/var/run/docker.sock',
+    });
+    expect(dockerOption.errors).toHaveLength(1);
+  });
+
+  test('a watcher without a provider key is still validated as a docker watcher', async () => {
+    const result = await validateConfiguration({ DD_WATCHER_LOCAL_SOCKET: '/var/run/docker.sock' });
+
+    expect(result.errors).toEqual([]);
+  });
+
   test('an unknown registry provider names the provider in both the path and the envKey', async () => {
     // Watchers only ever construct the fixed 'docker' provider (see
     // instanceSegments/FIXED_PROVIDER_KINDS), so an "unknown provider" for

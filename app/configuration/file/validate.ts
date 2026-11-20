@@ -28,6 +28,7 @@ import {
   getHelpfulErrorMessage,
   type RegistryComponentKind,
 } from '../../registry/component-resolution.js';
+import { splitWatcherProvider } from '../../registry/watcher-provider.js';
 import { getErrorMessage } from '../../util/error.js';
 import {
   ddEnvVars,
@@ -127,13 +128,17 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 // {name: config} object, which is why collectProviderEntries still checks
 // each provider's own value.
 function collectWatcherEntries(configurations: Record<string, unknown>): DiscoveryEntry[] {
-  return Object.keys(configurations).map((name) => ({
-    kind: 'watcher',
-    provider: 'docker',
-    name,
-    configuration: configurations[name],
-    componentPath: 'watchers/providers',
-  }));
+  return Object.keys(configurations).map((name) => {
+    // A bare `DD_WATCHER_X=value` leaves a string here, which has no provider key.
+    const { provider, configuration } = splitWatcherProvider(configurations[name] as object);
+    return {
+      kind: 'watcher',
+      provider,
+      name,
+      configuration,
+      componentPath: 'watchers/providers',
+    };
+  });
 }
 
 function collectProviderEntries(

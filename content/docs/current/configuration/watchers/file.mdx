@@ -1,0 +1,101 @@
+---
+title: "File Watcher"
+description: "Watch a static list of images from a YAML file, for images that no container runs."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+The `file` watcher provider reads a YAML list of images and checks each one for a newer tag, without any container running it. Use it for images that nothing on this host runs: pre-pull staging, CI base images, `FROM` lines in a Dockerfile, or an image you deploy somewhere Drydock can't reach.
+
+Each entry becomes a synthetic container. Tag include, exclude, transform and family, registry authentication and notification routing work the way they do for a Docker container.
+
+<Callout type="warn" title="Notification only">
+A file entry has no running container behind it, so Drydock never updates it. Action triggers (`docker`, `dockercompose`, `command`) skip it, the update API and the UI refuse it, and the container shows up with `source: file`. Notification triggers fire as usual.
+</Callout>
+
+## Enable it
+
+A watcher uses the `docker` provider unless you name another one. Set `PROVIDER` to `file` and give it a `PATH`:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    volumes:
+      - ./config:/config:ro
+    environment:
+      - DD_WATCHER_STAGING_PROVIDER=file
+      - DD_WATCHER_STAGING_PATH=/config/images.yml
+```
+
+`staging` is the watcher name. It shows up as the watcher on every container the list produces. As soon as one `DD_WATCHER_*` variable is set, Drydock no longer creates the default `local` Docker watcher, so add a Docker watcher next to it if you still want to watch containers:
+
+```yaml
+    environment:
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+      - DD_WATCHER_STAGING_PROVIDER=file
+      - DD_WATCHER_STAGING_PATH=/config/images.yml
+```
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_WATCHER_{watcher_name}_PROVIDER` | 🔴 | Selects the `file` provider | `file` | `docker` |
+| `DD_WATCHER_{watcher_name}_PATH` | 🔴 | Path of the YAML list, as seen inside the Drydock container | File path | |
+| `DD_WATCHER_{watcher_name}_CRON` | ⚪ | When to check every image in the list | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
+| `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to spread the load on the registries | >= 0 | `60000` (1 minute) |
+| `DD_WATCHER_{watcher_name}_WATCHFILE` | ⚪ | Re-check as soon as the file changes, see [Reloading](#reloading) | `true`, `false` | `true` |
+
+Docker-only options such as `SOCKET`, `HOST` or `WATCHALL` are rejected on a `file` watcher.
+
+## The list
+
+The file is a YAML list. An entry is a map, or a bare image string for the simple case:
+
+```yaml
+- nginx:1.25.3
+- image: ghcr.io/acme/app:1.4.0
+  name: acme-app
+  tag:
+    include: '^1\.'
+    exclude: rc
+  labels:
+    dd.display.name: Acme app
+    dd.notification.include: slack.team
+- image: node:20.11.0
+  name: ci-node
+  tag:
+    family: loose
+```
+
+| Field | Required | Description |
+| --- | :---: | --- |
+| `image` | 🔴 | Image reference with a tag, such as `ghcr.io/org/app:1.4.0`. No tag means `latest`. Digest references (`@sha256:...`) are not accepted. |
+| `name` | ⚪ | Name of the entry, unique in the file. Letters, digits, `.`, `_` and `-`. Defaults to the image path, so two entries for the same image need a `name`. |
+| `labels` | ⚪ | Map of `dd.*` [labels](/docs/configuration). Values can be strings, numbers or booleans. Other label names are rejected. |
+| `tag` | ⚪ | Shorthand for the tag labels: `include`, `exclude`, `transform` and `family` set `dd.tag.include`, `dd.tag.exclude`, `dd.tag.transform` and `dd.tag.family`. Setting both a field and its label is an error. |
+
+Everything a `dd.*` label does on a Docker container works here, including `dd.tag.*`, `dd.display.*`, `dd.link.template`, `dd.registry.lookup.image`, `dd.notification.include` and `dd.notification.exclude`, and the `dd.updatePolicy.*` labels. Labels that act on a running container, such as `dd.watch` and `dd.depends_on`, have nothing to act on.
+
+### Pinned tags
+
+The entry's tag is what you run today, and Drydock compares newer tags against it with the same rules as for a container. A fully pinned tag such as `1.25.3` follows the usual pin gate: you get an informational insight about newer tags, and an update is only reported once you allow climbing with `tag.include` or `tag.family: loose`. Digest watching is off for list entries, because there is no local image to take a digest from. That also means a floating tag such as `latest` has nothing to compare against, so list the version you run.
+
+## Reloading {#reloading}
+
+Drydock reads the file when the watcher starts, on every scheduled check, and shortly after the file changes (the directory is watched, so editors that replace the file are handled, and a burst of edits runs one check). Set `WATCHFILE=false` to read it only on the schedule. On a single-file bind mount the host's change events can be missed, so the schedule is the fallback.
+
+The file is checked as a whole. A YAML error, a bad entry or a duplicate name rejects the file, and Drydock keeps watching the last list that was good, so a typo or a deleted file never empties your watch list. The log names every problem with the entry number:
+
+```text
+/config/images.yml is invalid, keeping the last good list of 3 image(s): entry 2: image "ghcr.io/acme/app@sha256:abc" is digest-pinned; reference a tag instead, such as name:1.2.3; entry 4: name "nginx" is already used, set a unique name
+```
+
+The same message is reported once per distinct file content, not on every check. An empty file is also rejected, to tell it apart from a truncated one. Write `[]` for an empty list. When an entry is removed from a good file, its container is removed from Drydock.
+
+If the file is bad when Drydock starts, the watcher starts with an empty list and picks the file up as soon as it validates.
+
+## What is not covered
+
+A locally built image that was never pushed has no registry to ask, so there is nothing to compare. Watching other local tags of the same image name is not part of this provider.

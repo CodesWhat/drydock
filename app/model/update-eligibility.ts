@@ -16,7 +16,7 @@ import {
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
-import { isRollbackContainer } from './container.js';
+import { isFileSourcedContainer, isRollbackContainer } from './container.js';
 import {
   GROUP_POLICY_ACTION_HINT,
   groupTriggerExcludedMessage,
@@ -308,6 +308,26 @@ export function computeUpdateEligibility(
           reason: 'no-update-available',
           message: 'No newer image detected.',
           actionable: false,
+        }),
+      ],
+      evaluatedAt,
+      ...updateMode,
+    };
+  }
+
+  // A container from a static image list has no running Docker container behind it, so there
+  // is nothing for an action to update. It is notification-only: this hard blocker stops the
+  // manual path, and `Trigger.getMustTriggerDecision` stops the automatic one.
+  if (isFileSourcedContainer(container)) {
+    return {
+      eligible: false,
+      blockers: [
+        makeBlocker({
+          reason: 'no-update-trigger-configured',
+          message:
+            'This image comes from a file watcher list. It is notification-only and cannot be updated by Drydock.',
+          actionable: false,
+          details: { source: 'file' },
         }),
       ],
       evaluatedAt,

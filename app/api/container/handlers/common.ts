@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import type { Container } from '../../../model/container.js';
+import { type Container, isFileSourcedContainer } from '../../../model/container.js';
 import { sendErrorResponse } from '../../error-response.js';
 import type { CrudHandlerContext } from '../crud-context.js';
 
@@ -17,7 +17,7 @@ export function getContainerOrNotFound(
 }
 
 export function resolveWatcherIdForContainer(container: Container): string {
-  let watcherId = `docker.${container.watcher}`;
+  let watcherId = `${isFileSourcedContainer(container) ? 'file' : 'docker'}.${container.watcher}`;
   if (container.agent) {
     watcherId = `${container.agent}.${watcherId}`;
   }
