@@ -1,14 +1,21 @@
-// Checks against the production build in .next. Skipped when no build exists
+// Checks against the production build in .next. Skipped when no build exists or it is
+// older than the newest file under src or content/docs
 // (`npm run build` first); the build itself is what proves the static render.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import nextConfig from "../next.config.mjs";
+import { staleBuildReason } from "./built-site-staleness.mjs";
 
 const next = new URL("../.next/", import.meta.url);
-const built = existsSync(new URL("prerender-manifest.json", next));
-const opts = { skip: built ? false : "no .next build (run `npm run build`)" };
+const staleReason = staleBuildReason(fileURLToPath(new URL("BUILD_ID", next)), [
+  fileURLToPath(new URL("../src", import.meta.url)),
+  fileURLToPath(new URL("../../../content/docs", import.meta.url)),
+]);
+const built = !staleReason && existsSync(new URL("prerender-manifest.json", next));
+const opts = { skip: built ? false : staleReason || "no .next build (run `npm run build`)" };
 
 const read = (path) => readFileSync(new URL(path, next), "utf8");
 const manifest = built ? JSON.parse(read("prerender-manifest.json")) : { routes: {} };
