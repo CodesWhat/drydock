@@ -903,7 +903,7 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     expect(emitAgentConnected).toHaveBeenCalledWith(expect.objectContaining({ reconnected: true }));
   });
 
-  test('checks the agent version once, when the agent first connects', async () => {
+  test('never checks the agent version, since Portwing versions on its own line', async () => {
     const { adapter, ws, client } = createAdapter();
     client.info = { ...client.info, version: '1.8.0' };
     adapter.activate();
@@ -913,11 +913,7 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     sendFrame(ws, 'dd:container_sync', { containers: [] });
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(checkAgentVersion).toHaveBeenCalledTimes(1);
-    expect(checkAgentVersion).toHaveBeenCalledWith(
-      expect.stringContaining('portwing-edge-'),
-      '1.8.0',
-    );
+    expect(checkAgentVersion).not.toHaveBeenCalled();
   });
 
   test('does not emit agentConnected twice', async () => {

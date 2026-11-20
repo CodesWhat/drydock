@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
+import { useAgentHosts } from '../../composables/useAgentHosts';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -58,6 +59,7 @@ function getRevealedValue(containerId: string, key: string): string | undefined 
 }
 
 const { selectedContainer } = useContainersViewTemplateContext();
+const { isPortwingAgent } = useAgentHosts();
 </script>
 
 <template>
@@ -81,6 +83,7 @@ const { selectedContainer } = useContainersViewTemplateContext();
               <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
               <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
               <AppIconButton
+                v-if="!isPortwingAgent(selectedContainer.agent)"
                 :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
                 size="toolbar"
                 variant="muted"

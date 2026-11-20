@@ -381,10 +381,12 @@ function createConnectTrackingTransport(state: { connected: boolean }, timeoutMs
 export const AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE =
   'Env reveal needs the agent upgraded to this version';
 
-/** The agent has no env route (older agent, or an edge connection). */
+const PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE = 'Env reveal is not supported for Portwing agents';
+
+/** The agent has no env route (older agent, or a Portwing agent). */
 export class AgentEnvRevealUnsupportedError extends Error {
-  constructor() {
-    super(AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+  constructor(message: string = AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE) {
+    super(message);
     this.name = 'AgentEnvRevealUnsupportedError';
   }
 }
@@ -1502,7 +1504,9 @@ export class AgentClient {
       }).catch((error: unknown) => {
         this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
-      checkAgentVersion(this.name, this.info.version);
+      if (!this.isPortwing) {
+        checkAgentVersion(this.name, this.info.version);
+      }
     }
   }
 
@@ -1831,8 +1835,22 @@ export class AgentClient {
     };
   }
 
+  /**
+   * Whether this agent is a Portwing agent rather than a Drydock agent: an edge
+   * connection, ed25519 request signing, or a controller-Docker-transport watcher.
+   * Portwing versions on their own line, so Drydock's minimum-version checks and
+   * Drydock-only agent routes (env reveal, agent log entries) do not apply.
+   */
+  get isPortwing(): boolean {
+    return (
+      this.edgeAdapter !== undefined ||
+      this.config.authmode === 'ed25519' ||
+      this.controllerDockerTransportWatchers.size > 0
+    );
+  }
+
   get warnings(): AgentWarning[] {
-    return getAgentWarnings(this.info);
+    return this.isPortwing ? [] : getAgentWarnings(this.info);
   }
 
   private handleAckEvent(data: unknown) {
@@ -2906,8 +2924,8 @@ export class AgentClient {
    * agent at the time of use.
    */
   async getContainerEnv(containerId: string): Promise<Array<{ key: string; value: string }>> {
-    if (this.edgeAdapter) {
-      throw new AgentEnvRevealUnsupportedError();
+    if (this.isPortwing) {
+      throw new AgentEnvRevealUnsupportedError(PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE);
     }
     try {
       const target = `/api/containers/${encodeURIComponent(containerId)}/env`;
