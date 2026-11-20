@@ -1473,8 +1473,10 @@ class Hass {
     let watcherUpdateCount: number;
     if (this.configuration.hass.agenttopicsegment) {
       // #386 — filter by agent to avoid cross-agent contamination on shared watcher names
+      // Raw (uncloned, read-only) view: only agent and updateAvailable are read,
+      // so skip the per-call clone and env redaction of getContainers().
       const watcherContainers = containerStore
-        .getContainers({ watcher: container.watcher })
+        .getContainersRaw({ watcher: container.watcher })
         .filter((c) => normalizeAgentValue(c.agent) === containerAgentName);
       watcherTotalCount = watcherContainers.length;
       watcherUpdateCount = watcherContainers.filter((c) => c.updateAvailable).length;
