@@ -148,6 +148,11 @@ export function useTotpFactor() {
         return;
       }
       status.value = next;
+      if (!next.managementAllowed) {
+        unavailable.value = 'https-required';
+      } else if (unavailable.value === 'https-required') {
+        unavailable.value = undefined;
+      }
       loadError.value = '';
       loadState.value = 'ready';
     } catch (failure: unknown) {

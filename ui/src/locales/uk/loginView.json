@@ -31,6 +31,8 @@
       "challengeExpired": "Час перевірки минув. Увійдіть знову.",
       "challengeLocked": "Забагато спроб. Повторіть через {time}.",
       "challengeLockedLater": "Забагато спроб. Повторіть пізніше.",
+      "rateLimited": "Забагато спроб. Повторіть через {time}.",
+      "rateLimitedLater": "Забагато спроб. Повторіть пізніше.",
       "challengeUnavailable": "Перевірка зараз недоступна. Повторіть спробу трохи згодом."
     },
     "connectionLost": {

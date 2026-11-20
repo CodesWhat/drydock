@@ -1,0 +1,104 @@
+---
+title: "GitHub Dispatch"
+description: "The githubdispatch trigger asks a GitHub repository to rebuild a locally built image when its upstream base image has a newer tag."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `githubdispatch` trigger sends a [`repository_dispatch`](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event) event to a GitHub repository so a workflow can rebuild a locally built image when its upstream base image has a newer tag. GitHub Enterprise Server is supported through `URL`.
+
+It is a notification trigger, so it uses the `DD_NOTIFICATION_*` prefix. It never updates a container itself. The Docker and Docker Compose actions refuse to run for a locally built image, so a build is never replaced by the stock upstream image, and this trigger only asks your own pipeline to rebuild.
+
+By default it fires only for a base image update of a locally built image: a container with `dd.registry.lookup.image` set whose image was built on the host (see [local builds](/docs/configuration/registries#locally-built-images-base-image-updates)). Set `BASEIMAGEONLY=false` to let it fire for any update that the normal trigger filters allow.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_REPOSITORY` | 🔴 | The repository to dispatch to | `owner/repo` | |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_TOKEN` | 🔴 | A token that can create repository dispatch events (a fine-grained token with Contents write, or a classic token with `repo` scope) | | |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_EVENTTYPE` | ⚪ | The `event_type` your workflow listens for | Any string | `drydock-base-image-update` |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_URL` | ⚪ | The GitHub API base URL, for GitHub Enterprise Server | `http` or `https` URL, for example `https://ghe.example.com/api/v3` | `https://api.github.com` |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_BASEIMAGEONLY` | ⚪ | Only fire for a base image update of a locally built image | `true`, `false` | `true` |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_PROXY` | ⚪ | The HTTP proxy | Valid `http` or `https` proxy URL | |
+| `DD_NOTIFICATION_GITHUBDISPATCH_{trigger_name}_INSECURE` | ⚪ | Skip TLS certificate verification, for a GitHub Enterprise Server with a private CA | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). Its message templates are not used: the request carries the structured payload below.</Callout>
+
+<Callout type="info">Requests have the outbound HTTP timeout (30 seconds by default, `DD_OUTBOUND_HTTP_TIMEOUT_MS`) and do not follow redirects. A failure or timeout is logged like any other trigger failure with the HTTP status and the GitHub error message. The token never appears in logs or in the configuration API.</Callout>
+
+## Request
+
+```http
+POST {URL}/repos/{owner}/{repo}/dispatches
+Accept: application/vnd.github+json
+Authorization: Bearer <token>
+X-GitHub-Api-Version: 2022-11-28
+```
+
+A single update and a batch use the same shape. A single update sends a `containers` array of one. A batch sends one dispatch for all qualifying containers.
+
+```json
+{
+  "event_type": "drydock-base-image-update",
+  "client_payload": {
+    "source": "drydock",
+    "event": "base-image-update",
+    "count": 1,
+    "containers": [
+      {
+        "name": "web",
+        "image": "acme/web",
+        "localTag": "1.24.0",
+        "baseImage": "library/nginx",
+        "currentBaseTag": "1.24.0",
+        "newBaseTag": "1.25.0",
+        "currentBaseDigest": "sha256:aaa...",
+        "newBaseDigest": "sha256:bbb...",
+        "updateKind": { "kind": "tag", "baseImage": true, "semverDiff": "minor" }
+      }
+    ]
+  }
+}
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | Container name |
+| `image` | The locally built image name |
+| `localTag` | The tag of the local image |
+| `baseImage` | The upstream base from `dd.registry.lookup.image` |
+| `currentBaseTag` / `newBaseTag` | The base tag the build tracks and the newer tag found |
+| `currentBaseDigest` / `newBaseDigest` | Digests, when known |
+| `updateKind` | `kind`, `baseImage` (`true` for a base image update) and `semverDiff` |
+
+GitHub accepts at most 10 top-level `client_payload` properties and about 64 KB, so the context sits under `containers`.
+
+## Examples
+
+### Rebuild when the base image changes
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    ...
+    environment:
+      - DD_NOTIFICATION_GITHUBDISPATCH_REBUILD_REPOSITORY=acme/web-image
+      - DD_NOTIFICATION_GITHUBDISPATCH_REBUILD_TOKEN=github_pat_xxx
+```
+
+The workflow in `acme/web-image`:
+
+```yaml
+on:
+  repository_dispatch:
+    types: [drydock-base-image-update]
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo '${{ toJson(github.event.client_payload) }}'
+```

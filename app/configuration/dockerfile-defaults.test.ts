@@ -151,6 +151,23 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
     expect(result.status).toBe(0);
     expect(calls).toEqual([expect.stringMatching(/^su-exec node /u)]);
     expect(result.stdout).not.toContain('Preserving');
+    expect(result.stderr).not.toContain('Preserving');
+  });
+
+  test('writes the insecure root warning to stderr so scan output stays clean', () => {
+    writeStub('node', 'echo "node $*"');
+    const result = spawnSync('bash', [entrypointPath, 'node', 'dist/index.js', 'scan'], {
+      encoding: 'utf8',
+      env: {
+        PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`,
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'true',
+      },
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('node dist/index.js scan\n');
+    expect(result.stderr).toContain('WARNING: insecure root mode enabled');
   });
 
   test('skips node primary GID', () => {
@@ -164,13 +181,15 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
 
     expect(calls).toEqual([expect.stringMatching(/^su-exec node /u)]);
     expect(result.stdout).not.toContain('Preserving');
+    expect(result.stderr).not.toContain('Preserving');
   });
 
   test('adds node to the root group for a group_add of 0', () => {
     const { result, calls } = run({ groups: '0 0' });
 
     expect(calls).toEqual(['addgroup node root', expect.stringMatching(/^su-exec node /u)]);
-    expect(result.stdout).toContain('Preserving group_add supplementary GIDs for node: 0');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('Preserving group_add supplementary GIDs for node: 0');
   });
 
   test('creates a named group for a group_add GID with no entry', () => {
@@ -182,7 +201,8 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
       'addgroup node dd-gid-4242',
       expect.stringMatching(/^su-exec node /u),
     ]);
-    expect(result.stdout).toContain('node: 0 4242');
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('node: 0 4242');
   });
 
   test('keeps the docker socket group alongside group_add GIDs', async () => {

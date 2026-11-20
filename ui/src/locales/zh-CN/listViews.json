@@ -5,6 +5,8 @@
     "filterPlaceholder": "按目标或事件筛选...",
     "onThisPage": "本页内",
     "containerFilterPlaceholder": "容器名称...",
+    "actorFilterPlaceholder": "用户...",
+    "actorFilterLabel": "按用户筛选",
     "allEvents": "所有事件",
     "eventsSelected": "已选择 {count} 个事件",
     "clear": "清除",
@@ -16,12 +18,19 @@
       "nextPage": "下一页"
     },
     "emptyFiltered": "没有审计记录匹配您的筛选条件",
+    "systemActor": "系统",
+    "exportError": "导出审计日志失败",
+    "export": {
+      "csv": "导出 CSV",
+      "json": "导出 JSON"
+    },
     "columns": {
       "time": "时间",
       "event": "事件",
       "target": "目标",
       "status": "状态",
-      "details": "详情"
+      "details": "详情",
+      "actor": "操作者"
     },
     "card": {
       "time": "时间",
@@ -34,7 +43,8 @@
       "fromVersion": "从版本",
       "toVersion": "到版本",
       "trigger": "触发器",
-      "details": "详情"
+      "details": "详情",
+      "actor": "操作者"
     },
     "status": {
       "success": "成功",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "更新已预览（Dry Run）",
       "update-failed": "更新失败",
       "auto-update-blocked": "自动更新被阻止",
+      "security-fast-lane": "安全快速通道",
       "update-policy-override-set": "更新策略覆盖已设置",
       "update-policy-override-cleared": "更新策略覆盖已清除",
       "group-policy-set": "组策略已设置",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "通知发送失败",
       "security-alert": "安全警报",
       "maturity-cleared": "等待期已结束",
-      "image-prune": "镜像清理"
+      "image-prune": "镜像清理",
+      "cleanup": "清理",
+      "notification-silence-set": "已设置通知静音",
+      "notification-silence-cleared": "已取消通知静音"
     },
     "target": {
       "container": "容器",

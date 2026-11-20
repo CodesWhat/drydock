@@ -1237,7 +1237,10 @@ describe('Docker Watcher', () => {
 
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.0.0' });
+      expect(result).toEqual({
+        tag: '1.0.0',
+        lookupError: 'no configured registry matches unknown',
+      });
       expect(mockLogChild.error).toHaveBeenCalledWith(
         expect.stringContaining('Unsupported registry (unknown)'),
       );
@@ -1650,6 +1653,10 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({
         releaseMaturity: { earlierReleases: 0, family: '2', version: '2.0.0' },
         tag: 'v2.0.0',
+        updateCandidates: {
+          minor: { tag: 'v1.1.0', semverDiff: 'minor' },
+          major: { tag: 'v2.0.0', semverDiff: 'major' },
+        },
       });
       expect(mockLogChild.debug).toHaveBeenCalledWith(
         expect.stringContaining(
@@ -2988,10 +2995,10 @@ describe('Docker Watcher', () => {
       const logChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, logChild);
       expect(logChild.warn).toHaveBeenCalledWith(expect.stringContaining('Invalid regex pattern'));
-      // An invalid includeTags regex compiles to null, so no filter is applied and 2.0.0
-      // stays a candidate. This used to read 1.0.0 only because the mocked tag.isGreater
-      // was false; isGreaterCandidateTag now orders numerically before consulting it.
-      expect(result.tag).toBe('2.0.0');
+      // An invalid includeTags regex fails closed: no candidates, and the lookup error
+      // names the bad pattern.
+      expect(result.tag).toBe('1.0.0');
+      expect(result.lookupError).toContain('Tag include filter "[invalid" is invalid');
     });
 
     test('should warn when excludeTags regex is invalid', async () => {
@@ -4371,7 +4378,10 @@ describe('Docker Watcher', () => {
       };
 
       const result = await docker.findNewVersion(container, logChild);
-      expect(result).toEqual({ tag: '1.2.3' });
+      expect(result).toEqual({
+        tag: '1.2.3',
+        lookupError: 'no configured registry matches unknown',
+      });
       expect(logChild.error).toHaveBeenCalledWith('Unsupported registry (unknown)');
     });
   });

@@ -28,6 +28,7 @@ const {
   mockApplyContainerUpdatePolicyAction,
   mockRequestContainerUpdate,
   mockGetServerConfiguration,
+  mockRegistryGetState,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn() },
   mockListApprovals: vi.fn(),
@@ -43,6 +44,7 @@ const {
   mockApplyContainerUpdatePolicyAction: vi.fn(),
   mockRequestContainerUpdate: vi.fn(),
   mockGetServerConfiguration: vi.fn(() => ({ feature: { containeractions: true } })),
+  mockRegistryGetState: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -83,6 +85,7 @@ vi.mock('../updates/request-update.js', () => ({
   },
 }));
 vi.mock('../store/container.js', () => ({ getContainer: mockGetContainer }));
+vi.mock('../registry/index.js', () => ({ getState: mockRegistryGetState }));
 vi.mock('./sse-container-enrichment.js', () => ({
   buildEligibilityContext: mockBuildEligibilityContext,
 }));
@@ -183,6 +186,7 @@ beforeEach(() => {
   mockCountApprovals.mockReturnValue({ pending: 2, deferred: 1, decidedToday: 3 });
   mockGetApprovalById.mockReturnValue(undefined);
   mockGetContainer.mockReturnValue(undefined);
+  mockRegistryGetState.mockReturnValue({ trigger: {} });
   mockDecideApprovalIfPending.mockImplementation((_id: string, patch: Partial<ApprovalRecord>) => ({
     status: 'decided',
     record: { ...createRecord(), ...patch },
@@ -243,6 +247,31 @@ describe('GET /', () => {
       offset: 0,
       hasMore: false,
     });
+  });
+
+  test('flags rows whose container is on the security fast lane and leaves the rest alone', () => {
+    const fastLane = { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 };
+    mockListApprovals.mockReturnValue({
+      records: [
+        createRecord({ id: 'a', containerId: 'on-lane' }),
+        createRecord({ id: 'b', containerId: 'off-lane' }),
+        createRecord({ id: 'c', containerId: 'gone' }),
+      ],
+      total: 3,
+    });
+    mockGetContainer.mockImplementation((id: string) =>
+      id === 'on-lane'
+        ? createContainer({ securityFastLane: fastLane } as Partial<Container>)
+        : id === 'off-lane'
+          ? createContainer()
+          : undefined,
+    );
+
+    const { body } = callList({});
+
+    expect(body.data[0].securityFastLane).toStrictEqual(fastLane);
+    expect(body.data[1]).not.toHaveProperty('securityFastLane');
+    expect(body.data[2]).not.toHaveProperty('securityFastLane');
   });
 
   test('passes every filter through and paginates', () => {
@@ -353,6 +382,25 @@ describe('GET /:id', () => {
     expect(body.holdReasons).toStrictEqual([
       expect.objectContaining({ reason: 'snoozed', severity: 'soft' }),
     ]);
+  });
+
+  test('flags the row and carries the lifted holds when the candidate is a security fix', () => {
+    const fastLane = { fixedIds: ['CVE-1'], fixedCount: 1, fixedCritical: 1, fixedHigh: 0 };
+    mockGetApprovalById.mockReturnValue(createRecord());
+    mockGetContainer.mockReturnValue(
+      createContainer({
+        securityFastLane: fastLane,
+        updatePolicy: { snoozeUntil: '2999-01-01T00:00:00.000Z' },
+      } as Partial<Container>),
+    );
+    const res = createMockResponse();
+
+    getHandler('/:id')({ params: { id: 'approval-1' } }, res);
+
+    const body = vi.mocked(res.json).mock.calls[0][0];
+    expect(body.approval.securityFastLane).toStrictEqual(fastLane);
+    expect(body.holdReasons).toStrictEqual([]);
+    expect(body.eligibility.securityFastLane.bypassedHolds).toStrictEqual(['snoozed']);
   });
 
   test('keeps a hard blocker in eligibility rather than reporting it as a hold reason', () => {
@@ -509,7 +557,7 @@ describe('decision preconditions', () => {
   test.each([
     ['/:id/approve', { until: '2999-01-01T00:00:00.000Z' }, 'note'],
     ['/:id/approve', { days: 3 }, 'note'],
-    ['/:id/reject', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'note'],
+    ['/:id/reject', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'note, scope'],
     ['/:id/defer', { snoozeUntil: '2999-01-01T00:00:00.000Z' }, 'until, days, note'],
     ['/:id/defer', { ids: ['approval-2'] }, 'until, days, note'],
   ])('%s rejects %o as a property it does not take', async (path, body, allowed) => {
@@ -608,6 +656,78 @@ describe('decision preconditions', () => {
 
     expect(status).not.toBe(409);
     expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+  });
+
+  describe('a ref that flipped between tag and digest', () => {
+    const live = (result: Record<string, string> | undefined, remote = '1.2.4') =>
+      createContainer({
+        result,
+        updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: remote },
+      } as Partial<Container>);
+
+    beforeEach(() => {
+      mockDecideApprovalIfPending.mockImplementation(
+        (_id: string, patch: Partial<ApprovalRecord>) => ({
+          status: 'decided',
+          record: { ...createRecord(), ...patch },
+        }),
+      );
+    });
+
+    test.each(DECISION_PATHS)(
+      '%s decides a tag-only row once the same tag carries a digest',
+      async (path) => {
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:abc' }));
+
+        const { status } = await callDecision(path);
+
+        expect(status).not.toBe(409);
+        expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s 409s a tag-only row when the tag changed, with no side effects',
+      async (path) => {
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.5', digest: 'sha256:abc' }, '1.2.5'));
+
+        const { status } = await callDecision(path);
+
+        expect(status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+        expect(mockRequestContainerUpdate).not.toHaveBeenCalled();
+        expect(mockApplyContainerUpdatePolicyAction).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s 409s a digest-backed row when the live digest changed',
+      async (path) => {
+        mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: 'sha256:abc' }));
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:def' }));
+
+        const { status } = await callDecision(path);
+
+        expect(status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+      },
+    );
+
+    test.each(DECISION_PATHS)(
+      '%s refuses a digest-backed row while the digest is missing, and decides once it returns',
+      async (path) => {
+        mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: 'sha256:abc' }));
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4' }));
+
+        expect((await callDecision(path)).status).toBe(409);
+        expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+
+        mockGetContainer.mockReturnValue(live({ tag: '1.2.4', digest: 'sha256:abc' }));
+
+        expect((await callDecision(path)).status).not.toBe(409);
+        expect(mockDecideApprovalIfPending).toHaveBeenCalled();
+      },
+    );
   });
 });
 
@@ -793,6 +913,58 @@ describe('POST /:id/reject', () => {
       'decided',
       expect.objectContaining({ decision: 'rejected' }),
     );
+  });
+
+  test.each(['minor', 'major'] as const)(
+    'skips the whole %s line when the scope says so and records it in the audit entry',
+    async (scope) => {
+      const container = createContainer();
+      mockGetContainer.mockReturnValue(container);
+
+      const { status } = await callDecision('/:id/reject', { body: { scope } });
+
+      expect(status).toBe(200);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(container, 'skip-current', {
+        scope,
+      });
+      expect(getAuditDetails()).toMatchObject({ decision: 'rejected', scope });
+    },
+  );
+
+  test('treats an explicit tag scope as the default exact skip', async () => {
+    const container = createContainer();
+    mockGetContainer.mockReturnValue(container);
+
+    const { status } = await callDecision('/:id/reject', { body: { scope: 'tag' } });
+
+    expect(status).toBe(200);
+    expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledWith(
+      container,
+      'skip-current',
+      {},
+    );
+    expect(getAuditDetails()).not.toHaveProperty('scope');
+  });
+
+  test.each([['patch'], [3], [null]])('rejects scope %j with 400', async (scope) => {
+    const { status, body } = await callDecision('/:id/reject', { body: { scope } });
+
+    expect(status).toBe(400);
+    expect(body).toStrictEqual({ error: 'Invalid scope; expected tag, minor, or major' });
+    expect(mockDecideApprovalIfPending).not.toHaveBeenCalled();
+  });
+
+  test('puts the row back when a line scope is refused for a digest or non-semver update', async () => {
+    mockApplyContainerUpdatePolicyAction.mockReturnValue({
+      error: 'Only a tag update can be skipped by major line',
+    });
+
+    const { status, body } = await callDecision('/:id/reject', { body: { scope: 'major' } });
+
+    expect(status).toBe(400);
+    expect(body).toStrictEqual({ error: 'Only a tag update can be skipped by major line' });
+    expect(mockRestoreApproval).toHaveBeenCalledWith(createRecord());
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
   });
 
   test('puts the row back when the policy layer refuses the skip', async () => {
@@ -1019,6 +1191,43 @@ describe('POST /bulk', () => {
       const { next } = runGuard(undefined);
 
       expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('reject scope', () => {
+    test('passes the scope to every rejected row', async () => {
+      const { status, body } = await callBulk({
+        ids: ['approval-1', 'approval-2'],
+        action: 'reject',
+        scope: 'major',
+      });
+
+      expect(status).toBe(200);
+      expect(body.accepted).toHaveLength(2);
+      expect(mockApplyContainerUpdatePolicyAction).toHaveBeenCalledTimes(2);
+      for (const call of mockApplyContainerUpdatePolicyAction.mock.calls) {
+        expect(call.slice(1)).toStrictEqual(['skip-current', { scope: 'major' }]);
+      }
+    });
+
+    test.each(['approve', 'defer'])('refuses a scope on %s', async (action) => {
+      const { status, body } = await callBulk({ ids: ['approval-1'], action, scope: 'major' });
+
+      expect(status).toBe(400);
+      expect(body).toStrictEqual({
+        error: 'Invalid request body; scope is only valid with action reject',
+      });
+    });
+
+    test('refuses an unknown scope', async () => {
+      const { status, body } = await callBulk({
+        ids: ['approval-1'],
+        action: 'reject',
+        scope: 'patch',
+      });
+
+      expect(status).toBe(400);
+      expect(body).toStrictEqual({ error: 'Invalid scope; expected tag, minor, or major' });
     });
   });
 
@@ -1454,5 +1663,60 @@ describe('OpenAPI contract', () => {
     getHandler('/:id')({ params: { id: 'approval-1' } }, res);
 
     expectValid('/api/v1/approvals/{id}', vi.mocked(res.json).mock.calls[0][0]);
+  });
+});
+
+describe('a trigger that separates update types', () => {
+  const separateTriggers = {
+    trigger: {
+      'docker.local': {
+        type: 'docker',
+        configuration: { auto: 'none', threshold: 'minor', separateupdatetypes: true },
+        getId: () => 'docker.local',
+      },
+    },
+  };
+
+  function createMajorContainer() {
+    return createContainer({
+      updateAvailable: true,
+      result: {
+        tag: '3.0.0',
+        updateCandidates: { minor: { tag: '1.5.0', semverDiff: 'minor' } },
+      },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '3.0.0', semverDiff: 'major' },
+    });
+  }
+
+  beforeEach(() => {
+    mockRegistryGetState.mockReturnValue(separateTriggers);
+    mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: '1.5.0', toRef: '1.5.0' }));
+    mockGetContainer.mockReturnValue(createMajorContainer());
+  });
+
+  test('approving dispatches the candidate the row names', async () => {
+    const { status } = await callDecision('/:id/approve');
+
+    expect(status).toBe(202);
+    const dispatched = mockRequestContainerUpdate.mock.calls[0][0];
+    expect(dispatched.result.tag).toBe('1.5.0');
+    expect(dispatched.updateKind.remoteValue).toBe('1.5.0');
+  });
+
+  test('a row naming the primary is superseded once the trigger chooses another candidate', async () => {
+    mockGetApprovalById.mockReturnValue(createRecord({ candidateRef: '3.0.0', toRef: '3.0.0' }));
+
+    const { status } = await callDecision('/:id/approve');
+
+    expect(status).toBe(409);
+    expect(mockRequestContainerUpdate).not.toHaveBeenCalled();
+  });
+
+  test('the detail view evaluates eligibility against the chosen candidate', () => {
+    const res = createMockResponse();
+
+    getHandler('/:id')({ params: { id: 'approval-1' } }, res);
+
+    expect(mockBuildEligibilityContext.mock.calls[0][0].result.tag).toBe('1.5.0');
   });
 });

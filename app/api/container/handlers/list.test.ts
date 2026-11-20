@@ -506,6 +506,66 @@ describe('buildContainerListResponse dependency badge counts (#219)', () => {
 });
 
 describe('buildContainerListResponse', () => {
+  test('issues no per-container operation lookups when no operation is active', () => {
+    const containers = [
+      createContainer({ id: 'c1', name: 'web', displayName: 'web' }),
+      createContainer({ id: 'c2', name: 'worker', displayName: 'worker' }),
+      createContainer({ id: 'c3', name: 'db', displayName: 'db' }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => []);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/v1/containers',
+    );
+
+    expect(response.data).toHaveLength(3);
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(
+      context.updateOperationStore.getActiveOperationByContainerIdentity,
+    ).not.toHaveBeenCalled();
+    expect(response.data[0]?.updateOperation).toBeUndefined();
+  });
+
+  test('eligibility makes no operation lookups for an updatable container when none is active', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => [
+        createContainer({
+          result: { tag: '1.1.0' },
+          updateKind: {
+            kind: 'tag',
+            localValue: '1.0.0',
+            remoteValue: '1.1.0',
+            semverDiff: 'minor',
+          },
+        }),
+      ]),
+      getContainerCountFromStore: vi.fn(() => 1),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => []);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/v1/containers',
+    );
+
+    expect((response.data[0] as any).updateEligibility).toBeDefined();
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(
+      context.updateOperationStore.getActiveOperationByContainerIdentity,
+    ).not.toHaveBeenCalled();
+  });
+
   test('preloads active operations once for the full container list response', () => {
     const containers = [
       createContainer({ id: 'c1', name: 'web', displayName: 'web' }),

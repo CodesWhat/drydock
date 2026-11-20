@@ -5,6 +5,7 @@ type AgentHostMap = Record<string, string>;
 
 // Module-level singleton state shared by every composable consumer.
 const hostsByAgent = ref<AgentHostMap>({});
+const portwingAgents = ref<Record<string, true>>({});
 const loaded = ref(false);
 const loading = ref(false);
 let loadPromise: Promise<void> | null = null;
@@ -18,6 +19,16 @@ function buildHostMap(agents: Array<{ name?: unknown; host?: unknown }>): AgentH
       continue;
     }
     map[name] = host;
+  }
+  return map;
+}
+
+function buildPortwingMap(agents: Array<{ name?: unknown; portwing?: unknown }>) {
+  const map: Record<string, true> = {};
+  for (const agent of agents) {
+    if (typeof agent.name === 'string' && agent.portwing === true) {
+      map[agent.name.trim()] = true;
+    }
   }
   return map;
 }
@@ -37,9 +48,11 @@ async function loadAgentHosts(): Promise<void> {
     try {
       const agents = await getAgents();
       hostsByAgent.value = buildHostMap(agents);
+      portwingAgents.value = buildPortwingMap(agents);
       loaded.value = true;
     } catch {
       hostsByAgent.value = {};
+      portwingAgents.value = {};
     } finally {
       loading.value = false;
       loadPromise = null;
@@ -57,6 +70,11 @@ function resolveHost(agentName: string | undefined, fallback: string): string {
   return host && host.length > 0 ? host : fallback;
 }
 
+/** Portwing agents have no env reveal route, so the UI hides the control for their containers. */
+function isPortwingAgent(agentName: string | undefined): boolean {
+  return agentName !== undefined && portwingAgents.value[agentName] === true;
+}
+
 interface UseAgentHostsOptions {
   autoLoad?: boolean;
 }
@@ -71,6 +89,7 @@ export function useAgentHosts(options: UseAgentHostsOptions = {}) {
     loaded: readonly(loaded),
     loadAgentHosts,
     resolveHost,
+    isPortwingAgent,
   };
 }
 

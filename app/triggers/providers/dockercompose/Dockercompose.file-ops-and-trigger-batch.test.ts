@@ -462,6 +462,33 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('restoreComposeFileMutations should keep restoring the remaining files when one restore write fails', async () => {
+    const baseFile = '/opt/drydock/test/compose.yml';
+    const overrideFile = '/opt/drydock/test/compose.override.yml';
+    // Restore runs newest first, so the override file is attempted before the base file.
+    const writeSpy = vi
+      .spyOn(trigger, 'writeComposeFile')
+      .mockRejectedValueOnce(new Error('EACCES: permission denied'))
+      .mockResolvedValueOnce(undefined);
+
+    await expect(
+      trigger.restoreComposeFileMutations([
+        { filePath: baseFile, originalText: 'base-original' },
+        { filePath: overrideFile, originalText: 'override-original' },
+      ]),
+    ).rejects.toThrow(
+      `Failed to restore compose file mutations (${overrideFile}: EACCES: permission denied)`,
+    );
+
+    expect(writeSpy.mock.calls).toEqual([
+      [overrideFile, 'override-original'],
+      [baseFile, 'base-original'],
+    ]);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining(`Failed to restore compose file ${overrideFile}`),
+    );
+  });
+
   test('mutateComposeFile should return false when no text changes are applied', async () => {
     vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(
       Buffer.from('services:\n  nginx:\n    image: nginx:1.0.0\n'),
@@ -832,6 +859,35 @@ describe('Dockercompose Trigger', () => {
   // -----------------------------------------------------------------------
   // triggerBatch
   // -----------------------------------------------------------------------
+
+  test('triggerBatch refuses a locally built image instead of pulling the upstream base', async () => {
+    const container = {
+      name: 'myapp',
+      watcher: 'local',
+      image: { isLocalImage: true },
+      updateAvailable: true,
+    };
+
+    await expect(trigger.triggerBatch([container])).rejects.toThrow('locally built image');
+    await expect(trigger.trigger(container)).rejects.toThrow('locally built image');
+    expect(getState).not.toHaveBeenCalled();
+  });
+
+  test('triggerBatch skips a locally built image in a mixed batch and updates the rest', async () => {
+    const local = { name: 'myapp', watcher: 'local', image: { isLocalImage: true } };
+    const stock = { name: 'redis', watcher: 'local', image: { isLocalImage: false } };
+    const spy = vi
+      .spyOn(trigger, 'resolveAndGroupContainersByComposeFile')
+      .mockResolvedValue(new Map());
+
+    await expect(trigger.triggerBatch([local, stock])).resolves.toEqual([]);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0]).toEqual([stock]);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping container myapp in the compose update batch'),
+    );
+  });
 
   test('triggerBatch should skip containers not on local host', async () => {
     const container = { name: 'remote-container', watcher: 'remote' };

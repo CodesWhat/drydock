@@ -182,6 +182,8 @@ interface DetailSecurityState {
   detailSbomResult: Ref<Record<string, unknown> | null>;
   detailSbomLoading: Ref<boolean>;
   detailSbomError: Ref<string | null>;
+  vulnerabilitySeq: number;
+  sbomSeq: number;
 }
 
 function createSelectedRuntimeOrigins(
@@ -398,11 +400,15 @@ function severityStyle(severity: string) {
 }
 
 function resetVulnerabilityState(state: DetailSecurityState) {
+  state.vulnerabilitySeq += 1;
+  state.detailVulnerabilityLoading.value = false;
   state.detailVulnerabilityResult.value = null;
   state.detailVulnerabilityError.value = null;
 }
 
 function resetSbomState(state: DetailSecurityState) {
+  state.sbomSeq += 1;
+  state.detailSbomLoading.value = false;
   state.detailSbomResult.value = null;
   state.detailSbomError.value = null;
 }
@@ -419,6 +425,7 @@ function createDetailSecurityActions(
   t: (key: string) => string,
 ) {
   async function loadDetailVulnerabilities() {
+    const seq = ++state.vulnerabilitySeq;
     const containerId = input.selectedContainerId.value;
     if (!containerId) {
       resetVulnerabilityState(state);
@@ -428,19 +435,29 @@ function createDetailSecurityActions(
     state.detailVulnerabilityLoading.value = true;
     state.detailVulnerabilityError.value = null;
     try {
-      state.detailVulnerabilityResult.value = await fetchContainerVulnerabilities(containerId);
+      const result = await fetchContainerVulnerabilities(containerId);
+      if (seq !== state.vulnerabilitySeq) {
+        return;
+      }
+      state.detailVulnerabilityResult.value = result;
     } catch (e: unknown) {
+      if (seq !== state.vulnerabilitySeq) {
+        return;
+      }
       state.detailVulnerabilityResult.value = null;
       state.detailVulnerabilityError.value = errorMessage(
         e,
         t('containerComponents.security.loadVulnerabilitiesFailed'),
       );
     } finally {
-      state.detailVulnerabilityLoading.value = false;
+      if (seq === state.vulnerabilitySeq) {
+        state.detailVulnerabilityLoading.value = false;
+      }
     }
   }
 
   async function loadDetailSbom() {
+    const seq = ++state.sbomSeq;
     const containerId = input.selectedContainerId.value;
     if (!containerId) {
       resetSbomState(state);
@@ -449,19 +466,26 @@ function createDetailSecurityActions(
 
     state.detailSbomLoading.value = true;
     state.detailSbomError.value = null;
+    const format = selectedSbomFormat.value;
     try {
-      state.detailSbomResult.value = await fetchContainerSbom(
-        containerId,
-        selectedSbomFormat.value,
-      );
+      const result = await fetchContainerSbom(containerId, format);
+      if (seq !== state.sbomSeq) {
+        return;
+      }
+      state.detailSbomResult.value = result;
     } catch (e: unknown) {
+      if (seq !== state.sbomSeq) {
+        return;
+      }
       state.detailSbomResult.value = null;
       state.detailSbomError.value = errorMessage(
         e,
         t('containerComponents.security.loadSbomFailed'),
       );
     } finally {
-      state.detailSbomLoading.value = false;
+      if (seq === state.sbomSeq) {
+        state.detailSbomLoading.value = false;
+      }
     }
   }
 
@@ -575,6 +599,8 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     detailSbomResult,
     detailSbomLoading,
     detailSbomError,
+    vulnerabilitySeq: 0,
+    sbomSeq: 0,
   };
 
   const vulnerabilitySummary = createVulnerabilitySummary(detailVulnerabilityResult);

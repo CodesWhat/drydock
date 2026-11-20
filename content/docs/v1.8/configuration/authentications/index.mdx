@@ -1,0 +1,110 @@
+---
+title: "Authentication"
+description: "drydock requires authentication by default on fresh installs."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Since v1.4.0, drydock **requires authentication on fresh installs**. If no auth strategy is configured and no explicit anonymous opt-in is present, protected API requests return `401 Unauthorized`; public auth discovery/status routes remain available so the login surface can explain the problem.
+
+You can enable 1 or multiple authentication strategies using `DD_AUTH_*` env vars.
+
+<Callout type="warn">Authentication protects protected API routes and UI data unless anonymous access is enabled. Fresh installs and upgrades alike must opt in with `DD_ANONYMOUS_AUTH_CONFIRM=true` — without it, an instance with no auth configured starts fail-closed. Protected API requests return `401`, auth discovery/status remains public, and `/health` returns `503`. The SPA shell may still load, but it cannot read protected application data.</Callout>
+<Callout type="info">For OIDC setups, session-cookie policy is controlled by `DD_SERVER_COOKIE_SAMESITE` in [server configuration](/docs/configuration/server). Default `lax` works for most IdP callback flows.</Callout>
+
+## Login lockout controls
+
+To limit brute-force attempts on `POST /auth/login`, drydock tracks failed logins per account and per client IP and can temporarily lock access when thresholds are exceeded. Per-account controls use `DD_AUTH_ACCOUNT_LOCKOUT_*`; per-IP controls use `DD_AUTH_IP_LOCKOUT_*`.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per account before temporary lockout | Positive integer (`> 0`) | `5` |
+| `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per client IP before temporary lockout | Positive integer (`> 0`) | `25` |
+| `DD_AUTH_LOCKOUT_WINDOW_MS` | ⚪ | Rolling window (milliseconds) used to count failed login attempts | Positive integer (`> 0`) | `900000` |
+| `DD_AUTH_LOCKOUT_DURATION_MS` | ⚪ | Lockout duration (milliseconds) once a threshold is reached | Positive integer (`> 0`) | `900000` |
+| `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired lockout entries from memory and the persisted lockout sidecar file | Positive integer (`> 0`) | `60000` |
+| `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique account/IP identities tracked before older entries are pruned | Positive integer (`> 0`) | `5000` |
+| `DD_AUTH_MAX_CONCURRENT_LOGIN_ATTEMPTS` | ⚪ | Maximum login credential verifications running at once. Excess attempts receive `429` with `Retry-After: 1` before password hashing starts. | Positive integer (`> 0`) | `2` |
+| `DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS` | ⚪ | Maximum `Authorization: Basic` header credential verifications running at once on routes other than the login form. This pool is separate from the login form's. Excess attempts receive `429` with `Retry-After: 1` before password hashing starts. | Positive integer (`> 0`) | `8` |
+
+If a lockout value is missing or invalid, drydock falls back to the corresponding default.
+
+Scripted clients that send an `Authorization: Basic` header with a stale password draw on the same account and IP lockout budget as the login form, and their password checks have a concurrent attempt cap of their own (`DD_AUTH_MAX_CONCURRENT_HEADER_ATTEMPTS`), separate from the login form's.
+
+An integration that keeps sending a stale password keeps re-locking the account every time the lockout expires. Behind a reverse proxy without `DD_SERVER_TRUSTPROXY`, every client shares the proxy's IP, so the same failures also lock out that shared IP, and with it everyone else coming through the proxy. Use API keys for integrations rather than the account password, and update integrations before you rotate a password.
+
+## Two-factor (TOTP)
+
+Local Basic accounts can add a TOTP second factor through the [two-factor management API](/docs/api#two-factor-management). Enrolling, replacing or removing a factor is only allowed over HTTPS or from loopback, because those responses carry the TOTP secret and the recovery codes.
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_AUTH_TOTP_KEYRING__FILE` | ⚪ | Path to the key ring file that encrypts the stored TOTP secrets. Nobody can enroll without it | Path to a readable file | none |
+| `DD_AUTH_TOTP_ACTIVE_KEY_ID` | ⚪ | Id of the key ring key new secrets are encrypted under. Set it whenever the key ring is set | A key id from the key ring | none |
+| `DD_AUTH_TOTP_ALLOWHTTP` | ⚪ | Allow two-factor enrollment and management over plain HTTP from any address | `true`, `false` | `false` |
+
+<Callout type="warn">With `DD_AUTH_TOTP_ALLOWHTTP=true`, the TOTP secret, the recovery codes and the password sent with each management call cross the network unencrypted. Anyone who can read that traffic can copy the second factor as it's being set up, which leaves the account with no second factor in practice. Drydock logs a warning at startup while it's on. Prefer HTTPS, or `DD_SERVER_TRUSTPROXY` behind a TLS-terminating proxy, and leave this unset.</Callout>
+
+`DD_AUTH_TOTP_ALLOWHTTP` is read at startup. Any value other than `true` or `false` is a configuration error and Drydock won't start. In `drydock.yml` it's `auth.totp.allowhttp`.
+
+The key ring format, key rotation, recovering an account that lost its device or its recovery codes, what a lost key ring means, and what happens when an enrolled account is renamed are on the [two-factor key ring and recovery](/docs/configuration/authentications/two-factor) page.
+
+Currently, the following strategies are supported:
+
+- [**Basic**](/docs/configuration/authentications/basic)
+- [**Openid Connect**](/docs/configuration/authentications/oidc)
+
+## Anonymous access
+
+On previous versions of drydock (and upstream WUD), the dashboard was accessible without any login. Starting with v1.4.0, anonymous access must be explicitly opted into on fresh installs.
+
+### `DD_ANONYMOUS_AUTH_CONFIRM`
+
+Set `DD_ANONYMOUS_AUTH_CONFIRM=true` to explicitly allow anonymous (unauthenticated) access to the dashboard and API.
+
+`DD_AUTH_ANONYMOUS_CONFIRM=true` is also accepted as an alias. `DD_ANONYMOUS_AUTH_CONFIRM` is the canonical name.
+
+```yaml
+environment:
+  - DD_ANONYMOUS_AUTH_CONFIRM=true
+```
+
+### Behavior matrix
+
+| Scenario | Result |
+| --- | --- |
+| Fresh install, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Starts fail-closed — protected API requests return `401`; auth discovery/status stays public; `/health` returns `503` |
+| Fresh install, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
+| Upgrade, no auth configured, no `DD_ANONYMOUS_AUTH_CONFIRM` | Starts fail-closed — protected API requests return `401`; auth discovery/status stays public; `/health` returns `503` |
+| Upgrade, `DD_ANONYMOUS_AUTH_CONFIRM=true` | Anonymous access allowed |
+
+Drydock identifies an existing installation from its saved application metadata. In v1.8.0-rc.16 builds this record lives in SQLite and is carried across by the one-time JSON import; the presence of `dd.json` alone does not determine whether an installation is an upgrade. Both upgrades and fresh installs require configured authentication or explicit anonymous-access confirmation.
+
+### Upgrading
+
+<Callout type="warn">Upgrades fail closed exactly like fresh installs — there is no more warn-and-continue grace period. If an upgrading instance has no authentication configured (or anonymous auth is enabled but not explicitly confirmed), the container runs while protected API requests return `401`, auth discovery/status remains public, and `/health` returns `503`. The SPA shell may still load, but it cannot read protected application data. This replaces the previous warning plus open dashboard.</Callout>
+
+To restore access, either:
+
+1. **Configure authentication** — set `DD_AUTH_BASIC_<name>_USER` and `DD_AUTH_BASIC_<name>_HASH` (or use [OIDC](/docs/configuration/authentications/oidc)).
+2. **Explicitly opt in to anonymous access** — set `DD_ANONYMOUS_AUTH_CONFIRM=true`.
+
+<Callout type="warn">v1.6.0-rc.3 renamed the session cookie (`connect.sid` → `drydock.sid`). Upgrading from a build that still used the old name signs out existing sessions once, Basic and OIDC alike; users log back in. This earlier cookie change is separate from the v1.8 SQLite import.</Callout>
+
+## Fail-closed auth enforcement
+
+<Callout type="warn">Since v1.4.0, drydock enforces **fail-closed** authentication across registries, triggers, and the Docker entrypoint. If auth is configured and fails, drydock raises an error instead of silently falling back to anonymous or unauthenticated access.</Callout>
+
+This affects three areas:
+
+- **Registry bearer-token flows** — When a token exchange endpoint returns an error (network failure, invalid credentials, expired token), the registry call fails immediately. In older versions (and upstream WUD), this would silently fall through to anonymous access, which could cause missed updates on private images or confusing inconsistencies between authenticated and unauthenticated results.
+- **HTTP trigger auth** — If an HTTP trigger specifies an unsupported auth type, the trigger errors instead of sending an unauthenticated request.
+- **Docker entrypoint root mode** — Running as root requires both `DD_RUN_AS_ROOT=true` **and** `DD_ALLOW_INSECURE_ROOT=true`. Setting only one flag fails closed at startup. See [Docker Socket Security](/docs/configuration/watchers#docker-socket-security).
+
+If you are upgrading from WUD or an earlier drydock version and see new auth errors, verify that your credentials are valid and that outbound HTTPS to the token endpoint is not blocked. The errors are intentional — they surface problems that were previously hidden.
+
+## Remember me
+
+The login form includes a **Remember me** checkbox. When checked, the session cookie is extended to **30 days** so the browser stays logged in across restarts. When unchecked, the cookie expires when the browser is closed (default session lifetime is 7 days).
+
+Remember-me works with both Basic and OIDC authentication strategies. The preference is stored server-side in the authenticated session via `POST /auth/remember`.

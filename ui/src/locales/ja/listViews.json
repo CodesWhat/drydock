@@ -5,6 +5,8 @@
     "filterPlaceholder": "対象またはイベントで絞り込む...",
     "onThisPage": "このページ内",
     "containerFilterPlaceholder": "コンテナ名...",
+    "actorFilterPlaceholder": "ユーザー...",
+    "actorFilterLabel": "ユーザーで絞り込み",
     "allEvents": "全イベント",
     "eventsSelected": "{count} 件のイベントを選択",
     "clear": "クリア",
@@ -16,12 +18,19 @@
       "nextPage": "次のページ"
     },
     "emptyFiltered": "フィルターに一致する監査エントリがありません",
+    "systemActor": "システム",
+    "exportError": "監査ログのエクスポートに失敗しました",
+    "export": {
+      "csv": "CSVをエクスポート",
+      "json": "JSONをエクスポート"
+    },
     "columns": {
       "time": "時刻",
       "event": "イベント",
       "target": "対象",
       "status": "ステータス",
-      "details": "詳細"
+      "details": "詳細",
+      "actor": "実行者"
     },
     "card": {
       "time": "時刻",
@@ -34,7 +43,8 @@
       "fromVersion": "更新前バージョン",
       "toVersion": "更新後バージョン",
       "trigger": "トリガー",
-      "details": "詳細"
+      "details": "詳細",
+      "actor": "実行者"
     },
     "status": {
       "success": "成功",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "更新プレビュー済み（ドライラン）",
       "update-failed": "更新失敗",
       "auto-update-blocked": "自動更新ブロック",
+      "security-fast-lane": "セキュリティ優先レーン",
       "update-policy-override-set": "更新ポリシーの上書きを設定",
       "update-policy-override-cleared": "更新ポリシーの上書きを解除",
       "group-policy-set": "グループポリシーを設定",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "通知送信失敗",
       "security-alert": "セキュリティアラート",
       "maturity-cleared": "待機期間が終了",
-      "image-prune": "イメージプルーン"
+      "image-prune": "イメージプルーン",
+      "cleanup": "クリーンアップ",
+      "notification-silence-set": "通知のミュートを設定",
+      "notification-silence-cleared": "通知のミュートを解除"
     },
     "target": {
       "container": "コンテナ",

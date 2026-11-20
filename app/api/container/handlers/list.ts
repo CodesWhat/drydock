@@ -116,13 +116,19 @@ export function attachInProgressUpdateOperation(
   return createProjectionView(container, [['updateOperation', operation]]);
 }
 
-function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibilityContext {
+function buildEligibilityContext(
+  context: CrudHandlerContext,
+  noActiveOperations = false,
+): UpdateEligibilityContext {
   return {
     triggers: context.getTriggers ? context.getTriggers() : undefined,
     updateMode: getUpdateMode(),
     isAgentPendingRegistration: (agentName) =>
       context.getAgent(agentName ?? '')?.isRegisteringComponents === true,
     getActiveOperation: (container: Container) => {
+      if (noActiveOperations) {
+        return undefined;
+      }
       const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
       // Scoped by identity so cross-agent same-named ops don't affect eligibility (issue #411).
       const byIdentity = byId
@@ -270,19 +276,13 @@ function setLatestOperationLookupEntry(
   }
 }
 
-// Returns undefined when there is nothing to preload. The caller treats that
-// as a signal to use the per-row attachInProgressUpdateOperation path — which
-// performs its own empty-store check and returns the container unmodified. The
-// preload-vs-per-row branch is a perf optimisation for the common case where
-// active operations exist; undefined keeps the rare empty-store path on the
-// known-good fallback instead of adding another empty-map short-circuit.
+// An empty operations list yields an empty lookup (not undefined) so the common
+// no-active-operation case costs zero store queries per row. Undefined keeps the
+// per-row attachInProgressUpdateOperation fallback for a store that cannot list
+// active operations, or whose entries carry no usable lookup key.
 function buildPreloadedActiveOperationLookup(
   operations: unknown[],
 ): PreloadedActiveOperationLookup | undefined {
-  if (!Array.isArray(operations) || operations.length === 0) {
-    return undefined;
-  }
-
   const byContainerId = new Map<string, ContainerUpdateOperationState>();
   const byScopedContainerName = new Map<string, ContainerUpdateOperationState>();
   const byLegacyContainerName = new Map<string, ContainerUpdateOperationState>();
@@ -321,7 +321,9 @@ function buildPreloadedActiveOperationLookup(
     }
   }
 
+  // Entries that exist but yield no usable key stay on the per-row fallback.
   if (
+    operations.length > 0 &&
     byContainerId.size === 0 &&
     byScopedContainerName.size === 0 &&
     byLegacyContainerName.size === 0
@@ -429,10 +431,11 @@ export function buildContainerListResponse(
   const strippedContainers = redactedContainers.map((container) =>
     stripContainerDetailOnlySecurityFields(container, !includeVulnerabilities),
   );
-  const preloadedActiveOperationLookup = buildPreloadedActiveOperationLookup(
-    context.updateOperationStore.listActiveOperations?.() ?? [],
-  );
-  const eligibilityContext = buildEligibilityContext(context);
+  const activeOperations = context.updateOperationStore.listActiveOperations?.();
+  const preloadedActiveOperationLookup = Array.isArray(activeOperations)
+    ? buildPreloadedActiveOperationLookup(activeOperations)
+    : undefined;
+  const eligibilityContext = buildEligibilityContext(context, activeOperations?.length === 0);
   const watchers = context.getWatchers();
   const dependencyCounts = buildDependencyCounts(context);
   const data = strippedContainers.map((container) => {

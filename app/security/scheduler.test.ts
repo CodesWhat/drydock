@@ -23,6 +23,8 @@ const mockLogError = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
 const mockEmitSecurityAlert = vi.hoisted(() => vi.fn(async () => {}));
 const mockEmitSecurityScanCycleComplete = vi.hoisted(() => vi.fn(async () => {}));
+const mockScanFastLaneCandidates = vi.hoisted(() => vi.fn(async () => 0));
+const mockResetFastLaneCandidateAttempts = vi.hoisted(() => vi.fn());
 
 vi.mock('../configuration/index.js', () => ({
   getSecurityConfiguration: mockGetSecurityConfiguration,
@@ -80,6 +82,12 @@ vi.mock('./scan.js', () => ({
   clearDigestScanCache: (...args: unknown[]) => mockClearDigestScanCache(...args),
 }));
 
+vi.mock('./fast-lane-candidates.js', () => ({
+  scanFastLaneCandidates: (...args: unknown[]) => mockScanFastLaneCandidates(...args),
+  resetFastLaneCandidateAttempts: (...args: unknown[]) =>
+    mockResetFastLaneCandidateAttempts(...args),
+}));
+
 vi.mock('./runtime.js', () => ({
   getTrivyDatabaseStatus: (...args: unknown[]) => mockGetTrivyDatabaseStatus(...args),
 }));
@@ -89,6 +97,7 @@ vi.mock('../event/index.js', () => ({
   emitSecurityScanCycleComplete: (...args: unknown[]) => mockEmitSecurityScanCycleComplete(...args),
 }));
 
+import { _resetContainerScanStateForTesting, isContainerScanning } from './scan-state.js';
 import {
   _isScanInProgress,
   _resetForTesting,
@@ -385,8 +394,42 @@ describe('runScheduledScans', () => {
 
     await runScheduledScans();
 
-    expect(mockGetContainersRaw).toHaveBeenCalledTimes(1);
+    expect(mockGetContainersRaw).toHaveBeenCalled();
     expect(mockGetContainers).not.toHaveBeenCalled();
+  });
+
+  test('scans fast lane candidates after the batch with the same worker count', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledTimes(1);
+    expect(mockScanFastLaneCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scanConcurrency: expect.any(Number),
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  test('skips fast lane candidate scans when the batch was aborted', async () => {
+    const container = createContainer();
+    setMockContainersRaw([container]);
+    mockScanImageWithDedup.mockImplementation(async () => {
+      shutdown();
+      return { scanResult: createScanResult(), fromCache: false };
+    });
+
+    await runScheduledScans();
+
+    expect(mockScanFastLaneCandidates).not.toHaveBeenCalled();
+  });
+
+  test('shutdown forgets which fast lane candidates were attempted', () => {
+    shutdown();
+    expect(mockResetFastLaneCandidateAttempts).toHaveBeenCalled();
   });
 
   test('should process digest scans with configured concurrency', async () => {
@@ -1546,6 +1589,33 @@ describe('runScheduledScans', () => {
     );
   });
 
+  test('scans the running image by its immutable digest, not the mutable tag', async () => {
+    const digest = `sha256:${'e'.repeat(64)}`;
+    const container = createContainer({
+      image: { ...createContainer().image, digest: { watch: true, value: digest } },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, digest);
+    expect(mockScanImageWithDedup).toHaveBeenCalledWith(
+      expect.objectContaining({ digest }),
+      expect.any(Number),
+    );
+  });
+
+  test('falls back to the tag when the running digest is not a real digest', async () => {
+    const container = createContainer();
+    mockGetContainers.mockReturnValue([container]);
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockResolveContainerImageFullName).toHaveBeenCalledWith(container, {}, undefined);
+  });
+
   test('should use empty object fallback when registry state has no registry key', async () => {
     mockGetState.mockReturnValue({});
     const container = createContainer();
@@ -2005,5 +2075,104 @@ describe('_resetForTesting', () => {
     expect(isRunning()).toBe(false);
     expect(mockTask.stop).toHaveBeenCalled();
     expect(mockClearDigestScanCache).toHaveBeenCalled();
+  });
+});
+
+describe('transient container scanning state', () => {
+  beforeEach(() => {
+    _resetContainerScanStateForTesting();
+  });
+
+  function sameDigestPair() {
+    return [createContainer({ id: 'c1' }), createContainer({ id: 'c2', name: 'nginx-replica' })];
+  }
+
+  test('marks every container sharing a digest while the scan runs and clears them on success', async () => {
+    mockGetContainers.mockReturnValue(sameDigestPair());
+    let finishScan: (() => void) | undefined;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishScan = () => resolve({ scanResult: createScanResult(), fromCache: false });
+        }),
+    );
+
+    const run = runScheduledScans();
+    await vi.waitFor(() => expect(mockScanImageWithDedup).toHaveBeenCalled());
+    expect(isContainerScanning('c1')).toBe(true);
+    expect(isContainerScanning('c2')).toBe(true);
+
+    finishScan?.();
+    await run;
+    expect(isContainerScanning('c1')).toBe(false);
+    expect(isContainerScanning('c2')).toBe(false);
+  });
+
+  test('clears the state when the scan fails', async () => {
+    mockGetContainers.mockReturnValue(sameDigestPair());
+    mockScanImageWithDedup.mockRejectedValue(new Error('trivy exploded'));
+
+    await runScheduledScans();
+
+    expect(isContainerScanning('c1')).toBe(false);
+    expect(isContainerScanning('c2')).toBe(false);
+  });
+
+  test('clears the state when the batch timeout aborts the scan', async () => {
+    mockGetSecurityConfiguration.mockReturnValue({
+      ...createEnabledConfiguration(),
+      scan: { cron: '0 3 * * *', jitter: 60000, concurrency: 1, batchTimeout: 10 },
+    });
+    mockGetContainers.mockReturnValue([createContainer()]);
+    let scanningWhileRunning = false;
+    mockScanImageWithDedup.mockImplementation(
+      (rawOptions: unknown) =>
+        new Promise((_resolve, reject) => {
+          scanningWhileRunning = isContainerScanning('c1');
+          const signal = (rawOptions as { signal: AbortSignal }).signal;
+          signal.addEventListener('abort', () => reject(signal.reason ?? new Error('aborted')), {
+            once: true,
+          });
+        }),
+    );
+
+    await runScheduledScans();
+
+    expect(scanningWhileRunning).toBe(true);
+
+    expect(isContainerScanning('c1')).toBe(false);
+  });
+
+  test('keeps a container scanning until an overlapping scan of it also finishes', async () => {
+    mockGetContainers.mockReturnValue([createContainer()]);
+    let finishScan: (() => void) | undefined;
+    mockScanImageWithDedup.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishScan = () => resolve({ scanResult: createScanResult(), fromCache: false });
+        }),
+    );
+
+    const { beginContainerScan } = await import('./scan-state.js');
+    const releaseOnDemand = beginContainerScan('c1');
+    const run = runScheduledScans();
+    await vi.waitFor(() => expect(mockScanImageWithDedup).toHaveBeenCalled());
+
+    finishScan?.();
+    await run;
+    expect(isContainerScanning('c1')).toBe(true);
+
+    releaseOnDemand();
+    expect(isContainerScanning('c1')).toBe(false);
+  });
+
+  test('does not mark containers that never reach the scan', async () => {
+    mockGetContainers.mockReturnValue([createContainer()]);
+    mockResolveContainerRegistryAuth.mockRejectedValue(new Error('auth lookup failed'));
+
+    await runScheduledScans();
+
+    expect(mockScanImageWithDedup).not.toHaveBeenCalled();
+    expect(isContainerScanning('c1')).toBe(false);
   });
 });

@@ -8,11 +8,11 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/watchers/docker.png)
 
-The `docker` watcher lets you configure the Docker hosts you want to watch.
+The `docker` watcher lets you configure the Docker hosts you want to watch. Set `DD_WATCHER_{watcher_name}_PROVIDER=file` to watch a static list of images instead, see [File Watcher](/docs/configuration/watchers/file).
 
 ## Edit a watcher schedule in the UI
 
-This editor was introduced in v1.8.0-rc.1 and remains available in v1.8.0-rc.16 builds. It requires a writable [configuration file](/docs/configuration/config-file).
+This editor was introduced in v1.8.0-rc.1 and remains available in v1.9.0-rc.1 builds. It requires a writable [configuration file](/docs/configuration/config-file).
 
 Open **Watchers**, select a watcher, then choose **Edit schedule** in its detail
 panel. This editor changes four settings for existing controller-local watchers:
@@ -57,11 +57,15 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER`, `OIDC` | auto-detected from provided credentials |
 | `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
 | `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_CONTAINERS_EXCLUDE` | ⚪ | Never watch containers whose name matches this regex (unless the container has `dd.watch=true`), see [Container filters](#container-filters) | [RE2 regex](https://github.com/google/re2/wiki/Syntax) matched against the container name | |
+| `DD_WATCHER_{watcher_name}_CONTAINERS_INCLUDE` | ⚪ | Watch only containers whose name matches this regex, replacing `WATCHBYDEFAULT`, see [Container filters](#container-filters) | [RE2 regex](https://github.com/google/re2/wiki/Syntax) matched against the container name | |
 | `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
 | `DD_WATCHER_{watcher_name}_DISCOVERY_SETTLE_MS` | ⚪ | How long a newly-discovered container must remain visible before drydock registers it (store/triggers/UI) — rides out Docker's brief rename-alias window during container recreation. `0` disables settling entirely | integer ms (`>= 0`) | `30000` (30 seconds) |
 | `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
 | `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
+| `DD_WATCHER_{watcher_name}_LABELS_EXCLUDE` | ⚪ | Never watch containers with a matching label (unless the container has `dd.watch=true`), see [Container filters](#container-filters) | `key` or `key=valueRegex` | |
+| `DD_WATCHER_{watcher_name}_LABELS_INCLUDE` | ⚪ | Watch only containers with a matching label, replacing `WATCHBYDEFAULT`, see [Container filters](#container-filters) | `key` or `key=valueRegex` | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Schedule during which drydock may install updates on its own (manual updates are never gated). Matched per minute, so use `*` in the minute field, see [Maintenance window](#maintenance-window) | [Valid CRON expression](https://crontab.guru/) | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_SCOPE` | ⚪ | What the window holds back: only automatic installs, or the whole scheduled scan, see [Maintenance window](#maintenance-window) | `install`, `scan` | `install` |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
@@ -69,19 +73,50 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
 | `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | v1.8.0-rc.1: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | v1.8.0-rc.1: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
+| `DD_WATCHER_{watcher_name}_PROVIDER` | ⚪ | Watcher provider. `file` reads a static image list instead of a Docker host, see [File Watcher](/docs/configuration/watchers/file) | `docker`, `file` | `docker` |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
 | `DD_WATCHER_{watcher_name}_TAG_FAMILY` | ⚪ | Default actionable tag-family policy for this watcher; imgsets and labels can override it | `strict`, `loose` | `strict` |
+| `DD_WATCHER_{watcher_name}_TAG_CEILING` | ⚪ | Default running-version ceiling for this watcher; imgsets and labels can override it. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | unset |
 | `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Default for computing informational `updateInsight` on pinned containers; imgsets and labels can override it | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
+| `DD_WATCHER_{watcher_name}_RESTARTLOOP_THRESHOLD` | ⚪ | Crashes inside the window that raise a `container-restart-loop` notification (see [container state alerts](/docs/configuration/triggers#container-state-alerts)) | Integer, 2 or more | `3` |
+| `DD_WATCHER_{watcher_name}_RESTARTLOOP_WINDOW` | ⚪ | Restart loop window in seconds | Integer, 1 or more | `300` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
 <Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6 and remain rejected. Use the `dd.watch.digest` container label for per-container digest watching or the new process-wide default below; startup scans are always scheduled.</Callout>
+
+### Container filters {#container-filters}
+
+`CONTAINERS_INCLUDE`, `CONTAINERS_EXCLUDE`, `LABELS_INCLUDE` and `LABELS_EXCLUDE` choose which containers a watcher looks at without labeling each one. They apply before any registry lookup, so a filtered-out container costs no registry calls.
+
+- **Name filters** are regexes matched (unanchored, so use `^` and `$` to pin) against each of the container's names, without the leading `/`.
+- **Label filters** take `key` (the label exists) or `key=valueRegex` (the label exists and its value matches the regex). The key is matched exactly. Everything after the first `=` is the regex.
+- All regexes use RE2, the same engine as `dd.tag.include`. Lookaheads and backreferences are not supported. An invalid regex stops startup with a message naming the pattern.
+
+Precedence, highest first:
+
+1. The container's `dd.watch` label, when set to `true` or `false`. It overrides every filter in both directions.
+2. An exclude filter (name or label) that matches. Exclude always wins over include.
+3. When any include filter is set, the container is watched only if an include filter (name or label) matches. This replaces `WATCHBYDEFAULT`, so `WATCHBYDEFAULT=false` plus `CONTAINERS_INCLUDE` still watches the matching containers.
+4. Otherwise `WATCHBYDEFAULT` decides, as before.
+
+`WATCHALL` is independent and still controls which container states Docker returns.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_WATCHER_LOCAL_CONTAINERS_INCLUDE=^(web|api)-
+      - DD_WATCHER_LOCAL_CONTAINERS_EXCLUDE=-canary$
+      - DD_WATCHER_LOCAL_LABELS_EXCLUDE=team=^sandbox
+```
 
 ### Digest-watch default {#digest-watch-default}
 
@@ -118,7 +153,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - Label-derived watcher fields (`tagFamily`, `tagPinInfo`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle; removing a tag-policy label restores its imgset/watcher default.
 - Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
 - Fully-pinned specific tags (3+ numeric segments, e.g. `1.4.5`, `v1.13.3`) also compare by digest by default, the same as floating tags, so a rebuilt image republished under the same tag is detected. Version climbing across tags for a pinned image is opt-in via `dd.tag.include`, `dd.tag.family=loose`, or the actionable watcher default `DD_WATCHER_{watcher_name}_TAG_FAMILY=loose`. The watcher-wide `loose` setting can make cross-version candidates actionable and therefore eligible for configured action triggers; use it deliberately. Drydock separately computes an informational `updateInsight` — the best newer same-family tag available in the registry — which never triggers an update or notification and never changes `updateAvailable`/`updateKind`. The UI renders that insight as an informational Major/Minor/Patch state rather than **Current**, but does not expose an update action; the pinned tag itself is indicated separately by a persistent pin glyph on the Tag cell, whose tooltip names `dd.tag.family=loose` / `dd.tag.include` as the remedy. Control the informational channel with `dd.tag.pin.info`, matching-imgset `TAG_PIN_INFO`, or the watcher default `TAG_PIN_INFO`.
-- A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
+- A Major insight is not automatically a mismatch: strict family matching preserves prefix, suffix/variant shape, numeric precision, and CalVer rules, but it does not impose a same-major ceiling on its own. Add `dd.tag.ceiling` for that. By contrast, a Major result shown as an actionable update means an actionable policy such as `dd.tag.family=loose` or `dd.tag.include` is in effect. The Immich `v3.0.2 Major` report in #498 was caused by `dd.tag.family=loose` on only the machine-learning container. Loose mode still preserves suffix variants — for example, `v2.7.5-openvino` can climb to `v3.0.2-openvino`, never bare `v3.0.2` — and that historical cross-suffix bug is regression-covered.
 - As of v1.8 (#1133), a candidate tag has to carry the same variant suffix as the current tag, letter for letter: `-alpine` never climbs to `-alpine-perl` or `-alpine-slim`, and it doesn't climb the other way either. Digit runs inside a suffix count as precision, not identity, so `1.27-alpine3.20` can climb to `1.28-alpine3.21`, `12.1-cuda12` can climb to `12.2-cuda13`, and a bare `-alpine` can refine to `-alpine3.21` when that's the only newer build published. When both an exact-suffix and a digit-shifted candidate exist, the exact suffix ranks first. A trailing dot or other punctuation-only difference is never the same family, so `1.3.0-alpine.` is not `1.3.0-alpine`. Users who need a digit to be part of the identity, for example pinning to `-cuda12`, should use `dd.tag.include` with a regex that fixes that digit.
 
 <Callout type="warn">
@@ -139,7 +174,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_LOCAL_CRON=0 1 * * *
@@ -151,7 +186,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_CRON="0 1 * * *" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -164,7 +199,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_LOCAL_WATCHALL=true
@@ -176,7 +211,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHALL="true" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -207,7 +242,7 @@ These two variables are **orthogonal** — they filter at different stages of th
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -219,7 +254,7 @@ services:
 docker run \
     -e DD_WATCHER_MYREMOTEHOST_HOST="myremotehost" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -232,7 +267,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -252,7 +287,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_TYPE="BEARER" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_BEARER="my-secret-token" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -265,7 +300,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -289,7 +324,7 @@ docker run \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTID="my-client-id" \
     -e DD_WATCHER_MYREMOTEHOST_AUTH_OIDC_CLIENTSECRET="my-client-secret" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -304,7 +339,7 @@ Drydock requests a `client_credentials` token from `AUTH_OIDC_TOKENURL` and refr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         - DD_WATCHER_MYREMOTEHOST_HOST=myremotehost
@@ -331,7 +366,7 @@ docker run \
     -v /my-host/my-certs/cert.pem:/certs/cert.pem:ro \
     -v /my-host/my-certs/key.pem:/certs/key.pem:ro \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -354,7 +389,7 @@ Then configure Drydock to connect to the forwarded port:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
       - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
@@ -390,7 +425,7 @@ This is the **recommended approach** for all deployments. It provides a strict s
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -472,7 +507,7 @@ Configure Drydock with the client certificates:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     environment:
       - DD_WATCHER_REMOTE_HOST=docker-host.example.com
       - DD_WATCHER_REMOTE_PORT=2376
@@ -509,7 +544,7 @@ echo $XDG_RUNTIME_DIR/docker.sock
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     volumes:
       - /run/user/1000/docker.sock:/var/run/docker.sock
     ports:
@@ -529,7 +564,7 @@ The simplest approach — mount the Docker socket directly. Drydock runs as a no
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -545,7 +580,7 @@ If the non-root user cannot connect to the socket (common with `:ro` mounts), yo
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -625,7 +660,7 @@ Use Podman's host socket path, but mount it inside the Drydock container at `/va
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     volumes:
       - /run/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -641,7 +676,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     volumes:
       - ${XDG_RUNTIME_DIR}/podman/podman.sock:/var/run/docker.sock
     environment:
@@ -657,7 +692,7 @@ services:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     depends_on:
       socket-proxy:
         condition: service_healthy
@@ -730,7 +765,7 @@ For common Podman troubleshooting, see [FAQ Podman entries](/docs/faq#selinux-bl
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
         -  DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
@@ -746,7 +781,7 @@ docker run \
     -e  DD_WATCHER_MYREMOTEHOST1_HOST="myremotehost1" \
     -e  DD_WATCHER_MYREMOTEHOST2_HOST="myremotehost2" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -780,7 +815,7 @@ Only allow automatic updates between 2 AM and 4 AM in Europe/Berlin:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
       - DD_WATCHER_LOCAL_CRON=0 * * * *
@@ -796,7 +831,7 @@ docker run \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW="* 2-3 * * *" \
     -e DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ="Europe/Berlin" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -835,6 +870,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_DISPLAY_ICON`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_CEILING`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_PIN_INFO`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_WATCH_DIGEST`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INSPECT_TAG_PATH`
@@ -851,15 +887,15 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 
 - `dd.*` labels on the container (or swarm service/container merged labels) are highest priority.
 - Matching `IMGSET` values apply when the corresponding label is not set.
-- Watcher-level `TAG_FAMILY` and `TAG_PIN_INFO` values apply when neither a label nor imgset sets that policy.
-- Built-in defaults are `strict` for tag family and `true` for pin insight.
+- Watcher-level `TAG_FAMILY`, `TAG_CEILING` and `TAG_PIN_INFO` values apply when neither a label nor imgset sets that policy.
+- Built-in defaults are `strict` for tag family, no ceiling, and `true` for pin insight.
 
 ### Imgset example
 
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     environment:
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_IMAGE=ghcr.io/home-assistant/home-assistant
       - DD_WATCHER_LOCAL_IMGSET_HOMEASSISTANT_TAG_INCLUDE=^\\d+\\.\\d+\\.\\d+$$
@@ -884,10 +920,11 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
 | `dd.link.template` | ⚪ | Browsable link associated to the container version. A matching imgset's `LINK_TEMPLATE` is used when this label is absent — see [Associate a link to the container version](#associate-a-link-to-the-container-version) | String template with placeholders `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | Matching imgset `LINK_TEMPLATE` → none |
-| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
-| `dd.tag.include` | ⚪ | Regex to include specific tags only | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.exclude` | ⚪ | Regex to exclude specific tags. May use `${major}`, `${minor}`, `${patch}` and `${flavor}` from the running tag, see [Running-version variables](#running-version-variables-in-include-and-exclude) | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
+| `dd.tag.include` | ⚪ | Regex to include specific tags only. May use `${major}`, `${minor}`, `${patch}` and `${flavor}` from the running tag, see [Running-version variables](#running-version-variables-in-include-and-exclude) | [RE2 syntax](https://github.com/google/re2/wiki/Syntax), not JavaScript regex; no lookaround or backreferences | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. Suffix variants must still match exactly, digit runs excepted. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
+| `dd.tag.ceiling` | ⚪ | Never offer a tag outside the running major (`major`) or running major.minor (`minor`). Overrides matching imgset and watcher defaults. An invalid value logs a warning and is ignored. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | Matching imgset → watcher default → none |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
@@ -919,6 +956,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.update.mode` | ⚪ | Update routing mode for infrastructure containers (socket proxies, etc.) | `infrastructure` | standard update path |
 | `dd.runtime.entrypoint.origin` | ⚪ | Tracks whether the container's entrypoint was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current entrypoint or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
 | `dd.runtime.cmd.origin` | ⚪ | Tracks whether the container's cmd was explicitly set or inherited from the image. Used during updates to decide whether to preserve the current cmd or let the new image defaults apply. | `explicit`, `inherited`, `unknown` | auto-detected |
+
+A `dd.tag.include` or `dd.tag.exclude` regex that fails to compile fails closed. The container gets no update candidates and shows an error naming the bad pattern until you fix the label.
 
 `dd.display.name`, `dd.display.icon`, `dd.depends_on`, `dd.depends_on.action`, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can also be overridden by Drydock itself, per container, without touching the label. See [Override labels with the API](#override-labels-with-the-api).
 
@@ -984,7 +1023,7 @@ If you're trying to restrict which containers a trigger can touch at all, set `A
 
 ### Override labels with the API
 
-On the v1.8.0-rc.16 candidate, Drydock can store its own value for nine label-owned fields: the display name and icon, `dd.depends_on` and `dd.depends_on.action`, and the notification and action include, exclude and auto routing. This is for changing a container's behavior when you can't or don't want to edit its Compose file or recreate it. Saving an override never edits a Compose file, calls Docker, recreates or restarts a container, or runs a trigger. The endpoints and request format are in the [Container API](/docs/api/container#label-overrides).
+On the v1.9.0-rc.1 candidate, Drydock can store its own value for nine label-owned fields: the display name and icon, `dd.depends_on` and `dd.depends_on.action`, and the notification and action include, exclude and auto routing. This is for changing a container's behavior when you can't or don't want to edit its Compose file or recreate it. Saving an override never edits a Compose file, calls Docker, recreates or restarts a container, or runs a trigger. The endpoints and request format are in the [Container API](/docs/api/container#label-overrides).
 
 Each field resolves on its own, from lowest to highest priority:
 
@@ -1028,7 +1067,7 @@ Set `WATCHBYDEFAULT=false` so that only containers with an explicit `dd.watch=tr
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.16
+    image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
       - DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
@@ -1040,7 +1079,7 @@ services:
 docker run \
     -e DD_WATCHER_LOCAL_WATCHBYDEFAULT="false" \
   ...
-  codeswhat/drydock:1.8.0-rc.16
+  codeswhat/drydock:1.9.0-rc.1
 ```
 </Tab>
 </Tabs>
@@ -1199,6 +1238,82 @@ docker run -d --name mariadb --label 'dd.tag.include=^\d+\.\d+\.\d+$' mariadb:10
 ```
 </Tab>
 </Tabs>
+
+### Cap updates at the running major or minor {#cap-updates-at-the-running-major-or-minor}
+
+`dd.tag.ceiling` keeps candidates inside the version you're running:
+
+- `major`: never offer a tag outside the running major, so `1.2.3` can move to `1.9.0` but not `2.0.0`.
+- `minor`: stay inside the running major.minor, so `1.2.3` can move to `1.2.9` but not `1.3.0`.
+
+```yaml
+services:
+  app:
+    image: myorg/app:1.2.3
+    labels:
+      - dd.tag.family=loose
+      - dd.tag.ceiling=major
+```
+
+The ceiling is read from the transformed tag, so a `dd.tag.transform` that turns `release-1.2.3` into `1.2.3` is what the ceiling compares. It composes with `dd.tag.family`, `dd.tag.include` and `dd.tag.exclude`: those still decide which tags are eligible, and the ceiling only removes the ones outside the running line. It also bounds the informational pinned-tag insight.
+
+A ceiling only narrows candidates. It doesn't make a fully-pinned tag climb: a specific tag such as `1.2.3` still compares by digest unless `dd.tag.family=loose` or `dd.tag.include` opts it into version climbing.
+
+The ceiling applies to semver tags only. If the running tag isn't semver, or has too few numeric segments (a `minor` ceiling needs `major.minor`), the ceiling can't apply and is ignored, with one debug log line per container. A value other than `major` or `minor` logs a warning and is ignored. At the watcher level, an invalid `DD_WATCHER_{watcher_name}_TAG_CEILING` (or imgset `TAG_CEILING`) stops startup with a configuration error.
+
+This is not a required-upgrade stop. A ceiling never suggests an intermediate version to visit first.
+
+### Running-version variables in include and exclude {#running-version-variables-in-include-and-exclude}
+
+`dd.tag.include` and `dd.tag.exclude` (and their imgset `TAG_INCLUDE`/`TAG_EXCLUDE` forms) can reference the running version, so one pattern follows the container as it updates:
+
+| Variable | Value |
+|----------|-------|
+| `${major}` | First numeric segment of the transformed running tag |
+| `${minor}` | Second numeric segment |
+| `${patch}` | Third numeric segment |
+| `${flavor}` | The variant suffix after the version, without its leading separator (`alpine3.19` for `1.2.3-alpine3.19`) |
+
+```yaml
+labels:
+  # Stay on the running major line, whatever it currently is
+  - dd.tag.include=^$${major}\.\d+\.\d+$$
+```
+
+In a Compose file, write `$${major}` (and `$$` for the end anchor). Compose treats a single `${...}` as its own variable interpolation and would replace it before Drydock sees the label. With `docker run --label`, single quotes keep the shell from touching it: `--label 'dd.tag.include=^${major}\.\d+\.\d+$'`.
+
+Values are substituted before the pattern is compiled with RE2, and every substituted value is escaped, so a running tag can never inject regex syntax into the filter. The variable is matched literally, even if the tag contains characters such as `.`, `*` or `|`.
+
+If the running tag can't supply a variable the pattern uses (a non-semver tag such as `latest`, no third segment for `${patch}`, or no suffix for `${flavor}`), the filter fails safe. No candidates are offered from that filter and a warning names the pattern and the missing variable. It never falls back to matching everything. This applies to both include and exclude. Names other than these four are left in the pattern as written.
+
+### Candidates per update type {#candidates-per-update-type}
+
+Next to the highest allowed tag, Drydock records the best newer tag for each kind of update, measured against the running version:
+
+- `patch`: same major and minor, higher patch.
+- `minor`: same major, higher minor.
+- `major`: higher major.
+
+Each entry carries its tag and `semverDiff`, plus a digest when the lookup resolved one for that tag. A kind with no candidate is left out, and the list is only recorded when at least two kinds are on offer, because a lone candidate is the main update. They are listed under `result.updateCandidates` in the container API:
+
+```json
+{
+  "result": {
+    "tag": "3.0.0",
+    "updateCandidates": {
+      "patch": { "tag": "1.2.9", "semverDiff": "patch" },
+      "minor": { "tag": "1.5.0", "semverDiff": "minor" },
+      "major": { "tag": "3.0.0", "semverDiff": "major" }
+    }
+  }
+}
+```
+
+Every candidate goes through the same rules as the main update: `dd.tag.include` and `dd.tag.exclude` (including the running-version variables), `dd.tag.family`, `dd.tag.ceiling`, `dd.tag.transform` and rejected release lines. `result.tag` and the update kind are still the highest allowed candidate, so nothing changes unless you opt in. The container detail view lists the candidates when more than one kind exists. Digest-only and non-semver updates have no kinds, so only the main update applies.
+
+By default a trigger whose `THRESHOLD` rules out the main update does nothing. For example, with `THRESHOLD=minor` and a new major out, a pending minor or patch is ignored. Set `SEPARATEUPDATETYPES=true` on the trigger (`DD_ACTION_DOCKER_{trigger_name}_SEPARATEUPDATETYPES` or the notification equivalent) and it acts on the best candidate inside the threshold instead, largest change first. The notification names that candidate's tag, and the approval item and the update itself target it too. If the main update already meets the threshold, nothing changes.
+
+An approval item is for the candidate the trigger chose. There is one item per container, not a queue per update type, and the manual Update button still offers the main update only.
 
 ### Transform the tags before performing the analysis
 

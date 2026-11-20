@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filter by target or event...",
     "onThisPage": "on this page",
     "containerFilterPlaceholder": "Container name...",
+    "actorFilterPlaceholder": "User...",
+    "actorFilterLabel": "Filter by user",
     "allEvents": "All events",
     "eventsSelected": "{count} events selected",
     "clear": "Clear",
@@ -16,12 +18,19 @@
       "nextPage": "Next page"
     },
     "emptyFiltered": "No audit entries match your filters",
+    "systemActor": "System",
+    "exportError": "Failed to export audit log",
+    "export": {
+      "csv": "Export CSV",
+      "json": "Export JSON"
+    },
     "columns": {
       "time": "Time",
       "event": "Event",
       "target": "Target",
       "status": "Status",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "card": {
       "time": "Time",
@@ -34,7 +43,8 @@
       "fromVersion": "From Version",
       "toVersion": "To Version",
       "trigger": "Trigger",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "status": {
       "success": "Success",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "Update Previewed (Dry Run)",
       "update-failed": "Update Failed",
       "auto-update-blocked": "Auto-Update Blocked",
+      "security-fast-lane": "Security Fast Lane",
       "update-policy-override-set": "Update Policy Override Set",
       "update-policy-override-cleared": "Update Policy Override Cleared",
       "group-policy-set": "Group Policy Set",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "Notification Delivery Failed",
       "security-alert": "Security Alert",
       "maturity-cleared": "Maturity Cleared",
-      "image-prune": "Image Prune"
+      "image-prune": "Image Prune",
+      "cleanup": "Cleanup",
+      "notification-silence-set": "Notification Silence Set",
+      "notification-silence-cleared": "Notification Silence Cleared"
     },
     "target": {
       "container": "Container",

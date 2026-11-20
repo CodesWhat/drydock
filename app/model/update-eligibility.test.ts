@@ -657,6 +657,24 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.actionable).toBe(true);
     });
 
+    test.each([
+      ['major', 'major:1'],
+      ['minor', 'minor:1.1'],
+    ])('emits blocker when a rejected %s line covers the remote tag', (_scope, entry) => {
+      const container = makeContainerWithTagUpdate({ updatePolicy: { skipTags: [entry] } });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'skip-tag');
+      expect(blocker?.details?.skippedTag).toBe('1.1.0');
+    });
+
+    test('no blocker when the rejected line is a different one', () => {
+      const container = makeContainerWithTagUpdate({
+        updatePolicy: { skipTags: ['major:2', 'minor:1.2'] },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
+    });
+
     test('no blocker when remote tag is not in skipTags', () => {
       const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate({
@@ -683,6 +701,20 @@ describe('computeUpdateEligibility', () => {
         }),
       );
       expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
+    });
+
+    test.each([
+      ['exact', '1.0.0'],
+      ['minor', 'minor:1.0'],
+      ['major', 'major:1'],
+    ])('no skip-tag blocker on a same-tag digest update with a %s entry', (_scope, entry) => {
+      const container = makeContainerWithDigestUpdate({
+        result: { tag: BASE_IMAGE.tag.value, digest: 'sha256:bbb' },
+        updatePolicy: { skipTags: [entry] },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'skip-tag')).toBeUndefined();
+      expect(result.blockers.find((b) => b.reason === 'skip-digest')).toBeUndefined();
     });
 
     test('no skip-tag blocker when container has no result tag', () => {
@@ -2398,5 +2430,47 @@ describe('computeUpdateEligibility — maintenance-window-closed', () => {
     expect(result.blockers).toHaveLength(1);
     expect(result.blockers[0].reason).toBe('no-update-available');
     expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
+  });
+});
+
+describe('computeUpdateEligibility — file-sourced containers', () => {
+  const trigger = makeTrigger();
+
+  test('blocks an update on a container from a file watcher, with or without a trigger', () => {
+    for (const triggers of [undefined, { 'docker.update': trigger }]) {
+      const eligibility = computeUpdateEligibility(
+        makeContainerWithTagUpdate({ id: 'file-0123456789abcdef01234567' }),
+        makeContext({ triggers: triggers as never, now: FIXED_NOW }),
+      );
+
+      expect(eligibility.eligible).toBe(false);
+      expect(eligibility.blockers).toHaveLength(1);
+      expect(eligibility.blockers[0]).toMatchObject({
+        reason: 'no-update-trigger-configured',
+        severity: 'hard',
+        actionable: false,
+        details: { source: 'file' },
+      });
+      expect(eligibility.blockers[0].message).toContain('notification-only');
+      expect(hasHardBlocker(eligibility)).toBe(true);
+    }
+  });
+
+  test('still reports the update mode that binds the container', () => {
+    const eligibility = computeUpdateEligibility(
+      makeContainerWithTagUpdate({ id: 'file-0123456789abcdef01234567' }),
+      makeContext({ updateMode: 'auto', now: FIXED_NOW }),
+    );
+
+    expect(eligibility.updateMode).toMatchObject({ value: 'auto', source: 'global' });
+  });
+
+  test('a container without an update still reports that nothing is available', () => {
+    const eligibility = computeUpdateEligibility(
+      makeContainer({ id: 'file-0123456789abcdef01234567' }),
+      makeContext({ now: FIXED_NOW }),
+    );
+
+    expect(eligibility.blockers[0].reason).toBe('no-update-available');
   });
 });

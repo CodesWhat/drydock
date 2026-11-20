@@ -19,6 +19,7 @@ import {
 } from './action-policy.js';
 import { type Container, getContainerIdentityKey, hasRawUpdate } from './container.js';
 import { resolveUpdateModeCeiling } from './group-policy.js';
+import { applySeparateUpdateTypes } from './separate-update-types.js';
 import {
   computeUpdateEligibility,
   getPrimaryHardBlocker,
@@ -212,6 +213,24 @@ export function classifyApprovalCandidate(
 }
 
 /**
+ * The container as the approval queue sees it. A trigger that opted into
+ * `separateupdatetypes` acts on the best candidate inside its threshold, so the queue item,
+ * the notification and the dispatch on approval all have to name that same candidate rather
+ * than the primary the trigger will never apply. Containers without per-type candidates are
+ * returned as is, without resolving a trigger. One approval item exists per container: a
+ * queue per update type is not modelled.
+ */
+export function chooseApprovalCandidate(
+  container: Container,
+  triggers: Record<string, ActionPolicyTrigger> | undefined,
+): Container {
+  if (!container.result?.updateCandidates) {
+    return container;
+  }
+  return applySeparateUpdateTypes(container, selectActionTrigger(triggers, container)?.trigger);
+}
+
+/**
  * `shouldQueueForApproval(container, triggers, updateMode)`:
  *
  *      hasRawUpdate(container)                                   # NOT updateAvailable
@@ -241,6 +260,36 @@ export function shouldQueueForApproval(
  */
 export function getApprovalCandidateRef(container: Container): string | undefined {
   return container.result?.digest ?? container.result?.tag;
+}
+
+/** The fields of a record that identify its candidate. */
+export type ApprovalCandidateIdentity = Pick<
+  ApprovalRecordInput,
+  'candidateRef' | 'toRef' | 'updateKind'
+>;
+
+/**
+ * Whether a stored record and the candidate a container reports now are the same
+ * candidate. The ref is digest-first, so one tag update reads as a different ref on a cycle
+ * where the digest lookup failed (a registry 429). Equal refs always match. Otherwise both
+ * must be tag updates to the same target tag, and at least one side must be the tag-only
+ * form (its ref is its own target tag). Two different known digests never match merely
+ * because their tags agree, and a digest update has nothing but its ref to go on.
+ */
+export function isSameApprovalCandidate(
+  stored: ApprovalCandidateIdentity,
+  current: ApprovalCandidateIdentity,
+): boolean {
+  if (stored.candidateRef === current.candidateRef) {
+    return true;
+  }
+  if (stored.updateKind !== 'tag' || current.updateKind !== 'tag') {
+    return false;
+  }
+  if (stored.toRef !== current.toRef) {
+    return false;
+  }
+  return stored.candidateRef === stored.toRef || current.candidateRef === current.toRef;
 }
 
 function getScanFields(container: Container): Partial<ApprovalRecordInput> {

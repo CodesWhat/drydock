@@ -634,6 +634,16 @@ describe('container-init coverage', () => {
       expect(container.tagPinInfo).toBe(false);
     });
 
+    test('derives tagCeiling from dd.tag.ceiling label and restores the fallback when removed', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.ceiling': 'minor' });
+      expect(container.tagCeiling).toBe('minor');
+      applyDerivedLabelFieldsToContainer(container, {}, { tagCeiling: 'major' });
+      expect(container.tagCeiling).toBe('major');
+      applyDerivedLabelFieldsToContainer(container, {});
+      expect(container.tagCeiling).toBeUndefined();
+    });
+
     test('restores supplied imgset/watcher tag-policy fallbacks when labels are removed', () => {
       const container = makeContainer({ tagFamily: 'loose', tagPinInfo: false });
       applyDerivedLabelFieldsToContainer(container, {}, { tagFamily: 'strict', tagPinInfo: true });
@@ -825,6 +835,29 @@ describe('container-init coverage', () => {
           tagPinInfo: true,
         }),
       );
+    });
+
+    test('resolves the ceiling from label, then imgset, then watcher default, else unset', () => {
+      expect(
+        mergeConfigWithImgset(
+          { tagCeiling: 'minor' },
+          { name: 'service', tagCeiling: 'major' },
+          {},
+          { ceiling: 'major' },
+        ).tagCeiling,
+      ).toBe('minor');
+      expect(
+        mergeConfigWithImgset(
+          {},
+          { name: 'service', tagCeiling: 'major' },
+          {},
+          { ceiling: 'minor' },
+        ).tagCeiling,
+      ).toBe('major');
+      expect(mergeConfigWithImgset({}, undefined, {}, { ceiling: 'minor' }).tagCeiling).toBe(
+        'minor',
+      );
+      expect(mergeConfigWithImgset({}, undefined, {}).tagCeiling).toBeUndefined();
     });
 
     test('uses imgset values above watcher defaults when labels are absent', () => {

@@ -31,6 +31,8 @@
       "challengeExpired": "انتهت صلاحية التحقق. سجّل الدخول مرة أخرى.",
       "challengeLocked": "محاولات كثيرة جدًا. حاول مرة أخرى بعد {time}.",
       "challengeLockedLater": "محاولات كثيرة جدًا. حاول مرة أخرى لاحقًا.",
+      "rateLimited": "محاولات كثيرة جدًا. حاول مرة أخرى بعد {time}.",
+      "rateLimitedLater": "محاولات كثيرة جدًا. حاول مرة أخرى لاحقًا.",
       "challengeUnavailable": "التحقق غير متاح حاليًا. حاول مرة أخرى بعد قليل."
     },
     "connectionLost": {

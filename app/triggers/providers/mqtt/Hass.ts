@@ -13,18 +13,28 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import { type Container, deriveContainerIdentityKey } from '../../../model/container.js';
+import * as registry from '../../../registry/index.js';
 import * as containerStore from '../../../store/container.js';
 import * as mqttHassStore from '../../../store/mqtt-hass.js';
 import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
 import {
+  buildHassReleaseSummary,
+  getHassButtonCommandTopic,
+  getHassButtonCommandTopicFilters,
+  getHassButtonResultTopic,
   getHassCommandTopicFilters,
   getHassCommandTopicFromStateTopic,
   getStateTopicFromCommandTopic,
+  HASS_BUTTON_ACTIONS,
+  HASS_BUTTON_PRESS_PAYLOAD,
   HASS_COMMAND_QOS,
   HASS_INSTALL_PAYLOAD,
+  type HassButtonAction,
+  isHassButtonPressPayload,
   isHassInstallPayload,
+  parseHassButtonCommandTopic,
   resolveHassCommandContainer,
 } from './hass-commands.js';
 import { HASS_UPDATE_STATE_KEY } from './hass-progress.js';
@@ -33,9 +43,12 @@ import {
   getStaleSanitizedContainerNameCandidates,
 } from './naming.js';
 import {
+  getAvailabilityTopic,
   getContainerStateTopic,
   getContainerStateTopicFromName,
   getWatcherTopicPrefix,
+  HASS_AVAILABILITY_OFFLINE,
+  HASS_AVAILABILITY_ONLINE,
   normalizeAgentValue,
 } from './topics.js';
 
@@ -103,6 +116,15 @@ function hasHassCommandCapableClient(client: HassClient): client is HassCommandC
   );
 }
 
+// The watcher surface the check button drives, same as the API's watch handler.
+interface HassCheckWatcher {
+  getContainers?: () => Promise<Container[]>;
+  watchContainer: (
+    container: Container,
+    options?: { emitBatchEvent?: boolean },
+  ) => Promise<{ container?: { updateAvailable?: boolean } }>;
+}
+
 interface HassConfiguration {
   topic: string;
   // Optional here because Hass's own unit tests construct a bare
@@ -117,6 +139,7 @@ interface HassConfiguration {
     discovery: boolean;
     agenttopicsegment?: boolean;
     commands?: boolean;
+    buttons?: boolean;
     devicepercontainer?: boolean;
   };
 }
@@ -444,12 +467,12 @@ class Hass {
    * @returns {Promise<void>}
    */
   async initCommandSubscription(): Promise<void> {
-    if (!this.configuration.hass.commands) {
+    if (!this.configuration.hass.commands && !this.configuration.hass.buttons) {
       return;
     }
     if (!hasHassCommandCapableClient(this.client)) {
       this.log.warn(
-        'Home Assistant install commands are enabled but the MQTT client does not support subscriptions; skipping.',
+        'Home Assistant install commands or buttons are enabled but the MQTT client does not support subscriptions; skipping.',
       );
       return;
     }
@@ -460,7 +483,14 @@ class Hass {
         });
       };
       this.client.on('message', this.commandMessageHandler);
-      const filters = getHassCommandTopicFilters(this.configuration.topic);
+      const filters = [
+        ...(this.configuration.hass.commands
+          ? getHassCommandTopicFilters(this.configuration.topic)
+          : []),
+        ...(this.configuration.hass.buttons
+          ? getHassButtonCommandTopicFilters(this.configuration.topic)
+          : []),
+      ];
       await this.client.subscribeAsync(filters, { qos: HASS_COMMAND_QOS });
       this.commandTopicFilters = filters;
       this.commandSubscriptionActive = true;
@@ -533,6 +563,16 @@ class Hass {
   ): Promise<void> {
     if (packet.retain) {
       this.log.debug(`Ignoring retained hass command message on [${topic}]`);
+      return;
+    }
+    const buttonCommand = this.configuration.hass.buttons
+      ? parseHassButtonCommandTopic(topic, this.configuration.topic)
+      : undefined;
+    if (buttonCommand) {
+      await this.handleButtonCommand(topic, payload, buttonCommand);
+      return;
+    }
+    if (!this.configuration.hass.commands) {
       return;
     }
     const stateTopic = getStateTopicFromCommandTopic(topic, this.configuration.topic);
@@ -615,6 +655,181 @@ class Hass {
         status: 'error',
         details: 'Unexpected error',
       });
+    }
+  }
+
+  /**
+   * Handle a press of a per-container button (`hass.buttons`). Every outcome
+   * that has a resolvable container is reported on the button's result topic
+   * (its `json_attributes_topic`), so a refused press explains itself in Home
+   * Assistant instead of silently doing nothing. "Update now" goes through
+   * `requestContainerUpdate`, the same admission path as a manual update from
+   * the UI, so approval, exclusion and threshold rules reject it the same way.
+   */
+  private async handleButtonCommand(
+    topic: string,
+    payload: Buffer,
+    { stateTopic, action }: { stateTopic: string; action: HassButtonAction },
+  ): Promise<void> {
+    if (!isHassButtonPressPayload(payload)) {
+      this.log.debug(`Ignoring hass button message on [${topic}] with unexpected payload`);
+      return;
+    }
+    const resolution = resolveHassCommandContainer(
+      containerStore.getContainers({}),
+      stateTopic,
+      (container: Container) => this.getContainerStateTopic({ container }),
+    );
+    if (resolution.status === 'not-found') {
+      this.log.debug(`No tracked container for hass button topic [${topic}]`);
+      return;
+    }
+    if (resolution.status === 'ambiguous') {
+      this.log.warn(
+        `Ambiguous hass button topic [${topic}] matches ${resolution.containers.length} containers; ignoring.`,
+      );
+      await this.publishButtonResult(stateTopic, action, {
+        status: 'refused',
+        reason: 'Button topic matches more than one container',
+      });
+      return;
+    }
+
+    const container = resolution.container;
+    if (!this.isContainerAllowed(container)) {
+      this.log.warn(
+        `Ignoring hass ${action} button for [${container.name}]: container is excluded from this trigger`,
+      );
+      await this.publishButtonResult(stateTopic, action, {
+        status: 'refused',
+        reason: 'Container is excluded from this trigger',
+      });
+      return;
+    }
+    // "Update now" shares the install command's rate-limit key so the two
+    // controls cannot double-start one update; "check" has its own.
+    const baseRateLimitKey = this.getContainerId(container) ?? stateTopic;
+    const rateLimitKey = action === 'check' ? `${baseRateLimitKey}:check` : baseRateLimitKey;
+    if (!this.commandRateLimiter.tryConsume(rateLimitKey)) {
+      this.log.warn(`Ignoring hass ${action} button for [${container.name}]: rate limited`);
+      await this.publishButtonResult(stateTopic, action, {
+        status: 'refused',
+        reason: 'Rate limited, try again shortly',
+      });
+      return;
+    }
+
+    if (action === 'check') {
+      await this.runCheckButton(container, stateTopic);
+    } else {
+      await this.runUpdateButton(container, stateTopic);
+    }
+  }
+
+  private async runCheckButton(container: Container, stateTopic: string): Promise<void> {
+    try {
+      const watcherId = `${container.agent ? `${container.agent}.` : ''}docker.${container.watcher}`;
+      const watcher = registry.getState().watcher[watcherId] as HassCheckWatcher | undefined;
+      if (!watcher) {
+        await this.publishButtonResult(stateTopic, 'check', {
+          status: 'error',
+          reason: 'No watcher found for this container',
+        });
+        return;
+      }
+      let containerToWatch = container;
+      if (typeof watcher.getContainers === 'function') {
+        const found = (await watcher.getContainers()).find(
+          (candidate) => candidate.id === container.id,
+        );
+        if (!found) {
+          await this.publishButtonResult(stateTopic, 'check', {
+            status: 'error',
+            reason: 'Container not found',
+          });
+          return;
+        }
+        containerToWatch = found;
+      }
+      const report = await watcher.watchContainer(containerToWatch, { emitBatchEvent: true });
+      this.log.info(`Hass check button completed for container [${container.name}]`);
+      await this.publishButtonResult(stateTopic, 'check', {
+        status: 'checked',
+        update_available: report.container?.updateAvailable === true,
+      });
+    } catch (error: unknown) {
+      this.log.warn(
+        `Unexpected error handling hass check button for container [${container.name}] (${getErrorMessage(error)})`,
+      );
+      await this.publishButtonResult(stateTopic, 'check', {
+        status: 'error',
+        reason: 'Update check failed',
+      });
+    }
+  }
+
+  private async runUpdateButton(container: Container, stateTopic: string): Promise<void> {
+    try {
+      const accepted = await requestContainerUpdate(container);
+      this.log.info(
+        `Accepted hass update button for container [${container.name}] (operation ${accepted.operationId})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'success',
+        details: `operation ${accepted.operationId}`,
+      });
+      await this.publishButtonResult(stateTopic, 'update', {
+        status: 'accepted',
+        operation_id: accepted.operationId,
+      });
+    } catch (error: unknown) {
+      if (error instanceof UpdateRequestError) {
+        this.log.info(
+          `Hass update button rejected for container [${container.name}] (${error.message})`,
+        );
+        recordAuditEvent({
+          action: 'mqtt-command-update',
+          container,
+          status: 'error',
+          details: error.message,
+        });
+        await this.publishButtonResult(stateTopic, 'update', {
+          status: 'refused',
+          reason: error.message,
+        });
+        return;
+      }
+      this.log.warn(
+        `Unexpected error handling hass update button for container [${container.name}] (${getErrorMessage(error)})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Unexpected error',
+      });
+      await this.publishButtonResult(stateTopic, 'update', {
+        status: 'error',
+        reason: 'Unexpected error',
+      });
+    }
+  }
+
+  private async publishButtonResult(
+    stateTopic: string,
+    action: HassButtonAction,
+    result: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await this.client.publish(
+        getHassButtonResultTopic(stateTopic, action),
+        JSON.stringify({ ...result, at: new Date().toISOString() }),
+        { retain: true },
+      );
+    } catch (error: unknown) {
+      this.log.warn(`Failed to publish hass button result (${getErrorMessage(error)})`);
     }
   }
 
@@ -972,7 +1187,8 @@ class Hass {
           value_template: HASS_ENTITY_VALUE_TEMPLATE,
           latest_version_topic: containerStateSensor.topic,
           latest_version_template: HASS_LATEST_VERSION_TEMPLATE,
-          release_url: container.result ? container.result.link : undefined,
+          release_url: container.result?.link ?? container.result?.releaseNotes?.url,
+          release_summary: buildHassReleaseSummary(container.result?.releaseNotes),
           json_attributes_topic: containerStateSensor.topic,
           // #210 — advertise the Install button ONLY when a command subscription
           // is actually live (commandSubscriptionActive), not merely when the config
@@ -992,8 +1208,71 @@ class Hass {
         },
       });
     }
+    if (this.configuration.hass.discovery) {
+      await this.syncContainerButtons({
+        container,
+        stateTopic: containerStateSensor.topic,
+        staleStateTopics,
+        device: containerDevice,
+      });
+    }
     this.trackContainerStateTopic(container, containerStateSensor.topic);
     await this.updateContainerSensors(container);
+  }
+
+  private areButtonsAdvertised(): boolean {
+    return this.configuration.hass.buttons === true && this.commandSubscriptionActive;
+  }
+
+  /**
+   * Publish the "check for updates" and "update now" button entities, or clear
+   * their retained configs for the stale alias topics. Advertised only while the
+   * command subscription is live, for the same reason as the Install button.
+   */
+  private async syncContainerButtons({
+    container,
+    stateTopic,
+    staleStateTopics,
+    device,
+  }: {
+    container: Container;
+    stateTopic: string;
+    staleStateTopics: string[];
+    device?: Record<string, unknown>;
+  }) {
+    if (!this.areButtonsAdvertised()) {
+      return;
+    }
+    for (const action of HASS_BUTTON_ACTIONS) {
+      await this.removeDiscoveryTopics({
+        kind: 'button',
+        stateTopics: staleStateTopics.map((stale) => `${stale}/${action}`),
+      });
+      const label = action === 'check' ? 'Check for updates' : 'Update now';
+      await this.publishDiscoveryMessage({
+        discoveryTopic: this.getDiscoveryTopic({
+          kind: 'button',
+          topic: `${stateTopic}/${action}`,
+        }),
+        kind: 'button',
+        stateTopic: `${stateTopic}/${action}`,
+        name: device ? label : `${container.displayName} ${label.toLowerCase()}`,
+        icon: action === 'check' ? 'mdi:refresh' : 'mdi:download',
+        uniqueId: `${getHassUniqueId(container)}_${action}`,
+        device,
+        options: {
+          // A button has no state to read; these keys would be rejected as extras.
+          state_topic: undefined,
+          entity_picture: undefined,
+          command_topic: getHassButtonCommandTopic(stateTopic, action),
+          payload_press: HASS_BUTTON_PRESS_PAYLOAD,
+          qos: HASS_COMMAND_QOS,
+          retain: false,
+          json_attributes_topic: getHassButtonResultTopic(stateTopic, action),
+          ...(action === 'update' ? { device_class: 'update' } : {}),
+        },
+      });
+    }
   }
 
   /**
@@ -1057,6 +1336,12 @@ class Hass {
         kind: containerStateSensor.kind,
         stateTopics: discoveryStateTopicsToRemove,
       });
+      for (const action of HASS_BUTTON_ACTIONS) {
+        await this.removeDiscoveryTopics({
+          kind: 'button',
+          stateTopics: discoveryStateTopicsToRemove.map((stateTopic) => `${stateTopic}/${action}`),
+        });
+      }
     }
     this.clearTrackedContainerStateTopic(container);
     await this.updateContainerSensors(container);
@@ -1188,8 +1473,10 @@ class Hass {
     let watcherUpdateCount: number;
     if (this.configuration.hass.agenttopicsegment) {
       // #386 — filter by agent to avoid cross-agent contamination on shared watcher names
+      // Raw (uncloned, read-only) view: only agent and updateAvailable are read,
+      // so skip the per-call clone and env redaction of getContainers().
       const watcherContainers = containerStore
-        .getContainers({ watcher: container.watcher })
+        .getContainersRaw({ watcher: container.watcher })
         .filter((c) => normalizeAgentValue(c.agent) === containerAgentName);
       watcherTotalCount = watcherContainers.length;
       watcherUpdateCount = watcherContainers.filter((c) => c.updateAvailable).length;
@@ -1362,6 +1649,9 @@ class Hass {
         icon: icon || sanitizeIcon('mdi:docker'),
         entity_picture: entityPicture || resolveEntityPicture(icon),
         state_topic: stateTopic,
+        availability_topic: getAvailabilityTopic(this.configuration.topic),
+        payload_available: HASS_AVAILABILITY_ONLINE,
+        payload_not_available: HASS_AVAILABILITY_OFFLINE,
         ...options,
       }),
       {

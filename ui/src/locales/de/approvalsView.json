@@ -32,6 +32,10 @@
       "prerelease": "Vorabversion",
       "unknown": "Unbekannt"
     },
+    "securityFastLane": {
+      "badge": "Sicherheitsfix",
+      "tooltip": "Behebt kritische oder hohe Schwachstellen im laufenden Image. Es braucht weiterhin eine Freigabe."
+    },
     "actions": {
       "notesAriaLabel": "Versionshinweise und Gründe für das Zurückhalten anzeigen",
       "approve": "Genehmigen",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "Aktualisierungsmodus ist notify; Genehmigen ist deaktiviert",
       "reject": "Ablehnen",
       "rejectAriaLabel": "Aktualisierung ablehnen",
+      "rejectScopeAriaLabel": "Umfang der Ablehnung",
       "defer": "Zurückstellen",
       "deferAriaLabel": "Aktualisierung zurückstellen"
+    },
+    "rejectScope": {
+      "tag": "Nur diese Version",
+      "minor": "Ganze Minor-Linie",
+      "major": "Ganze Major-Linie"
     },
     "detail": {
       "loading": "Details werden geladen…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "Aktualisierung ablehnen",
         "message": "Aktualisierung von {name} auf {toRef} ablehnen? Sie wird nicht automatisch angewendet.",
+        "messageLine": "Update für {name} auf {toRef} ablehnen und alle {line}.x-Versionen überspringen? Neuere Linien werden weiterhin angeboten.",
         "acceptLabel": "Ablehnen"
       },
       "defer": {

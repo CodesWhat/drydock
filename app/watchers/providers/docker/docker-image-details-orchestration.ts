@@ -54,6 +54,7 @@ export interface ContainerLabelOverrides {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: string;
+  tagCeiling?: string;
   linkTemplate?: string;
   portLabel?: string;
   displayName?: string;
@@ -130,6 +131,7 @@ interface ResolvedContainerLabelOverrides {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: string;
+  tagCeiling?: string;
   linkTemplate?: string;
   portLabel?: string;
   displayName?: string;
@@ -152,6 +154,7 @@ interface ResolvedContainerConfig {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: boolean;
+  tagCeiling?: string;
   linkTemplate?: string;
   portLabel?: string;
   displayName?: string;
@@ -1086,6 +1089,7 @@ export async function buildDiscoveredContainer(
     transformTags: resolvedConfig.transformTags,
     tagFamily: resolvedConfig.tagFamily,
     tagPinInfo: resolvedConfig.tagPinInfo,
+    tagCeiling: resolvedConfig.tagCeiling,
     linkTemplate: resolvedConfig.linkTemplate,
     portLabel: resolvedConfig.portLabel,
     displayName: getContainerDisplayName(

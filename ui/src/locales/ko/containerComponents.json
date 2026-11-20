@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "새 버전 사용 가능: {tag}. 이 Tag는 고정되어 있어 drydock이 자동으로 업데이트하지 않습니다."
     },
+    "updateCandidates": {
+      "title": "업데이트 유형별 후보"
+    },
     "eligibilityBadges": {
       "securityBlocked": "보안으로 인해 차단됨",
       "rolledBack": "롤백됨",
@@ -481,6 +484,7 @@
       "maturityClockPublished": "후보가 {date}에 게시됨 — {minDays}일 최소 기간까지 {count}일 남음",
       "maturityClockDetected": "후보가 {date}에 감지됨 — {minDays}일 최소 기간까지 {count}일 남음",
       "groupManualOnly": "그룹 정책 '{group}'은(는) 수동 업데이트만 허용합니다. Drydock이 이 업데이트를 자동으로 적용하지 않습니다.",
+      "securityFastLane": "실행 중인 이미지의 치명적 또는 높음 등급 취약점 {count}개를 수정합니다 ({ids}). 일시 중지, 숙성 기간, 유지보수 창 보류는 적용되지 않습니다.",
       "updateAvailableRuleDisabled": "Update Available 알림 규칙이 꺼져 있으며, 이 규칙은 자동 업데이트도 제어합니다. Drydock이 이 업데이트를 자동으로 적용하게 하려면 Settings > Notifications > Update Available에서 켜세요.",
       "updateButton": "지금 업데이트",
       "blockedButton": "업데이트 차단됨",
@@ -527,6 +531,7 @@
         "update-available-rule-disabled": "Update Available 규칙이 꺼져 있습니다",
         "group-notify-only": "그룹이 알림만 허용합니다",
         "group-manual-only": "그룹이 수동 업데이트를 요구합니다",
+        "security-fast-lane": "보안 패스트 레인",
         "dry-run-trigger": "트리거 구성이 드라이런 모드임",
         "maturity-releases-not-reached": "성숙도 정책 대기 중"
       },

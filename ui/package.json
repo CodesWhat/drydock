@@ -1,7 +1,7 @@
 {
   "name": "drydock-ui",
-  "version": "1.8.0",
-  "description": "Drydock dashboard \u2014 Vue 3 + Tailwind CSS 4 SPA",
+  "version": "1.9.0",
+  "description": "Drydock dashboard — Vue 3 + Tailwind CSS 4 SPA",
   "repository": "CodesWhat/drydock",
   "engines": {
     "node": ">=24.0.0"

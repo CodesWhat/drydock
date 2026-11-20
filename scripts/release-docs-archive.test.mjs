@@ -191,3 +191,40 @@ test('v1.7 archive preserves the promoted rc.7 source with exact release and cre
   assert.ok(!config.includes('!content/docs/v1.7-provenance.json'));
   assert.ok(!config.includes('!content/docs/v1.7-errata.json'));
 });
+
+test('v1.8 archive preserves the published rc.16 docs byte for byte', () => {
+  const record = JSON.parse(readFileSync('content/docs/v1.8-provenance.json', 'utf8'));
+  const root = 'content/docs/v1.8';
+  assert.equal(record.version, 'v1.8');
+  assert.equal(record.sourceTag, 'v1.8.0-rc.16');
+  assert.equal(git('rev-parse', `${record.sourceTag}^{commit}`), record.sourceCommit);
+  assert.equal(
+    git('rev-parse', `${record.sourceCommit}:content/docs/current`),
+    record.sourceDocsTree,
+  );
+  assert.equal(git('rev-parse', `${record.sourceCommit}:CHANGELOG.md`), record.sourceChangelogBlob);
+  const sourceFiles = git(
+    'ls-tree',
+    '-r',
+    '--format=%(objectname) %(path)',
+    record.sourceCommit,
+    'content/docs/current',
+  )
+    .split('\n')
+    .map((entry) => entry.split(' '))
+    .map(([object, path]) => [path.replace('content/docs/current/', ''), object]);
+  assert.deepEqual(
+    listFiles(root).map((path) => relative(root, path)),
+    [...sourceFiles.map(([path]) => path), 'changelog/index.mdx'].sort(),
+  );
+  for (const [path, blob] of sourceFiles) {
+    assert.equal(git('hash-object', join(root, path)), blob, path);
+  }
+  const changelog = readFileSync(join(root, 'changelog/index.mdx'));
+  assert.doesNotMatch(changelog.toString('utf8'), /^## \[Unreleased\]|^\[Unreleased\]:/mu);
+  assert.equal(
+    createHash('sha256').update(changelog).digest('hex'),
+    record.generatedChangelogSha256,
+  );
+  assert.ok(readFileSync('.coderabbit.yaml', 'utf8').includes('    - "!content/docs/v1.8/**"'));
+});

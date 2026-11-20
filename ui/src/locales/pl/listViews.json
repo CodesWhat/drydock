@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filtruj według celu lub zdarzenia...",
     "onThisPage": "na tej stronie",
     "containerFilterPlaceholder": "Nazwa kontenera...",
+    "actorFilterPlaceholder": "Użytkownik...",
+    "actorFilterLabel": "Filtruj według użytkownika",
     "allEvents": "Wszystkie wydarzenia",
     "eventsSelected": "Wybrano zdarzenia {count}",
     "clear": "Wyczyść",
@@ -16,12 +18,19 @@
       "nextPage": "Następna strona"
     },
     "emptyFiltered": "Żadne wpisy audytu nie pasują do wybranych filtrów",
+    "systemActor": "System",
+    "exportError": "Nie udało się wyeksportować dziennika audytu",
+    "export": {
+      "csv": "Eksportuj CSV",
+      "json": "Eksportuj JSON"
+    },
     "columns": {
       "time": "Czas",
       "event": "Wydarzenie",
       "target": "Cel",
       "status": "Stan",
-      "details": "Szczegóły"
+      "details": "Szczegóły",
+      "actor": "Wykonawca"
     },
     "card": {
       "time": "Czas",
@@ -34,7 +43,8 @@
       "fromVersion": "Z wersji",
       "toVersion": "Do wersji",
       "trigger": "Wyzwalacz",
-      "details": "Szczegóły"
+      "details": "Szczegóły",
+      "actor": "Wykonawca"
     },
     "status": {
       "success": "Sukces",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "Podgląd aktualizacji (dry run)",
       "update-failed": "Aktualizacja nie powiodła się",
       "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
+      "security-fast-lane": "Szybka ścieżka bezpieczeństwa",
       "update-policy-override-set": "Ustawiono nadpisanie polityki aktualizacji",
       "update-policy-override-cleared": "Wyczyszczono nadpisanie polityki aktualizacji",
       "group-policy-set": "Ustawiono politykę grupy",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
       "security-alert": "Alert bezpieczeństwa",
       "maturity-cleared": "Okres oczekiwania zakończony",
-      "image-prune": "Czyszczenie obrazu"
+      "image-prune": "Czyszczenie obrazu",
+      "cleanup": "Czyszczenie",
+      "notification-silence-set": "Wyciszono powiadomienia",
+      "notification-silence-cleared": "Zdjęto wyciszenie powiadomień"
     },
     "target": {
       "container": "Kontener",

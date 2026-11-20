@@ -722,6 +722,11 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
         pruneStack: this.joi.boolean().default(false),
         redeployTimeout: this.joi.number().integer().min(1).default(DEFAULT_REDEPLOY_TIMEOUT_MS),
         digestPinning: this.joi.boolean().default(false),
+        // The liveness watch rolls back through Docker directly, which would
+        // bypass the stack. Portainer leaves a failed update to the operator.
+        livenesswindow: this.joi.forbidden().messages({
+          'any.unknown': 'LIVENESSWINDOW is not supported by Portainer actions',
+        }),
       })
       .rename('updatemode', 'updateMode', {
         ignoreUndefined: true,
@@ -1772,8 +1777,18 @@ class Portainer extends Docker<PortainerTriggerConfiguration> {
     );
   }
 
+  /**
+   * Portainer owns the stack, so a rollback driven straight through Docker
+   * would bypass it. Auto-rollback and the liveness watch both stay off.
+   */
   getRollbackConfig(container) {
-    return { ...super.getRollbackConfig(container), autoRollback: false };
+    const config = super.getRollbackConfig(container);
+    if ((config.livenessWindow ?? 0) > 0) {
+      this.log?.warn?.(
+        `Ignoring dd.rollback.liveness for ${container.name}: the liveness watch is not supported by Portainer actions`,
+      );
+    }
+    return { ...config, autoRollback: false, livenessWindow: 0 };
   }
 
   override getUpdateLockKeys(container: {

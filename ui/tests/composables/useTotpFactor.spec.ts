@@ -17,11 +17,16 @@ vi.mock('@/services/totp-factor', async (importOriginal) => {
 
 const mocked = vi.mocked(service);
 
-const UNENROLLED = { status: 'unenrolled', recoveryCodesRemaining: 0 } as const;
+const UNENROLLED = {
+  status: 'unenrolled',
+  recoveryCodesRemaining: 0,
+  managementAllowed: true,
+} as const;
 const ACTIVE = {
   status: 'active',
   activatedAt: '2026-10-01T00:00:00.000Z',
   recoveryCodesRemaining: 10,
+  managementAllowed: true,
 } as const;
 const REVEAL = {
   id: 'enr-1',
@@ -394,6 +399,40 @@ describe('useTotpFactor', () => {
       await factor.load({ silent: true });
 
       expect(factor.unavailable.value).toBe('no-key-ring');
+    });
+  });
+
+  describe('transport hint from the status read', () => {
+    it('is unavailable before any password step when the status says management is refused', async () => {
+      const factor = await ready({
+        ...UNENROLLED,
+        managementAllowed: false,
+        reason: 'https-required',
+      });
+
+      expect(factor.unavailable.value).toBe('https-required');
+      expect(factor.step.value).toBe('idle');
+    });
+
+    it('clears the hint when a later read says management is allowed, and leaves other reasons alone', async () => {
+      const factor = await ready({
+        ...UNENROLLED,
+        managementAllowed: false,
+        reason: 'https-required',
+      });
+      mocked.getTotpFactor.mockResolvedValue(UNENROLLED);
+      await factor.load({ silent: true });
+      expect(factor.unavailable.value).toBeUndefined();
+
+      const other = await ready();
+      mocked.startTotpEnrollment.mockRejectedValue(failure(503));
+      other.begin('enable');
+      other.password.value = 'hunter2';
+      await other.submitReauth();
+      expect(other.unavailable.value).toBe('no-key-ring');
+      mocked.getTotpFactor.mockResolvedValue(UNENROLLED);
+      await other.load({ silent: true });
+      expect(other.unavailable.value).toBe('no-key-ring');
     });
   });
 

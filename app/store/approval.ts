@@ -327,11 +327,14 @@ export function findApprovalByContainerAndCandidate(
 }
 
 /**
- * Return a system-resolved row to the queue as a fresh pending row. The `(containerId,
- * candidateRef)` pair is unique, so a candidate whose earlier row was resolved by the
- * system (superseded, withdrawn, auto-applied, container removed) can only come back by
- * reopening that row. A row an operator decided on (approved or rejected) is never
- * reopened: that answer stands for the exact candidate.
+ * Return a row to the queue as a fresh pending row. The `(containerId, candidateRef)` pair
+ * is unique, so a candidate whose earlier row was resolved by the system (superseded,
+ * withdrawn, auto-applied, container removed) can only come back by reopening that row.
+ * One operator answer is reopened too: an approval whose update failed (outcome `failed`,
+ * no rollback), because the candidate is still on offer and nothing else would ever put it
+ * back in front of an operator. Any other approved row and every rejected row is never
+ * reopened: that answer stands for the exact candidate. The audit history of the earlier
+ * attempt stays in the audit log.
  *
  * Every decision field is cleared, and `createdAt` restarts so time-in-queue is real.
  * @param id
@@ -351,7 +354,8 @@ export function reopenApproval(
           SET decision = 'pending', decided_at = NULL, decided_by = NULL, decision_note = NULL,
               deferred_until = NULL, operation_id = NULL, outcome = NULL,
               resolved_at = NULL, resolution = NULL, created_at = ?, created_at_ms = ?
-        WHERE id = ? AND resolved_at IS NOT NULL AND decision IN ('pending', 'deferred')`,
+        WHERE id = ? AND ((resolved_at IS NOT NULL AND decision IN ('pending', 'deferred'))
+            OR (decision = 'approved' AND outcome = 'failed'))`,
     )
     .run(new Date(createdAtMs).toISOString(), createdAtMs, id);
   return result.changes > 0 ? getApprovalById(id) : undefined;

@@ -22,10 +22,10 @@ const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype'])
 const FILE_MARKER_KEY = '_file';
 
 /**
- * `DD_*` env vars that 21 non-test files read straight from the real
+ * `DD_*` env vars that 23 non-test files read straight from the real
  * environment, bypassing `ddEnvVars`/`get()` entirely — see the "direct
  * (the real environment's) DD_ readers" test in `../index.test.ts`, which
- * enumerates those 21 files and is the source of truth this list is derived
+ * enumerates those 23 files and is the source of truth this list is derived
  * from (same 65 read sites,
  * minus the DD_SELF_UPDATE_* ones below). The file layer only ever reaches
  * `ddEnvVars`, so a file-only value for one of these keys would be merged
@@ -35,14 +35,14 @@ const FILE_MARKER_KEY = '_file';
  * silent no-op into a load-time error naming the YAML path.
  *
  * `DD_SELF_UPDATE_*` is deliberately excluded even though those files are
- * among the 21: every `DD_SELF_UPDATE_*` variable is a handoff value the
+ * among the 23: every `DD_SELF_UPDATE_*` variable is a handoff value the
  * app writes itself as environment for a helper container it spawns
  * (`SelfUpdateTransitionShared.ts` and `self-update-controller.ts`'s own
  * `-e` argument lists), never something an operator configures. Rejecting
  * them from `drydock.yml` would be describing a mechanism that isn't
  * configuration at all.
  *
- * Keep this in sync with the 21-file list by hand; `../index.test.ts`'s
+ * Keep this in sync with the 23-file list by hand; `../index.test.ts`'s
  * recompute test fails loudly if the two drift.
  */
 export const UNSUPPORTED_FILE_KEYS: readonly string[] = [
@@ -51,6 +51,7 @@ export const UNSUPPORTED_FILE_KEYS: readonly string[] = [
   'DD_AGENT_SECRET_FILE',
   'DD_ALLOW_INSECURE_ROOT',
   'DD_ANONYMOUS_AUTH_CONFIRM',
+  'DD_AUDIT_RETENTION_DAYS',
   'DD_AUTH_ANONYMOUS_CONFIRM',
   'DD_CONFIG_WATCH',
   'DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES',

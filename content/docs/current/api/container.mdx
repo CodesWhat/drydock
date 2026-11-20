@@ -452,7 +452,7 @@ Returns 200 with `accepted` and `rejected` arrays, 400 if `expectedContainerIds`
 
 This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → [group policy](/docs/configuration/groups) → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, `updatePolicySources` (`env`, `group`, `label`, or `override`), and `groupPolicy`, a snapshot of the group policy the container was last resolved against (`id`, `group`, `revision`, `updatePolicy`, `actions`), which is absent when no group policy applies.
 
-- `skip-current`: skip the currently detected remote tag or digest
+- `skip-current`: skip the currently detected remote tag or digest. An optional `scope` of `minor` or `major` skips the whole `X.Y` or `X` line instead of the exact tag (stored as `minor:X.Y` / `major:X` in `skipTags`, removed with `remove-skip`); line scopes are refused for digest updates and non-semver tags
 - `remove-skip`: remove a single previously skipped tag or digest (requires `kind` and `value`)
 - `clear-skips`: remove `skipTags` and `skipDigests`
 - `snooze`: suppress update notifications until a date (supports `days` or explicit `snoozeUntil`)

@@ -41,6 +41,11 @@ vi.mock('../../../release-notes/index.js', () => ({
   toContainerReleaseNotes: (...args: unknown[]) => mockToContainerReleaseNotes(...args),
 }));
 
+const mockIsObservationMode = vi.hoisted(() => vi.fn(() => false));
+vi.mock('../../../runtime/observation-mode.js', () => ({
+  isObservationMode: mockIsObservationMode,
+}));
+
 // Mock all dependencies
 vi.mock('dockerode');
 vi.mock('node-cron');
@@ -77,6 +82,7 @@ import mockCron from 'node-cron';
 import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
+import { toEventTimestamp } from './docker-recent-event.js';
 import * as maintenance from './maintenance.js';
 import {
   applyRemoteOidcTokenPayload,
@@ -334,6 +340,24 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
 
+    test('should accept container and label filters', () => {
+      expect(() =>
+        docker.validateConfiguration({
+          containers: { include: '^web-', exclude: 'canary$' },
+          labels: { include: 'tier=^(web|api)$', exclude: 'skip' },
+        }),
+      ).not.toThrow();
+    });
+
+    test.each([
+      [{ containers: { include: '(unclosed' } }, /Invalid regular expression "\(unclosed"/],
+      [{ containers: { exclude: '(a)\\1' } }, /Invalid regular expression/],
+      [{ labels: { include: 'tier=(bad' } }, /Invalid regular expression/],
+      [{ labels: { exclude: '=value' } }, /label key/],
+    ])('should reject invalid container filter %j', (config, message) => {
+      expect(() => docker.validateConfiguration(config)).toThrow(message);
+    });
+
     test.each(['watchdigest', 'watchatstart'])('should reject removed %s configuration', (key) => {
       expect(() => docker.validateConfiguration({ [key]: false })).toThrow(
         new RegExp(`${key}.*not allowed`, 'i'),
@@ -372,6 +396,27 @@ describe('Docker Watcher', () => {
         },
       };
       expect(() => docker.validateConfiguration(config)).not.toThrow();
+    });
+
+    test('validates the watcher-level tag.ceiling default and rejects unknown values', () => {
+      expect(
+        docker.validateConfiguration({ socket: '/var/run/docker.sock', tag: { ceiling: 'minor' } })
+          .tag.ceiling,
+      ).toBe('minor');
+      expect(() =>
+        docker.validateConfiguration({ socket: '/var/run/docker.sock', tag: { ceiling: 'patch' } }),
+      ).toThrow();
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        imgset: { service: { image: 'ghcr.io/team/service', tag: { ceiling: 'major' } } },
+      });
+      expect(validated.imgset.service.tag.ceiling).toBe('major');
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          imgset: { service: { image: 'ghcr.io/team/service', tag: { ceiling: 'x' } } },
+        }),
+      ).toThrow();
     });
 
     test('should validate configuration with tag.pin.info override (#498)', async () => {
@@ -545,8 +590,6 @@ describe('Docker Watcher', () => {
 
   describe('Recent event history helpers', () => {
     test('should convert docker event timestamps from timeNano and time', () => {
-      const toEventTimestamp = (docker as any).toEventTimestamp.bind(docker);
-
       expect(toEventTimestamp({ timeNano: 1_700_000_000_123_000_000 })).toBe(
         new Date(1_700_000_000_123).toISOString(),
       );
@@ -809,6 +852,23 @@ describe('Docker Watcher', () => {
       expect(mockDebounce).not.toHaveBeenCalled();
     });
 
+    test('in observation mode registers no cron, startup scan, events stream or update listener', async () => {
+      mockIsObservationMode.mockReturnValue(true);
+      try {
+        await docker.register('watcher', 'docker', 'test', { watchevents: true });
+        await docker.init();
+
+        expect(mockCron.schedule).not.toHaveBeenCalled();
+        expect(docker.watchCron).toBeUndefined();
+        expect(docker.watchCronTimeout).toBeUndefined();
+        expect(docker.listenDockerEventsTimeout).toBeUndefined();
+        expect(docker.unregisterContainerUpdateApplied).toBeUndefined();
+        expect(mockDebounce).not.toHaveBeenCalled();
+      } finally {
+        mockIsObservationMode.mockReturnValue(false);
+      }
+    });
+
     test('should always schedule the startup watch when watcher state already exists', async () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'existing' }]);
       await docker.register('watcher', 'docker', 'test', {
@@ -1017,6 +1077,56 @@ describe('Docker Watcher', () => {
 
       const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
       await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+    });
+
+    // #1595: UI/API updates emit the bare container name, and the stored row still
+    // holds the removed container's id. Reporter ran WATCHEVENTS=false.
+    test('callback matches the bare container name and refreshes the recreated container by name (#1595)', async () => {
+      await docker.register('watcher', 'docker', 'test', { watchevents: false });
+      await docker.init();
+
+      const matchedContainer = { id: 'old-id', name: 'dashy', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('dashy');
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: 'other-id', Names: ['/dashy-extra'] },
+        { Id: 'nameless-id' },
+        { Id: 'new-id', Names: ['/dashy'] },
+      ]);
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('dashy');
+
+      expect(mockDockerApi.listContainers).toHaveBeenCalledWith({
+        all: true,
+        filters: { name: ['dashy'] },
+      });
+      expect(docker.watchContainer).toHaveBeenCalledTimes(1);
+      expect(docker.watchContainer).toHaveBeenCalledWith(
+        { ...matchedContainer, id: 'new-id' },
+        { emitBatchEvent: false, refreshImageDetails: true },
+      );
+    });
+
+    test('callback falls back to the stored record when the replacement lookup fails', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const matchedContainer = { id: 'old-id', name: 'dashy', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('dashy');
+      mockDockerApi.listContainers.mockRejectedValue(new Error('socket hang up'));
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('dashy');
 
       expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
         emitBatchEvent: false,

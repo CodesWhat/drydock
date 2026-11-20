@@ -32,6 +32,10 @@
       "prerelease": "预发布版本",
       "unknown": "未知"
     },
+    "securityFastLane": {
+      "badge": "安全修复",
+      "tooltip": "修复运行中镜像的严重或高危漏洞。仍需要批准。"
+    },
     "actions": {
       "notesAriaLabel": "显示发布说明和暂缓原因",
       "approve": "批准",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "更新模式为 notify；批准操作不可用",
       "reject": "拒绝",
       "rejectAriaLabel": "拒绝更新",
+      "rejectScopeAriaLabel": "拒绝范围",
       "defer": "推迟",
       "deferAriaLabel": "推迟更新"
+    },
+    "rejectScope": {
+      "tag": "仅此版本",
+      "minor": "整个次版本线",
+      "major": "整个主版本线"
     },
     "detail": {
       "loading": "正在加载详情…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "拒绝更新",
         "message": "拒绝将 {name} 更新到 {toRef}？此更新将不会自动应用。",
+        "messageLine": "拒绝 {name} 更新到 {toRef} 并跳过所有 {line}.x 版本？更新的版本线仍会提供。",
         "acceptLabel": "拒绝"
       },
       "defer": {

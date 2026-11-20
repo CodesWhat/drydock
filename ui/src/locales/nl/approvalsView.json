@@ -32,6 +32,10 @@
       "prerelease": "Voorlopige versie",
       "unknown": "Onbekend"
     },
+    "securityFastLane": {
+      "badge": "Beveiligingsfix",
+      "tooltip": "Verhelpt kritieke of hoge kwetsbaarheden in de draaiende image. Goedkeuring blijft nodig."
+    },
     "actions": {
       "notesAriaLabel": "Uitgaveopmerkingen en redenen voor tegenhouden tonen",
       "approve": "Goedkeuren",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "De updatemodus is notify; goedkeuren is uitgeschakeld",
       "reject": "Afwijzen",
       "rejectAriaLabel": "Update afwijzen",
+      "rejectScopeAriaLabel": "Reikwijdte van afwijzing",
       "defer": "Uitstellen",
       "deferAriaLabel": "Update uitstellen"
+    },
+    "rejectScope": {
+      "tag": "Alleen deze versie",
+      "minor": "Hele minor-lijn",
+      "major": "Hele major-lijn"
     },
     "detail": {
       "loading": "Details laden…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "Update afwijzen",
         "message": "De update van {name} naar {toRef} afwijzen? Deze wordt niet automatisch toegepast.",
+        "messageLine": "De update van {name} naar {toRef} afwijzen en alle {line}.x-versies overslaan? Nieuwere lijnen blijven aangeboden.",
         "acceptLabel": "Afwijzen"
       },
       "defer": {

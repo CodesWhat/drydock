@@ -141,7 +141,7 @@ describe('store/db/schema', () => {
       .prepare("SELECT name, sql FROM sqlite_schema WHERE name LIKE 'audit_%'")
       .all()
       .map((row) => String(row.sql));
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(3);
     expect(rows.every((sql) => sql.includes('timestamp_ms DESC'))).toBe(true);
   });
 

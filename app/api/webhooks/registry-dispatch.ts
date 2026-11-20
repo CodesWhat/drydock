@@ -1,6 +1,6 @@
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
-import type { Container } from '../../model/container.js';
+import { type Container, isFileSourcedContainer } from '../../model/container.js';
 import { getErrorMessage } from '../../util/error.js';
 import { getImageReferenceCandidatesFromPattern } from '../../watchers/providers/docker/docker-helpers.js';
 import type { RegistryWebhookReference } from './parsers/types.js';
@@ -110,7 +110,7 @@ export function findContainersForImageReferences(
 }
 
 function resolveWatcherIdForContainer(container: Container): string {
-  let watcherId = `docker.${container.watcher}`;
+  let watcherId = `${isFileSourcedContainer(container) ? 'file' : 'docker'}.${container.watcher}`;
   if (container.agent) {
     watcherId = `${container.agent}.${watcherId}`;
   }

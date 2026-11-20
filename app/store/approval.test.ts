@@ -246,6 +246,56 @@ describe('reopenApproval', () => {
     expect(approvalStore.getApprovalById(inserted.id)?.decision).toBe('rejected');
   });
 
+  describe('an approved row', () => {
+    function approve(outcome?: 'failed' | 'applied' | 'rolled-back') {
+      const inserted = approvalStore.insertApproval(createInput(), { now: 1000 });
+      approvalStore.updateApproval(inserted.id, {
+        decision: 'approved',
+        decidedAt: '2026-01-01T00:00:00.000Z',
+        decidedBy: 'scott',
+        decisionNote: 'go',
+        operationId: 'op-1',
+        ...(outcome !== undefined ? { outcome } : {}),
+      });
+      return inserted.id;
+    }
+
+    test('whose update failed returns to pending with every decision field reset', () => {
+      const id = approve('failed');
+
+      const reopened = approvalStore.reopenApproval(id, { now: 5000 });
+
+      expect(reopened).toMatchObject({ id, decision: 'pending', createdAtMs: 5000 });
+      expect(reopened?.decidedAt).toBeUndefined();
+      expect(reopened?.decidedBy).toBeUndefined();
+      expect(reopened?.decisionNote).toBeUndefined();
+      expect(reopened?.operationId).toBeUndefined();
+      expect(reopened?.outcome).toBeUndefined();
+      expect(reopened?.resolution).toBeUndefined();
+      expect(reopened?.resolvedAt).toBeUndefined();
+    });
+
+    test.each([undefined, 'applied', 'rolled-back'] as const)(
+      'with outcome %s stays as it was',
+      (outcome) => {
+        const id = approve(outcome);
+
+        expect(approvalStore.reopenApproval(id, { now: 5000 })).toBeUndefined();
+        expect(approvalStore.getApprovalById(id)).toMatchObject({
+          decision: 'approved',
+          operationId: 'op-1',
+        });
+      },
+    );
+  });
+
+  test('leaves a rejected row with a failed outcome alone', () => {
+    const inserted = approvalStore.insertApproval(createInput());
+    approvalStore.updateApproval(inserted.id, { decision: 'rejected', outcome: 'failed' });
+
+    expect(approvalStore.reopenApproval(inserted.id)).toBeUndefined();
+  });
+
   test('returns undefined for an unknown id and for an uncreated store', () => {
     expect(approvalStore.reopenApproval('missing')).toBeUndefined();
     approvalStore.resetApprovalStoreForTests();

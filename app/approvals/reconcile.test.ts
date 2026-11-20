@@ -515,6 +515,100 @@ describe('a candidate whose ref flips between digest and tag (#1500)', () => {
   });
 });
 
+describe('an operator decision survives the ref flipping between digest and tag', () => {
+  const withDigest = (digest = 'sha256:aaa') =>
+    createContainer({ result: { tag: '1.2.4', digest } });
+  const withoutDigest = () => createContainer({ result: { tag: '1.2.4' } });
+  let notified: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    notified = vi.fn();
+    events.registerApprovalPendingNotification(notified);
+  });
+
+  function reject(id: string) {
+    approvalStore.updateApproval(id, {
+      decision: 'rejected',
+      decidedAt: '2026-01-01T00:00:00.000Z',
+      decidedBy: 'scott',
+    });
+  }
+
+  test('a rejected digest-backed candidate is not requeued by a tag-only report with that tag skipped', async () => {
+    await emitContainerReport({ container: withDigest(), changed: true });
+    const [row] = allRows();
+    reject(row.id);
+    notified.mockClear();
+
+    const skipped = createContainer({
+      result: { tag: '1.2.4' },
+      updatePolicy: { skipTags: ['1.2.4'] },
+    });
+    await emitContainerReport({ container: skipped, changed: true });
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(allRows()[0]).toMatchObject({ id: row.id, decision: 'rejected' });
+    expect(approvalStore.countApprovals().pending).toBe(0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('a rejected tag-only candidate is not requeued once its digest arrives', async () => {
+    await emitContainerReport({ container: withoutDigest(), changed: true });
+    const [row] = allRows();
+    reject(row.id);
+    notified.mockClear();
+
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    expect(allRows()).toHaveLength(1);
+    expect(approvalStore.countApprovals().pending).toBe(0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('resolves a pending duplicate of a rejected candidate as superseded', async () => {
+    const seed = (candidateRef: string) =>
+      approvalStore.insertApproval({
+        containerId: 'container-1',
+        containerIdentityKey: '::local::nginx',
+        containerName: 'nginx',
+        watcher: 'local',
+        image: 'library/nginx',
+        fromRef: '1.2.3',
+        toRef: '1.2.4',
+        candidateRef,
+        updateKind: 'tag',
+        semverDiff: 'patch',
+      });
+    const rejected = seed('sha256:aaa');
+    reject(rejected.id);
+    const duplicate = seed('1.2.4');
+
+    await emitContainerReport({ container: withDigest(), changed: true });
+
+    const rows = allRows();
+    expect(rows.find((r) => r.id === rejected.id)).toMatchObject({ decision: 'rejected' });
+    expect(rows.find((r) => r.id === rejected.id)?.resolution).toBeUndefined();
+    expect(rows.find((r) => r.id === duplicate.id)).toMatchObject({ resolution: 'superseded' });
+    expect(approvalStore.countApprovals().pending).toBe(0);
+    expect(notified).not.toHaveBeenCalled();
+  });
+
+  test('two different known digests for the same tag supersede the pending candidate', async () => {
+    await emitContainerReport({ container: withDigest('sha256:aaa'), changed: true });
+    await emitContainerReport({ container: withDigest('sha256:bbb'), changed: true });
+
+    const rows = allRows();
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.candidateRef === 'sha256:aaa')).toMatchObject({
+      resolution: 'superseded',
+    });
+    expect(rows.find((r) => r.candidateRef === 'sha256:bbb')).toMatchObject({
+      decision: 'pending',
+    });
+  });
+});
+
 describe('candidate withdrawal', () => {
   test('marks a pending row withdrawn once the candidate disappears', async () => {
     await emitContainerReport({ container: createContainer(), changed: true });
@@ -614,6 +708,48 @@ describe('trigger threshold under auto mode', () => {
     getStateMock.mockReturnValue({ trigger: createTrigger('all', 'docker.local', 'all') });
 
     await emitContainerReport({ container: majorCandidate(), changed: true });
+
+    expect(allRows()).toHaveLength(0);
+  });
+});
+
+describe('a trigger that separates update types', () => {
+  function separateTriggers(auto: 'all' | 'none') {
+    return {
+      trigger: {
+        'docker.local': {
+          type: 'docker',
+          configuration: { auto, threshold: 'minor', separateupdatetypes: true },
+          getId: () => 'docker.local',
+        } as unknown as ActionPolicyTrigger,
+      },
+    };
+  }
+
+  const majorPrimary = () =>
+    createContainer({
+      result: {
+        tag: '2.0.0',
+        updateCandidates: { minor: { tag: '1.3.0', semverDiff: 'minor' } },
+      },
+      updateKind: { kind: 'tag', localValue: '1.2.3', remoteValue: '2.0.0', semverDiff: 'major' },
+    });
+
+  test('queues the candidate inside the threshold instead of the primary', async () => {
+    getStateMock.mockReturnValue(separateTriggers('none'));
+
+    await emitContainerReport({ container: majorPrimary(), changed: true });
+
+    expect(allRows()).toMatchObject([
+      { candidateRef: '1.3.0', toRef: '1.3.0', semverDiff: 'minor', decision: 'pending' },
+    ]);
+  });
+
+  test('queues nothing under auto mode, where the trigger applies the candidate itself', async () => {
+    getUpdateModeMock.mockReturnValue('auto');
+    getStateMock.mockReturnValue(separateTriggers('all'));
+
+    await emitContainerReport({ container: majorPrimary(), changed: true });
 
     expect(allRows()).toHaveLength(0);
   });
@@ -779,6 +915,78 @@ describe('operation outcomes', () => {
     await emitContainerUpdateApplied({ containerName: 'nginx', operationId: 'op-2' });
 
     expect(approvalStore.getApprovalById(id)?.outcome).toBeUndefined();
+  });
+});
+
+describe('an approved candidate whose update failed', () => {
+  let notified: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    notified = vi.fn();
+    events.registerApprovalPendingNotification(notified);
+  });
+
+  async function approveAndFail(): Promise<string> {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    const [row] = allRows();
+    approvalStore.updateApproval(row.id, {
+      decision: 'approved',
+      decidedAt: '2026-01-01T00:00:00.000Z',
+      decidedBy: 'scott',
+      operationId: 'op-1',
+    });
+    await emitContainerUpdateFailed({ containerName: 'nginx', operationId: 'op-1' } as never);
+    expect(allRows()[0]).toMatchObject({ decision: 'approved', outcome: 'failed' });
+    notified.mockClear();
+    return row.id;
+  }
+
+  test('returns to Pending on the next unchanged report, once', async () => {
+    const id = await approveAndFail();
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()).toHaveLength(1);
+    expect(allRows()[0]).toMatchObject({ id, decision: 'pending' });
+    expect(allRows()[0].outcome).toBeUndefined();
+    expect(approvalStore.countApprovals().pending).toBe(1);
+    expect(notified).toHaveBeenCalledTimes(1);
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()).toHaveLength(1);
+    expect(notified).toHaveBeenCalledTimes(1);
+  });
+
+  test('stays decided while a hard blocker holds the candidate, and returns when it lifts', async () => {
+    const id = await approveAndFail();
+    getStateMock.mockReturnValue({ trigger: createTrigger('onauto') });
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ id, decision: 'approved', outcome: 'failed' });
+    expect(notified).not.toHaveBeenCalled();
+
+    getStateMock.mockReturnValue({ trigger: createTrigger('none') });
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ id, decision: 'pending' });
+  });
+
+  test('a rolled-back approval stays decided', async () => {
+    await emitContainerReport({ container: createContainer(), changed: true });
+    const [row] = allRows();
+    approvalStore.updateApproval(row.id, { decision: 'approved', operationId: 'op-2' });
+    await emitContainerUpdateFailed({
+      containerName: 'nginx',
+      operationId: 'op-2',
+      rollbackReason: 'health',
+    } as never);
+
+    await emitContainerReport({ container: createContainer(), changed: false });
+
+    expect(allRows()[0]).toMatchObject({ decision: 'approved', outcome: 'rolled-back' });
+    expect(approvalStore.countApprovals().pending).toBe(0);
   });
 });
 

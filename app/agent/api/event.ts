@@ -356,6 +356,22 @@ function sanitizeUpdateFailedPayloadForAgentSse(
   };
 }
 
+function sanitizeContainerStateAlertPayloadForAgentSse(
+  payload: event.ContainerStateAlertEventPayload,
+): Record<string, unknown> {
+  return {
+    kind: payload.kind,
+    containerName: payload.containerName,
+    ...(payload.exitCode !== undefined ? { exitCode: payload.exitCode } : {}),
+    ...(payload.reason !== undefined ? { reason: payload.reason } : {}),
+    ...(payload.restartCount !== undefined ? { restartCount: payload.restartCount } : {}),
+    ...(payload.windowSeconds !== undefined ? { windowSeconds: payload.windowSeconds } : {}),
+    ...(payload.container && typeof payload.container === 'object'
+      ? { container: getAgentContainerSsePayload(payload.container) }
+      : {}),
+  };
+}
+
 function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainersForStats();
   const containerStatus = getContainerStatusSummary(containers);
@@ -532,6 +548,14 @@ export function initEvents() {
   );
   event.registerSecurityAlert((payload: event.SecurityAlertEventPayload) =>
     sendSseEvent('dd:security-alert', sanitizeSecurityAlertPayloadForAgentSse(payload)),
+  );
+  // The agent's own Docker watchers classify die/oom/stop events (dedupe, restart-loop
+  // window, update suppression all happen here). The controller only relays the result.
+  event.registerContainerStateAlert((payload: event.ContainerStateAlertEventPayload) =>
+    sendSseEvent(
+      'dd:container-state-alert',
+      sanitizeContainerStateAlertPayloadForAgentSse(payload),
+    ),
   );
   event.registerSecurityScanCycleComplete((payload: event.SecurityScanCycleCompleteEventPayload) =>
     sendSseEvent(

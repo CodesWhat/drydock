@@ -5,6 +5,8 @@
     "filterPlaceholder": "تصفية حسب الهدف أو الحدث...",
     "onThisPage": "في هذه الصفحة",
     "containerFilterPlaceholder": "اسم الحاوية...",
+    "actorFilterPlaceholder": "المستخدم...",
+    "actorFilterLabel": "التصفية حسب المستخدم",
     "allEvents": "جميع الأحداث",
     "eventsSelected": "{count} أحداث محددة",
     "clear": "مسح",
@@ -16,12 +18,19 @@
       "nextPage": "الصفحة التالية"
     },
     "emptyFiltered": "لا توجد إدخالات تدقيق تطابق عوامل التصفية",
+    "systemActor": "النظام",
+    "exportError": "تعذّر تصدير سجل التدقيق",
+    "export": {
+      "csv": "تصدير CSV",
+      "json": "تصدير JSON"
+    },
     "columns": {
       "time": "الوقت",
       "event": "الحدث",
       "target": "الهدف",
       "status": "الحالة",
-      "details": "التفاصيل"
+      "details": "التفاصيل",
+      "actor": "المنفّذ"
     },
     "card": {
       "time": "الوقت",
@@ -34,7 +43,8 @@
       "fromVersion": "من الإصدار",
       "toVersion": "إلى الإصدار",
       "trigger": "المشغّل",
-      "details": "التفاصيل"
+      "details": "التفاصيل",
+      "actor": "المنفّذ"
     },
     "status": {
       "success": "نجاح",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "تمت معاينة التحديث (تشغيل تجريبي)",
       "update-failed": "فشل التحديث",
       "auto-update-blocked": "التحديث التلقائي محظور",
+      "security-fast-lane": "المسار السريع الأمني",
       "update-policy-override-set": "تم تعيين تجاوز سياسة التحديث",
       "update-policy-override-cleared": "تم مسح تجاوز سياسة التحديث",
       "group-policy-set": "تم تعيين سياسة المجموعة",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "فشل تسليم الإشعار",
       "security-alert": "تنبيه أمني",
       "maturity-cleared": "انتهت فترة الانتظار",
-      "image-prune": "تنظيف الصورة"
+      "image-prune": "تنظيف الصورة",
+      "cleanup": "التنظيف",
+      "notification-silence-set": "تم كتم الإشعارات",
+      "notification-silence-cleared": "أُلغي كتم الإشعارات"
     },
     "target": {
       "container": "الحاوية",

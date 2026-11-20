@@ -318,6 +318,34 @@ describe('approval service', () => {
       expect(result.approval).toEqual(approval);
     });
 
+    it.each(['minor', 'major'] as const)('sends the %s scope in the body', async (scope) => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ approval: makeApproval({ decision: 'rejected' }) }),
+      });
+
+      await rejectApproval('approval-1', { scope });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/approvals/approval-1/reject',
+        expect.objectContaining({ body: JSON.stringify({ scope }) }),
+      );
+    });
+
+    it('sends the note and scope together', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ approval: makeApproval({ decision: 'rejected' }) }),
+      });
+
+      await rejectApproval('approval-1', { note: 'n', scope: 'major' });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        '/api/v1/approvals/approval-1/reject',
+        expect.objectContaining({ body: JSON.stringify({ note: 'n', scope: 'major' }) }),
+      );
+    });
+
     it('throws ApprovalApiError on failure', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: false,

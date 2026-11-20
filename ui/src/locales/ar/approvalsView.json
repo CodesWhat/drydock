@@ -32,6 +32,10 @@
       "prerelease": "إصدار تجريبي",
       "unknown": "غير معروف"
     },
+    "securityFastLane": {
+      "badge": "إصلاح أمني",
+      "tooltip": "يصلح ثغرات حرجة أو عالية في الصورة قيد التشغيل. ما زال يحتاج إلى موافقة."
+    },
     "actions": {
       "notesAriaLabel": "عرض ملاحظات الإصدار وأسباب التعليق",
       "approve": "موافقة",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "وضع التحديث هو notify؛ الموافقة معطّلة",
       "reject": "رفض",
       "rejectAriaLabel": "رفض التحديث",
+      "rejectScopeAriaLabel": "نطاق الرفض",
       "defer": "تأجيل",
       "deferAriaLabel": "تأجيل التحديث"
+    },
+    "rejectScope": {
+      "tag": "هذا الإصدار فقط",
+      "minor": "خط الإصدار الفرعي بالكامل",
+      "major": "خط الإصدار الرئيسي بالكامل"
     },
     "detail": {
       "loading": "جارٍ تحميل التفاصيل…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "رفض التحديث",
         "message": "هل تريد رفض تحديث {name} إلى {toRef}؟ لن يُطبّق تلقائيًا.",
+        "messageLine": "هل تريد رفض تحديث {name} إلى {toRef} وتخطي كل إصدارات {line}.x؟ ستظل الخطوط الأحدث متاحة.",
         "acceptLabel": "رفض"
       },
       "defer": {

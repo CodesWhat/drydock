@@ -6,7 +6,7 @@
 export const OPERATOR_CANCELLED_ROLLBACK_REASON = 'cancelled';
 export const OPERATOR_CANCELLED_ERROR_MESSAGE = 'Cancelled by operator';
 
-const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
+const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update', 'rollback'] as const;
 
 export type ContainerUpdateOperationKind = (typeof CONTAINER_UPDATE_OPERATION_KINDS)[number];
 

@@ -32,6 +32,10 @@
       "prerelease": "Ön sürüm",
       "unknown": "Bilinmiyor"
     },
+    "securityFastLane": {
+      "badge": "Güvenlik düzeltmesi",
+      "tooltip": "Çalışan imajdaki kritik veya yüksek açıkları giderir. Yine de onay gerekir."
+    },
     "actions": {
       "notesAriaLabel": "Sürüm notlarını ve bekletme nedenlerini göster",
       "approve": "Onayla",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "Güncelleme modu notify; onaylama devre dışı",
       "reject": "Reddet",
       "rejectAriaLabel": "Güncellemeyi reddet",
+      "rejectScopeAriaLabel": "Reddetme kapsamı",
       "defer": "Ertele",
       "deferAriaLabel": "Güncellemeyi ertele"
+    },
+    "rejectScope": {
+      "tag": "Yalnızca bu sürüm",
+      "minor": "Tüm minor hattı",
+      "major": "Tüm major hattı"
     },
     "detail": {
       "loading": "Ayrıntılar yükleniyor…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "Güncellemeyi reddet",
         "message": "{name} için {toRef} sürümüne güncelleme reddedilsin mi? Otomatik olarak uygulanmayacak.",
+        "messageLine": "{name} için {toRef} güncellemesi reddedilsin ve tüm {line}.x sürümleri atlansın mı? Daha yeni hatlar sunulmaya devam eder.",
         "acceptLabel": "Reddet"
       },
       "defer": {

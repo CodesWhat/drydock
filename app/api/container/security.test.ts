@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  _resetContainerScanStateForTesting,
+  beginContainerScan,
+  isContainerScanning,
+} from '../../security/scan-state.js';
 import { createMockResponse } from '../../test/helpers.js';
 import { createSecurityHandlers } from './security.js';
 
@@ -625,6 +630,64 @@ describe('api/container/security', () => {
         expect.objectContaining({ image: CURRENT_IMAGE }),
         expect.any(String),
       );
+    });
+  });
+
+  describe('scanContainer transient scanning state', () => {
+    beforeEach(() => {
+      _resetContainerScanStateForTesting();
+    });
+
+    test('marks the container while the scan runs and clears it on success', async () => {
+      const harness = createHarness();
+      let scanningDuringScan = false;
+      harness.deps.scanImageForVulnerabilities.mockImplementation(async () => {
+        scanningDuringScan = isContainerScanning('c1');
+        return createScanResult();
+      });
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(scanningDuringScan).toBe(true);
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('clears the state when the scan fails', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockRejectedValue(new Error('scan failed'));
+
+      const res = await callScanContainer(harness.handlers);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('does not mark the container when the request is rejected before the scan starts', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: false,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      await callScanContainer(harness.handlers);
+
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+
+    test('stays scanning while an overlapping scan of the same container is still running', async () => {
+      const harness = createHarness();
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      const releaseScheduled = beginContainerScan('c1');
+
+      await callScanContainer(harness.handlers);
+      expect(isContainerScanning('c1')).toBe(true);
+
+      releaseScheduled();
+      expect(isContainerScanning('c1')).toBe(false);
     });
   });
 
@@ -1311,6 +1374,107 @@ describe('api/container/security', () => {
 
       const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
       expect(persisted.security.updateScan).toEqual(updateScan);
+    });
+
+    test('scans the running image pinned by its immutable digest', async () => {
+      const runningDigest = `sha256:${'f'.repeat(64)}`;
+      const running = createContainer({
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/app',
+          tag: { value: '1.2.3' },
+          digest: { value: runningDigest },
+        },
+        updateAvailable: false,
+        result: undefined,
+      });
+      const harness = createHarness({ container: running });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ image: CURRENT_IMAGE }),
+      );
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...running });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        runningDigest,
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.scan.imageDigest).toBe(runningDigest);
+    });
+
+    test('scans a candidate whose digest is not immutable by tag and does not stamp it', async () => {
+      const initialContainer = createContainer({ result: { tag: '2.0.0', digest: '2.0.0' } });
+      const harness = createHarness({ container: initialContainer });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult({ image: CURRENT_IMAGE }))
+        .mockResolvedValueOnce(createScanResult({ image: UPDATE_IMAGE }));
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...initialContainer });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        '2.0.0',
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan.imageDigest).toBeUndefined();
+    });
+
+    test('scans the candidate pinned by digest and stamps exactly that digest', async () => {
+      const candidateDigest = `sha256:${'9'.repeat(64)}`;
+      const initialContainer = createContainer({
+        result: { tag: '2.0.0', digest: candidateDigest },
+      });
+      const harness = createHarness({ container: initialContainer });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(createScanResult({ image: CURRENT_IMAGE }))
+        .mockResolvedValueOnce(createScanResult({ image: UPDATE_IMAGE }));
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...initialContainer });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        candidateDigest,
+      );
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan.imageDigest).toBe(candidateDigest);
+    });
+
+    test('scans the candidate of a held update when the container is on the security fast lane', async () => {
+      const held = createContainer({
+        updateAvailable: false,
+        labels: { 'dd.security.fastlane': 'true' },
+        result: { tag: '2.0.0' },
+      });
+      const harness = createHarness({ container: held });
+      const currentScan = createScanResult({ image: CURRENT_IMAGE });
+      const updateScan = createScanResult({ image: UPDATE_IMAGE });
+      harness.deps.scanImageForVulnerabilities
+        .mockResolvedValueOnce(currentScan)
+        .mockResolvedValueOnce(updateScan);
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...held });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+      const persisted = harness.storeContainer.updateContainer.mock.calls[0][0];
+      expect(persisted.security.updateScan).toEqual(updateScan);
+    });
+
+    test('does not scan the candidate of a held update when the fast lane is off', async () => {
+      const held = createContainer({ updateAvailable: false, result: { tag: '2.0.0' } });
+      const harness = createHarness({ container: held });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValueOnce(
+        createScanResult({ image: CURRENT_IMAGE }),
+      );
+      harness.storeContainer.getContainerRaw.mockReturnValue({ ...held });
+
+      await callScanContainer(harness.handlers);
+
+      expect(harness.deps.scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
     });
 
     test('skips the write and returns 404 when the container vanished while the scan was in flight', async () => {

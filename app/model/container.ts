@@ -1,6 +1,7 @@
 import { snakeCase } from 'change-case';
 import { flatten as flat } from 'flat';
 import joi from 'joi';
+import { evaluateSecurityFastLane, type SecurityFastLane } from '../security/fast-lane.js';
 import type {
   ContainerSecuritySbom,
   ContainerSecurityScan,
@@ -9,6 +10,7 @@ import type {
 import { isPinGateGoverned } from '../tag/family.js';
 import * as tag from '../tag/index.js';
 import { isTagPinned } from '../tag/precision.js';
+import type { UpdateCandidates } from '../tag/update-candidates.js';
 import type { ReleaseMaturityEvidence } from '../tag/version-population.js';
 import type {
   ActiveContainerUpdateOperationPhase,
@@ -26,6 +28,7 @@ import {
   maturityMinAgeDaysToMilliseconds,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
+import { isTagSkipped } from './skip-scope.js';
 
 const { parse: parseSemver, diff: diffSemver, transform: transformTag } = tag;
 const DEFAULT_UI_MATURITY_THRESHOLD_DAYS = 7;
@@ -44,6 +47,18 @@ function createUnknownUpdateKind(): ContainerUpdateKind {
     semverDiff: UPDATE_KIND_UNKNOWN_VALUE as ContainerUpdateKind['semverDiff'],
   };
 }
+
+/**
+ * True for an image that was built or loaded locally (no RepoDigests). The
+ * registry only holds its declared upstream base, so an update action that
+ * pulled a registry image would replace the local build with stock upstream.
+ */
+export function isLocalBuildContainer(container: Pick<Container, 'image'> | undefined): boolean {
+  return container?.image?.isLocalImage === true;
+}
+
+export const LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE =
+  'This container runs a locally built image. A base image update is notification-only; rebuild the image to apply it.';
 
 export function isTagUpdateKind(updateKind: ContainerUpdateKind): boolean {
   return updateKind.kind === UPDATE_KIND_TAG_VALUE;
@@ -95,6 +110,8 @@ export interface ContainerResult {
   tag?: string;
   suggestedTag?: string;
   digest?: string;
+  /** Digest of the manifest list the platform digest was picked from (what a pull by tag records). */
+  indexDigest?: string;
   created?: string;
   softwareVersion?: string;
   releaseMaturity?: ReleaseMaturityEvidence;
@@ -102,6 +119,11 @@ export interface ContainerResult {
   publishedAtTrusted?: boolean;
   link?: string;
   noUpdateReason?: string;
+  /**
+   * Transient: set by findNewVersion when a lookup failed. watchContainer moves
+   * it onto container.error and strips it, so it is never persisted (#1590).
+   */
+  lookupError?: string;
   releaseNotes?: ContainerReleaseNotes;
   // #498: pure information about the best newer same-family tag for a
   // container caught by the pin gate. Additive only — never consulted by
@@ -110,6 +132,11 @@ export interface ContainerResult {
     tag: string;
     kind: 'major' | 'minor' | 'patch';
   };
+  // Best newer tag per update type relative to the running version. The
+  // primary tag above stays the highest allowed candidate; this only adds the
+  // narrower options. Absent for digest-only and non-semver updates, and when
+  // fewer than two types are on offer.
+  updateCandidates?: UpdateCandidates;
 }
 
 export interface ContainerReleaseNotes {
@@ -122,6 +149,9 @@ export interface ContainerReleaseNotes {
 
 export interface ContainerUpdateKind {
   kind: 'tag' | 'digest' | 'unknown';
+  // True when the update is a newer tag of the declared upstream base of a
+  // locally built image (dd.registry.lookup.image). Additive: kind stays 'tag'.
+  baseImage?: boolean;
   localValue?: string;
   remoteValue?: string;
   semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
@@ -220,6 +250,25 @@ export interface ContainerUpdateOperationState {
 
 export type TriggerCategory = 'action' | 'notification';
 
+/**
+ * Where a container record comes from. Only `file` is ever stored on a record: it marks a
+ * synthetic container produced by the `file` watcher provider (a static image list), which
+ * has no running Docker container behind it and so can never be updated by an action.
+ */
+export type ContainerSource = 'docker' | 'file';
+
+/**
+ * Synthetic file-watcher ids start with this prefix. Docker container ids are lowercase hex,
+ * so the hyphen makes the prefix impossible to collide with, or be spoofed by, a real
+ * container. `source` is derived from it on every `validate()`, which is why no store column
+ * carries it.
+ */
+export const FILE_CONTAINER_ID_PREFIX = 'file-';
+
+export function isFileSourcedContainer(container: { id?: unknown } | undefined | null): boolean {
+  return typeof container?.id === 'string' && container.id.startsWith(FILE_CONTAINER_ID_PREFIX);
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -230,11 +279,14 @@ export interface Container {
   watcher: string;
   agent?: string;
   identityKey?: string;
+  /** `file` for a synthetic container from a static image list; absent for Docker containers. */
+  source?: ContainerSource;
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: boolean;
+  tagCeiling?: string;
   linkTemplate?: string;
   portLabel?: string;
   link?: string;
@@ -266,6 +318,12 @@ export interface Container {
   /** Spec 7.5: the declared layer and effective sources behind the label-owned fields. */
   labelOwned?: LabelOwnedState;
   security?: ContainerSecurityState;
+  /**
+   * Derived on every validate(): set only when the container opted in to the security fast
+   * lane and its pending candidate fixes critical/high findings of the running image. While
+   * set, snooze and maturity no longer suppress `updateAvailable`.
+   */
+  securityFastLane?: SecurityFastLane;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
   result?: ContainerResult;
@@ -300,6 +358,12 @@ export interface ContainerReport {
   changed: boolean;
 }
 
+const updateCandidateSchema = joi.object({
+  tag: joi.string().min(1).required(),
+  digest: joi.string(),
+  semverDiff: joi.string().valid('major', 'minor', 'patch').required(),
+});
+
 const containerSecurityVulnerabilitySchema = joi.object({
   id: joi.string().required(),
   target: joi.string(),
@@ -324,6 +388,7 @@ const containerSecurityScanSchema = joi.object({
   scanner: joi.string().valid('trivy', 'grype', 'both').required(),
   image: joi.string().required(),
   imageDigest: joi.string(),
+  scannedRef: joi.string(),
   scannedAt: joi.string().isoDate().required(),
   status: joi.string().valid('passed', 'blocked', 'error').required(),
   blockSeverities: joi
@@ -333,6 +398,10 @@ const containerSecurityScanSchema = joi.object({
   blockingCount: joi.number().integer().min(0).required(),
   summary: containerSecuritySummarySchema.required(),
   vulnerabilities: joi.array().items(containerSecurityVulnerabilitySchema).required(),
+  severityIds: joi.object({
+    critical: joi.array().items(joi.string()).required(),
+    high: joi.array().items(joi.string()).required(),
+  }),
   relativeGate: joi.object({
     decision: joi.string().valid('passed', 'blocked').required(),
     reason: joi
@@ -417,11 +486,13 @@ const schema = joi.object({
   watcher: joi.string().min(1).required(),
   agent: joi.string().optional(),
   identityKey: joi.string().optional(),
+  source: joi.string().valid('file').optional(),
   includeTags: joi.string(),
   excludeTags: joi.string(),
   transformTags: joi.string(),
   tagFamily: joi.string(),
   tagPinInfo: joi.boolean(),
+  tagCeiling: joi.string(),
   linkTemplate: joi.string(),
   portLabel: joi.string(),
   link: joi.string(),
@@ -437,6 +508,12 @@ const schema = joi.object({
   dependsOnAction: joi.string().valid('update', 'restart').optional(),
   tagPinned: joi.boolean(),
   tagPinGated: joi.boolean(),
+  securityFastLane: joi.object({
+    fixedIds: joi.array().items(joi.string()).required(),
+    fixedCount: joi.number().integer().min(1).required(),
+    fixedCritical: joi.number().integer().min(0).required(),
+    fixedHigh: joi.number().integer().min(0).required(),
+  }),
   updatePolicy: joi.object({
     skipTags: joi.array().items(joi.string()),
     skipDigests: joi.array().items(joi.string()),
@@ -550,6 +627,7 @@ const schema = joi.object({
     tag: joi.string().min(1),
     suggestedTag: joi.string().min(1),
     digest: joi.string(),
+    indexDigest: joi.string(),
     created: joi.string().isoDate(),
     softwareVersion: joi.string().max(256),
     releaseMaturity: joi.object({
@@ -572,6 +650,11 @@ const schema = joi.object({
       tag: joi.string().min(1).required(),
       kind: joi.string().valid('major', 'minor', 'patch').required(),
     }),
+    updateCandidates: joi.object({
+      patch: updateCandidateSchema,
+      minor: updateCandidateSchema,
+      major: updateCandidateSchema,
+    }),
   }),
   error: joi.object({
     message: joi.string().min(1).required(),
@@ -580,6 +663,7 @@ const schema = joi.object({
   updateKind: joi
     .object({
       kind: joi.string().valid('tag', 'digest', 'unknown').required(),
+      baseImage: joi.boolean(),
       localValue: joi.string(),
       remoteValue: joi.string(),
       semverDiff: joi.string().valid('major', 'minor', 'patch', 'prerelease', 'unknown'),
@@ -679,6 +763,7 @@ function getRawTagUpdate(container: Container): ContainerUpdateKind {
 
   return {
     kind: UPDATE_KIND_TAG_VALUE as ContainerUpdateKind['kind'],
+    ...(isLocalBuildContainer(container) ? { baseImage: true } : {}),
     localValue: container.image.tag.value,
     remoteValue: container.result.tag,
     semverDiff: semverDiffResult,
@@ -773,15 +858,18 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     return false;
   }
 
-  if (updatePolicy.snoozeUntil) {
-    const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
-    if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+  // The security fast lane lifts exactly these two holds; skip lists below still apply.
+  if (container.securityFastLane === undefined) {
+    if (updatePolicy.snoozeUntil) {
+      const snoozeUntilDate = new Date(updatePolicy.snoozeUntil);
+      if (!Number.isNaN(snoozeUntilDate.getTime()) && snoozeUntilDate.getTime() > Date.now()) {
+        return true;
+      }
+    }
+
+    if (isMaturityGatePending(container)) {
       return true;
     }
-  }
-
-  if (isMaturityGatePending(container)) {
-    return true;
   }
 
   if (
@@ -789,7 +877,7 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
     updateKind.remoteValue &&
     Array.isArray(updatePolicy.skipTags)
   ) {
-    return updatePolicy.skipTags.includes(updateKind.remoteValue);
+    return isTagSkipped(updateKind.remoteValue, updatePolicy.skipTags, container.transformTags);
   }
 
   if (
@@ -890,6 +978,19 @@ function getLink(container: Container, originalTagValue: string) {
   return container.linkTemplate.replaceAll(/\$\{(\w+)\}/g, (_, key) =>
     key in vars ? vars[key] : '',
   );
+}
+
+function addSecurityFastLaneProperty(container: Container) {
+  // Recomputed from the scans on every validate(), so a stale value that rode in on a clone
+  // never outlives the scan or policy it was derived from.
+  delete container.securityFastLane;
+  if (!hasRawUpdate(container)) {
+    return;
+  }
+  const securityFastLane = evaluateSecurityFastLane(container);
+  if (securityFastLane) {
+    container.securityFastLane = securityFastLane;
+  }
 }
 
 function addTagPinnedProperty(container: Container) {
@@ -1137,7 +1238,14 @@ export function validate(container: unknown): Container {
   // through. The schema permits identityKey as an input so persisted store
   // entries round-trip cleanly, but the derived value wins.
   containerValidated.identityKey = deriveContainerIdentityKey(containerValidated);
+  // Derived from the id, like identityKey, so a stored row needs no column for it.
+  if (isFileSourcedContainer(containerValidated)) {
+    containerValidated.source = 'file';
+  } else {
+    delete containerValidated.source;
+  }
   addTagPinnedProperty(containerValidated);
+  addSecurityFastLaneProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
   addUpdateAgeProperty(containerValidated);

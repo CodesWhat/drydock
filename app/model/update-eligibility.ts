@@ -3,6 +3,7 @@ import {
   findDockerTriggerForContainer,
   isTriggerExecutionCompatibleWithContainer,
 } from '../api/docker-trigger.js';
+import { type SecurityFastLane, updateScanMatchesCandidate } from '../security/fast-lane.js';
 import type { UpdateMode } from '../store/settings.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
@@ -15,7 +16,7 @@ import {
   selectActionTrigger,
 } from './action-policy.js';
 import type { Container } from './container.js';
-import { isRollbackContainer } from './container.js';
+import { isFileSourcedContainer, isRollbackContainer } from './container.js';
 import {
   GROUP_POLICY_ACTION_HINT,
   groupTriggerExcludedMessage,
@@ -29,6 +30,7 @@ import {
   resolveMaturityClock,
   resolveMaturityMinAgeDays,
 } from './maturity-policy.js';
+import { isTagSkipped } from './skip-scope.js';
 
 export type UpdateBlockerReason =
   | 'no-update-available'
@@ -119,23 +121,6 @@ export function getPrimaryHardBlocker(
   return getHardBlockers(eligibility)[0];
 }
 
-type UpdateSecurityScan = NonNullable<NonNullable<Container['security']>['updateScan']>;
-
-function updateScanMatchesCandidate(container: Container, updateScan: UpdateSecurityScan): boolean {
-  const candidateDigest = container.result?.digest;
-  if (candidateDigest) {
-    return (
-      updateScan.imageDigest === candidateDigest || updateScan.image.endsWith(`@${candidateDigest}`)
-    );
-  }
-
-  const candidateTag = container.result?.tag;
-  return Boolean(
-    candidateTag &&
-      (updateScan.image === candidateTag || updateScan.image.endsWith(`:${candidateTag}`)),
-  );
-}
-
 function makeBlocker(
   blocker: Omit<UpdateBlocker, 'severity'>,
   severityOverride?: UpdateBlockerSeverity,
@@ -171,12 +156,22 @@ interface UpdateEligibilityUpdateMode {
   group?: string;
 }
 
+/**
+ * Present when the pending candidate fixes critical/high findings of the running image and
+ * the container opted in to the security fast lane. `bypassedHolds` names the holds it lifted
+ * on this evaluation (empty when nothing was holding the candidate back).
+ */
+interface UpdateEligibilitySecurityFastLane extends SecurityFastLane {
+  bypassedHolds: UpdateBlockerReason[];
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: UpdateEligibilityActionPolicy;
   updateMode?: UpdateEligibilityUpdateMode;
+  securityFastLane?: UpdateEligibilitySecurityFastLane;
 }
 
 export interface UpdateEligibilityContext {
@@ -320,7 +315,40 @@ export function computeUpdateEligibility(
     };
   }
 
+  // A container from a static image list has no running Docker container behind it, so there
+  // is nothing for an action to update. It is notification-only: this hard blocker stops the
+  // manual path, and `Trigger.getMustTriggerDecision` stops the automatic one.
+  if (isFileSourcedContainer(container)) {
+    return {
+      eligible: false,
+      blockers: [
+        makeBlocker({
+          reason: 'no-update-trigger-configured',
+          message:
+            'This image comes from a file watcher list. It is notification-only and cannot be updated by Drydock.',
+          actionable: false,
+          details: { source: 'file' },
+        }),
+      ],
+      evaluatedAt,
+      ...updateMode,
+    };
+  }
+
   const blockers: UpdateBlocker[] = [];
+
+  // Security fast lane: snooze, maturity and the maintenance window are the only holds it
+  // lifts. Everything else (skip entries, threshold, action policy, approval, scan gate) is
+  // pushed to `blockers` unchanged.
+  const fastLane = container.securityFastLane;
+  const bypassedHolds: UpdateBlockerReason[] = [];
+  const pushHold = (blocker: UpdateBlocker) => {
+    if (fastLane) {
+      bypassedHolds.push(blocker.reason);
+    } else {
+      blockers.push(blocker);
+    }
+  };
 
   // group-notify-only: the container's group policy allows notifications only (spec 7.3).
   // A per-container restriction travels the per-container channel, so the button is disabled,
@@ -345,7 +373,7 @@ export function computeUpdateEligibility(
   // (runUpdateAvailableSimpleTrigger) and the batch/digest path (runAcceptedUpdateBatch). Those
   // guard action triggers regardless of how container detection was triggered.
   if (context.maintenanceWindowOpen === false) {
-    blockers.push(
+    pushHold(
       makeBlocker({
         reason: 'maintenance-window-closed',
         message: 'Outside maintenance window — auto update deferred until the window opens.',
@@ -437,7 +465,7 @@ export function computeUpdateEligibility(
   if (snoozeUntil) {
     const snoozeUntilMs = new Date(snoozeUntil).getTime();
     if (Number.isFinite(snoozeUntilMs) && snoozeUntilMs > now) {
-      blockers.push(
+      pushHold(
         makeBlocker({
           reason: 'snoozed',
           message: `Snoozed until ${formatSnoozeDate(snoozeUntil)}.`,
@@ -449,10 +477,15 @@ export function computeUpdateEligibility(
     }
   }
 
-  // 3. skip-tag
+  // 3. skip-tag. Only a tag update: `isUpdateSuppressed` applies skipTags to tag updates
+  // alone, and a same-tag digest update carries `result.tag` equal to the running tag.
   const remoteTag = container.result?.tag;
   const skipTags = container.updatePolicy?.skipTags;
-  if (remoteTag && Array.isArray(skipTags) && skipTags.includes(remoteTag)) {
+  if (
+    container.updateKind?.kind === 'tag' &&
+    remoteTag &&
+    isTagSkipped(remoteTag, skipTags, container.transformTags)
+  ) {
     blockers.push(
       makeBlocker({
         reason: 'skip-tag',
@@ -499,7 +532,7 @@ export function computeUpdateEligibility(
           ? new Date(maturityStartMs + maturityMinAgeMs).toISOString()
           : undefined;
 
-      blockers.push(
+      pushHold(
         makeBlocker({
           reason: 'maturity-not-reached',
           message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old${policySource ? ` (from ${policySource})` : ''}.`,
@@ -534,7 +567,7 @@ export function computeUpdateEligibility(
       fallbackDays > 0 && clock.startMs !== undefined
         ? new Date(clock.startMs + daysToMs(fallbackDays)).toISOString()
         : undefined;
-    blockers.push(
+    pushHold(
       makeBlocker({
         reason: 'maturity-releases-not-reached',
         message: evidence
@@ -798,5 +831,6 @@ export function computeUpdateEligibility(
     evaluatedAt,
     ...(actionPolicy ? { actionPolicy } : {}),
     ...updateMode,
+    ...(fastLane ? { securityFastLane: { ...fastLane, bypassedHolds } } : {}),
   };
 }

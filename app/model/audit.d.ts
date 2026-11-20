@@ -51,6 +51,7 @@ export interface AuditEntry {
     | 'config-reloaded'
     | 'config-written'
     | 'auto-update-blocked'
+    | 'security-fast-lane'
     | 'update-policy-override-set'
     | 'update-policy-override-cleared'
     | 'label-override-set'
@@ -64,7 +65,10 @@ export interface AuditEntry {
     | 'api-key-created'
     | 'api-key-revoked'
     | 'api-key-auth-failed'
-    | 'image-prune';
+    | 'image-prune'
+    | 'cleanup'
+    | 'notification-silence-set'
+    | 'notification-silence-cleared';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;
@@ -75,4 +79,6 @@ export interface AuditEntry {
   triggerName?: string;
   status: 'success' | 'error' | 'info';
   details?: string;
+  /** Who caused the event. Absent for the system (schedulers, auto-updates, agents). */
+  actor?: string;
 }

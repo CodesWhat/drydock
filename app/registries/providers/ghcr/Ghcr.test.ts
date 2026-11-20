@@ -3,6 +3,10 @@ import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 import Ghcr from './Ghcr.js';
 
 vi.mock('axios');
+vi.mock('../../token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
 
 /**
  * Create a proper Axios-shaped error so that `axios.isAxiosError(err)` returns
@@ -115,6 +119,7 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -142,6 +147,7 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -204,6 +210,7 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
       },
@@ -243,6 +250,7 @@ describe('GitHub Container Registry', () => {
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -763,6 +771,97 @@ describe('GitHub Container Registry', () => {
       url: page2Url,
       headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer testtoken' },
       timeout: getRegistryRequestTimeoutMs(),
+    });
+  });
+
+  describe('poll-cycle publish-date cache', () => {
+    const versionsPage = {
+      data: [
+        {
+          updated_at: '2026-03-02T09:30:00.000Z',
+          metadata: { container: { tags: ['1.2.3'] } },
+        },
+      ],
+    };
+    const image = (tag: string) => ({ name: 'acme/widgets', tag: { value: tag } });
+
+    test('containers sharing an image and tag hit the GitHub API once per cycle', async () => {
+      axios.mockResolvedValue(versionsPage);
+      ghcr.startDigestCachePollCycle();
+
+      const results = await Promise.all([
+        ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3', { usePollCycleCache: true }),
+        ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3', { usePollCycleCache: true }),
+      ]);
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3', { usePollCycleCache: true });
+
+      expect(results).toEqual(['2026-03-02T09:30:00.000Z', '2026-03-02T09:30:00.000Z']);
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    test('a new poll cycle looks the date up again', async () => {
+      axios.mockResolvedValue(versionsPage);
+      ghcr.startDigestCachePollCycle();
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+      ghcr.startDigestCachePollCycle();
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+
+      expect(axios).toHaveBeenCalledTimes(2);
+    });
+
+    test('a failed lookup is not cached', async () => {
+      axios.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(versionsPage);
+      ghcr.startDigestCachePollCycle();
+
+      await expect(ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3')).rejects.toThrow('boom');
+      await expect(ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3')).resolves.toBe(
+        '2026-03-02T09:30:00.000Z',
+      );
+      expect(axios).toHaveBeenCalledTimes(2);
+    });
+
+    test('a failure that lands after the cycle restarted leaves the new entry alone', async () => {
+      let rejectFirst: (error: Error) => void = () => undefined;
+      axios
+        .mockImplementationOnce(() => new Promise((_resolve, reject) => (rejectFirst = reject)))
+        .mockResolvedValue(versionsPage);
+      ghcr.startDigestCachePollCycle();
+      const stale = ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+      ghcr.startDigestCachePollCycle();
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+      rejectFirst(new Error('late'));
+      await expect(stale).rejects.toThrow('late');
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+
+      expect(axios).toHaveBeenCalledTimes(2);
+    });
+
+    test('keys the cache by registry url as well as image and tag', async () => {
+      axios.mockResolvedValue(versionsPage);
+      ghcr.startDigestCachePollCycle();
+      const withRegistry = { ...image('1.2.3'), registry: { url: 'ghcr.io' } };
+      await ghcr.getImagePublishedAt(withRegistry, '1.2.3');
+      await ghcr.getImagePublishedAt(withRegistry, '1.2.3');
+
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    test('opting out of the poll-cycle cache always looks up', async () => {
+      axios.mockResolvedValue(versionsPage);
+      ghcr.startDigestCachePollCycle();
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3', { usePollCycleCache: false });
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3', { usePollCycleCache: false });
+
+      expect(axios).toHaveBeenCalledTimes(2);
+    });
+
+    test('rate-limits each versions page request', async () => {
+      const { acquireToken } = await import('../../token-bucket.js');
+      vi.mocked(acquireToken).mockClear();
+      axios.mockResolvedValue(versionsPage);
+      await ghcr.getImagePublishedAt(image('1.2.3'), '1.2.3');
+
+      expect(acquireToken).toHaveBeenCalledTimes(1);
     });
   });
 });

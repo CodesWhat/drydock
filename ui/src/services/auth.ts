@@ -85,7 +85,11 @@ async function getStrategies(): Promise<{
 }> {
   const response = await fetch('/api/v1/auth/status', { credentials: 'include' });
   if (!response.ok) {
-    throw new Error(`Failed to get auth strategies: ${response.statusText}`);
+    throw new AuthRequestError(
+      `Failed to get auth strategies: ${response.statusText}`,
+      response.status,
+      parseRetryAfterSeconds(response),
+    );
   }
   return response.json();
 }
@@ -127,13 +131,27 @@ async function getUser() {
 }
 
 /**
+ * Base64 of `username:password` as UTF-8 bytes. `btoa` on the raw string
+ * throws above U+00FF and sends Latin-1 bytes below it, but the server
+ * decodes the Basic credentials as UTF-8.
+ */
+function encodeBasicCredentials(username: string, password: string): string {
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary);
+}
+
+/**
  * Perform auth Basic.
  * @param username
  * @param password
  * @returns {Promise<*>}
  */
 async function loginBasic(username: string, password: string, remember: boolean = false) {
-  const base64 = btoa(`${username}:${password}`);
+  const base64 = encodeBasicCredentials(username, password);
   const response = await fetch(`/auth/login`, {
     method: 'POST',
     credentials: 'include',

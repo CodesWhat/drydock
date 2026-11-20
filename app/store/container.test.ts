@@ -62,6 +62,60 @@ describe('createCollections', () => {
   });
 });
 
+describe('container list re-validation cost', () => {
+  function countParsesDuring(run: () => void): number {
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      run();
+      return parse.mock.calls.length;
+    } finally {
+      parse.mockRestore();
+    }
+  }
+
+  test('a cache miss only re-parses the rows that changed', () => {
+    for (const id of ['a', 'b', 'c', 'd']) {
+      container.insertContainer(createContainerFixture({ id, name: id }));
+    }
+    container._resetContainerStoreStateForTests();
+    const fullParse = countParsesDuring(() => container.getContainersRaw());
+    expect(fullParse).toBeGreaterThan(0);
+
+    // The empty query is an always-invalidate key, so this write drops it.
+    container.updateContainerFields('b', { displayName: 'changed' });
+    const afterWrite = countParsesDuring(() => container.getContainersRaw());
+
+    expect(afterWrite).toBeGreaterThan(0);
+    expect(afterWrite).toBeLessThanOrEqual(fullParse / 2);
+    expect(container.getContainersRaw().find((item) => item.id === 'b')?.displayName).toBe(
+      'changed',
+    );
+  });
+
+  test('reuses the same container object for an unchanged row and drops removed rows', () => {
+    container.insertContainer(createContainerFixture({ id: 'keep', name: 'keep' }));
+    container.insertContainer(createContainerFixture({ id: 'gone', name: 'gone' }));
+    const first = container.getContainersRaw().find((item) => item.id === 'keep');
+
+    container.updateContainerFields('gone', { displayName: 'touched' });
+    const second = container.getContainersRaw().find((item) => item.id === 'keep');
+    expect(second).toBe(first);
+
+    container.deleteContainer('gone');
+    expect(container.getContainersRaw().map((item) => item.id)).toEqual(['keep']);
+  });
+
+  test('re-validates a row rewritten behind the store by another writer', () => {
+    container.insertContainer(createContainerFixture({ id: 'x', name: 'x' }));
+    expect(container.getContainersRaw()[0].displayName).not.toBe('external');
+
+    db.prepare('UPDATE containers SET display_name = ? WHERE id = ?').run('external', 'x');
+    container._resetContainerStoreStateForTests();
+
+    expect(container.getContainersRaw()[0].displayName).toBe('external');
+  });
+});
+
 describe('buildImportedContainerRow', () => {
   test('returns undefined for a document that fails validation', () => {
     expect(container.buildImportedContainerRow({ id: 'missing-required-fields' })).toBeUndefined();
@@ -85,6 +139,11 @@ describe('rowToContainer defensive fallbacks', () => {
     expect(containerRead?.link).toBeUndefined();
     expect(containerRead?.tagFamily).toBeUndefined();
     expect(containerRead?.actionTriggerInclude).toBeUndefined();
+  });
+
+  test('round-trips the persisted tag ceiling', () => {
+    seedContainer(createContainerFixture({ id: 'ceiling-container', tagCeiling: 'minor' }));
+    expect(container.getContainer('ceiling-container')?.tagCeiling).toBe('minor');
   });
 
   test('preserves a persisted error message', () => {
@@ -7358,7 +7417,7 @@ describe('dependency field persistence (spec 7.5 slice 1)', () => {
         )
         .run(...columns.map((column) => row[column] as string | number | null));
 
-      expect(migrate(legacyDb)).toEqual([7, 8, 9, 10, 11, 12, 13, 14]);
+      expect(migrate(legacyDb)).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
       container.createCollections(legacyDb);
 
       const stored = container.getContainer('deps-pre-migration');

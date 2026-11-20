@@ -18,8 +18,10 @@ import * as storeContainer from '../store/container.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import { getAbortReason } from './abort.js';
+import { resetFastLaneCandidateAttempts, scanFastLaneCandidates } from './fast-lane-candidates.js';
 import { getTrivyDatabaseStatus } from './runtime.js';
 import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
+import { beginContainerScan } from './scan-state.js';
 
 const logScheduler = log.child({ component: 'security.scheduler' });
 const DEFAULT_CRON_INTERVAL_MS = MS_PER_DAY;
@@ -185,6 +187,7 @@ async function scanDigestGroup(options: {
 }): Promise<ScanDigestGroupResult> {
   const { digest, group, signal, scanIntervalMs, trivyDbUpdatedAt, cycleId } = options;
   let startedBroadcast = false;
+  const releaseScanStates: Array<() => void> = [];
 
   try {
     const representative = group[0];
@@ -197,6 +200,7 @@ async function scanDigestGroup(options: {
     // Broadcast scan-started for all containers with this digest
     for (const container of group) {
       broadcastScanStarted(container.id);
+      releaseScanStates.push(beginContainerScan(container.id));
     }
     startedBroadcast = true;
 
@@ -282,6 +286,10 @@ async function scanDigestGroup(options: {
     }
 
     return { outcome: isAbortError(error) ? 'aborted' : 'error', alertCount: 0 };
+  } finally {
+    for (const release of releaseScanStates) {
+      release();
+    }
   }
 }
 
@@ -551,6 +559,15 @@ export async function runScheduledScans(): Promise<void> {
     totalScannedForCycle = cachedCount + scannedCount;
     totalAlertsForCycle = alertCount;
 
+    // Security fast lane: scan the pending candidate of opted-in containers once, so a held
+    // update that fixes critical/high findings can be recognised. Same worker count as above.
+    if (!batchController.signal.aborted) {
+      await scanFastLaneCandidates({
+        signal: batchController.signal,
+        scanConcurrency,
+      });
+    }
+
     logScheduler.info(
       `Scheduled scan complete: ${digestGroups.size} digests, ${cachedCount} cached, ${scannedCount} scanned fresh, ${errorCount} errors, ${abortedCount} aborted, ${skippedCount} skipped, ${alertCount} alerts emitted`,
     );
@@ -623,6 +640,7 @@ export function shutdown(): void {
     cronTask = undefined;
   }
   clearDigestScanCache();
+  resetFastLaneCandidateAttempts();
   cachedSecurityConfiguration = undefined;
   cachedScanIntervalMs = undefined;
   running = false;

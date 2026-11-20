@@ -1,11 +1,12 @@
 # Versioned docs content
 
-- `current/`: active/default v1.8 RC docs, served as `v1.8`
+- `current/`: active/default v1.9 RC docs, served as `v1.9`
+- `v1.8/`: archive of the v1.8 line, bound to the published `v1.8.0-rc.16` tag by `v1.8-provenance.json`, served as `v1.8`
 - `v1.7/`: retained docs for the v1.7 line, updated for v1.7.1 GA on 2026-11-11; the line first went GA as v1.7.0 on 2026-10-19
 - `v1.6/`: frozen 1.6 documentation, initialized from the published v1.6.0 docs and corrected only for version-compatible errata; final release is v1.6.1
 - `v1.5/`, `v1.4/`, `v1.3/`: archived documentation
 
-v1.8.0-rc.16 is an opt-in test candidate, not a GA release. Its SQLite migration guidance does not describe v1.7 storage. Keeping an archived docs directory is separate from promising security support; see the root SECURITY.md.
+v1.9.0-rc.1 is an opt-in test candidate, not a GA release. Its SQLite migration guidance does not describe v1.7 storage. Keeping an archived docs directory is separate from promising security support; see the root SECURITY.md.
 
 Each directory contains `meta.json` files that define navigation titles and page ordering.
 
@@ -24,7 +25,8 @@ The v1.6 tree is initialized from the `v1.6.0` release commit on `main`, whose s
 `apps/web/scripts/sync-docs.mjs` (run via `npm run sync:docs` and on `postinstall`) copies
 these source directories into the gitignored `apps/web/content/docs/`:
 
-- `content/docs/current` → `apps/web/content/docs/v1.8`
+- `content/docs/current` → `apps/web/content/docs/v1.9`
+- `content/docs/v1.8`    → `apps/web/content/docs/v1.8`
 - `content/docs/v1.7`    → `apps/web/content/docs/v1.7`
 - `content/docs/v1.6`    → `apps/web/content/docs/v1.6`
 - `content/docs/v1.5`    → `apps/web/content/docs/v1.5`
