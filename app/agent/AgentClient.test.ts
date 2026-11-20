@@ -2650,7 +2650,10 @@ describe('AgentClient', () => {
     test.each([
       ['an edge connection', (c: any) => (c.edgeAdapter = {})],
       ['ed25519 signing', (c: any) => (c.config.authmode = 'ed25519')],
-      ['a controller Docker transport watcher', (c: any) => c.controllerDockerTransportWatchers.add('w')],
+      [
+        'a controller Docker transport watcher',
+        (c: any) => c.controllerDockerTransportWatchers.add('w'),
+      ],
     ])('should skip the minimum-version warning for Portwing agents (%s)', async (_name, mark) => {
       vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
       mark(client);
