@@ -1585,9 +1585,12 @@ export function getActiveOperationByContainerIdentity(
     return undefined;
   }
 
-  const operations = db
-    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL)
-    .all(identityKey)
+  const database = db;
+  // Only the active statuses are candidates, so query those through the
+  // (identity, status) index instead of hydrating every historical operation.
+  const operations = ACTIVE_STATUSES.flatMap((status) =>
+    database.prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL).all(identityKey, status),
+  )
     .map(rowToOperation)
     .map((operation) => getFreshActiveOperation(operation))
     .filter((item): item is ActiveUpdateOperation => Boolean(item))

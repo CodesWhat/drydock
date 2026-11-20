@@ -36,6 +36,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- **Container list performance** - The container store no longer re-parses and re-validates every stored container (including its vulnerability list) each time its query cache is rebuilt after a write; only rows that changed are re-read. The container list endpoint also stops running three update-operation queries per container when no update is active, the by-identity lookup only reads active operations, and a new migration indexes `update_operations.new_container_id` so the remaining lookup no longer scans the table.
 - GHCR, LSCR and Docker Hub publish-date lookups are now shared per image and tag for each scan, so containers on the same image no longer repeat the GitHub package versions paging or the Docker Hub tag request, and each GHCR versions page now goes through the api.github.com rate limiter. This stops a large fleet from burning the anonymous GitHub API quota in one scan.
 - The Home Assistant MQTT trigger no longer clones and redacts the whole container list for every sensor refresh when agent topic segments are on, which made startup discovery quadratic in the container count.
 - The trigger docs no longer say notification rules only reach notification triggers. An empty trigger list on `container-unhealthy` and the container state alerts also runs Command triggers, and the docs now list how to opt out.

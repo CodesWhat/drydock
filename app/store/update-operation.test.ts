@@ -297,6 +297,32 @@ describe('Update Operation Store', () => {
     );
   });
 
+  test('getActiveOperationByContainerIdentity never hydrates terminal operations', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    const database = createDb();
+    fresh.createCollections(database as any);
+    for (let index = 0; index < 5; index += 1) {
+      insertOp(fresh, {
+        id: `old-${index}`,
+        containerId: 'c-old',
+        containerName: 'old-web',
+        status: 'succeeded',
+        phase: 'succeeded',
+        createdAt: '2026-02-23T00:00:00.000Z',
+        updatedAt: '2026-02-23T00:00:00.000Z',
+      } as any);
+    }
+
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(fresh.getActiveOperationByContainerIdentity(identity('old-web'))).toBeUndefined();
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
   test('createCollections should reset in-progress pulling-phase operations to queued for recovery', async () => {
     vi.useFakeTimers();
     try {
