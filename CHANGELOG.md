@@ -39,6 +39,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- The image entrypoint's notices (the `group_add` GID line and the insecure-root warning) now go to stderr, so `scan` output on stdout stays valid JSON under those settings.
+- The OpenAPI schema for `PATCH /api/v1/containers/{id}/update-policy` now lists the `scope` field (`tag`, `minor` or `major`) that `skip-current` already accepted.
 - Portwing agents no longer get the "upgrade to 1.7.0" warning and Update agent badge, or an agent-version-mismatch alert. The minimum-version check now applies only to Drydock agents, since Portwing versions on its own line.
 - Env reveal and the agent log view now answer Portwing agents with a clear 501 saying they are not supported, instead of an opaque failure, and the UI hides the env reveal button for containers on Portwing agents and the Logs tab on the agent detail panel. Container log viewing and download already work over the edge connection.
 - **Container list performance** - The container store no longer re-parses and re-validates every stored container (including its vulnerability list) each time its query cache is rebuilt after a write; only rows that changed are re-read. The container list endpoint also stops running three update-operation queries per container when no update is active, the by-identity lookup only reads active operations, and a new migration indexes `update_operations.new_container_id` so the remaining lookup no longer scans the table.
