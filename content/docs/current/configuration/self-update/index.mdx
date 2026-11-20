@@ -18,7 +18,7 @@ Drydock detects when its own container image has an update available, just like 
 - The Docker trigger must be enabled
 - Drydock must be able to create temporary helper containers
 
-The examples below pin the opt-in `1.8.0-rc.15` image and explicitly discover newer `1.8.0-rc.N` tags. Their `local` Docker action uses `AUTO=onauto` with `dd.action.include=local`, so self-updates are manually available and automatic installs remain opt-in through `dd.action.auto=local`. Other update eligibility still applies. Before anything is replaced, the new image is pulled and pinned to its digest, its signature is verified against that digest when signature verification is configured, and the configured vulnerability scan gate runs against it. The replacement container is created from that pinned image, and a failed check stops the update with the running container untouched. See [action execution policy](/docs/configuration/triggers#common-trigger-configuration).
+The examples below pin the opt-in `1.9.0-rc.1` image and explicitly discover newer `1.9.0-rc.N` tags. Their `local` Docker action uses `AUTO=onauto` with `dd.action.include=local`, so self-updates are manually available and automatic installs remain opt-in through `dd.action.auto=local`. Other update eligibility still applies. Before anything is replaced, the new image is pulled and pinned to its digest, its signature is verified against that digest when signature verification is configured, and the configured vulnerability scan gate runs against it. The replacement container is created from that pinned image, and a failed check stops the update with the running container untouched. See [action execution policy](/docs/configuration/triggers#common-trigger-configuration).
 
 <Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
 
@@ -136,10 +136,10 @@ services:
       - VOLUMES=1
 
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.15
+    image: codeswhat/drydock:1.9.0-rc.1
     labels:
       - dd.watch=true
-      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - 'dd.tag.include=^1\.9\.0-rc\.\d+$$'
       - dd.action.include=local
     environment:
       - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
@@ -180,11 +180,11 @@ For ordinary container updates, restart recovery depends on which phase was inte
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.15
+    image: codeswhat/drydock:1.9.0-rc.1
     container_name: drydock
     labels:
       - dd.watch=true
-      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - 'dd.tag.include=^1\.9\.0-rc\.\d+$$'
       - dd.action.include=local
     environment:
       - DD_ACTION_DOCKER_LOCAL_PRUNE=true
@@ -207,11 +207,11 @@ Plain TCP deployment — Drydock connects to the Docker daemon over TCP (no bind
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.8.0-rc.15
+    image: codeswhat/drydock:1.9.0-rc.1
     container_name: drydock
     labels:
       - dd.watch=true
-      - 'dd.tag.include=^1\.8\.0-rc\.\d+$$'
+      - 'dd.tag.include=^1\.9\.0-rc\.\d+$$'
       - dd.action.include=local
     environment:
       - DD_WATCHER_LOCAL_HOST=my-docker-host

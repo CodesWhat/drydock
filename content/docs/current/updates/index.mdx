@@ -5,7 +5,19 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.15 is an opt-in testing candidate with Git `2.54.1-r0` and fast-xml-parser `5.12.0`. It begins its own soak when published; it is not v1.8 GA.</Callout>
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.9.0-rc.1 is the first opt-in testing candidate of the v1.9 line. It begins its own soak when published; it is not v1.9 GA. [v1.8](/docs/v1.8/updates) remains a release candidate line.</Callout>
+
+## v1.9.0-rc.1 Highlights - November 20, 2026
+
+<Callout type="warn">**Testing candidate, not v1.9 GA.** Back up the complete store directory before upgrading from v1.8. 1.9 applies store schema migrations 15 and 16 on first start, and v1.8 refuses a database with a newer schema, so downgrading needs the pre-upgrade backup. Read [storage migration](/docs/configuration/storage#upgrade-from-json) first.</Callout>
+
+- **Rebuild triggers for locally built images.** The GitHub Dispatch and GitLab Pipeline triggers ask your CI to rebuild an image when its upstream base has a newer tag. Set `dd.registry.lookup.image` on a locally built container to watch it against its base.
+- **File watcher.** A watcher can read a static list of images from a YAML file with `DD_WATCHER_{name}_PROVIDER=file` instead of watching a Docker host.
+- **Container state alerts.** New `container-stopped`, `container-exited`, `container-oom-killed` and `container-restart-loop` notification rules, including containers on remote and Portwing agents. `auth-abuse` and `agent-version-mismatch` rules, quiet hours and silences are also new.
+- **Update control.** `result.updateCandidates` lists the best patch, minor and major candidate, `dd.tag.ceiling` caps updates at the running major or minor, and rejecting an update can skip a whole minor or major line.
+- **Security fast lane.** An opt-in policy for updates that fix critical or high vulnerabilities in the running image, plus scan progress and `drydock scan` for CI.
+- **Operations.** Per-registry pull pacing with `PULLCONCURRENCY`, scheduled and disk-threshold cleanup policies, an opt-in liveness watch after updates, Docker watcher container filters, OIDC allow-lists, and an audit log that records the actor.
+- Every change is listed in the [changelog](/docs/changelog). For production, use [v1.7.1](/docs/v1.7/updates).
 
 ## v1.8.0-rc.15 Highlights - November 13, 2026
 
