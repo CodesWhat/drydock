@@ -36,6 +36,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- The trigger docs no longer say notification rules only reach notification triggers. An empty trigger list on `container-unhealthy` and the container state alerts also runs Command triggers, and the docs now list how to opt out.
 - A Portwing edge agent's over-cap response now fails with a clear error instead of a generic agent failure. Buffered requests and legacy container log replies that exceed Portwing's 16 MiB cap come back as `response_too_large`; the log download endpoint answers 413 for it, and other buffered requests report that the response was too large and to use a streaming request. Older Portwing versions that don't send the code behave as before.
 - A `dd.tag.include` or `dd.tag.exclude` regex that fails to compile no longer widens the candidate tags. Before, the bad filter was skipped with a log warning and the container could be offered tags the filter was meant to block. Now it gets no update candidates and shows an error naming the pattern until you fix it.
 - Container state alerts (`container-stopped`, `container-exited`, `container-oom-killed` and `container-restart-loop`) now go to notification triggers only. With an empty trigger list the rule means all notification triggers, but a Command action trigger was also running its command for these alerts. Command and the update actions are skipped for them now, as the docs already said.
@@ -87,6 +88,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Fixed
 
 - HTTP trigger proxy credentials in the proxy URL are now sent to the proxy. Previously only the host and port were used, so an authenticated proxy rejected the request.
+- The getdrydock.com site now prerenders every marketing and docs page at build instead of rendering each request on a function. A per-request CSP nonce had forced every page dynamic, which produced about 449,000 function invocations in 30 days against roughly 2,000 real pageviews, mostly bot crawls of old docs versions. The site now sends a static CSP header (scripts from the site and the analytics proxy, every other directive unchanged), `/api/search` is rate limited per IP, archived docs versions canonicalize to the current docs and are disallowed in robots.txt, and the sitemap lists only current pages.
 - The getdrydock.com site now honors Do Not Track and Global Privacy Control. When either signal is set the browser never loads PostHog, and any event that would still reach it is dropped. PostHog ignored its own `respect_dnt` setting in cookieless mode, so the check now lives in the site code.
 
 ### Documentation
