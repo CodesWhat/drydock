@@ -41,3 +41,22 @@ test('should redact a proxy URL that carries credentials', () => {
 
   expect(sanitized).toEqual({ proxy: '[REDACTED]', mode: 'simple' });
 });
+
+test('should redact CI rebuild trigger coordinates, credential and variables', () => {
+  const sanitized = redactTriggerConfigurationInfrastructureDetails({
+    repository: 'acme/app',
+    project: 'group/app',
+    url: 'https://ghe.example.com/api/v3',
+    token: 'sekret-trigger-value',
+    variables: { REGISTRY_PASSWORD: 'sekret-variable-value' },
+    ref: 'main',
+  });
+  expect(sanitized).toEqual({
+    repository: '[REDACTED]',
+    project: '[REDACTED]',
+    url: '[REDACTED]',
+    token: '[REDACTED]',
+    variables: '[REDACTED]',
+    ref: 'main',
+  });
+});

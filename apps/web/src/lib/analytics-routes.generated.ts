@@ -505,6 +505,8 @@ const routes = [
   "/docs/v1.8/configuration/triggers/discord",
   "/docs/v1.8/configuration/triggers/docker",
   "/docs/v1.8/configuration/triggers/docker-compose",
+  "/docs/v1.8/configuration/triggers/githubdispatch",
+  "/docs/v1.8/configuration/triggers/gitlabpipeline",
   "/docs/v1.8/configuration/triggers/google-chat",
   "/docs/v1.8/configuration/triggers/gotify",
   "/docs/v1.8/configuration/triggers/http",
