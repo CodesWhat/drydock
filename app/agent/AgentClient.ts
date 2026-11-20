@@ -381,8 +381,7 @@ function createConnectTrackingTransport(state: { connected: boolean }, timeoutMs
 export const AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE =
   'Env reveal needs the agent upgraded to this version';
 
-const PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE =
-  'Env reveal is not supported for Portwing agents';
+const PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE = 'Env reveal is not supported for Portwing agents';
 
 /** The agent has no env route (older agent, or a Portwing agent). */
 export class AgentEnvRevealUnsupportedError extends Error {
