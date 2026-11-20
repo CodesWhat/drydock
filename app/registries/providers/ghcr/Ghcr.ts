@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { toPositiveInteger } from '../../../util/parse.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
-import type { RegistryLookupOptions } from '../../Registry.js';
 import { getRegistryRequestTimeoutMs } from '../../configuration.js';
+import type { RegistryLookupOptions } from '../../Registry.js';
 import { acquireToken, getBucketForUrl } from '../../token-bucket.js';
 
 interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
@@ -229,7 +229,6 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   }
 
   private async fetchImagePublishedAt(image, tagToLookup: string): Promise<string | undefined> {
-
     const [owner, ...packageNameParts] = image.name.split('/');
     if (!owner || packageNameParts.length === 0) {
       return undefined;

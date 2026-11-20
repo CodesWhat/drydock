@@ -135,7 +135,6 @@ class Hub extends Custom<HubRegistryConfiguration> {
     image: ContainerImage,
     tagToLookup: string,
   ): Promise<string | undefined> {
-
     const metadataUrl = `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
       tagToLookup,
     )}`;

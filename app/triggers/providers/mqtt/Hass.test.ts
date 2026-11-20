@@ -2546,7 +2546,11 @@ describe('agenttopicsegment flag', () => {
       const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
 
       for (let i = 0; i < 5; i += 1) {
-        await hassAgent.updateContainerSensors({ name: `nginx-${i}`, watcher: 'local', agent: 'ml' });
+        await hassAgent.updateContainerSensors({
+          name: `nginx-${i}`,
+          watcher: 'local',
+          agent: 'ml',
+        });
       }
 
       expect(getContainersSpy).not.toHaveBeenCalled();
