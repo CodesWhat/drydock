@@ -58,6 +58,7 @@ vi.mock('../event/index.js', () => ({
   emitBatchUpdateCompleted: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
   emitContainerReports: vi.fn(),
+  emitContainerStateAlert: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
@@ -68,6 +69,7 @@ vi.mock('../maturity/gate-watch.js', () => ({
 }));
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: vi.fn(),
+  getOperationsByContainerId: vi.fn(() => []),
   insertOperation: vi.fn((operation) => ({
     ...operation,
     id: operation.id ?? 'inserted-op',
@@ -4158,6 +4160,136 @@ describe('AgentClient', () => {
       });
 
       expect(event.emitBatchUpdateCompleted).not.toHaveBeenCalled();
+    });
+
+    describe('dd:container-state-alert', () => {
+      const snapshot = { id: 'c1', name: 'nginx', watcher: 'local' };
+
+      beforeEach(() => {
+        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([]);
+      });
+
+      test.each([
+        ['container-stopped', { reason: 'stopped' }],
+        ['container-exited', { exitCode: 137, reason: 'exit code 137' }],
+        ['container-oom-killed', { exitCode: 137, reason: 'out of memory' }],
+        [
+          'container-restart-loop',
+          { exitCode: 1, reason: 'restart loop', restartCount: 3, windowSeconds: 300 },
+        ],
+      ])('should relay %s from an agent tagged with the agent name', async (kind, extra) => {
+        await client.handleEvent('dd:container-state-alert', {
+          kind,
+          containerName: 'nginx',
+          container: snapshot,
+          ...extra,
+        });
+
+        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
+          kind,
+          containerName: 'nginx',
+          container: { ...snapshot, agent: 'test-agent' },
+          ...extra,
+        });
+      });
+
+      test('should prefer the controller store copy of the container', async () => {
+        const stored = { ...snapshot, agent: 'test-agent', displayName: 'Web' };
+        vi.mocked(storeContainer.getContainer).mockReturnValue(stored);
+
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-stopped',
+          containerName: 'nginx',
+          container: snapshot,
+        });
+
+        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
+          kind: 'container-stopped',
+          containerName: 'nginx',
+          container: stored,
+        });
+      });
+
+      test('should ignore a store container that belongs to another agent', async () => {
+        vi.mocked(storeContainer.getContainer).mockReturnValue({ ...snapshot, agent: 'other' });
+
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-stopped',
+          containerName: 'nginx',
+          container: snapshot,
+        });
+
+        expect(event.emitContainerStateAlert).toHaveBeenCalledWith(
+          expect.objectContaining({ container: { ...snapshot, agent: 'test-agent' } }),
+        );
+      });
+
+      test('should drop an alert while a Drydock operation is replacing the container', async () => {
+        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([
+          { status: 'in-progress' },
+        ]);
+
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-stopped',
+          containerName: 'nginx',
+          container: snapshot,
+        });
+
+        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
+      });
+
+      test('should drop an alert while a rollback operation is replacing the container', async () => {
+        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([
+          { kind: 'rollback', status: 'in-progress' },
+        ]);
+
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-stopped',
+          containerName: 'nginx',
+          container: snapshot,
+        });
+
+        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
+      });
+
+      test('should drop an alert for a rollback-renamed container', async () => {
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-stopped',
+          containerName: 'nginx-old-1700000000000',
+          container: { ...snapshot, name: 'nginx-old-1700000000000' },
+        });
+
+        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
+      });
+
+      test.each([
+        ['null data', null],
+        ['unknown kind', { kind: 'container-paused', containerName: 'nginx', container: snapshot }],
+        ['missing name', { kind: 'container-stopped', container: snapshot }],
+        ['missing container', { kind: 'container-stopped', containerName: 'nginx' }],
+      ])('should ignore a malformed payload (%s)', async (_label, data) => {
+        await client.handleEvent('dd:container-state-alert', data);
+
+        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
+      });
+
+      test('should drop non-numeric optional fields', async () => {
+        await client.handleEvent('dd:container-state-alert', {
+          kind: 'container-exited',
+          containerName: 'nginx',
+          container: snapshot,
+          exitCode: 'x',
+          reason: 5,
+          restartCount: 'y',
+          windowSeconds: 'z',
+        });
+
+        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
+          kind: 'container-exited',
+          containerName: 'nginx',
+          container: { ...snapshot, agent: 'test-agent' },
+        });
+      });
     });
 
     test('should emit security-alert when agent sends dd:security-alert', async () => {
