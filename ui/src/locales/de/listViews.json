@@ -5,6 +5,8 @@
     "filterPlaceholder": "Nach Ziel oder Ereignis filtern...",
     "onThisPage": "auf dieser Seite",
     "containerFilterPlaceholder": "Containername...",
+    "actorFilterPlaceholder": "Benutzer...",
+    "actorFilterLabel": "Nach Benutzer filtern",
     "allEvents": "Alle Ereignisse",
     "eventsSelected": "{count} Ereignisse ausgewählt",
     "clear": "Löschen",
@@ -16,12 +18,19 @@
       "nextPage": "Nächste Seite"
     },
     "emptyFiltered": "Keine Audit-Einträge passen zu deinen Filtern",
+    "systemActor": "System",
+    "exportError": "Audit-Protokoll konnte nicht exportiert werden",
+    "export": {
+      "csv": "CSV exportieren",
+      "json": "JSON exportieren"
+    },
     "columns": {
       "time": "Zeit",
       "event": "Ereignis",
       "target": "Ziel",
       "status": "Status",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Akteur"
     },
     "card": {
       "time": "Zeit",
@@ -34,7 +43,8 @@
       "fromVersion": "Von Version",
       "toVersion": "Zu Version",
       "trigger": "Trigger",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Akteur"
     },
     "status": {
       "success": "Erfolg",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "Update in Vorschau angezeigt (Dry Run)",
       "update-failed": "Update fehlgeschlagen",
       "auto-update-blocked": "Automatisches Update blockiert",
+      "security-fast-lane": "Sicherheits-Schnellspur",
       "update-policy-override-set": "Update-Policy-Override gesetzt",
       "update-policy-override-cleared": "Update-Policy-Override entfernt",
       "group-policy-set": "Gruppen-Policy gesetzt",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "Benachrichtigung fehlgeschlagen",
       "security-alert": "Sicherheitswarnung",
       "maturity-cleared": "Reifezeit abgelaufen",
-      "image-prune": "Image-Bereinigung"
+      "image-prune": "Image-Bereinigung",
+      "cleanup": "Bereinigung",
+      "notification-silence-set": "Benachrichtigungs-Stummschaltung gesetzt",
+      "notification-silence-cleared": "Benachrichtigungs-Stummschaltung aufgehoben"
     },
     "target": {
       "container": "Container",

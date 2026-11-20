@@ -32,6 +32,10 @@
       "prerelease": "Pré-lançamento",
       "unknown": "Desconhecida"
     },
+    "securityFastLane": {
+      "badge": "Correção de segurança",
+      "tooltip": "Corrige vulnerabilidades críticas ou altas da imagem em execução. Ainda precisa de aprovação."
+    },
     "actions": {
       "notesAriaLabel": "Mostrar notas da versão e motivos de retenção",
       "approve": "Aprovar",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "O modo de atualização é notify; as aprovações estão desativadas",
       "reject": "Rejeitar",
       "rejectAriaLabel": "Rejeitar atualização",
+      "rejectScopeAriaLabel": "Escopo da rejeição",
       "defer": "Adiar",
       "deferAriaLabel": "Adiar atualização"
+    },
+    "rejectScope": {
+      "tag": "Somente esta versão",
+      "minor": "Toda a linha minor",
+      "major": "Toda a linha major"
     },
     "detail": {
       "loading": "Carregando detalhes…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "Rejeitar atualização",
         "message": "Rejeitar a atualização de {name} para {toRef}? Ela não será aplicada automaticamente.",
+        "messageLine": "Rejeitar a atualização de {name} para {toRef} e ignorar todas as versões {line}.x? Linhas mais novas continuam sendo oferecidas.",
         "acceptLabel": "Rejeitar"
       },
       "defer": {

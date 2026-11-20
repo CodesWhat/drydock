@@ -23,6 +23,6 @@ Feature: Drydock Trigger API Exposure
     And response body path $.configuration.threshold should be all
     And response body path $.configuration.mode should be simple
     And response body path $.configuration.once should be true
-    And response body path $.configuration.simpletitle should be ${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}
+    And response body path $.configuration.simpletitle should be ${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + updateKindLabel + " found for container " + container.name + container.notificationWatcherSuffix}
     And response body path $.configuration.batchtitle should be ${containers.length} updates available
     And response body path $.configuration.mock should be mock

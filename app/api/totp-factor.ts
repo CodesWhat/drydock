@@ -60,6 +60,7 @@ import {
   getManagementContext,
   guarded,
   INVALID_BODY_MESSAGE,
+  isAllowedTransport,
   type ManagementContext,
   parseReauthBody,
   type Reauthenticated,
@@ -193,12 +194,21 @@ function principalAfterChange(
   };
 }
 
-function getFactorStatus(_req: Request, res: Response): void {
+function createGetFactorStatus(allowPlainHttp: boolean) {
+  return (req: Request, res: Response): void => getFactorStatus(req, res, allowPlainHttp);
+}
+
+function getFactorStatus(req: Request, res: Response, allowPlainHttp: boolean): void {
   const { subjectId } = getManagementContext(res);
   const factor = getFactorBySubject(subjectId);
   const pending = getEnrollmentBySubject(subjectId);
+  // The same transport check the changing routes are gated by, so the profile
+  // tab can say so before it asks for a password.
+  const managementAllowed = isAllowedTransport(req, allowPlainHttp);
   res.status(200).json({
     status: factor ? 'active' : 'unenrolled',
+    managementAllowed,
+    ...(managementAllowed ? {} : { reason: 'https-required' }),
     ...(factor ? { activatedAt: factor.activatedAt } : {}),
     recoveryCodesRemaining: factor ? countUnusedRecoveryCodes(factor.factorId) : 0,
     ...(pending
@@ -548,7 +558,11 @@ export function init(): express.Router {
     createManagementSessionGate({ allowPlainHttp }),
   ];
 
-  router.get('/totp-factor', ...gates, scoped(SESSION_ONLY, guarded(getFactorStatus)));
+  router.get(
+    '/totp-factor',
+    ...gates,
+    scoped(SESSION_ONLY, guarded(createGetFactorStatus(allowPlainHttp))),
+  );
   router.delete('/totp-factor', ...gates, scoped(SESSION_ONLY, guarded(removeActiveFactor)));
   router.post('/totp-enrollments', ...gates, scoped(SESSION_ONLY, guarded(startEnrollment)));
   router.put('/totp-enrollments/:id', ...gates, scoped(SESSION_ONLY, guarded(confirmEnrollment)));

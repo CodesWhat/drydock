@@ -5,6 +5,8 @@
     "filterPlaceholder": "Filter op doel of gebeurtenis...",
     "onThisPage": "op deze pagina",
     "containerFilterPlaceholder": "Containernaam...",
+    "actorFilterPlaceholder": "Gebruiker...",
+    "actorFilterLabel": "Filteren op gebruiker",
     "allEvents": "Alle evenementen",
     "eventsSelected": "{count} gebeurtenissen geselecteerd",
     "clear": "Wissen",
@@ -16,12 +18,19 @@
       "nextPage": "Volgende pagina"
     },
     "emptyFiltered": "Er zijn geen auditgegevens die overeenkomen met uw filters",
+    "systemActor": "Systeem",
+    "exportError": "Auditlog exporteren mislukt",
+    "export": {
+      "csv": "CSV exporteren",
+      "json": "JSON exporteren"
+    },
     "columns": {
       "time": "Tijd",
       "event": "Evenement",
       "target": "Doel",
       "status": "Status",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "card": {
       "time": "Tijd",
@@ -34,7 +43,8 @@
       "fromVersion": "Van versie",
       "toVersion": "Naar versie",
       "trigger": "Trigger",
-      "details": "Details"
+      "details": "Details",
+      "actor": "Actor"
     },
     "status": {
       "success": "Succes",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "Update in voorbeeld getoond (dry run)",
       "update-failed": "Update mislukt",
       "auto-update-blocked": "Automatische update geblokkeerd",
+      "security-fast-lane": "Beveiligings-fastlane",
       "update-policy-override-set": "Update-beleidsoverride ingesteld",
       "update-policy-override-cleared": "Update-beleidsoverride gewist",
       "group-policy-set": "Groepsbeleid ingesteld",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "Melding mislukt",
       "security-alert": "Beveiligingswaarschuwing",
       "maturity-cleared": "Wachttijd verstreken",
-      "image-prune": "Image-opruiming"
+      "image-prune": "Image-opruiming",
+      "cleanup": "Opruiming",
+      "notification-silence-set": "Meldingen gedempt",
+      "notification-silence-cleared": "Demping van meldingen opgeheven"
     },
     "target": {
       "container": "Container",

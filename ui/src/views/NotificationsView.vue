@@ -33,7 +33,7 @@ interface TriggerSummary {
   type: string;
 }
 
-const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
+const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose', 'portainer']);
 
 function isNotificationTriggerType(type: string) {
   return !NON_NOTIFICATION_TRIGGER_TYPES.has(type.toLowerCase());

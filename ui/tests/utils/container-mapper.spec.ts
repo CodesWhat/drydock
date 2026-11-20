@@ -243,6 +243,25 @@ describe('container-mapper', () => {
       expect(c.securityScanState).toBe('not-scanned');
     });
 
+    it('reports scanning while the server flags a scan in progress', () => {
+      const c = mapApiContainer(makeApiContainer({ securityScanState: 'scanning' }));
+      expect(c.securityScanState).toBe('scanning');
+    });
+
+    it('keeps the persisted verdict while scanning and ignores unknown flag values', () => {
+      const scanning = mapApiContainer(
+        makeApiContainer({
+          securityScanState: 'scanning',
+          security: { scan: { status: 'blocked', summary: null } },
+        }),
+      );
+      expect(scanning.securityScanState).toBe('scanning');
+      expect(scanning.bouncer).toBe('blocked');
+
+      const ignored = mapApiContainer(makeApiContainer({ securityScanState: 'bogus' }));
+      expect(ignored.securityScanState).toBe('not-scanned');
+    });
+
     it('returns blocked when scan status is blocked', () => {
       const c = mapApiContainer(
         makeApiContainer({
@@ -1714,6 +1733,54 @@ describe('container-mapper', () => {
         makeApiContainer({ result: { tag: '2.0', suggestedTag: '  ' }, updateAvailable: true }),
       );
       expect(c.suggestedTag).toBeUndefined();
+    });
+  });
+
+  describe('updateCandidates', () => {
+    it('maps the per-type candidates in patch, minor, major order', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '3.0.0',
+            updateCandidates: {
+              major: { tag: '3.0.0', semverDiff: 'major' },
+              patch: { tag: '1.2.9', semverDiff: 'patch' },
+              minor: { tag: '1.5.0', semverDiff: 'minor' },
+            },
+          },
+        }),
+      );
+      expect(c.updateCandidates).toEqual([
+        { kind: 'patch', tag: '1.2.9' },
+        { kind: 'minor', tag: '1.5.0' },
+        { kind: 'major', tag: '3.0.0' },
+      ]);
+    });
+
+    it('drops entries without a usable tag', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: {
+            tag: '1.5.0',
+            updateCandidates: { patch: { tag: '  ' }, minor: { tag: '1.5.0' }, major: null },
+          },
+        }),
+      );
+      expect(c.updateCandidates).toEqual([{ kind: 'minor', tag: '1.5.0' }]);
+    });
+
+    it('is undefined when missing, not an object, or empty', () => {
+      expect(mapApiContainer(makeApiContainer({ result: { tag: '1' } })).updateCandidates).toBe(
+        undefined,
+      );
+      expect(
+        mapApiContainer(makeApiContainer({ result: { tag: '1', updateCandidates: 'nope' } }))
+          .updateCandidates,
+      ).toBeUndefined();
+      expect(
+        mapApiContainer(makeApiContainer({ result: { tag: '1', updateCandidates: {} } }))
+          .updateCandidates,
+      ).toBeUndefined();
     });
   });
 

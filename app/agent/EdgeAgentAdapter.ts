@@ -14,6 +14,10 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
+import {
+  AGENT_RESPONSE_TOO_LARGE_CODE,
+  AgentResponseTooLargeError,
+} from './AgentResponseTooLargeError.js';
 import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
 
@@ -32,6 +36,8 @@ const ORDERED_STATE_FRAME_TYPES = new Set([
   'dd:container_added',
   'dd:container_updated',
   'dd:container_removed',
+  // die then stop must reach the state alert tracker in order.
+  'dd:container_event',
 ]);
 // Number of consecutive server-initiated ping cycles that may pass without a
 // pong reply before the connection is considered dead. 2 cycles × 30s = 60s,
@@ -440,6 +446,9 @@ export class EdgeAgentAdapter {
       case 'dd:container_updated':
         await this.client.handleEvent(agentEventName, (data as { container?: unknown }).container);
         return;
+      case 'dd:container_event':
+        await this.client.handleEvent(agentEventName, data);
+        return;
       case 'dd:container_removed':
         await this.client.handleEvent(agentEventName, { id: data.id, name: data.name });
         return;
@@ -485,6 +494,7 @@ export class EdgeAgentAdapter {
           log.debug(`Failed to emit agentConnected: ${getErrorMessage(err)}`);
         },
       );
+      // No version check: an edge connection is always Portwing, which versions on its own line.
     }
   }
 
@@ -671,6 +681,12 @@ export class EdgeAgentAdapter {
     const liveStream = requestId ? this.liveContainerLogStreams.get(requestId) : undefined;
     if (requestId && liveStream?.containerId === containerId) {
       this.liveContainerLogStreams.delete(requestId);
+      if (data.code === AGENT_RESPONSE_TOO_LARGE_CODE) {
+        liveStream.handlers.onError(
+          new AgentResponseTooLargeError(typeof data.logs === 'string' ? data.logs : undefined),
+        );
+        return;
+      }
       if (typeof data.logs === 'string' && data.logs.length > 0) {
         liveStream.handlers.onChunk({ stream: 'stdout', logs: data.logs });
       }
@@ -679,6 +695,12 @@ export class EdgeAgentAdapter {
     }
     const pending = this.takePendingContainerResponse('log', containerId, data);
     if (!pending) {
+      return;
+    }
+    if (data.code === AGENT_RESPONSE_TOO_LARGE_CODE) {
+      pending.reject(
+        new AgentResponseTooLargeError(typeof data.logs === 'string' ? data.logs : undefined),
+      );
       return;
     }
     pending.resolve(data.logs);
@@ -885,7 +907,12 @@ export class EdgeAgentAdapter {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(pendingKey);
-      pending.reject(new Error(typeof data.message === 'string' ? data.message : 'agent error'));
+      const message = typeof data.message === 'string' ? data.message : undefined;
+      pending.reject(
+        data.code === AGENT_RESPONSE_TOO_LARGE_CODE
+          ? new AgentResponseTooLargeError(message)
+          : new Error(message ?? 'agent error'),
+      );
     }
   }
 

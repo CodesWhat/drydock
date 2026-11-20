@@ -2,6 +2,7 @@ import axios, { type AxiosRequestConfig } from 'axios';
 import type { ContainerImage } from '../../../model/container.js';
 import { getRegistryRequestTimeoutMs } from '../../configuration.js';
 import { withRetry } from '../../http-retry.js';
+import type { RegistryLookupOptions } from '../../Registry.js';
 import { acquireToken, getBucketForUrl } from '../../token-bucket.js';
 import Custom, { type CustomRegistryConfiguration } from '../custom/Custom.js';
 import { getTokenAuthConfigurationSchema } from '../shared/tokenAuthConfigurationSchema.js';
@@ -59,10 +60,16 @@ class Hub extends Custom<HubRegistryConfiguration> {
 
   match(image: ContainerImage) {
     const registryUrl = image?.registry?.url;
+    if (!registryUrl) {
+      return true;
+    }
+    // normalizeImage() rewrites the url to its canonical form
+    // (https://registry-1.docker.io/v2); match must accept that form too so a
+    // second normalization pass keeps the hub provider (#1591).
+    const registryHost = registryUrl.replace(/^https:\/\//, '').replace(/\/v2\/?$/, '');
     return (
-      !registryUrl ||
-      registryUrl === 'docker.io' ||
-      (registryUrl.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryUrl))
+      registryHost === 'docker.io' ||
+      (registryHost.endsWith('.docker.io') && /^[a-zA-Z0-9.-]+$/.test(registryHost))
     );
   }
 
@@ -110,12 +117,24 @@ class Hub extends Custom<HubRegistryConfiguration> {
     return fullName;
   }
 
-  async getImagePublishedAt(image: ContainerImage, tag?: string): Promise<string | undefined> {
+  async getImagePublishedAt(
+    image: ContainerImage,
+    tag?: string,
+    options?: RegistryLookupOptions,
+  ): Promise<string | undefined> {
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : image.tag?.value;
     if (typeof image.name !== 'string' || image.name.length === 0 || !tagToLookup) {
       return undefined;
     }
+    return this.memoizePublishedAt(image, tagToLookup, options, () =>
+      this.fetchImagePublishedAt(image, tagToLookup),
+    );
+  }
 
+  private async fetchImagePublishedAt(
+    image: ContainerImage,
+    tagToLookup: string,
+  ): Promise<string | undefined> {
     const metadataUrl = `https://hub.docker.com/v2/repositories/${image.name}/tags/${encodeURIComponent(
       tagToLookup,
     )}`;

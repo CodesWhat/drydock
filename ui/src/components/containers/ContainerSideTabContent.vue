@@ -11,6 +11,7 @@ import ContainerStats from './ContainerStats.vue';
 import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import LabelOverridesPanel from '../LabelOverridesPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateCandidatesList from './UpdateCandidatesList.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ContainerLinkActions from './ContainerLinkActions.vue';
 import ContainerPortEntry from './ContainerPortEntry.vue';
@@ -25,7 +26,10 @@ import { useContainersViewTemplateContext } from './containersViewTemplateContex
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { updateInsightColor } from '../../utils/display';
-import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
+import {
+  findDryRunActionTrigger,
+  isManagedUpdateTrigger,
+} from '../../views/containers/useContainerTriggers';
 import { enrichContainerPorts } from '../../utils/ports';
 import { useAgentHosts } from '../../composables/useAgentHosts';
 
@@ -169,7 +173,7 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
-const { resolveHost } = useAgentHosts();
+const { resolveHost, isPortwingAgent } = useAgentHosts();
 const enrichedPorts = computed(() =>
   enrichContainerPorts(
     selectedContainer.value.details.ports,
@@ -201,10 +205,6 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
 function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
-}
-
-function isManagedUpdateTrigger(trigger: { type: string }) {
-  return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
 function getUpdateKindLabel(kind: Container['updateKind']) {
@@ -300,6 +300,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppIcon name="arrow-right" :size="7" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
+              <UpdateCandidatesList :candidates="selectedContainer.updateCandidates" />
               <div v-if="selectedContainer.softwareVersion"
                    class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-2xs-plus font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
@@ -686,6 +687,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <AppIconButton
+                      v-if="!isPortwingAgent(selectedContainer.agent)"
                       :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
                       size="toolbar"
                       variant="muted"

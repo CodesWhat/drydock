@@ -638,6 +638,13 @@ export const containerPaths = {
                 },
                 kind: { type: 'string', enum: ['tag', 'digest'] },
                 value: { type: 'string' },
+                scope: {
+                  type: 'string',
+                  enum: ['tag', 'minor', 'major'],
+                  default: 'tag',
+                  description:
+                    'For skip-current: skip the exact tag, or the whole minor (X.Y) or major (X) line. Line scopes are refused for digest updates and non-semver tags.',
+                },
                 days: { type: 'number' },
                 snoozeUntil: { type: 'string', format: 'date-time' },
                 mode: { type: 'string', enum: ['all', 'mature'] },

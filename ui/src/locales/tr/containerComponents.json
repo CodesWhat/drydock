@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Daha yeni sürüm mevcut: {tag}. Bu Tag sabitlendi, drydock onu otomatik olarak güncellemez."
     },
+    "updateCandidates": {
+      "title": "Güncelleme türüne göre adaylar"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",
       "rolledBack": "Geri alındı",
@@ -481,6 +484,7 @@
       "maturityClockPublished": "Aday {date} tarihinde yayımlandı — {minDays} günlük minimuma {count} gün kaldı",
       "maturityClockDetected": "Aday {date} tarihinde algılandı — {minDays} günlük minimuma {count} gün kaldı",
       "groupManualOnly": "'{group}' grup ilkesi yalnızca elle güncellemeye izin veriyor. Drydock bu güncellemeyi otomatik uygulamayacak.",
+      "securityFastLane": "Çalışan imajdaki {count} kritik veya yüksek açığı giderir ({ids}). Erteleme, olgunlaşma ve bakım penceresi beklemeleri uygulanmaz.",
       "updateAvailableRuleDisabled": "Update Available bildirim kuralı kapalı ve otomatik güncellemeleri de denetliyor. Drydock'un bu güncellemeyi kendiliğinden uygulaması için Settings > Notifications > Update Available bölümünden aç.",
       "updateButton": "Şimdi güncelle",
       "blockedButton": "Güncelleme engellendi",
@@ -527,6 +531,7 @@
         "update-available-rule-disabled": "Update Available kuralı kapalı",
         "group-notify-only": "Grup yalnızca bildirimlere izin veriyor",
         "group-manual-only": "Grup elle güncelleme gerektiriyor",
+        "security-fast-lane": "Güvenlik hızlı hattı",
         "dry-run-trigger": "Tetikleyici yapılandırması deneme modunda (dry-run)",
         "maturity-releases-not-reached": "Olgunluk politikası bekliyor"
       },

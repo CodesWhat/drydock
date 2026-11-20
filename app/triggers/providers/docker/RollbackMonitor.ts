@@ -1,6 +1,7 @@
 import type { ContainerBackupScope } from '../../../util/backup.js';
 import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
+import { registerRollbackMonitor } from './rollback-monitor-registry.js';
 
 type RollbackMonitorLogger = {
   info: (message: string) => void;
@@ -17,6 +18,8 @@ type RollbackContainer = {
   watcher: string;
   agent?: string;
   identityKey?: string;
+  /** Docker state the watcher recorded before the update ran. */
+  status?: string;
   labels: Record<string, string>;
   image: {
     // Not read here, declared because the rollback the health monitor performs
@@ -35,6 +38,11 @@ type RollbackConfig = {
   autoRollback: boolean;
   rollbackWindow: number;
   rollbackInterval: number;
+  /**
+   * Opt-in liveness watch (ms) for containers without a HEALTHCHECK. Absent or
+   * 0 leaves such containers unmonitored.
+   */
+  livenessWindow?: number;
 };
 
 type RollbackMonitorDependencies = {
@@ -48,7 +56,10 @@ type RollbackMonitorDependencies = {
   inspectContainer: (
     container: unknown,
     logContainer: RollbackMonitorLogger,
-  ) => Promise<{ Id: string; State?: { Health?: unknown } } | undefined>;
+  ) => Promise<
+    | { Id: string; RestartCount?: number; State?: { Health?: unknown; Running?: boolean } }
+    | undefined
+  >;
   startHealthMonitor: (options: {
     dockerApi: unknown;
     container: RollbackContainer;
@@ -59,9 +70,12 @@ type RollbackMonitorDependencies = {
     backupScope: ContainerBackupScope;
     window: number;
     interval: number;
+    mode?: 'health' | 'liveness';
+    baselineRestartCount?: number;
+    wasRunning?: boolean;
     triggerInstance: unknown;
     log: RollbackMonitorLogger;
-  }) => void;
+  }) => AbortController | undefined;
   getTriggerInstance: () => unknown;
   resolveContainerBackupScope: (container: RollbackContainer) => ContainerBackupScope;
 };
@@ -131,7 +145,7 @@ class RollbackMonitor {
     Object.assign(this, dependencies);
   }
 
-  getConfig(container: RollbackContainer): RollbackConfig {
+  getConfig(container: RollbackContainer, defaultLivenessWindow?: number): RollbackConfig {
     const logger = this.getLogger()?.child?.({});
     const rollbackWindow = parsePositiveDurationLabel(
       this.getPreferredLabelValue(container.labels, 'dd.rollback.window', logger),
@@ -148,6 +162,12 @@ class RollbackMonitor {
       logger,
     );
 
+    const livenessWindow = this.parseLivenessWindow(
+      this.getPreferredLabelValue(container.labels, 'dd.rollback.liveness', logger),
+      defaultLivenessWindow,
+      logger,
+    );
+
     return {
       autoRollback:
         (
@@ -155,7 +175,32 @@ class RollbackMonitor {
         ).toLowerCase() === 'true',
       rollbackWindow,
       rollbackInterval,
+      ...(livenessWindow === undefined ? {} : { livenessWindow }),
     };
+  }
+
+  /**
+   * The container label wins over the action option. `0` turns the watch off
+   * for a container even when the action enables it; a malformed label falls
+   * back to the action option with a warning.
+   */
+  private parseLivenessWindow(
+    rawLabel: string | undefined,
+    defaultValue: number | undefined,
+    logger: { warn?: (message: string) => void } | undefined,
+  ): number | undefined {
+    if (rawLabel !== undefined) {
+      try {
+        const parsed = parseEnvNonNegativeInteger(rawLabel, 'dd.rollback.liveness');
+        if (parsed !== undefined) {
+          return parsed;
+        }
+      } catch {
+        // Fall through to the warn-and-default behavior.
+      }
+      logger?.warn?.('Invalid rollback liveness label value — using the action default');
+    }
+    return defaultValue;
   }
 
   async start(
@@ -164,7 +209,8 @@ class RollbackMonitor {
     rollbackConfig: RollbackConfig,
     logContainer: RollbackMonitorLogger,
   ) {
-    if (!rollbackConfig.autoRollback) {
+    const livenessWindow = rollbackConfig.livenessWindow ?? 0;
+    if (!rollbackConfig.autoRollback && livenessWindow <= 0) {
       return;
     }
 
@@ -175,7 +221,31 @@ class RollbackMonitor {
     }
 
     const newContainerSpec = await this.inspectContainer(newContainer, logContainer);
+    if (!this.wasRunningBeforeUpdate(container, newContainerSpec)) {
+      // A rollback restores the pre-update running state, and a container that
+      // was stopped before the update is stopped now by design. Watching it
+      // would roll back on the first poll.
+      logContainer.info(
+        'Container was not running before the update — skipping rollback monitoring',
+      );
+      return;
+    }
     const hasHealthcheck = !!newContainerSpec?.State?.Health;
+    if (hasHealthcheck && !rollbackConfig.autoRollback) {
+      // The liveness watch is only for containers without a healthcheck.
+      return;
+    }
+    if (!hasHealthcheck && livenessWindow > 0 && newContainerSpec) {
+      this.startLivenessWatch(
+        dockerApi,
+        container,
+        newContainerSpec,
+        rollbackConfig,
+        livenessWindow,
+        logContainer,
+      );
+      return;
+    }
     if (!hasHealthcheck) {
       logContainer.warn(
         'Auto-rollback enabled but container has no HEALTHCHECK defined — skipping health monitoring',
@@ -188,8 +258,60 @@ class RollbackMonitor {
     logContainer.info(
       `Starting health monitor (window=${rollbackConfig.rollbackWindow}ms, interval=${rollbackConfig.rollbackInterval}ms)`,
     );
+    this.startMonitor(dockerApi, container, newContainerId, rollbackConfig, {
+      window: rollbackConfig.rollbackWindow,
+      logContainer,
+    });
+  }
+
+  private wasRunningBeforeUpdate(
+    container: RollbackContainer,
+    newContainerSpec: { State?: { Running?: boolean } } | undefined,
+  ): boolean {
+    const status = container.status;
+    if (status === 'exited' || status === 'created' || status === 'dead') {
+      return false;
+    }
+    if (status === 'running' || status === 'restarting' || status === 'paused') {
+      return true;
+    }
+    // No usable status: the recreate only starts the replacement when the old
+    // container was running, so an explicitly stopped replacement means it
+    // wasn't.
+    return newContainerSpec?.State?.Running !== false;
+  }
+
+  private startLivenessWatch(
+    dockerApi: unknown,
+    container: RollbackContainer,
+    newContainerSpec: { Id: string; RestartCount?: number },
+    rollbackConfig: RollbackConfig,
+    livenessWindow: number,
+    logContainer: RollbackMonitorLogger,
+  ) {
+    logContainer.info(
+      `Container has no HEALTHCHECK — starting liveness watch (window=${livenessWindow}ms, interval=${rollbackConfig.rollbackInterval}ms)`,
+    );
+    this.startMonitor(dockerApi, container, newContainerSpec.Id, rollbackConfig, {
+      window: livenessWindow,
+      logContainer,
+      liveness: { baselineRestartCount: newContainerSpec.RestartCount ?? 0 },
+    });
+  }
+
+  private startMonitor(
+    dockerApi: unknown,
+    container: RollbackContainer,
+    newContainerId: string,
+    rollbackConfig: RollbackConfig,
+    options: {
+      window: number;
+      logContainer: RollbackMonitorLogger;
+      liveness?: { baselineRestartCount: number };
+    },
+  ) {
     const failingImageTag = container.updateKind?.remoteValue ?? container.image.tag.value;
-    this.startHealthMonitor({
+    const controller = this.startHealthMonitor({
       dockerApi,
       // The whole container, not just its name and the replacement's id: a
       // rollback runs through the trigger's own recreate, which for compose
@@ -201,11 +323,20 @@ class RollbackMonitor {
       backupImageTag: failingImageTag,
       backupImageDigest: container.image.digest?.repo,
       backupScope: this.resolveContainerBackupScope(container),
-      window: rollbackConfig.rollbackWindow,
+      window: options.window,
       interval: rollbackConfig.rollbackInterval,
+      ...(options.liveness
+        ? { mode: 'liveness' as const, baselineRestartCount: options.liveness.baselineRestartCount }
+        : {}),
+      // Only a running container is monitored, and a rollback puts it back
+      // the way it was.
+      wasRunning: true,
       triggerInstance: this.getTriggerInstance(),
-      log: logContainer,
+      log: options.logContainer,
     });
+    if (controller) {
+      registerRollbackMonitor(container, controller);
+    }
   }
 }
 

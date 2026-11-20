@@ -31,6 +31,8 @@
       "challengeExpired": "Die Bestätigung ist abgelaufen. Melde dich erneut an.",
       "challengeLocked": "Zu viele Versuche. Versuche es in {time} erneut.",
       "challengeLockedLater": "Zu viele Versuche. Versuche es später erneut.",
+      "rateLimited": "Zu viele Versuche. Versuche es in {time} erneut.",
+      "rateLimitedLater": "Zu viele Versuche. Versuche es später erneut.",
       "challengeUnavailable": "Die Bestätigung ist derzeit nicht verfügbar. Versuche es gleich noch einmal."
     },
     "connectionLost": {

@@ -646,6 +646,43 @@ describe('ContainerFullPageTabContent', () => {
     ).toBeUndefined();
   });
 
+  it('disables portainer trigger runs in notify mode and keeps notification runs enabled', () => {
+    activeDetailTab.value = 'actions';
+    updateMode.value = 'notify';
+    detailTriggers.value = [
+      { type: 'portainer', name: 'prod' },
+      { type: 'slack', name: 'ops' },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(
+      wrapper.get('[data-trigger-key="portainer.prod"] button').attributes('disabled'),
+    ).toBeDefined();
+    expect(
+      wrapper.get('[data-trigger-key="slack.ops"] button').attributes('disabled'),
+    ).toBeUndefined();
+  });
+
+  it('marks a portainer dry-run action as preview-only', () => {
+    detailTriggers.value = [{ type: 'portainer', name: 'prod', configuration: { dryrun: true } }];
+
+    const wrapper = mountComponent();
+    expect(wrapper.get('[data-test="dry-run-update-action"]').text()).toContain('Preview only');
+    expect(wrapper.get('[data-test="dry-run-trigger-condition"]').text()).toContain(
+      'portainer.prod',
+    );
+  });
+
+  it('does not treat false or string dry-run values as preview-only', () => {
+    detailTriggers.value = [
+      { type: 'portainer', name: 'a', configuration: { dryrun: false } },
+      { type: 'docker', name: 'b', configuration: { dryrun: 'true' } },
+    ];
+
+    expect(mountComponent().find('[data-test="dry-run-update-action"]').exists()).toBe(false);
+  });
+
   it('wires standard action buttons in the non-blocked update branch', async () => {
     snoozeDateInput.value = '2026-03-20';
     selectedSnoozeUntil.value = '2026-03-21T00:00:00Z';
@@ -1485,6 +1522,41 @@ describe('ContainerFullPageTabContent', () => {
 
     expect(wrapper.text()).toContain('\u2022\u2022\u2022\u2022\u2022');
     expect(mockRevealContainerEnv).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the backend reveal error, then clears it on a successful retry', async () => {
+    activeDetailTab.value = 'environment';
+    selectedContainer.value = makeContainer({
+      details: {
+        ports: [],
+        volumes: [],
+        env: [{ key: 'TOKEN', value: '[REDACTED]', sensitive: true }],
+        labels: [],
+      },
+    });
+    mockRevealContainerEnv
+      .mockRejectedValueOnce(new Error('agent too old to reveal'))
+      .mockResolvedValueOnce({ env: [{ key: 'TOKEN', value: 'secret-1' }] });
+
+    const wrapper = mountComponent();
+    const findButton = () =>
+      wrapper
+        .findAll('.font-mono')
+        .find((node) => node.text().includes('TOKEN'))
+        ?.find('button');
+
+    await findButton()?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('agent too old to reveal');
+    expect(wrapper.text()).not.toContain('secret-1');
+    expect(findButton()?.attributes('disabled')).toBeUndefined();
+
+    await findButton()?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('agent too old to reveal');
+    expect(wrapper.text()).toContain('secret-1');
   });
 
   it('mounts the label override panel for the selected container on the labels tab', () => {

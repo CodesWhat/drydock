@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { ROUTES } from '../router/routes';
+import AgentEdgeKeysPanel from '../components/agents/AgentEdgeKeysPanel.vue';
 import AgentDetailConfigTab from '../components/agents/AgentDetailConfigTab.vue';
 import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
@@ -40,6 +41,7 @@ interface Agent {
   version?: string;
   build?: string;
   hookLabelsTrusted: boolean;
+  portwing: boolean;
   uptime?: string;
   logLevel?: string;
   pollInterval?: string;
@@ -62,6 +64,7 @@ const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const router = useRouter();
 let activeAgentStatusListener: EventListener | null = null;
 
+const showEdgeKeys = ref(false);
 const loading = ref(true);
 const error = ref<string | null>(null);
 const agentsData = ref<Agent[]>([]);
@@ -174,6 +177,7 @@ async function fetchAgents() {
       version: typeof a.version === 'string' ? a.version : undefined,
       build: distinctBuild(a.version, a.build),
       hookLabelsTrusted: a.warnings?.includes('hook-labels-trusted') ?? false,
+      portwing: a.portwing === true,
       uptime: Number.isFinite(a.uptimeSeconds) ? formatUptime(Number(a.uptimeSeconds)) : undefined,
       logLevel: typeof a.logLevel === 'string' ? a.logLevel : undefined,
       pollInterval: typeof a.pollInterval === 'string' ? a.pollInterval : undefined,
@@ -427,9 +431,12 @@ const selectedAgent = ref<Agent | null>(null);
 const agentPanelOpen = ref(false);
 const agentDetailTab = ref('overview');
 
+// Portwing agents have no Drydock log route, so their detail panel has no Logs tab.
 const agentDetailTabs = computed(() => [
   { id: 'overview', label: t('agentsView.detail.tabs.overview'), icon: 'info' },
-  { id: 'logs', label: t('agentsView.detail.tabs.logs'), icon: 'logs' },
+  ...(selectedAgent.value?.portwing
+    ? []
+    : [{ id: 'logs', label: t('agentsView.detail.tabs.logs'), icon: 'logs' }]),
   { id: 'config', label: t('agentsView.detail.tabs.config'), icon: 'config' },
 ]);
 
@@ -708,6 +715,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                           @clear="searchQuery = ''" />
             </template>
           </DataTable>
+
+          <AppButton variant="outlined" size="sm" class="mt-4" data-testid="edge-keys-toggle" @click="showEdgeKeys = !showEdgeKeys">
+            {{ showEdgeKeys ? t('agentsView.edgeKeys.hide') : t('agentsView.edgeKeys.toggle') }}
+          </AppButton>
+          <AgentEdgeKeysPanel v-if="showEdgeKeys" />
 
     <template #panel>
         <!-- Detail panel -->

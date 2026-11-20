@@ -8,6 +8,8 @@ import type { Logger } from 'pino';
 import { deriveVersionIdentity } from '../configuration/version-identity.js';
 import type {
   BatchUpdateCompletedEventPayload,
+  ContainerStateAlertEventPayload,
+  ContainerStateAlertKind,
   ContainerUpdateAppliedEventPayload,
   ContainerUpdateFailedEventPayload,
   SecurityAlertEventPayload,
@@ -21,6 +23,7 @@ import {
   emitBatchUpdateCompleted,
   emitContainerReport,
   emitContainerReports,
+  emitContainerStateAlert,
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
   emitSecurityAlert,
@@ -34,6 +37,7 @@ import {
   type ContainerReport,
   clearDetectedUpdateState,
   deriveContainerIdentityKey,
+  isRollbackContainerName,
 } from '../model/container.js';
 import {
   type ActiveContainerUpdateOperationStatus,
@@ -62,13 +66,16 @@ import { uuidv7 } from '../util/uuid.js';
 import { findControllerLocalWatcherClaimingContainerId } from '../watchers/controller-local-container-ids.js';
 import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js';
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
+import { isDrydockInitiatedStateChange } from '../watchers/providers/docker/container-state-alerts.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
+import { checkAgentVersion } from './agent-version-alerts.js';
 import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import { PORTWING_CONTAINER_EVENT, PortwingStateAlerts } from './portwing-container-events.js';
 import { StandardKeyRotation } from './standard-key-rotation.js';
 import { createRotationRequest } from './standard-key-rotation-client.js';
 
@@ -280,6 +287,12 @@ export const AGENT_SSE_IDLE_TIMEOUT_MS = 45_000;
 const SSE_HEARTBEAT_LINE = ': heartbeat';
 // Longer than any heartbeat line, so a trailing partial line never needs more.
 const SSE_PARTIAL_LINE_KEEP_CHARS = SSE_HEARTBEAT_LINE.length + 4;
+const CONTAINER_STATE_ALERT_KINDS: ReadonlySet<string> = new Set<ContainerStateAlertKind>([
+  'container-stopped',
+  'container-exited',
+  'container-oom-killed',
+  'container-restart-loop',
+]);
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -368,10 +381,12 @@ function createConnectTrackingTransport(state: { connected: boolean }, timeoutMs
 export const AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE =
   'Env reveal needs the agent upgraded to this version';
 
-/** The agent has no env route (older agent, or an edge connection). */
+const PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE = 'Env reveal is not supported for Portwing agents';
+
+/** The agent has no env route (older agent, or a Portwing agent). */
 export class AgentEnvRevealUnsupportedError extends Error {
-  constructor() {
-    super(AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE);
+  constructor(message: string = AGENT_ENV_REVEAL_UNSUPPORTED_MESSAGE) {
+    super(message);
     this.name = 'AgentEnvRevealUnsupportedError';
   }
 }
@@ -425,6 +440,7 @@ export class AgentClient {
   private readonly inventory: AgentInventoryRefresh;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
+  private portwingStateAlerts?: PortwingStateAlerts;
   /**
    * Set by portwing-ws.ts immediately after EdgeAgentAdapter.activate() for
    * edge-mode connections. When present, container-op methods that have a
@@ -1488,6 +1504,9 @@ export class AgentClient {
       }).catch((error: unknown) => {
         this.log.debug(`Failed to emit agent connected event (${getErrorMessage(error)})`);
       });
+      if (!this.isPortwing) {
+        checkAgentVersion(this.name, this.info.version);
+      }
     }
   }
 
@@ -1528,6 +1547,8 @@ export class AgentClient {
     }
     clearTimeout(this.statsChangedTimer);
     this.statsChangedTimer = undefined;
+    this.portwingStateAlerts?.dispose();
+    this.portwingStateAlerts = undefined;
   }
 
   private scheduleStatsChanged(): void {
@@ -1814,8 +1835,22 @@ export class AgentClient {
     };
   }
 
+  /**
+   * Whether this agent is a Portwing agent rather than a Drydock agent: an edge
+   * connection, ed25519 request signing, or a controller-Docker-transport watcher.
+   * Portwing versions on their own line, so Drydock's minimum-version checks and
+   * Drydock-only agent routes (env reveal, agent log entries) do not apply.
+   */
+  get isPortwing(): boolean {
+    return (
+      this.edgeAdapter !== undefined ||
+      this.config.authmode === 'ed25519' ||
+      this.controllerDockerTransportWatchers.size > 0
+    );
+  }
+
   get warnings(): AgentWarning[] {
-    return getAgentWarnings(this.info);
+    return this.isPortwing ? [] : getAgentWarnings(this.info);
   }
 
   private handleAckEvent(data: unknown) {
@@ -2507,6 +2542,54 @@ export class AgentClient {
     return parsedPayload;
   }
 
+  /**
+   * Agents classify container state alerts where the Docker events are, so the controller
+   * only validates and relays. It still drops anything Drydock is replacing itself (the
+   * agent checks its own operations; this covers a controller-issued one) and rollback
+   * containers, so a stale or older-protocol payload cannot page for an update.
+   */
+  private parseContainerStateAlertPayload(
+    data: unknown,
+  ): ContainerStateAlertEventPayload | undefined {
+    const payload = toOptionalRecord(data);
+    if (
+      !payload ||
+      typeof payload.kind !== 'string' ||
+      !CONTAINER_STATE_ALERT_KINDS.has(payload.kind) ||
+      typeof payload.containerName !== 'string' ||
+      payload.containerName.length === 0
+    ) {
+      return undefined;
+    }
+    const snapshot = toOptionalRecord(payload.container) as unknown as Container | undefined;
+    const stored = snapshot ? storeContainer.getContainer(snapshot.id) : undefined;
+    const container =
+      stored?.agent === this.name
+        ? stored
+        : snapshot
+          ? { ...snapshot, agent: this.name }
+          : undefined;
+    if (!container) {
+      return undefined;
+    }
+    if (isRollbackContainerName(container.name) || isDrydockInitiatedStateChange(container)) {
+      return undefined;
+    }
+    return {
+      kind: payload.kind as ContainerStateAlertKind,
+      containerName: payload.containerName,
+      container,
+      ...(Number.isInteger(payload.exitCode) ? { exitCode: Number(payload.exitCode) } : {}),
+      ...(typeof payload.reason === 'string' ? { reason: payload.reason } : {}),
+      ...(Number.isFinite(payload.restartCount)
+        ? { restartCount: Number(payload.restartCount) }
+        : {}),
+      ...(Number.isFinite(payload.windowSeconds)
+        ? { windowSeconds: Number(payload.windowSeconds) }
+        : {}),
+    };
+  }
+
   private parseSecurityScanCycleCompleteEventPayload(
     data: unknown,
   ): SecurityScanCycleCompleteEventPayload | undefined {
@@ -2626,6 +2709,18 @@ export class AgentClient {
         }
         return;
       }
+      case 'dd:container-state-alert': {
+        const payload = this.parseContainerStateAlertPayload(data);
+        if (payload) {
+          await emitContainerStateAlert(payload);
+        }
+        return;
+      }
+      case PORTWING_CONTAINER_EVENT:
+        // Portwing sends this only when it advertises the dd:container-event capability.
+        this.portwingStateAlerts ??= new PortwingStateAlerts(this.name, this.log);
+        this.portwingStateAlerts.observe(data);
+        return;
       case 'dd:security-scan-cycle-complete': {
         const payload = this.parseSecurityScanCycleCompleteEventPayload(data);
         if (payload) {
@@ -2829,8 +2924,8 @@ export class AgentClient {
    * agent at the time of use.
    */
   async getContainerEnv(containerId: string): Promise<Array<{ key: string; value: string }>> {
-    if (this.edgeAdapter) {
-      throw new AgentEnvRevealUnsupportedError();
+    if (this.isPortwing) {
+      throw new AgentEnvRevealUnsupportedError(PORTWING_ENV_REVEAL_UNSUPPORTED_MESSAGE);
     }
     try {
       const target = `/api/containers/${encodeURIComponent(containerId)}/env`;

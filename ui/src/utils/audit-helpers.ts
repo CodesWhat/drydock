@@ -13,6 +13,7 @@ export interface AuditEntry {
   triggerName?: string;
   status: 'success' | 'error' | 'info';
   details?: string;
+  actor?: string;
 }
 
 export function statusColor(status: string): string {

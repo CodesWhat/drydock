@@ -78,6 +78,7 @@ async function loadEntryPoint({
   const apiInit = vi.fn(async () => undefined);
   const securitySchedulerInit = vi.fn();
   const maturitySchedulerInit = vi.fn();
+  const cleanupSchedulerInit = vi.fn();
   const approvalReconcilerInit = vi.fn();
   const warmTrivyDatabase = vi.fn(async () => 'ready');
   const startOutboxWorker = vi.fn();
@@ -117,6 +118,7 @@ async function loadEntryPoint({
   vi.doMock('./api/index.js', () => ({ init: apiInit }));
   vi.doMock('./security/scheduler.js', () => ({ init: securitySchedulerInit }));
   vi.doMock('./maturity/scheduler.js', () => ({ init: maturitySchedulerInit }));
+  vi.doMock('./cleanup/scheduler.js', () => ({ init: cleanupSchedulerInit }));
   vi.doMock('./approvals/reconcile.js', () => ({ init: approvalReconcilerInit }));
   vi.doMock('./security/scan.js', () => ({ warmTrivyDatabase }));
   vi.doMock('./notifications/outbox-worker.js', () => ({
@@ -152,6 +154,7 @@ async function loadEntryPoint({
     apiInit,
     securitySchedulerInit,
     maturitySchedulerInit,
+    cleanupSchedulerInit,
     approvalReconcilerInit,
     warmTrivyDatabase,
     startOutboxWorker,
@@ -190,6 +193,7 @@ describe('entrypoint', () => {
     expect(harness.apiInit).not.toHaveBeenCalled();
     expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.cleanupSchedulerInit).not.toHaveBeenCalled();
     expect(harness.approvalReconcilerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
@@ -213,6 +217,7 @@ describe('entrypoint', () => {
     expect(harness.apiInit).not.toHaveBeenCalled();
     expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
     expect(harness.maturitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.cleanupSchedulerInit).not.toHaveBeenCalled();
     expect(harness.approvalReconcilerInit).not.toHaveBeenCalled();
     expect(harness.warmTrivyDatabase).not.toHaveBeenCalled();
     expect(harness.startOutboxWorker).not.toHaveBeenCalled();
@@ -240,6 +245,7 @@ describe('entrypoint', () => {
     expect(harness.apiInit).toHaveBeenCalledOnce();
     expect(harness.securitySchedulerInit).toHaveBeenCalledOnce();
     expect(harness.maturitySchedulerInit).toHaveBeenCalledOnce();
+    expect(harness.cleanupSchedulerInit).toHaveBeenCalledOnce();
     expect(harness.approvalReconcilerInit).toHaveBeenCalledOnce();
     expect(harness.warmTrivyDatabase).toHaveBeenCalledOnce();
     expect(harness.startOutboxWorker).toHaveBeenCalledOnce();

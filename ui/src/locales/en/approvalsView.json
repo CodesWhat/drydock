@@ -32,6 +32,10 @@
       "prerelease": "Prerelease",
       "unknown": "Unknown"
     },
+    "securityFastLane": {
+      "badge": "Security fix",
+      "tooltip": "Fixes critical or high vulnerabilities in the running image. It still needs approval."
+    },
     "actions": {
       "notesAriaLabel": "Show release notes and hold reasons",
       "approve": "Approve",
@@ -39,8 +43,14 @@
       "approveDisabledNotify": "Update mode is notify; approve is disabled",
       "reject": "Reject",
       "rejectAriaLabel": "Reject update",
+      "rejectScopeAriaLabel": "Reject scope",
       "defer": "Defer",
       "deferAriaLabel": "Defer update"
+    },
+    "rejectScope": {
+      "tag": "This version only",
+      "minor": "Whole minor line",
+      "major": "Whole major line"
     },
     "detail": {
       "loading": "Loading details…",
@@ -65,6 +75,7 @@
       "reject": {
         "header": "Reject update",
         "message": "Reject the update for {name} to {toRef}? It will not be applied automatically.",
+        "messageLine": "Reject the update for {name} to {toRef} and skip every {line}.x version? Newer lines are still offered.",
         "acceptLabel": "Reject"
       },
       "defer": {

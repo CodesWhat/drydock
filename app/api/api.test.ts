@@ -138,9 +138,22 @@ describe('API Router', () => {
     expect(router).toBeDefined();
   });
 
+  test('should bind the audit actor after authentication and before the routers', async () => {
+    const auth = await import('./auth.js');
+    const auditActor = await import('./audit-actor.js');
+    const useCalls = router.use.mock.calls;
+    const authIndex = useCalls.findIndex((c) => c[0] === auth.requireAuthentication);
+    const bindIndex = useCalls.findIndex((c) => c[0] === auditActor.bindAuditActor);
+    const appMountIndex = useCalls.findIndex((c) => c[0] === '/app');
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(bindIndex).toBeGreaterThan(authIndex);
+    expect(bindIndex).toBeLessThan(appMountIndex);
+  });
+
   test('should register a mutation-only json parser before API route mounts', async () => {
     const auth = await import('./auth.js');
     const csrf = await import('./csrf.js');
+    const auditActor = await import('./audit-actor.js');
     expect(mockExpressJson).toHaveBeenCalledTimes(1);
 
     const useCalls = router.use.mock.calls;
@@ -154,6 +167,7 @@ describe('API Router', () => {
         typeof c[0] === 'function' &&
         c[0] !== auth.requireAuthentication &&
         c[0] !== csrf.requireSameOriginForMutations &&
+        c[0] !== auditActor.bindAuditActor &&
         // Phase 11.1 mounts a second rate limiter, the per-API-key budget,
         // between requireAuthentication and the routers. Both limiters are the
         // same mock function, so they are excluded by identity here rather
@@ -193,6 +207,7 @@ describe('API Router', () => {
   test('should reject mutation requests with non-json content type when body is present', async () => {
     const auth = await import('./auth.js');
     const csrf = await import('./csrf.js');
+    const auditActor = await import('./audit-actor.js');
     const useCalls = router.use.mock.calls;
     const appMountIndex = useCalls.findIndex((c) => c[0] === '/app');
 
@@ -203,6 +218,7 @@ describe('API Router', () => {
         typeof c[0] === 'function' &&
         c[0] !== auth.requireAuthentication &&
         c[0] !== csrf.requireSameOriginForMutations &&
+        c[0] !== auditActor.bindAuditActor &&
         // Phase 11.1 mounts a second rate limiter, the per-API-key budget,
         // between requireAuthentication and the routers. Both limiters are the
         // same mock function, so they are excluded by identity here rather

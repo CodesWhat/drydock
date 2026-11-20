@@ -41,6 +41,7 @@ function createHarness(overrides = {}) {
     isInfrastructureUpdate: vi.fn(() => false),
     prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
     maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+    pullAndBindSpecialUpdateImage: vi.fn().mockResolvedValue({}),
     executeSelfUpdate: vi.fn().mockResolvedValue(true),
     markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
     markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
@@ -81,6 +82,7 @@ function createHarness(overrides = {}) {
       isInfrastructureUpdate: deps.isInfrastructureUpdate,
       prepareSelfUpdateOperation: deps.prepareSelfUpdateOperation,
       maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
+      pullAndBindSpecialUpdateImage: deps.pullAndBindSpecialUpdateImage,
       executeSelfUpdate: deps.executeSelfUpdate,
       markSelfUpdateOperationFailed: deps.markSelfUpdateOperationFailed,
       markSelfUpdateOperationSkipped: deps.markSelfUpdateOperationSkipped,
@@ -138,6 +140,7 @@ describe('UpdateLifecycleExecutor', () => {
         isInfrastructureUpdate: vi.fn(() => false),
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        pullAndBindSpecialUpdateImage: vi.fn(),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
         markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
@@ -189,6 +192,7 @@ describe('UpdateLifecycleExecutor', () => {
         isInfrastructureUpdate: vi.fn(() => false),
         prepareSelfUpdateOperation: vi.fn(),
         maybeNotifySelfUpdate: vi.fn(),
+        pullAndBindSpecialUpdateImage: vi.fn(),
         executeSelfUpdate: vi.fn(),
         markSelfUpdateOperationFailed: vi.fn(),
         markSelfUpdateOperationSkipped: vi.fn(),
@@ -234,6 +238,7 @@ describe('UpdateLifecycleExecutor', () => {
         isInfrastructureUpdate: vi.fn(() => false),
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        pullAndBindSpecialUpdateImage: vi.fn(),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
         markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
@@ -291,6 +296,7 @@ describe('UpdateLifecycleExecutor', () => {
         isInfrastructureUpdate: vi.fn(() => false),
         prepareSelfUpdateOperation: vi.fn().mockResolvedValue('prepared-self-update-op-id'),
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
+        pullAndBindSpecialUpdateImage: vi.fn(),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
         markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
@@ -484,6 +490,94 @@ describe('UpdateLifecycleExecutor', () => {
       expect(executeSelfUpdate).not.toHaveBeenCalled();
     },
   );
+
+  test.each(['self', 'infrastructure'] as const)(
+    '%s update pulls, pins the digest, verifies and scans it, then hands the pinned image to the transition',
+    async (updatePath) => {
+      const callOrder: string[] = [];
+      const pinned = 'repo/dd:2@sha256:abc';
+      const pullAndBindSpecialUpdateImage = vi.fn().mockImplementation(async () => {
+        callOrder.push('pull');
+        return { imageIdentity: pinned };
+      });
+      const verifySignaturePreUpdate = vi.fn().mockImplementation(async () => {
+        callOrder.push('verify');
+      });
+      const scanAndGatePostPull = vi.fn().mockImplementation(async () => {
+        callOrder.push('scan');
+      });
+      const runPreUpdateHook = vi.fn().mockImplementation(async () => {
+        callOrder.push('hook');
+      });
+      const executeSelfUpdate = vi.fn().mockImplementation(async () => {
+        callOrder.push('execute');
+        return true;
+      });
+      const harness = createHarness({
+        createTriggerContext: vi.fn().mockResolvedValue(createContext({ newImage: 'repo/dd:2' })),
+        pullAndBindSpecialUpdateImage,
+        verifySignaturePreUpdate,
+        scanAndGatePostPull,
+        runPreUpdateHook,
+        executeSelfUpdate,
+        ...(updatePath === 'self'
+          ? { isSelfUpdate: vi.fn(() => true) }
+          : { isInfrastructureUpdate: vi.fn(() => true) }),
+      });
+
+      await harness.executor.run(createContainer());
+
+      expect(callOrder).toEqual(['pull', 'verify', 'scan', 'hook', 'execute']);
+      expect(verifySignaturePreUpdate.mock.calls[0][0].newImage).toBe(pinned);
+      expect(scanAndGatePostPull.mock.calls[0][0].newImage).toBe(pinned);
+      expect(executeSelfUpdate.mock.calls[0][0].newImage).toBe(pinned);
+    },
+  );
+
+  test('blocks a special update before hooks and handoff when the post-pull gate fails', async () => {
+    const gateFailure = new Error('vulnerability gate failed');
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      pullAndBindSpecialUpdateImage: vi
+        .fn()
+        .mockResolvedValue({ imageIdentity: 'r/dd@sha256:abc' }),
+      scanAndGatePostPull: vi.fn().mockRejectedValue(gateFailure),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow(
+      'vulnerability gate failed',
+    );
+
+    expect(harness.runPreUpdateHook).not.toHaveBeenCalled();
+    expect(harness.prepareSelfUpdateOperation).not.toHaveBeenCalled();
+    expect(harness.executeSelfUpdate).not.toHaveBeenCalled();
+  });
+
+  test('skips the scan but still verifies the reference when the identity could not be bound', async () => {
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      createTriggerContext: vi.fn().mockResolvedValue(createContext({ newImage: 'repo/dd:2' })),
+      pullAndBindSpecialUpdateImage: vi.fn().mockResolvedValue({ skipSecurityGate: true }),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(harness.scanAndGatePostPull).not.toHaveBeenCalled();
+    expect(harness.verifySignaturePreUpdate.mock.calls[0][0].newImage).toBe('repo/dd:2');
+    expect(harness.executeSelfUpdate.mock.calls[0][0].newImage).toBe('repo/dd:2');
+  });
+
+  test('aborts a special update when pulling or binding the image fails', async () => {
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      pullAndBindSpecialUpdateImage: vi.fn().mockRejectedValue(new Error('no digest')),
+    });
+
+    await expect(harness.executor.run(createContainer())).rejects.toThrow('no digest');
+
+    expect(harness.verifySignaturePreUpdate).not.toHaveBeenCalled();
+    expect(harness.executeSelfUpdate).not.toHaveBeenCalled();
+  });
 
   test('runs non-self-update path and emits fallback update-applied telemetry without operation id', async () => {
     const container = createContainer();

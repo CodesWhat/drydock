@@ -87,6 +87,60 @@
         "lastSeen": "Última atividade",
         "never": "nunca"
       }
+    },
+    "edgeKeys": {
+      "toggle": "Chaves de agentes edge",
+      "hide": "Ocultar chaves de agentes edge",
+      "title": "Chaves de agentes edge",
+      "description": "Registre a chave pública de um agente edge do Portwing para que ele possa se conectar a este controlador. Apenas chaves públicas são armazenadas, então nada secreto aparece aqui.",
+      "registerButton": "Registrar chave",
+      "loading": "Carregando chaves...",
+      "empty": "Nenhuma chave de agente edge registrada",
+      "loadError": "Falha ao carregar as chaves de agentes edge",
+      "forbidden": "Gerenciar chaves de agentes edge exige uma sessão de administrador autenticada. Chaves de API e logins de recuperação não conseguem fazer isso.",
+      "registered": "{label} registrada como chave {keyId}.",
+      "revokeButton": "Revogar",
+      "errors": {
+        "register": "Falha ao registrar a chave",
+        "revoke": "Falha ao revogar a chave"
+      },
+      "columns": {
+        "label": "Rótulo",
+        "keyId": "ID da chave",
+        "created": "Criada",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Ativa",
+        "revoked": "Revogada"
+      },
+      "form": {
+        "title": "Registrar uma chave de agente edge",
+        "label": "Rótulo",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "Chave pública",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "Cole a chave base64 de 44 caracteres ou a linha completa impressa por portwing keygen -pub-from.",
+        "submit": "Registrar",
+        "invalidKey": "A chave pública deve estar em base64 e decodificar para exatamente 32 bytes."
+      },
+      "revoke": {
+        "header": "Revogar chave",
+        "message": "Revogar {label}? O agente é desconectado agora e não poderá se reconectar.",
+        "accept": "Revogar"
+      },
+      "snippet": {
+        "show": "Mostrar trecho do agente",
+        "hide": "Ocultar trecho do agente",
+        "title": "Configuração do agente",
+        "description": "Gere o par de chaves no host do agente com portwing keygen, registre a chave pública aqui e inicie o agente com um destes trechos.",
+        "controllerUrl": "URL do controlador",
+        "agentName": "Nome do agente",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "Copiar",
+        "copied": "Copiado"
+      }
     }
   }
 }

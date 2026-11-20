@@ -524,6 +524,54 @@ describe('Trigger Router', () => {
       );
     });
 
+    test('refuses an action trigger run on a container from a file watcher', async () => {
+      const commandTrigger = { type: 'command', name: 'deploy', trigger: vi.fn() };
+      const dockerTrigger = { type: 'docker', name: 'update', trigger: vi.fn() };
+      registry.getState.mockReturnValue({
+        trigger: { 'command.deploy': commandTrigger, 'docker.update': dockerTrigger },
+      });
+
+      for (const type of ['command', 'docker']) {
+        const res = createMockResponse();
+
+        await runTrigger(
+          {
+            params: { type, name: type === 'docker' ? 'update' : 'deploy' },
+            body: { id: 'file-0123456789abcdef01234567' },
+          },
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Containers from a file watcher are notification-only',
+        });
+      }
+      expect(commandTrigger.trigger).not.toHaveBeenCalled();
+      expect(dockerTrigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('runs a notification trigger on a container from a file watcher', async () => {
+      const mockTrigger = {
+        type: 'slack',
+        name: 'default',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({ trigger: { 'slack.default': mockTrigger } });
+      const res = createMockResponse();
+
+      await runTrigger(
+        {
+          params: { type: 'slack', name: 'default' },
+          body: { id: 'file-0123456789abcdef01234567' },
+        },
+        res,
+      );
+
+      expect(mockTrigger.trigger).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should return 409 when local trigger targets a temporary rollback container', async () => {
       const mockTrigger = {
         type: 'slack',

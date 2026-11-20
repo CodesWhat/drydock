@@ -51,6 +51,22 @@ describe('Docker Hub Registry', () => {
     expect(hub.match({ registry: { url: 'notdocker.io' } })).toBe(false);
   });
 
+  test('should keep matching its own canonical url across repeated normalization (#1591)', async () => {
+    const once = hub.normalizeImage({ name: 'nginx', registry: { url: 'docker.io' } });
+    expect(once.registry.url).toBe('https://registry-1.docker.io/v2');
+    expect(hub.match(once)).toBe(true);
+    const twice = hub.normalizeImage(once);
+    expect(twice.registry.url).toBe('https://registry-1.docker.io/v2');
+    expect(twice.name).toBe('library/nginx');
+    expect(hub.match({ registry: { url: 'https://registry-1.docker.io' } })).toBe(true);
+  });
+
+  test('should still reject canonical-looking urls on other hosts (#1591)', async () => {
+    expect(hub.match({ registry: { url: 'https://ghcr.io/v2' } })).toBe(false);
+    expect(hub.match({ registry: { url: 'https://docker.io.attacker.com/v2' } })).toBe(false);
+    expect(hub.match({ registry: { url: 'https://evil-docker.io/v2' } })).toBe(false);
+  });
+
   test('should normalize image name for official images', async () => {
     const image = { name: 'nginx', registry: {} };
     const normalized = hub.normalizeImage(image);
@@ -142,6 +158,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -165,6 +182,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
       },
@@ -190,6 +208,7 @@ describe('Docker Hub Registry', () => {
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       maxRedirects: 0,
+      timeout: 30000,
       headers: {
         Accept: 'application/json',
         Authorization: 'Basic base64credentials',
@@ -464,5 +483,25 @@ describe('Docker Hub Registry', () => {
 
   test('publishedAtIsPushDate is true on Hub', () => {
     expect(hub.publishedAtIsPushDate).toBe(true);
+  });
+
+  test('containers sharing an image and tag hit Docker Hub once per poll cycle', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+    const image = { name: 'library/nginx', tag: { value: 'latest' } };
+    hub.startDigestCachePollCycle();
+
+    const results = await Promise.all([
+      hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true }),
+      hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true }),
+    ]);
+    await hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true });
+
+    expect(results).toEqual(['2026-03-01T12:34:56.000Z', '2026-03-01T12:34:56.000Z']);
+    expect(axios).toHaveBeenCalledTimes(1);
+
+    hub.endDigestCachePollCycle();
+    await hub.getImagePublishedAt(image, '1.26.0');
+    expect(axios).toHaveBeenCalledTimes(2);
   });
 });

@@ -87,6 +87,60 @@
         "lastSeen": "Laatst gezien",
         "never": "nooit"
       }
+    },
+    "edgeKeys": {
+      "toggle": "Edge-agentsleutels",
+      "hide": "Edge-agentsleutels verbergen",
+      "title": "Edge-agentsleutels",
+      "description": "Registreer de publieke sleutel van een Portwing-edge-agent zodat die met deze controller kan verbinden. Alleen publieke sleutels worden opgeslagen, dus hier wordt niets geheims getoond.",
+      "registerButton": "Sleutel registreren",
+      "loading": "Sleutels laden...",
+      "empty": "Geen edge-agentsleutels geregistreerd",
+      "loadError": "Edge-agentsleutels laden mislukt",
+      "forbidden": "Edge-agentsleutels beheren vereist een ingelogde beheerderssessie. API-sleutels en herstellogins kunnen dat niet.",
+      "registered": "{label} geregistreerd als sleutel {keyId}.",
+      "revokeButton": "Intrekken",
+      "errors": {
+        "register": "Sleutel registreren mislukt",
+        "revoke": "Sleutel intrekken mislukt"
+      },
+      "columns": {
+        "label": "Label",
+        "keyId": "Sleutel-ID",
+        "created": "Aangemaakt",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Actief",
+        "revoked": "Ingetrokken"
+      },
+      "form": {
+        "title": "Edge-agentsleutel registreren",
+        "label": "Label",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "Publieke sleutel",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "Plak de base64-sleutel van 44 tekens of de volledige regel die portwing keygen -pub-from afdrukt.",
+        "submit": "Registreren",
+        "invalidKey": "De publieke sleutel moet base64 zijn en na decoderen precies 32 bytes zijn."
+      },
+      "revoke": {
+        "header": "Sleutel intrekken",
+        "message": "{label} intrekken? De agent wordt direct losgekoppeld en kan niet opnieuw verbinden.",
+        "accept": "Intrekken"
+      },
+      "snippet": {
+        "show": "Agentsnippet tonen",
+        "hide": "Agentsnippet verbergen",
+        "title": "Agent instellen",
+        "description": "Genereer het sleutelpaar op de agenthost met portwing keygen, registreer hier de publieke sleutel en start de agent met een van deze snippets.",
+        "controllerUrl": "Controller-URL",
+        "agentName": "Agentnaam",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "Kopiëren",
+        "copied": "Gekopieerd"
+      }
     }
   }
 }

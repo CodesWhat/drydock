@@ -392,7 +392,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = docker.getRollbackConfig(container);
 
-      expect(getConfig).toHaveBeenCalledWith(container);
+      expect(getConfig).toHaveBeenCalledWith(container, undefined);
       expect(result).toEqual({
         autoRollback: true,
         rollbackWindow: 45_000,

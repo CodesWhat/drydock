@@ -1264,6 +1264,107 @@ describe('getImageManifestDigest', () => {
     });
   });
 
+  describe('manifest list (index) digest', () => {
+    const LIST_ONLY_ACCEPT =
+      'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json';
+    const INDEX = `sha256:${'1'.repeat(64)}`;
+    const PLATFORM = `sha256:${'2'.repeat(64)}`;
+    const v2 = 'application/vnd.docker.distribution.manifest.v2+json';
+
+    function multiArchRegistry(indexHeader: unknown, options: { legacy?: boolean } = {}) {
+      const registryMocked = createMockedRegistry();
+      const calls: Array<{ method?: string; url: string }> = [];
+      registryMocked.callRegistry = (callOptions) => {
+        calls.push({ method: callOptions.method, url: callOptions.url });
+        if (callOptions.headers.Accept === ALL_MANIFEST_ACCEPT) {
+          return manifestListResponse([
+            platformManifest(
+              'amd64',
+              'linux',
+              PLATFORM,
+              options.legacy ? 'application/vnd.docker.container.image.v1+json' : v2,
+            ),
+          ]);
+        }
+        if (callOptions.headers.Accept === LIST_ONLY_ACCEPT) {
+          if (indexHeader instanceof Error) throw indexHeader;
+          return { headers: { 'docker-content-digest': indexHeader } };
+        }
+        if (callOptions.url?.includes('/blobs/')) return {};
+        return { headers: { 'docker-content-digest': PLATFORM } };
+      };
+      return { registryMocked, calls };
+    }
+
+    test('records the digest of the list a tag resolved through, beside the platform digest', async () => {
+      const { registryMocked } = multiArchRegistry(INDEX);
+      await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+        version: 2,
+        digest: PLATFORM,
+        indexDigest: INDEX,
+      });
+    });
+
+    test('records it for a legacy image config entry as well', async () => {
+      const { registryMocked } = multiArchRegistry(INDEX, { legacy: true });
+      await expect(registryMocked.getImageManifestDigest(imageInput())).resolves.toStrictEqual({
+        version: 1,
+        digest: PLATFORM,
+        indexDigest: INDEX,
+      });
+    });
+
+    test.each([
+      ['a missing header', undefined],
+      ['a header that is not a sha256 digest', 'latest'],
+      ['a failing request', new Error('HEAD not allowed')],
+    ])('leaves the index digest unknown for %s', async (_label, header) => {
+      const { registryMocked } = multiArchRegistry(header);
+      const result = await registryMocked.getImageManifestDigest(imageInput());
+      expect(result).toStrictEqual({ version: 2, digest: PLATFORM });
+    });
+
+    test('a digest reference is its own list digest and costs no extra request', async () => {
+      const { registryMocked, calls } = multiArchRegistry('should-not-be-read');
+      const result = await registryMocked.getImageManifestDigest(imageInput(), INDEX);
+      expect(result.indexDigest).toBe(INDEX);
+      expect(calls.some((call) => call.accept === LIST_ONLY_ACCEPT)).toBe(false);
+    });
+
+    test('keeps the outer list digest when the matched entry is itself an index', async () => {
+      const registryMocked = createMockedRegistry();
+      const NESTED = `sha256:${'3'.repeat(64)}`;
+      registryMocked.callRegistry = (callOptions) => {
+        if (callOptions.headers.Accept === LIST_ONLY_ACCEPT) {
+          return { headers: { 'docker-content-digest': INDEX } };
+        }
+        if (callOptions.url.endsWith('/manifests/tag')) {
+          return manifestListResponse([
+            platformManifest('amd64', 'linux', NESTED, 'application/vnd.oci.image.index.v1+json'),
+          ]);
+        }
+        if (callOptions.url.endsWith(`/manifests/${NESTED}`) && callOptions.method !== 'head') {
+          return manifestListResponse([platformManifest('amd64', 'linux', PLATFORM, v2)]);
+        }
+        return { headers: { 'docker-content-digest': PLATFORM } };
+      };
+      const result = await registryMocked.getImageManifestDigest(imageInput());
+      expect(result).toMatchObject({ digest: PLATFORM, indexDigest: INDEX });
+    });
+
+    test('a single-arch manifest has no index digest', async () => {
+      const registryMocked = createMockedRegistry();
+      registryMocked.callRegistry = headDigestThenBody('123456789', {
+        schemaVersion: 2,
+        mediaType: v2,
+        config: { digest: 'digest_x', mediaType: 'application/vnd.docker.container.image.v1+json' },
+      });
+      expect(await registryMocked.getImageManifestDigest(imageInput())).not.toHaveProperty(
+        'indexDigest',
+      );
+    });
+  });
+
   test('should return digest for manifest.list.v2 then container.image.v1', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = (options) => {

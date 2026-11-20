@@ -75,6 +75,24 @@ describe('scanner runtime OpenAPI schemas', () => {
   });
 });
 
+describe('per-type update candidates OpenAPI schema', () => {
+  test('documents result.updateCandidates on ContainerResource', () => {
+    const { result } = openApiSchemas.ContainerResource.properties;
+    expect(result.properties.updateCandidates).toStrictEqual({
+      $ref: '#/components/schemas/UpdateCandidates',
+    });
+    expect(Object.keys(openApiSchemas.UpdateCandidates.properties)).toStrictEqual([
+      'patch',
+      'minor',
+      'major',
+    ]);
+    expect(openApiSchemas.UpdateCandidate).toMatchObject({
+      required: ['tag', 'semverDiff'],
+      properties: { semverDiff: { enum: ['patch', 'minor', 'major'] } },
+    });
+  });
+});
+
 describe('container update-eligibility OpenAPI schemas', () => {
   test('documents the eligibility verdict, blockers, and maturity clock details', () => {
     expect(openApiSchemas.ContainerResource.properties).toMatchObject({

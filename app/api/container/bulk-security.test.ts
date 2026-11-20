@@ -2,6 +2,10 @@ import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import {
+  _resetContainerScanStateForTesting,
+  isContainerScanning,
+} from '../../security/scan-state.js';
 import { createMockResponse } from '../../test/helpers.js';
 import { createBulkSecurityHandlers, MAX_CONCURRENT_BULK_SCANS } from './bulk-security.js';
 
@@ -692,6 +696,55 @@ describe('api/container/bulk-security', () => {
     });
   });
 
+  describe('transient scanning state', () => {
+    beforeEach(() => {
+      _resetContainerScanStateForTesting();
+    });
+
+    test('marks each container while its scan runs and clears it afterwards', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      const scanningDuringScan: Record<string, boolean> = {};
+      harness.deps.scanImageForVulnerabilities.mockImplementation(async () => {
+        for (const id of ['c1', 'c2']) {
+          scanningDuringScan[id] ||= isContainerScanning(id);
+        }
+        return createScanResult();
+      });
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(scanningDuringScan.c1).toBe(true);
+      expect(isContainerScanning('c1')).toBe(false);
+      expect(isContainerScanning('c2')).toBe(false);
+    });
+
+    test('clears the state when the scan or registry auth fails', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
+      harness.deps.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('scan failed'));
+      harness.deps.getContainerRegistryAuth.mockRejectedValueOnce(new Error('auth failed'));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(isContainerScanning('c1')).toBe(false);
+      expect(isContainerScanning('c2')).toBe(false);
+    });
+
+    test('keeps a container scanning while another scan of it is still running', async () => {
+      const harness = createHarness({ containers: [{ id: 'c1' }] });
+      const { beginContainerScan } = await import('../../security/scan-state.js');
+      const releaseOnDemand = beginContainerScan('c1');
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+      expect(isContainerScanning('c1')).toBe(true);
+
+      releaseOnDemand();
+      expect(isContainerScanning('c1')).toBe(false);
+    });
+  });
+
   describe('error resilience', () => {
     test('correlates successful and failed scans with the accepted cycle', async () => {
       const harness = createHarness({ containers: [{ id: 'c1' }, { id: 'c2' }] });
@@ -1078,6 +1131,42 @@ describe('api/container/bulk-security', () => {
       expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
         'sha256:abc',
         scan,
+        '2026-04-01T00:00:00.000Z',
+      );
+    });
+
+    test('scans the running image by its immutable digest and stamps that digest', async () => {
+      const digest = `sha256:${'e'.repeat(64)}`;
+      const harness = createHarness({
+        containers: [
+          {
+            id: 'c1',
+            name: 'nginx',
+            image: {
+              registry: { name: 'hub', url: 'my-registry' },
+              name: 'test/app',
+              tag: { value: '1.2.3' },
+              digest: { value: digest },
+            },
+          },
+        ],
+      });
+      harness.deps.scanImageForVulnerabilities.mockResolvedValue(createScanResult());
+      harness.storeContainer.getContainerRaw.mockImplementation((id: string) => ({ id }));
+
+      await callScanAll(harness.handlers);
+      await waitForCycleComplete(harness.deps);
+
+      expect(harness.deps.getContainerImageFullName).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1' }),
+        digest,
+      );
+      expect(
+        harness.storeContainer.updateContainer.mock.calls[0][0].security.scan.imageDigest,
+      ).toBe(digest);
+      expect(harness.deps.updateDigestScanCache).toHaveBeenCalledWith(
+        digest,
+        expect.objectContaining({ imageDigest: digest }),
         '2026-04-01T00:00:00.000Z',
       );
     });

@@ -14,6 +14,7 @@ const {
   mockGetUpdateMode,
   mockGetAgent,
   mockRestartDependentContainer,
+  mockInsertAudit,
   agentFixture,
 } = vi.hoisted(() => {
   const agentFixture = {
@@ -35,12 +36,17 @@ const {
     mockGetUpdateMode: vi.fn(() => 'auto' as const),
     mockGetAgent: vi.fn(),
     mockRestartDependentContainer: vi.fn(),
+    mockInsertAudit: vi.fn(),
     agentFixture,
   };
 });
 
 vi.mock('../agent/manager.js', () => ({
   getAgent: mockGetAgent,
+}));
+
+vi.mock('../store/audit.js', () => ({
+  insertAudit: mockInsertAudit,
 }));
 
 vi.mock('../store/settings.js', () => ({
@@ -180,6 +186,120 @@ describe('request-update', () => {
     });
     const accepted = await requestContainerUpdate(createContainer(), { trigger });
     expect(accepted.operationId).toEqual(expect.any(String));
+  });
+
+  describe('security fast lane audit', () => {
+    const fastLane = {
+      fixedIds: ['CVE-1', 'CVE-2'],
+      fixedCount: 3,
+      fixedCritical: 1,
+      fixedHigh: 2,
+    };
+    const registered = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+      getId: () => 'docker.update',
+    };
+    const dockerTrigger = () => registered;
+    beforeEach(() => {
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': registered }, watcher: {} });
+    });
+    const heldContainer = (overrides: Record<string, unknown> = {}) =>
+      createContainer({
+        image: { name: 'nginx', tag: { value: '1.0.0' }, digest: { watch: false } },
+        result: { tag: '1.0.1' },
+        updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.0.1', semverDiff: 'patch' },
+        updatePolicy: { snoozeUntil: '2999-01-01T00:00:00.000Z' },
+        securityFastLane: fastLane,
+        ...overrides,
+      });
+
+    test('an automatic update that only got through the snooze records an audit entry', async () => {
+      const trigger = dockerTrigger();
+      await enqueueContainerUpdate(heldContainer() as never, { trigger, source: 'automatic' });
+
+      expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'security-fast-lane',
+          containerImage: 'nginx',
+          fromVersion: '1.0.0',
+          toVersion: '1.0.1',
+          updateKind: 'tag',
+          semverDiff: 'patch',
+          triggerName: 'docker.update',
+          status: 'info',
+          details:
+            'Security fast lane: fixes 1 critical and 2 high (CVE-1, CVE-2, +1 more); lifted snoozed',
+        }),
+      );
+    });
+
+    test('a closed maintenance window is named in the audit entry', async () => {
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': registered },
+        watcher: { 'docker.local': { isMaintenanceWindowOpen: () => false } },
+      });
+      await enqueueContainerUpdate(
+        heldContainer({ watcher: 'local', updatePolicy: undefined }) as never,
+        { trigger: dockerTrigger(), source: 'automatic' },
+      );
+
+      expect(mockInsertAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.stringContaining('lifted maintenance-window-closed'),
+        }),
+      );
+    });
+
+    test('lists every lifted hold without a "more" suffix when all IDs fit', async () => {
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': registered },
+        watcher: { 'docker.local': { isMaintenanceWindowOpen: () => false } },
+      });
+      await enqueueContainerUpdate(
+        heldContainer({
+          watcher: 'local',
+          securityFastLane: { ...fastLane, fixedCount: 2 },
+        }) as never,
+        { trigger: dockerTrigger(), source: 'automatic' },
+      );
+
+      expect(mockInsertAudit.mock.calls[0][0].details).toBe(
+        'Security fast lane: fixes 1 critical and 2 high (CVE-1, CVE-2); lifted snoozed, maintenance-window-closed',
+      );
+    });
+
+    test('nothing is recorded when no hold was lifted', async () => {
+      await enqueueContainerUpdate(heldContainer({ updatePolicy: undefined }) as never, {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('nothing is recorded for a manual request, which no hold applies to', async () => {
+      await requestContainerUpdate(heldContainer() as never, { trigger: dockerTrigger() });
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('nothing is recorded for a container that is not on the fast lane', async () => {
+      await enqueueContainerUpdate(heldContainer({ securityFastLane: undefined }) as never, {
+        trigger: dockerTrigger(),
+        source: 'automatic',
+      });
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('an automatic request the fast lane cannot lift a control for is still rejected and unaudited', async () => {
+      await expect(
+        enqueueContainerUpdate(heldContainer({ actionTriggerExclude: 'docker.update' }) as never, {
+          trigger: dockerTrigger(),
+          source: 'automatic',
+        }),
+      ).rejects.toThrow(/excluded/);
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
   });
 
   test('auto mode allows automatic update admission', async () => {
@@ -338,6 +458,33 @@ describe('request-update', () => {
       statusCode: 400,
       message: 'No update available for this container',
     });
+  });
+
+  test('requestContainerUpdate refuses a locally built image base update with 409', async () => {
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    const localBuild = createContainer({
+      image: { ...(createContainer().image as object), isLocalImage: true },
+    });
+
+    await expect(requestContainerUpdate(localBuild, { trigger })).rejects.toMatchObject<
+      Partial<UpdateRequestError>
+    >({
+      statusCode: 409,
+      message: expect.stringContaining('locally built image'),
+    });
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('requestContainerUpdate refuses a locally built image on the automatic path too', async () => {
+    const trigger = { type: 'dockercompose', trigger: vi.fn() };
+    const localBuild = createContainer({
+      image: { ...(createContainer().image as object), isLocalImage: true },
+    });
+
+    await expect(
+      requestContainerUpdate(localBuild, { trigger, source: 'automatic' }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({ statusCode: 409 });
+    expect(trigger.trigger).not.toHaveBeenCalled();
   });
 
   test('requestContainerUpdate rejects with 409 when getActiveOperationByContainerId returns a queued operation', async () => {
@@ -1519,6 +1666,166 @@ describe('request-update', () => {
         expect.objectContaining({ id: 'sidecar' }),
       );
       expect(triggerFn).not.toHaveBeenCalled();
+    });
+
+    test('skips a queued entry that was cancelled before dispatch without failing its dependents', async () => {
+      mockGetOperationById.mockImplementation((id: string) =>
+        id === 'op-db' ? { id, status: 'failed', cancelRequested: true } : undefined,
+      );
+      const dbTrigger = vi.fn().mockResolvedValue(undefined);
+      const apiTrigger = vi.fn().mockResolvedValue(undefined);
+
+      await runAcceptedContainerUpdates([
+        {
+          operationId: 'op-db',
+          container: createDependentContainer({ id: 'db', name: 'db' }),
+          trigger: { type: 'docker', trigger: dbTrigger },
+        },
+        {
+          operationId: 'op-api',
+          container: createDependentContainer({
+            id: 'api',
+            name: 'api',
+            dependsOn: ['db'],
+            dependsOnSource: 'label',
+          }),
+          trigger: { type: 'docker', trigger: apiTrigger },
+        },
+      ]);
+
+      expect(dbTrigger).not.toHaveBeenCalled();
+      expect(apiTrigger).toHaveBeenCalledTimes(1);
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    });
+
+    describe('no-work and restart-only admission', () => {
+      const trigger = () => ({
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        getId: () => 'docker.update',
+      });
+      const redis = () =>
+        createDependentContainer({ id: 'redis', name: 'redis', updateAvailable: false });
+      const db = () => createDependentContainer({ id: 'db', name: 'db' });
+      const web = (overrides: Record<string, unknown> = {}) =>
+        createDependentContainer({
+          id: 'web',
+          name: 'web',
+          dependsOn: ['redis', 'db'],
+          dependsOnSource: 'label',
+          ...overrides,
+        });
+
+      test('a current upstream does not reject dependents that have other work', async () => {
+        const result = await enqueueContainerUpdates([redis(), db(), web()], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['db', 'web']);
+        expect(result.rejected).toEqual([
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'redis' }),
+            statusCode: 400,
+          }),
+        ]);
+      });
+
+      test('a restart-only dependent runs when another upstream has an update', async () => {
+        const result = await enqueueContainerUpdates(
+          [redis(), db(), web({ updateAvailable: false, dependsOnAction: 'restart' })],
+          { trigger: trigger(), source: 'manual' },
+        );
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['db', 'web']);
+        expect(result.rejected.map((entry) => entry.container.id)).toEqual(['redis']);
+      });
+
+      test('a restart-only dependent chain activates through an updating upstream', async () => {
+        const cache = createDependentContainer({
+          id: 'cache',
+          name: 'cache',
+          dependsOn: ['db'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'restart',
+          updateAvailable: false,
+        });
+        const worker = createDependentContainer({
+          id: 'worker',
+          name: 'worker',
+          dependsOn: ['cache'],
+          dependsOnSource: 'label',
+          dependsOnAction: 'restart',
+          updateAvailable: false,
+        });
+
+        const result = await enqueueContainerUpdates([worker, cache, db()], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id).sort()).toEqual([
+          'cache',
+          'db',
+          'worker',
+        ]);
+        expect(result.rejected).toEqual([]);
+      });
+
+      test('rejects a restart-only dependent whose only upstream is current', async () => {
+        const result = await enqueueContainerUpdates(
+          [
+            redis(),
+            web({ dependsOn: ['redis'], updateAvailable: false, dependsOnAction: 'restart' }),
+          ],
+          { trigger: trigger(), source: 'manual' },
+        );
+
+        expect(result.accepted).toEqual([]);
+        expect(result.rejected).toEqual([
+          expect.objectContaining({ statusCode: 400 }),
+          expect.objectContaining({ statusCode: 409 }),
+        ]);
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+      });
+
+      test('rejects a restart-labelled container requested alone with no update', async () => {
+        const dependent = web({
+          dependsOn: ['db'],
+          updateAvailable: false,
+          dependsOnAction: 'restart',
+        });
+        const triggerFn = vi.fn().mockResolvedValue(undefined);
+
+        await expect(
+          requestContainerUpdate(dependent, {
+            trigger: { type: 'docker', trigger: triggerFn, getId: () => 'docker.update' },
+          }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+        await flushAsyncWork();
+
+        const batch = await requestContainerUpdates([dependent], {
+          trigger: { type: 'docker', trigger: triggerFn, getId: () => 'docker.update' },
+        });
+        await flushAsyncWork();
+
+        expect(batch.accepted).toEqual([]);
+        expect(batch.rejected).toEqual([expect.objectContaining({ statusCode: 400 })]);
+        expect(mockInsertOperation).not.toHaveBeenCalled();
+        expect(triggerFn).not.toHaveBeenCalled();
+        expect(mockRestartDependentContainer).not.toHaveBeenCalled();
+      });
+
+      test('a restart-labelled container with its own update stays admissible alone', async () => {
+        const dependent = web({ dependsOn: ['db'], dependsOnAction: 'restart' });
+
+        const result = await enqueueContainerUpdates([dependent], {
+          trigger: trigger(),
+          source: 'manual',
+        });
+
+        expect(result.accepted.map((entry) => entry.container.id)).toEqual(['web']);
+      });
     });
 
     test('rejects every transitive dependent when an upstream operation is already active', async () => {

@@ -451,6 +451,42 @@ test('container health transition handler unsubscribe prevents later dispatch', 
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('container state alert handlers run by order and unsubscribe cleanly', async () => {
+  const calls: string[] = [];
+  event.registerContainerStateAlert(async () => void calls.push('late'), { id: 'z', order: 20 });
+  event.registerContainerStateAlert(async () => void calls.push('early'), { id: 'a', order: 10 });
+  const removed = vi.fn();
+  event.registerContainerStateAlert(removed)();
+  await event.emitContainerStateAlert({ kind: 'container-exited', containerName: 'web' });
+  expect(calls).toEqual(['early', 'late']);
+  expect(removed).not.toHaveBeenCalled();
+});
+
+test('auth abuse and agent version mismatch handlers run by order and unsubscribe cleanly', async () => {
+  const calls: string[] = [];
+  event.registerAuthAbuse(async () => void calls.push('abuse-late'), { id: 'z', order: 20 });
+  event.registerAuthAbuse(async () => void calls.push('abuse-early'), { id: 'a', order: 10 });
+  event.registerAgentVersionMismatch(async () => void calls.push('version'));
+  const removed = vi.fn();
+  event.registerAuthAbuse(removed)();
+  event.registerAgentVersionMismatch(removed)();
+  await event.emitAuthAbuse({
+    scope: 'ip',
+    source: '10.0.0.1',
+    failedAttempts: 25,
+    windowSeconds: 900,
+    lockoutSeconds: 900,
+  });
+  await event.emitAgentVersionMismatch({
+    agentName: 'edge',
+    agentVersion: '1.8.0',
+    controllerVersion: '1.9.0',
+    difference: 'minor',
+  });
+  expect(calls).toEqual(['abuse-early', 'abuse-late', 'version']);
+  expect(removed).not.toHaveBeenCalled();
+});
+
 test('a timed-out container health transition handler does not block the next handler', async () => {
   event.setHandlerTimeoutMsForTests(20);
   const next = vi.fn();

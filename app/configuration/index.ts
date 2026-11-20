@@ -235,8 +235,9 @@ getDefaultDigestWatch();
  *
  * Scoped to configurations a file actually touched: when `configFileSources`
  * has no `'file'`-sourced key (a pure env-only deployment, no drydock.yml or
- * an empty one), this returns `{ errors: [] }` without constructing a single
- * component. That's deliberate, not an optimization — every one of today's
+ * an empty one), only watcher configurations are validated (an invalid watcher
+ * must stop startup on every install). Every other kind is skipped, which is
+ * deliberate, not an optimization — every one of today's
  * env-only call sites (registerComponents' try/warn/continue for triggers,
  * registries and authentications; api.init()'s unconditional section-schema
  * reads) already runs unchanged, so gating on "did a file contribute
@@ -256,10 +257,13 @@ export async function validateStartupConfiguration(): Promise<{
   errors: Array<{ path: string; envKey: string; message: string }>;
 }> {
   const hasFileSourcedValue = Object.values(configFileSources).includes('file');
-  if (!hasFileSourcedValue) {
-    return { errors: [] };
-  }
   const { validateConfiguration } = await import('./file/validate.js');
+  if (!hasFileSourcedValue) {
+    // Env-only: every other kind keeps its register-time try/warn/continue,
+    // but an invalid watcher (bad filter regex, restart-loop threshold) must
+    // stop startup the same way it does with a drydock.yml.
+    return validateConfiguration(ddEnvVars, { watchersOnly: true });
+  }
   return validateConfiguration(ddEnvVars);
 }
 
@@ -1487,6 +1491,37 @@ export function getMaturitySweepConfiguration() {
     throw configurationToValidate.error;
   }
   return configurationToValidate.value;
+}
+
+/**
+ * Notification alert tuning from `DD_ALERTS_*`.
+ *
+ * - `DD_ALERTS_AGENTVERSIONPATCH`: also alert on a patch-only agent/controller version difference.
+ * - `DD_ALERTS_QUIETHOURS_SCHEDULE`, `_TZ`, `_RULES`, `_EXEMPT`: the global quiet-hours window.
+ */
+export function getNotificationAlertsConfiguration() {
+  const configurationFromEnv = get('dd.alerts', ddEnvVars);
+  const configurationSchema = joi.object().keys({
+    agentversionpatch: joi.boolean().default(false),
+    quiethours: joi
+      .object()
+      .keys({
+        schedule: joi.string().allow('').default(''),
+        tz: joi.string().default('UTC'),
+        rules: joi.string().allow('').default(''),
+        exempt: joi.string().allow('').default('security-alert,update-failed'),
+      })
+      .default(),
+  });
+
+  const configurationToValidate = configurationSchema.validate(configurationFromEnv);
+  if (configurationToValidate.error) {
+    throw configurationToValidate.error;
+  }
+  return configurationToValidate.value as {
+    agentversionpatch: boolean;
+    quiethours: { schedule: string; tz: string; rules: string; exempt: string };
+  };
 }
 
 const DNS_MODE_VALUES = ['ipv4first', 'ipv6first', 'verbatim'] as const;

@@ -134,6 +134,16 @@ type UpdateLifecycleExecutorCallbacks = {
     logger: UpdateLifecycleOperationLogger,
     operationId: string,
   ) => Promise<void>;
+  /**
+   * Pull the special-update image and resolve it to an immutable reference
+   * before anything is verified or deployed. Throws when the security policy
+   * requires a bound identity and none is available.
+   */
+  pullAndBindSpecialUpdateImage: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<{ imageIdentity?: string; skipSecurityGate?: boolean }>;
   executeSelfUpdate: (
     context: UpdateLifecycleContext,
     container: UpdateLifecycleContainer,
@@ -207,6 +217,7 @@ type UpdateLifecycleSelfUpdateServices = Pick<
   | 'isInfrastructureUpdate'
   | 'prepareSelfUpdateOperation'
   | 'maybeNotifySelfUpdate'
+  | 'pullAndBindSpecialUpdateImage'
   | 'executeSelfUpdate'
   | 'markSelfUpdateOperationFailed'
   | 'markSelfUpdateOperationSkipped'
@@ -264,6 +275,7 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
     'isInfrastructureUpdate',
     'prepareSelfUpdateOperation',
     'maybeNotifySelfUpdate',
+    'pullAndBindSpecialUpdateImage',
     'executeSelfUpdate',
     'markSelfUpdateOperationFailed',
     'markSelfUpdateOperationSkipped',
@@ -342,20 +354,39 @@ class UpdateLifecycleExecutor {
     const requestedOperationId = getRequestedOperationId(container, runtimeContext);
 
     try {
-      const context = await this.context.createTriggerContext(
+      const baseContext = await this.context.createTriggerContext(
         container,
         containerLogger,
         runtimeContext,
       );
-      if (!context) {
+      if (!baseContext) {
         return;
       }
+      let context = baseContext;
 
       const isSpecialUpdate =
         this.selfUpdate.isSelfUpdate(container) ||
         this.selfUpdate.isInfrastructureUpdate(container);
 
-      if (!context.deferSignatureVerification || isSpecialUpdate) {
+      if (isSpecialUpdate) {
+        // Self-update and infrastructure updates never reach the runtime update's
+        // post-pull hook, so the gate runs here: pull first, pin the pulled
+        // digest, then verify and scan that exact identity. The transition
+        // creates the replacement from the same pinned reference, so a registry
+        // retag after the check cannot swap what is deployed.
+        const binding = await this.selfUpdate.pullAndBindSpecialUpdateImage(
+          context,
+          container,
+          containerLogger,
+        );
+        if (binding.imageIdentity) {
+          context = { ...context, newImage: binding.imageIdentity };
+        }
+        await this.security.verifySignaturePreUpdate(context, container, containerLogger);
+        if (binding.skipSecurityGate !== true) {
+          await this.security.scanAndGatePostPull(context, container, containerLogger);
+        }
+      } else if (!context.deferSignatureVerification) {
         await this.security.verifySignaturePreUpdate(context, container, containerLogger);
       }
 

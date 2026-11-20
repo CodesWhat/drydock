@@ -30,6 +30,8 @@
     "triggers/providers/discord/Discord.ts",
     "triggers/providers/docker/Docker.ts",
     "triggers/providers/dockercompose/Dockercompose.ts",
+    "triggers/providers/githubdispatch/Githubdispatch.ts",
+    "triggers/providers/gitlabpipeline/Gitlabpipeline.ts",
     "triggers/providers/googlechat/Googlechat.ts",
     "triggers/providers/gotify/Gotify.ts",
     "triggers/providers/http/Http.ts",

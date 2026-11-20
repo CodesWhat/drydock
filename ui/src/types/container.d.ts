@@ -69,12 +69,29 @@ export interface UpdateEligibilityUpdateMode {
   group?: string;
 }
 
+/**
+ * Server-resolved security fast lane verdict: the pending candidate fixes critical or high
+ * vulnerabilities of the running image, so snooze, maturity and the maintenance window do not
+ * hold it. `bypassedHolds` names the holds lifted on this evaluation.
+ */
+export interface SecurityFastLane {
+  fixedIds: string[];
+  fixedCount: number;
+  fixedCritical: number;
+  fixedHigh: number;
+}
+
+export interface UpdateEligibilitySecurityFastLane extends SecurityFastLane {
+  bypassedHolds: UpdateBlockerReason[];
+}
+
 export interface UpdateEligibility {
   eligible: boolean;
   blockers: UpdateBlocker[];
   evaluatedAt: string;
   actionPolicy?: ActionPolicy;
   updateMode?: UpdateEligibilityUpdateMode;
+  securityFastLane?: UpdateEligibilitySecurityFastLane;
 }
 
 /** Shared UI container type used across views, composables, and templates. */
@@ -227,8 +244,14 @@ export interface Container {
    * update (see updateKind/updateEligibility for that).
    */
   updateInsight?: { tag: string; kind: 'major' | 'minor' | 'patch' };
+  /**
+   * Best newer tag per update type, patch first. Display only: the update
+   * actions still target newTag.
+   */
+  updateCandidates?: Array<{ kind: 'patch' | 'minor' | 'major'; tag: string }>;
   bouncer: 'safe' | 'unsafe' | 'blocked';
-  securityScanState?: 'scanned' | 'not-scanned';
+  /** `scanning` is transient server state: a scan of this container is running right now. */
+  securityScanState?: 'scanned' | 'not-scanned' | 'scanning';
   securitySummary?: ContainerSecuritySummary;
   updateBouncer?: 'safe' | 'unsafe' | 'blocked';
   updateSecurityScanState?: 'scanned' | 'not-scanned';

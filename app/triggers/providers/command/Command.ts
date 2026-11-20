@@ -122,6 +122,17 @@ export function resetShellExecutionWarningStateForTests() {
   hasLoggedShellExecutionWarning = false;
 }
 
+function describeCommandFailure(error: unknown): string {
+  const failure = error as { code?: unknown; signal?: unknown; killed?: unknown };
+  if (failure.killed === true || failure.signal === 'SIGTERM') {
+    return 'Command execution failed (timed out)';
+  }
+  if (typeof failure.code === 'number') {
+    return `Command execution failed (exit code ${failure.code})`;
+  }
+  return 'Command execution failed';
+}
+
 /**
  * Command Trigger implementation
  */
@@ -283,8 +294,10 @@ class Command extends Trigger<CommandConfiguration> {
         if (stderr) {
           this.log.warn('Command completed with stderr');
         }
-      } catch {
+      } catch (error) {
         this.log.warn('Command execution failed');
+        // Never forward the original error: its message embeds the command string.
+        throw new Error(describeCommandFailure(error));
       }
     } finally {
       releaseUpdateSemaphore();

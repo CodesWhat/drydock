@@ -13,6 +13,8 @@ import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 import { useContainerPreview } from '@/views/containers/useContainerPreview';
 import {
   findDryRunActionTrigger,
+  isDryRunActionTrigger,
+  isManagedUpdateTrigger,
   useContainerTriggers,
 } from '@/views/containers/useContainerTriggers';
 
@@ -61,6 +63,25 @@ describe('formatOperationPhase / formatOperationStatus / formatRollbackReason (m
 });
 
 describe('container action focused composables', () => {
+  it('treats docker, dockercompose and portainer as managed update triggers', () => {
+    expect(isManagedUpdateTrigger({ type: 'docker' })).toBe(true);
+    expect(isManagedUpdateTrigger({ type: 'dockercompose' })).toBe(true);
+    expect(isManagedUpdateTrigger({ type: 'portainer' })).toBe(true);
+    expect(isManagedUpdateTrigger({ type: 'slack' })).toBe(false);
+  });
+
+  it('recognizes strict portainer dry-run triggers only', () => {
+    expect(
+      isDryRunActionTrigger({ type: 'portainer', name: 'p', configuration: { dryrun: true } }),
+    ).toBe(true);
+    expect(
+      isDryRunActionTrigger({ type: 'portainer', name: 'p', configuration: { dryrun: false } }),
+    ).toBe(false);
+    expect(
+      isDryRunActionTrigger({ type: 'portainer', name: 'p', configuration: { dryrun: 'true' } }),
+    ).toBe(false);
+  });
+
   it('finds only effective docker action triggers with dry-run explicitly enabled', () => {
     expect(
       findDryRunActionTrigger([

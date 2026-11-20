@@ -64,7 +64,7 @@ If the header is missing or does not match the expected token, the API responds 
 | Category | Endpoints | Description |
 | --- | --- | --- |
 | [App](/docs/api/app) | `GET /api/v1/app`, `GET /api/v1/server` | Application info, server configuration, security runtime |
-| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.8.0-rc.16 file configuration and source-aware editors; reads require a session, writes require admin |
+| [Config file](/docs/configuration/config-file#api) | `GET /api/v1/config`, `GET /:section`, `POST /validate`, `POST /reload`, `PUT /:section`; `GET` / `PATCH /editor/watchers`, `/editor/triggers`, `/editor/actions` | v1.9.0-rc.1 file configuration and source-aware editors; reads require a session, writes require admin |
 | [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
 | [Agents](/docs/api/agent) | `GET /api/v1/agents`, `GET /api/v1/agents/roster` | Remote agent status, roster and logs |
 | [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
@@ -89,6 +89,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
+| `/api/v1/notifications/silences` | `GET`, `POST`, `DELETE /:id` | [Notification silences](#notification-silences) (mute a rule for a while; creating and removing need `admin`) |
 | `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
 | `/api/v1/preferences` | `GET`, `PATCH` | [Synced UI preferences](#preferences) (opt-in cross-device sync; `403` for anonymous sessions) |
@@ -342,6 +343,36 @@ curl -X DELETE http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id
 
 Returns 204 on success, 404 if the entry does not exist, or 500 on an internal error.
 
+## Notification silences
+
+A silence mutes one notification rule, or every non-exempt rule, until it expires. See [Quiet hours and silences](/docs/configuration/triggers#quiet-hours-and-silences) for how they interact with quiet hours and which rules are exempt.
+
+### Create a silence
+
+```bash
+curl -X POST http://drydock:3000/api/v1/notifications/silences \
+  -H 'Content-Type: application/json' \
+  -d '{"ruleId":"container-stopped","durationMinutes":120,"reason":"host maintenance"}'
+```
+
+Send exactly one of `durationMinutes` (1 to 43200) or `expiresAt`. `ruleId` is optional. Returns 201 with the silence, 400 for an invalid body or an expiry in the past, or 404 if `ruleId` is not a notification rule. Recorded in the audit trail as `notification-silence-set`.
+
+### List silences
+
+```bash
+curl http://drydock:3000/api/v1/notifications/silences
+```
+
+Returns 200 with `data` (active silences), `total`, `quietHours` (the configured schedule and whether it is active now, or `null`) and `suppressed` (notifications dropped since the process started, per rule and reason).
+
+### Delete a silence
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/notifications/silences/silence-id
+```
+
+Returns 204 on success or 404 if the silence does not exist or has already expired. Recorded in the audit trail as `notification-silence-cleared`.
+
 ## Audit trail
 
 Returns paginated audit log entries for container lifecycle events, updates, rollbacks, webhooks, and more.
@@ -363,7 +394,8 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
       "toVersion": "2024.12.0",
       "triggerName": "docker.local",
       "status": "success",
-      "details": ""
+      "details": "",
+      "actor": "alice"
     }
   ],
   "total": 42,
@@ -382,12 +414,31 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 | `action` | string | | Filter by a single action type |
 | `actions` | string | | Comma-separated list of action types (e.g. `update-applied,update-failed`) |
 | `container` | string | | Filter by container name |
+| `actor` | string | | Filter by who caused the entry: a username or `api-key:<key name>`. `system` matches automated entries with no actor |
 | `from` | string | | ISO 8601 date -- only entries on or after this timestamp |
 | `to` | string | | ISO 8601 date -- only entries on or before this timestamp |
 
+### Actor
+
+Each entry carries an `actor` when a signed-in user or API key caused it: the username for sessions, Basic and OIDC, `api-key:<key name>` for an API key, and `anonymous` when anonymous access is enabled. The value comes from the authenticated request on the server, never from anything the client sends. Entries from schedulers, auto-updates and agent-reported events have no `actor`, and so do entries written before this field existed. A failed login has no actor either, because the name was typed by the caller and never verified.
+
+### Export audit entries
+
+```bash
+curl -OJ "http://drydock:3000/api/v1/audit/export?format=csv&actor=alice&from=2024-12-01"
+```
+
+Downloads every entry matching the filters, newest first, as a file. It takes `format` (`csv`, the default, or `json`) plus the same `action`, `actions`, `container`, `actor`, `from` and `to` filters as the list route, and ignores `offset` and `limit`. The export is capped at 100,000 entries; the `X-Total-Count` header carries the full match count. It needs the same `read` scope as the list route.
+
+The CSV has a header row and the columns `id`, `timestamp`, `actor`, `action`, `containerName`, `containerIdentityKey`, `containerImage`, `fromVersion`, `toVersion`, `updateKind`, `semverDiff`, `triggerName`, `status` and `details`. Cells are quoted when they hold a comma, quote or line break. A cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet shows it as text instead of running it as a formula. The JSON export is an array of entries with the stored values unchanged.
+
+### Retention
+
+Entries older than 30 days are pruned by default. Set `DD_AUDIT_RETENTION_DAYS` to keep them longer or shorter; see [Storage](/docs/configuration/storage).
+
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `hook-label-ignored`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `hook-label-ignored`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `security-fast-lane`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`, `notification-silence-set`, `notification-silence-cleared`
 
 ## Server-Sent Events (SSE)
 

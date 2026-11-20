@@ -237,6 +237,7 @@ describe('Docker Watcher', () => {
               'pause',
               'unpause',
               'die',
+              'oom',
               'update',
               'rename',
               'health_status',
@@ -1008,6 +1009,39 @@ describe('Docker Watcher', () => {
 
       expect(existing.tagFamily).toBe('strict');
       expect(existing.tagPinInfo).toBe(true);
+    });
+  });
+
+  describe('container state alerts', () => {
+    test('observes docker events through a lazily created tracker and disposes it on deregister', async () => {
+      docker.log = createMockLog(['debug']);
+      const dieEvent = { Action: 'die', Actor: { ID: 'abc', Attributes: { exitCode: '1' } } };
+      await docker.processDockerEvent(dieEvent);
+      const tracker = (docker as any).containerStateAlertTracker;
+      expect(tracker).toBeDefined();
+      const dispose = vi.spyOn(tracker, 'dispose');
+      await docker.processDockerEvent(dieEvent);
+      expect((docker as any).containerStateAlertTracker).toBe(tracker);
+      await docker.deregisterComponent();
+      expect(dispose).toHaveBeenCalledTimes(1);
+      expect((docker as any).containerStateAlertTracker).toBeUndefined();
+      await docker.processDockerEvent(dieEvent);
+      expect((docker as any).containerStateAlertTracker).toBeUndefined();
+    });
+
+    test('accepts the restartloop watcher configuration', () => {
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          restartloop: { threshold: 5, window: 120 },
+        }),
+      ).not.toThrow();
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          restartloop: { threshold: 1 },
+        }),
+      ).toThrow();
     });
   });
 

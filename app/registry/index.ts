@@ -25,6 +25,7 @@ import {
   getWatcherConfigurations,
 } from '../configuration/index.js';
 import type Registry from '../registries/Registry.js';
+import { runOutsideAuditActor } from '../store/audit-actor.js';
 import type Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import type Watcher from '../watchers/Watcher.js';
@@ -46,6 +47,7 @@ import {
   applySharedTriggerConfigurationByName as applySharedTriggerConfigurationByNameHelper,
   applyTriggerGroupDefaults as applyTriggerGroupDefaultsHelper,
 } from './trigger-shared-config.js';
+import { DEFAULT_WATCHER_PROVIDER, splitWatcherProvider } from './watcher-provider.js';
 
 type SharedTriggerConfigurationInput = Parameters<
   typeof applySharedTriggerConfigurationByNameHelper
@@ -356,6 +358,7 @@ function applyTriggerGroupDefaults(
  */
 interface WatcherRegistrationEntry {
   name: string;
+  provider: string;
   configuration: ComponentConfiguration;
 }
 
@@ -381,17 +384,17 @@ function buildWatcherProviderConfigurations(
     }
     configuredLocalWatcherNames.add('local');
     return {
-      entries: [{ name: 'local', configuration: {} }],
+      entries: [{ name: 'local', provider: DEFAULT_WATCHER_PROVIDER, configuration: {} }],
       configuredLocalWatcherNames,
     };
   }
   const entries = Object.keys(configurations).map((watcherKey) => {
     const watcherKeyNormalize = watcherKey.toLowerCase();
     configuredLocalWatcherNames.add(watcherKeyNormalize);
-    return {
-      name: watcherKeyNormalize,
-      configuration: configurations[watcherKeyNormalize] as ComponentConfiguration,
-    };
+    const { provider, configuration } = splitWatcherProvider(
+      configurations[watcherKeyNormalize] as ComponentConfiguration,
+    );
+    return { name: watcherKeyNormalize, provider, configuration };
   });
   return { entries, configuredLocalWatcherNames };
 }
@@ -427,7 +430,7 @@ async function registerWatchers(options: RegistrationOptions = {}): Promise<Set<
     const watchersToRegister = entries.map((entry) =>
       registerComponent({
         kind: 'watcher',
-        provider: 'docker',
+        provider: entry.provider,
         name: entry.name,
         configuration: entry.configuration,
         componentPath: 'watchers/providers',
@@ -1024,8 +1027,8 @@ function buildDesiredEntriesForKind(
       registrationOptions,
     );
     for (const entry of watcherEntries) {
-      entries.set(`docker.${entry.name}`, {
-        provider: 'docker',
+      entries.set(`${entry.provider}.${entry.name}`, {
+        provider: entry.provider,
         name: entry.name,
         configuration: entry.configuration,
         componentPath,
@@ -1163,7 +1166,16 @@ async function applyReconcilePlanForKind(
  * the same reasoning that makes this diff-based rather than
  * deregister-all-and-reinit in the first place.
  */
-export async function reconcileComponentsWithConfiguration(): Promise<ComponentReconcileResult> {
+export function reconcileComponentsWithConfiguration(): Promise<ComponentReconcileResult> {
+  // Reloads run inside the API request that asked for them. Registering a
+  // component arms its own schedulers, and async context flows into those
+  // timers, so without leaving the request's audit actor here every later
+  // scheduled scan or auto-update would be attributed to the admin who
+  // triggered the reload.
+  return runOutsideAuditActor(reconcileComponents);
+}
+
+async function reconcileComponents(): Promise<ComponentReconcileResult> {
   const result: ComponentReconcileResult = {
     added: [],
     changed: [],
@@ -1195,6 +1207,21 @@ export async function reconcileComponentsWithConfiguration(): Promise<ComponentR
   }
 
   return result;
+}
+
+/**
+ * Register only what an observation-only run needs: registries and watchers.
+ * No triggers (so nothing can notify or act), no authentications, no agents,
+ * and no signal handlers.
+ */
+export async function initObservationOnly() {
+  await registerRegistries();
+  await registerWatchers({});
+}
+
+/** Tear down what {@link initObservationOnly} registered. */
+export async function deregisterObservationOnly() {
+  await Promise.allSettled([deregisterWatchers(), deregisterRegistries()]);
 }
 
 async function shutdown() {

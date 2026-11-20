@@ -162,10 +162,12 @@ const oidcLayoutClass = computed(() => {
 onMounted(async () => {
   try {
     await loadStrategies();
-  } catch {
-    error.value = t('loginView.errors.loadFailed');
-    connectionLost.value = true;
-    scheduleConnectivityRetry();
+  } catch (failure: unknown) {
+    if (!showRateLimitNotice(failure)) {
+      error.value = t('loginView.errors.loadFailed');
+      connectionLost.value = true;
+      scheduleConnectivityRetry();
+    }
   } finally {
     loading.value = false;
   }
@@ -414,16 +416,39 @@ function formatAuthProviderError(authProviderError: AuthProviderError): string {
 async function checkConnectivity() {
   try {
     await loadStrategies();
-  } catch {
-    connectionLost.value = true;
-    scheduleConnectivityRetry();
+  } catch (failure: unknown) {
+    if (!showRateLimitNotice(failure)) {
+      connectionLost.value = true;
+      scheduleConnectivityRetry();
+    }
   }
 }
 
-function scheduleConnectivityRetry() {
+/**
+ * A 429 means the server answered and is rate limiting us, which is not a lost
+ * connection. Show how long to wait and retry once that time has passed.
+ */
+function showRateLimitNotice(failure: unknown): boolean {
+  if (!isRecord(failure) || failure.status !== 429) {
+    return false;
+  }
+  const seconds =
+    typeof failure.retryAfterSeconds === 'number' ? failure.retryAfterSeconds : undefined;
+  error.value =
+    seconds === undefined
+      ? t('loginView.errors.rateLimitedLater')
+      : t('loginView.errors.rateLimited', { time: formatRetryTime(seconds) });
+  connectionLost.value = false;
+  scheduleConnectivityRetry(seconds === undefined ? undefined : Math.max(1, seconds) * 1000);
+  return true;
+}
+
+function scheduleConnectivityRetry(delayOverrideMs?: number) {
   clearConnectivityRetry();
-  connectivityTimer = setTimeout(checkConnectivity, retryDelayMs);
-  retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+  connectivityTimer = setTimeout(checkConnectivity, delayOverrideMs ?? retryDelayMs);
+  if (delayOverrideMs === undefined) {
+    retryDelayMs = Math.min(retryDelayMs * 2, MAX_RETRY_DELAY_MS);
+  }
 }
 
 function clearConnectivityRetry() {

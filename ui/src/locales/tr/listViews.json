@@ -5,6 +5,8 @@
     "filterPlaceholder": "Hedefe veya etkinliğe göre filtreleyin...",
     "onThisPage": "bu sayfada",
     "containerFilterPlaceholder": "Konteyner adı...",
+    "actorFilterPlaceholder": "Kullanıcı...",
+    "actorFilterLabel": "Kullanıcıya göre filtrele",
     "allEvents": "Tüm etkinlikler",
     "eventsSelected": "{count} etkinlikleri seçildi",
     "clear": "Temizle",
@@ -16,12 +18,19 @@
       "nextPage": "Sonraki sayfa"
     },
     "emptyFiltered": "Filtrelerinizle eşleşen denetim girişi yok",
+    "systemActor": "Sistem",
+    "exportError": "Denetim günlüğü dışa aktarılamadı",
+    "export": {
+      "csv": "CSV olarak dışa aktar",
+      "json": "JSON olarak dışa aktar"
+    },
     "columns": {
       "time": "Zaman",
       "event": "Etkinlik",
       "target": "Hedef",
       "status": "Durum",
-      "details": "Ayrıntılar"
+      "details": "Ayrıntılar",
+      "actor": "Kullanıcı"
     },
     "card": {
       "time": "Zaman",
@@ -34,7 +43,8 @@
       "fromVersion": "Sürümden",
       "toVersion": "Sürüme",
       "trigger": "Tetikleyici",
-      "details": "Ayrıntılar"
+      "details": "Ayrıntılar",
+      "actor": "Kullanıcı"
     },
     "status": {
       "success": "Başarılı",
@@ -95,6 +105,7 @@
       "update-applied-dryrun": "Güncelleme önizlendi (deneme)",
       "update-failed": "Güncelleme Başarısız",
       "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "security-fast-lane": "Güvenlik hızlı hattı",
       "update-policy-override-set": "Güncelleme politikası geçersiz kılma ayarlandı",
       "update-policy-override-cleared": "Güncelleme politikası geçersiz kılma temizlendi",
       "group-policy-set": "Grup politikası ayarlandı",
@@ -108,7 +119,10 @@
       "notification-delivery-failed": "Bildirim Teslimi Başarısız",
       "security-alert": "Güvenlik Uyarısı",
       "maturity-cleared": "Bekleme süresi doldu",
-      "image-prune": "İmaj Temizleme"
+      "image-prune": "İmaj Temizleme",
+      "cleanup": "Temizlik",
+      "notification-silence-set": "Bildirim Sessize Alma Ayarlandı",
+      "notification-silence-cleared": "Bildirim Sessize Alma Kaldırıldı"
     },
     "target": {
       "container": "Kapsayıcı",

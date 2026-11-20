@@ -14,7 +14,8 @@
  *   409, which is why the queue can show a row it cannot approve without the API ever
  *   pretending otherwise;
  * - reject writes the container's existing `skipTags`/`skipDigests` policy, the same
- *   operation as the container panel's Skip button;
+ *   operation as the container panel's Skip button. An optional `scope` (`tag`, the
+ *   default, `minor` or `major`) widens a tag rejection to the whole line;
  * - defer writes the container's existing snooze, and mirrors the expiry onto the row so
  *   the queue and the `snoozed` soft blocker cannot disagree.
  *
@@ -40,15 +41,20 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { announceApprovalEvent } from '../approvals/events.js';
+import type { ActionPolicyTrigger } from '../model/action-policy.js';
 import {
   type ApprovalRecord,
   type ApprovalSemverDiff,
-  getApprovalCandidateRef,
+  buildApprovalRecordInput,
+  chooseApprovalCandidate,
+  isSameApprovalCandidate,
 } from '../model/approval.js';
 import type { AuditEntry } from '../model/audit.js';
 import type { Container } from '../model/container.js';
 import { daysToMs } from '../model/maturity-policy.js';
+import { isRejectScope, type RejectScope } from '../model/skip-scope.js';
 import { computeUpdateEligibility, getSoftBlockers } from '../model/update-eligibility.js';
+import * as registry from '../registry/index.js';
 import {
   type ApprovalPatch,
   type ApprovalStatusFilter,
@@ -78,6 +84,10 @@ import { buildEligibilityContext } from './sse-container-enrichment.js';
 
 const router = express.Router();
 
+function getActionTriggers(): Record<string, ActionPolicyTrigger> {
+  return registry.getState().trigger as unknown as Record<string, ActionPolicyTrigger>;
+}
+
 const APPROVAL_BASE_PATH = '/api/v1/approvals';
 const APPROVAL_LIST_MAX_LIMIT = 200;
 const APPROVAL_SEARCH_MAX_LENGTH = 200;
@@ -101,7 +111,11 @@ const BULK_DEFER_ONLY_MESSAGE =
 const BULK_PROCESSED_MESSAGE = 'Approval decisions processed';
 const BULK_APPROVE_CONFIRMATION = 'approvals-bulk-approve';
 const DECISION_BODY_FIELDS = ['note'] as const;
-const BULK_BODY_FIELDS = ['ids', 'action', 'until', 'days', 'note'] as const;
+const REJECT_BODY_FIELDS = ['note', 'scope'] as const;
+const BULK_BODY_FIELDS = ['ids', 'action', 'until', 'days', 'note', 'scope'] as const;
+const INVALID_SCOPE_MESSAGE = 'Invalid scope; expected tag, minor, or major';
+const BULK_REJECT_ONLY_SCOPE_MESSAGE =
+  'Invalid request body; scope is only valid with action reject';
 const DEFER_BODY_FIELDS = ['until', 'days', 'note'] as const;
 // A full RFC 3339 instant: date, time to the second, explicit offset. `new Date()` accepts
 // far more than that — a bare `2026-09-09` is midnight in whatever zone the process runs
@@ -203,13 +217,23 @@ function getApprovals(req: Request, res: Response): void {
   });
 
   res.status(200).json({
-    data: records,
+    data: records.map(withSecurityFastLane),
     total,
     limit: pagination.limit,
     offset: pagination.offset,
     hasMore: pagination.limit > 0 && pagination.offset + records.length < total,
     ...(links ? { _links: links } : {}),
   });
+}
+
+/**
+ * Flag a row whose candidate is a security fix for the running image (the container's
+ * security fast lane). Read live from the container, never stored on the row: the fast lane
+ * follows the latest scans, and a held update is approved on exactly the same terms.
+ */
+function withSecurityFastLane<T extends { containerId: string }>(record: T) {
+  const securityFastLane = getContainer(record.containerId)?.securityFastLane;
+  return securityFastLane ? { ...record, securityFastLane } : record;
 }
 
 /**
@@ -239,16 +263,21 @@ function getApproval(req: Request<{ id: string }>, res: Response): void {
     return;
   }
 
-  const container = getContainer(approval.containerId);
-  if (container === undefined) {
+  const stored = getContainer(approval.containerId);
+  if (stored === undefined) {
     // The row outlived its container, which is the `container-removed` resolution. There
     // is nothing live to report, and an empty hold list is the honest answer.
     res.status(200).json({ approval, holdReasons: [] });
     return;
   }
 
+  const container = chooseApprovalCandidate(stored, getActionTriggers());
   const eligibility = computeUpdateEligibility(container, buildEligibilityContext(container));
-  res.status(200).json({ approval, eligibility, holdReasons: getSoftBlockers(eligibility) });
+  res.status(200).json({
+    approval: withSecurityFastLane(approval),
+    eligibility,
+    holdReasons: getSoftBlockers(eligibility),
+  });
 }
 
 /** Whoever the authentication middleware resolved, if anyone. */
@@ -391,6 +420,23 @@ function resolveDeferralExpiry(
 }
 
 /**
+ * Whether the container still offers the candidate a row names. A row minted while the
+ * digest lookup failed is tag-only and keeps binding to the same target tag once the digest
+ * is back. A row that holds a digest binds to exactly that digest: a missing or different
+ * live digest refuses the decision.
+ */
+function isCandidateStillOnOffer(previous: ApprovalRecord, container: Container): boolean {
+  const current = buildApprovalRecordInput(container);
+  if (current === undefined) {
+    return false;
+  }
+  if (previous.candidateRef === current.candidateRef) {
+    return true;
+  }
+  return previous.candidateRef === previous.toRef && isSameApprovalCandidate(previous, current);
+}
+
+/**
  * Take the row for one decision, or answer why it could not be taken.
  *
  * Everything that can refuse the decision is checked before the row is written, and
@@ -423,14 +469,17 @@ function reserveApproval(
     return failure(404, APPROVAL_NOT_FOUND_MESSAGE);
   }
 
-  const container = getContainer(previous.containerId);
-  if (container === undefined) {
+  const stored = getContainer(previous.containerId);
+  if (stored === undefined) {
     // A row whose container is gone has already been resolved `container-removed` by the
     // reconciler in the normal case; this answers the race where it has not.
     return failure(404, CONTAINER_NOT_FOUND_MESSAGE);
   }
 
-  if (getApprovalCandidateRef(container) !== previous.candidateRef) {
+  // The row names the candidate the queue chose for this container, which is the primary
+  // unless the winning trigger separates update types.
+  const container = chooseApprovalCandidate(stored, getActionTriggers());
+  if (!isCandidateStillOnOffer(previous, container)) {
     return failure(409, APPROVAL_SUPERSEDED_MESSAGE);
   }
 
@@ -508,6 +557,7 @@ function completeDecision(
   action: AuditEntry['action'],
   container: Container,
   record: ApprovalRecord,
+  scope?: RejectScope,
 ): void {
   recordAuditEvent({
     action,
@@ -523,6 +573,7 @@ function completeDecision(
       ...(record.decisionNote !== undefined ? { note: record.decisionNote } : {}),
       ...(record.deferredUntil !== undefined ? { deferredUntil: record.deferredUntil } : {}),
       ...(record.operationId !== undefined ? { operationId: record.operationId } : {}),
+      ...(scope !== undefined && scope !== 'tag' ? { scope } : {}),
     }),
   });
   announceApprovalEvent('decided', record);
@@ -567,22 +618,33 @@ async function approveOne(
  * Reject one queued update by writing the container's existing skip policy. This is the
  * same operation as the container panel's Skip button, one source of truth, undoable from
  * the update-policy panel — and visible there, which is a thing the confirmation copy has
- * to say out loud.
+ * to say out loud. A `minor` or `major` scope skips the whole line, and refuses (rolling
+ * the reservation back) for a digest update or a tag with no semver line.
  * @param id
  * @param decidedBy
  * @param note
+ * @param scope
  */
-function rejectOne(id: string, decidedBy: string, note: string | undefined): DecisionOutcome {
+function rejectOne(
+  id: string,
+  decidedBy: string,
+  note: string | undefined,
+  scope: RejectScope = 'tag',
+): DecisionOutcome {
   const reserved = reserveApproval(id, decidedBy, { decision: 'rejected' }, note);
   if (isFailure(reserved)) {
     return reserved;
   }
-  const policyFailure = writeDecisionPolicy(reserved, 'skip-current', {});
+  const policyFailure = writeDecisionPolicy(
+    reserved,
+    'skip-current',
+    scope === 'tag' ? {} : { scope },
+  );
   if (policyFailure !== undefined) {
     return policyFailure;
   }
 
-  completeDecision('update-rejected', reserved.container, reserved.record);
+  completeDecision('update-rejected', reserved.container, reserved.record, scope);
   return { kind: 'decided', record: reserved.record };
 }
 
@@ -652,14 +714,20 @@ async function approveApproval(req: DecisionRequest, res: Response): Promise<voi
  * @param res
  */
 function rejectApproval(req: DecisionRequest, res: Response): void {
-  const request = readDecisionRequest(res, req.body, DECISION_BODY_FIELDS);
+  const request = readDecisionRequest(res, req.body, REJECT_BODY_FIELDS);
   if (request === undefined) {
+    return;
+  }
+
+  const scope = request.body.scope === undefined ? 'tag' : request.body.scope;
+  if (!isRejectScope(scope)) {
+    sendErrorResponse(res, 400, INVALID_SCOPE_MESSAGE);
     return;
   }
 
   sendDecisionOutcome(
     res,
-    rejectOne(getPathParamValue(req.params.id), getDecidedBy(req), request.note),
+    rejectOne(getPathParamValue(req.params.id), getDecidedBy(req), request.note, scope),
   );
 }
 
@@ -747,6 +815,15 @@ async function bulkDecideApprovals(
     sendErrorResponse(res, 400, BULK_DEFER_ONLY_MESSAGE);
     return;
   }
+  if (action !== 'reject' && request.body.scope !== undefined) {
+    sendErrorResponse(res, 400, BULK_REJECT_ONLY_SCOPE_MESSAGE);
+    return;
+  }
+  const scope = request.body.scope === undefined ? 'tag' : request.body.scope;
+  if (!isRejectScope(scope)) {
+    sendErrorResponse(res, 400, INVALID_SCOPE_MESSAGE);
+    return;
+  }
   if (action === 'approve' && !areContainerActionsEnabled()) {
     sendErrorResponse(res, 403, CONTAINER_ACTIONS_DISABLED_MESSAGE);
     return;
@@ -771,7 +848,7 @@ async function bulkDecideApprovals(
     if (action === 'approve') {
       outcome = await approveOne(id, decidedBy, request.note);
     } else if (action === 'reject') {
-      outcome = rejectOne(id, decidedBy, request.note);
+      outcome = rejectOne(id, decidedBy, request.note, scope);
     } else {
       outcome = deferOne(id, decidedBy, request.note, deferredUntil);
     }

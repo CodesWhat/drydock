@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Доступна новая версия: {tag}. Этот Tag закреплён, drydock не обновит его автоматически."
     },
+    "updateCandidates": {
+      "title": "Кандидаты по типу обновления"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Заблокировано безопасностью",
       "rolledBack": "Откат выполнен",
@@ -481,6 +484,7 @@
       "maturityClockPublished": "Кандидат опубликован {date} — остался {count} день до минимума в {minDays} дн. | Кандидат опубликован {date} — осталось {count} дней до минимума в {minDays} дн.",
       "maturityClockDetected": "Кандидат обнаружен {date} — остался {count} день до минимума в {minDays} дн. | Кандидат обнаружен {date} — осталось {count} дней до минимума в {minDays} дн.",
       "groupManualOnly": "Политика группы '{group}' разрешает только ручные обновления. Drydock не будет применять это обновление автоматически.",
+      "securityFastLane": "Исправляет критических или высоких уязвимостей в работающем образе: {count} ({ids}). Отсрочка, выдержка и окно обслуживания не применяются.",
       "updateAvailableRuleDisabled": "Правило уведомлений Update Available выключено, а оно управляет и автоматическими обновлениями. Включите его в Settings > Notifications > Update Available, чтобы Drydock применил это обновление сам.",
       "updateButton": "Обновить сейчас",
       "blockedButton": "Обновление заблокировано",
@@ -527,6 +531,7 @@
         "update-available-rule-disabled": "Правило Update Available выключено",
         "group-notify-only": "Группа разрешает только уведомления",
         "group-manual-only": "Группа требует ручных обновлений",
+        "security-fast-lane": "Быстрая полоса безопасности",
         "dry-run-trigger": "Конфигурация триггера в режиме dry-run",
         "maturity-releases-not-reached": "Ожидание политики зрелости"
       },

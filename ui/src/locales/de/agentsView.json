@@ -87,6 +87,60 @@
         "lastSeen": "Zuletzt gesehen",
         "never": "nie"
       }
+    },
+    "edgeKeys": {
+      "toggle": "Edge-Agent-Schlüssel",
+      "hide": "Edge-Agent-Schlüssel ausblenden",
+      "title": "Edge-Agent-Schlüssel",
+      "description": "Registriere den öffentlichen Schlüssel eines Portwing-Edge-Agents, damit er sich bei diesem Controller melden kann. Es werden nur öffentliche Schlüssel gespeichert, hier wird also nichts Geheimes angezeigt.",
+      "registerButton": "Schlüssel registrieren",
+      "loading": "Schlüssel werden geladen...",
+      "empty": "Keine Edge-Agent-Schlüssel registriert",
+      "loadError": "Edge-Agent-Schlüssel konnten nicht geladen werden",
+      "forbidden": "Zum Verwalten von Edge-Agent-Schlüsseln ist eine angemeldete Admin-Sitzung nötig. API-Schlüssel und Wiederherstellungs-Logins reichen nicht.",
+      "registered": "{label} als Schlüssel {keyId} registriert.",
+      "revokeButton": "Widerrufen",
+      "errors": {
+        "register": "Schlüssel konnte nicht registriert werden",
+        "revoke": "Schlüssel konnte nicht widerrufen werden"
+      },
+      "columns": {
+        "label": "Bezeichnung",
+        "keyId": "Schlüssel-ID",
+        "created": "Erstellt",
+        "status": "Status"
+      },
+      "status": {
+        "active": "Aktiv",
+        "revoked": "Widerrufen"
+      },
+      "form": {
+        "title": "Edge-Agent-Schlüssel registrieren",
+        "label": "Bezeichnung",
+        "labelPlaceholder": "edge-host-01",
+        "pubkey": "Öffentlicher Schlüssel",
+        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
+        "pubkeyHint": "Füge den 44-stelligen Base64-Schlüssel oder die vollständige Zeile von portwing keygen -pub-from ein.",
+        "submit": "Registrieren",
+        "invalidKey": "Der öffentliche Schlüssel muss Base64 sein und genau 32 Bytes ergeben."
+      },
+      "revoke": {
+        "header": "Schlüssel widerrufen",
+        "message": "{label} widerrufen? Der Agent wird sofort getrennt und kann sich nicht erneut verbinden.",
+        "accept": "Widerrufen"
+      },
+      "snippet": {
+        "show": "Agent-Snippet anzeigen",
+        "hide": "Agent-Snippet ausblenden",
+        "title": "Agent einrichten",
+        "description": "Erzeuge das Schlüsselpaar auf dem Agent-Host mit portwing keygen, registriere hier den öffentlichen Schlüssel und starte den Agent dann mit einem dieser Snippets.",
+        "controllerUrl": "Controller-URL",
+        "agentName": "Agent-Name",
+        "compose": "Compose",
+        "dockerRun": "docker run",
+        "copy": "Kopieren",
+        "copied": "Kopiert"
+      }
     }
   }
 }

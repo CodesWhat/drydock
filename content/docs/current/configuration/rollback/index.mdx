@@ -10,7 +10,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 Before every container update, drydock automatically backs up the current image metadata including the image name, tag, digest, and timestamp. This ensures you always have a record of exactly which image was running prior to each update.
 
-These image-restore backup records live in the SQLite store in v1.8.0-rc.16 builds; v1.7 and earlier use the LokiJS JSON store. The `/store` volume persists them in either case. They describe container images, rather than snapshots of Drydock's database. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
+These image-restore backup records live in the SQLite store in v1.9.0-rc.1 builds; v1.7 and earlier use the LokiJS JSON store. The `/store` volume persists them in either case. They describe container images, rather than snapshots of Drydock's database. Each container retains its N most recent backups, with older entries pruned automatically when the limit is exceeded.
 
 ## Backup Retention
 
@@ -76,7 +76,30 @@ Containers with a Docker `HEALTHCHECK` can automatically roll back if they becom
 4. If the status becomes `unhealthy`, rollback is triggered automatically
 5. If the window expires without failure, the container is considered stable
 
-<Callout type="warn">Auto-rollback requires a `HEALTHCHECK` instruction in your Dockerfile. Without one, monitoring is skipped.</Callout>
+<Callout type="warn">Health-based auto-rollback requires a `HEALTHCHECK` instruction in your Dockerfile. Without one, monitoring is skipped unless you enable the liveness watch below.</Callout>
+
+### Liveness watch for images without a HEALTHCHECK
+
+For containers with no `HEALTHCHECK`, you can opt in to a liveness watch. After the update, Drydock polls the recreated container every `dd.rollback.interval` for the length of the liveness window. If the container exits, is OOM-killed, or its restart count rises above the value it had right after the update (a crash loop under a restart policy), Drydock rolls back to the previous image the same way it does for an unhealthy container, with the same `auto-rollback` audit entry. If the window passes with the container still up, the update stands.
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `dd.rollback.liveness` (label) | number (ms) | unset | Liveness window for this container. `0` turns the watch off for this container even when the action enables it |
+| `LIVENESSWINDOW` (action option) | number (ms) | `0` (off) | Default liveness window for every container the action updates. The label overrides it |
+
+The watch works with both the Docker and Docker Compose actions, doesn't need `dd.rollback.auto`, and never applies to containers that have a `HEALTHCHECK`, which keep the health-based behavior above. With neither setting, containers without a healthcheck behave as before.
+
+The Portainer action doesn't support the liveness watch, because a rollback would recreate the container through Docker and bypass the stack Portainer manages. `LIVENESSWINDOW` is rejected on a Portainer action at startup, and `dd.rollback.liveness` on a container it updates is ignored with a warning.
+
+A container that was stopped before the update isn't watched. Rollbacks put the container back the way it was before the update: a container that was running is started again, and the rollback is only recorded as a success once the restored container is seen running. If it isn't, the audit entry says so and records a failure.
+
+### Rollbacks and later updates
+
+A rollback, whether automatic or from the manual rollback action, remembers the candidate it undid. Drydock then blocks that same candidate with the "last update rolled back" reason until a different version shows up or you set `dd.update.rollback-gate=off` on the container, so the failed update isn't applied again once the recently-applied window passes.
+
+Rollbacks take the same per-container lock updates do, so a rollback never runs at the same time as an update of that container. Starting an update, or a manual rollback, cancels any health or liveness watch still running for that container. An operator stopping the container by hand during a watch window still counts as an exit and triggers the rollback, the same as before.
+
+Each rollback is recorded as an operation, so container state alerts don't report the stop and restart Drydock does for it.
 
 ## Examples
 

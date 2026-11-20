@@ -360,12 +360,33 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
     method: 'GET',
     url: 'https://auth.example.com/token',
     maxRedirects: 0,
+    timeout: 30000,
     headers: {
       Accept: 'application/json',
       Authorization: 'Basic dXNlcjpwYXNz',
     },
   });
   expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should honor DD_OUTBOUND_HTTP_TIMEOUT_MS for the auth request', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  const previous = process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+  process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = '5000';
+  try {
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+    );
+    expect(axios.mock.calls.at(-1)[0].timeout).toBe(5000);
+  } finally {
+    if (previous === undefined) {
+      delete process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS;
+    } else {
+      process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previous;
+    }
+  }
 });
 
 test('authenticateBearerFromAuthUrl should set bearer token using access_token from default extractor', async () => {
@@ -1305,6 +1326,29 @@ test('getImagePublishedAt should handle images without tag metadata', async () =
       name: 'library/nginx',
     }),
   );
+});
+
+test('getImageManifestDigest keeps the manifest list digest through the poll-cycle cache', async () => {
+  const indexDigest = `sha256:${'1'.repeat(64)}`;
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:manifest-123',
+    indexDigest,
+    version: 2,
+  });
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  };
+
+  const first = await baseRegistry.getImageManifestDigest(image);
+  const cached = await baseRegistry.getImageManifestDigest(image);
+
+  expect(first.indexDigest).toBe(indexDigest);
+  expect(cached.indexDigest).toBe(indexDigest);
 });
 
 test('getImageManifestDigest should deduplicate sequential lookups within a poll cycle', async () => {

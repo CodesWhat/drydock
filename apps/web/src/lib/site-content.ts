@@ -362,17 +362,18 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.9.0",
-    title: "Policy depth & Ecosystem",
+    version: "v1.9.0-rc.1",
+    title: "Policy depth & Ecosystem (RC, testing only)",
     emoji: "\u{1F9ED}",
-    status: "planned",
+    status: "next",
     dotColor:
-      "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
+      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
-      "Per-update-type candidates and running-version ceilings",
-      "Watcher include/exclude filters",
-      "Audit actor and export",
-      "Home Assistant and Homepage integrations",
+      "Landed: per-update-type candidates and running-version ceilings",
+      "Landed: watcher include/exclude filters and a file watcher provider",
+      "Landed: container state alerts, quiet hours and silences",
+      "Landed: audit actor, OIDC sign-in allowlist and security fast lane",
+      "Landed: GitHub dispatch and GitLab pipeline rebuild triggers",
     ],
   },
   {

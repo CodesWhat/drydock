@@ -3,6 +3,7 @@ import type { Database } from './driver.js';
 import { StoreConstraintError } from './driver.js';
 import {
   AGENT_KEY_ROTATION_MIGRATION_VERSION,
+  AUDIT_ACTOR_MIGRATION_VERSION,
   assertSchemaSupported,
   GROUP_POLICIES_MIGRATION_VERSION,
   getAppliedSchemaVersions,
@@ -14,6 +15,7 @@ import {
   TOTP_MIGRATION_VERSION,
   TOTP_SUBJECT_STATE_MIGRATION_VERSION,
   TOTP_SUBJECT_USERNAME_MIGRATION_VERSION,
+  UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
 } from './migrations.js';
 
 const { logMock } = vi.hoisted(() => ({
@@ -58,7 +60,11 @@ describe('store/db/migrations', () => {
       'active',
       42,
     );
-    expect(migrate(db)).toEqual([AGENT_KEY_ROTATION_MIGRATION_VERSION]);
+    expect(migrate(db)).toEqual([
+      AGENT_KEY_ROTATION_MIGRATION_VERSION,
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
+    ]);
     expect(db.prepare('SELECT * FROM agent_keys ORDER BY key_id').all()).toEqual([
       {
         key_id: 'active',
@@ -114,6 +120,8 @@ describe('store/db/migrations', () => {
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       AGENT_KEY_ROTATION_MIGRATION_VERSION,
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
     ]);
   });
 
@@ -145,6 +153,8 @@ describe('store/db/migrations', () => {
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       AGENT_KEY_ROTATION_MIGRATION_VERSION,
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
     ]);
 
     const rows = db
@@ -175,6 +185,8 @@ describe('store/db/migrations', () => {
       TOTP_SUBJECT_STATE_MIGRATION_VERSION,
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       AGENT_KEY_ROTATION_MIGRATION_VERSION,
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
     ]);
 
     expect(
@@ -213,12 +225,61 @@ describe('store/db/migrations', () => {
     expect(migrate(db)).toEqual([
       TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
       AGENT_KEY_ROTATION_MIGRATION_VERSION,
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
     ]);
 
     expect(db.prepare('SELECT enrollment_id, failed_attempts FROM totp_enrollments').all()).toEqual(
       [{ enrollment_id: 'pending', failed_attempts: 0 }],
     );
-    expect(MIGRATIONS.at(-1)?.version).toBe(AGENT_KEY_ROTATION_MIGRATION_VERSION);
+    expect(MIGRATIONS.at(-1)?.version).toBe(
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
+    );
+  });
+
+  test('migration 16 indexes update_operations.new_container_id', () => {
+    expect(UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION).toBe(16);
+    migrate(
+      db,
+      MIGRATIONS.filter(
+        (migration) =>
+          migration.version < UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
+      ),
+    );
+
+    expect(migrate(db)).toEqual([UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION]);
+
+    expect(
+      db
+        .prepare("SELECT name FROM sqlite_schema WHERE name = 'update_operations_new_container_id'")
+        .all(),
+    ).toHaveLength(1);
+    const plan = db
+      .prepare('EXPLAIN QUERY PLAN SELECT * FROM update_operations WHERE new_container_id = ?')
+      .all('x');
+    expect(JSON.stringify(plan)).toContain('update_operations_new_container_id');
+  });
+
+  test('migration 15 adds a nullable audit.actor, leaves existing rows null and indexes it', () => {
+    expect(AUDIT_ACTOR_MIGRATION_VERSION).toBe(15);
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < AUDIT_ACTOR_MIGRATION_VERSION),
+    );
+    db.prepare(
+      `INSERT INTO audit (id, timestamp, timestamp_ms, action, container_name, status)
+       VALUES ('old', '2026-01-01T00:00:00.000Z', 1, 'update-applied', 'web', 'success')`,
+    ).run();
+
+    expect(migrate(db)).toEqual([
+      AUDIT_ACTOR_MIGRATION_VERSION,
+      UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
+    ]);
+
+    expect(db.prepare('SELECT id, actor FROM audit').all()).toEqual([{ id: 'old', actor: null }]);
+    expect(
+      db.prepare("SELECT name FROM sqlite_schema WHERE name = 'audit_actor_timestamp'").all(),
+    ).toHaveLength(1);
   });
 
   test('records the version, the note and when it was applied', () => {
@@ -286,6 +347,8 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
         AGENT_KEY_ROTATION_MIGRATION_VERSION,
+        AUDIT_ACTOR_MIGRATION_VERSION,
+        UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -349,6 +412,8 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
         AGENT_KEY_ROTATION_MIGRATION_VERSION,
+        AUDIT_ACTOR_MIGRATION_VERSION,
+        UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -424,6 +489,8 @@ describe('store/db/migrations', () => {
         TOTP_SUBJECT_STATE_MIGRATION_VERSION,
         TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION,
         AGENT_KEY_ROTATION_MIGRATION_VERSION,
+        AUDIT_ACTOR_MIGRATION_VERSION,
+        UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,

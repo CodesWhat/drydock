@@ -4276,7 +4276,7 @@ describe('Auth Router', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    test('POST without a session cookie is not blocked (no session = no CSRF risk)', () => {
+    test('cross-site POST without a session cookie is blocked (anonymous installs have no cookie)', () => {
       const csrfMiddleware = getSameOriginMiddleware();
 
       const req = {
@@ -4287,6 +4287,19 @@ describe('Auth Router', () => {
           return undefined;
         }),
       };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+    });
+
+    test('header-free POST without a session cookie is not blocked', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = { method: 'POST', get: vi.fn(() => undefined) };
       const res = createResponse();
       const next = vi.fn();
 

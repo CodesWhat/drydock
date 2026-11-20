@@ -28,6 +28,7 @@ import {
   getHelpfulErrorMessage,
   type RegistryComponentKind,
 } from '../../registry/component-resolution.js';
+import { splitWatcherProvider } from '../../registry/watcher-provider.js';
 import { getErrorMessage } from '../../util/error.js';
 import {
   ddEnvVars,
@@ -127,13 +128,17 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 // {name: config} object, which is why collectProviderEntries still checks
 // each provider's own value.
 function collectWatcherEntries(configurations: Record<string, unknown>): DiscoveryEntry[] {
-  return Object.keys(configurations).map((name) => ({
-    kind: 'watcher',
-    provider: 'docker',
-    name,
-    configuration: configurations[name],
-    componentPath: 'watchers/providers',
-  }));
+  return Object.keys(configurations).map((name) => {
+    // A bare `DD_WATCHER_X=value` leaves a string here, which has no provider key.
+    const { provider, configuration } = splitWatcherProvider(configurations[name] as object);
+    return {
+      kind: 'watcher',
+      provider,
+      name,
+      configuration,
+      componentPath: 'watchers/providers',
+    };
+  });
 }
 
 function collectProviderEntries(
@@ -346,13 +351,18 @@ async function validateEntry(
  * standalone candidate map — the caller is responsible for it already being
  * the merged (env-over-file) result when validating a running instance's
  * effective configuration; this function does no merging of its own.
+ * `watchersOnly` limits the walk to watcher schemas (the env-only startup gate).
  */
 export async function validateConfiguration(
   envMap: Record<string, string | undefined>,
+  options: { watchersOnly?: boolean } = {},
 ): Promise<ConfigurationValidationResult> {
   const errors: ConfigurationValidationError[] = [];
 
   const discoveryEntries = withCandidateEnv(envMap, () => {
+    if (options.watchersOnly) {
+      return collectWatcherEntries(getWatcherConfigurations());
+    }
     validateSectionSchemas(errors);
     return [
       ...collectWatcherEntries(getWatcherConfigurations()),

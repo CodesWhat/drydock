@@ -1,6 +1,9 @@
+import { ddEnvVars } from '../configuration/index.js';
+import { getSuppressedCounts, resetSuppressionForTests } from '../notifications/suppression.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import type { Database } from './db/driver.js';
 import * as notification from './notification.js';
+import * as silenceStore from './notification-silence.js';
 
 vi.mock('../log/index.js', () => ({
   default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
@@ -466,5 +469,100 @@ describe('getNotificationRules caching', () => {
 
     expect(rulesAfterWrite.find((rule) => rule.id === 'update-applied')?.enabled).toBe(false);
     expect(countRuleTableReads()).toBe(readsBeforeGetAfterWrite + 1);
+  });
+});
+
+describe('container state alert default rules', () => {
+  test.each([
+    'container-stopped',
+    'container-exited',
+    'container-oom-killed',
+    'container-restart-loop',
+  ])('%s ships disabled with no bell so existing users see no new alerts', (id) => {
+    const rule = notification.DEFAULT_NOTIFICATION_RULES.find((item) => item.id === id);
+    expect(rule).toBeDefined();
+    expect(rule?.enabled).toBe(false);
+    expect(rule?.bellEnabled).toBe(false);
+    expect(rule?.triggers).toEqual([]);
+  });
+});
+
+describe('alert breadth default rules', () => {
+  test.each(['auth-abuse', 'agent-version-mismatch'])(
+    '%s ships disabled with no bell so existing users see no new alerts',
+    (id) => {
+      const rule = notification.DEFAULT_NOTIFICATION_RULES.find((item) => item.id === id);
+      expect(rule).toBeDefined();
+      expect(rule?.enabled).toBe(false);
+      expect(rule?.bellEnabled).toBe(false);
+      expect(rule?.triggers).toEqual([]);
+    },
+  );
+});
+
+describe('quiet hours and silences in the dispatch decision', () => {
+  const NIGHT = new Date('2026-03-01T23:30:00Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NIGHT);
+    notification.createCollections(db);
+    notification.updateNotificationRule('update-applied', { enabled: true });
+    ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE = '22:00-07:00';
+    resetSuppressionForTests();
+    silenceStore.resetSilencesForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    delete ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE;
+    silenceStore.resetSilencesForTests();
+    resetSuppressionForTests();
+  });
+
+  const options = { allowAllWhenNoTriggers: true, applyQuietHours: true };
+
+  test('a notification trigger is held back inside the window and counted when asked', () => {
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-applied', 'slack.ops', options),
+    ).toEqual({ enabled: false, reason: 'quiet-hours' });
+    expect(getSuppressedCounts()).toEqual([]);
+
+    notification.getTriggerDispatchDecisionForRule('update-applied', 'slack.ops', {
+      ...options,
+      countSuppression: true,
+    });
+    expect(getSuppressedCounts()).toEqual([
+      { ruleId: 'update-applied', reason: 'quiet-hours', count: 1 },
+    ]);
+  });
+
+  test('is not applied unless the caller asks, so action triggers are never muted', () => {
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-applied', 'docker.local', {
+        allowAllWhenNoTriggers: true,
+      }).enabled,
+    ).toBe(true);
+  });
+
+  test('is not applied outside the window or to an exempt rule', () => {
+    vi.setSystemTime(new Date('2026-03-01T12:00:00Z'));
+    expect(notification.isTriggerEnabledForRule('update-applied', 'slack.ops', options)).toBe(true);
+    vi.setSystemTime(NIGHT);
+    expect(notification.isTriggerEnabledForRule('update-failed', 'slack.ops', options)).toBe(true);
+  });
+
+  test('an active silence reports silenced, and a disabled rule stays disabled', () => {
+    delete ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE;
+    silenceStore.addSilence({
+      ruleId: 'update-applied',
+      expiresAt: new Date(NIGHT.getTime() + 60_000),
+    });
+    expect(
+      notification.getTriggerDispatchDecisionForRule('update-applied', 'slack.ops', options),
+    ).toEqual({ enabled: false, reason: 'silenced' });
+    expect(
+      notification.getTriggerDispatchDecisionForRule('auth-abuse', 'slack.ops', options).reason,
+    ).toBe('rule-disabled');
   });
 });

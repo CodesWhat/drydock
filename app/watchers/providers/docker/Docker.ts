@@ -6,9 +6,8 @@ const joi = JoiCronExpression(Joi);
 
 import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
-import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
-import { getDockerMaturityConfigurationSchema } from './update-policy.js';
+import { getDockerMaturityConfigurationSchema, withStoredSkipTags } from './update-policy.js';
 
 type DebounceFn = <T extends (...args: any[]) => void>(
   fn: T,
@@ -33,6 +32,7 @@ import {
 } from '../../../prometheus/watcher.js';
 import type { ComponentConfiguration } from '../../../registry/Component.js';
 import * as registry from '../../../registry/index.js';
+import { isObservationMode } from '../../../runtime/observation-mode.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
 import { sleep } from '../../../util/sleep.js';
@@ -44,6 +44,12 @@ import {
 import { consumeFreshContainerScheduledPollSkip } from '../../registry-webhook-fresh.js';
 import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
+import {
+  buildContainerWatchFilter,
+  type ContainerWatchFilterConfiguration,
+  getContainerFilterConfigurationSchema,
+  shouldWatchContainer,
+} from './container-filter.js';
 import {
   type AliasFilterDecision,
   applyEffectiveDockerConfigFromLabels,
@@ -63,6 +69,12 @@ import {
   type DockerContainerWatchOptions,
   mapContainerToContainerReport as mapContainerToContainerReportState,
 } from './container-processing.js';
+import {
+  type ContainerStateAlertTracker,
+  createContainerStateAlertTracker,
+  getRestartLoopConfigurationSchema,
+  type RestartLoopConfiguration,
+} from './container-state-alerts.js';
 import { warnIfCurlHealthcheckOverride } from './curl-healthcheck-warning.js';
 import {
   endDigestCachePollCycleForRegistries,
@@ -105,7 +117,6 @@ import {
   getOldContainers,
   getSemverTagFromInspectPath,
   getStillInWatchScopeContainerIds,
-  isContainerToWatch,
   normalizeConfigNumberValue,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
@@ -121,6 +132,7 @@ import {
   createDockerImageDetailsHelpers,
 } from './docker-image-details-orchestration.js';
 import { createDockerInventoryRefresh, type DockerInventoryWatcher } from './docker-inventory.js';
+import { type DockerRecentEvent, toRecentDockerEvent } from './docker-recent-event.js';
 import {
   applyRemoteAuthHeadersForWatcher,
   ensureRemoteAuthHeadersForWatcher,
@@ -140,6 +152,7 @@ import {
   ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
+  ddTagCeiling,
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
@@ -163,12 +176,19 @@ import {
 } from './oidc.js';
 import { detectPodmanCompatibility } from './podman-detection.js';
 import { filterBySegmentCount, getCurrentPrefix, getFirstDigitIndex } from './tag-candidates.js';
+import {
+  allSettledWithDockerWatchConcurrency,
+  mapWithDockerWatchConcurrency,
+} from './watch-concurrency.js';
 
-export interface DockerWatcherConfiguration extends ComponentConfiguration {
+export interface DockerWatcherConfiguration
+  extends ComponentConfiguration,
+    ContainerWatchFilterConfiguration {
   socket: string;
   host?: string;
   protocol?: 'http' | 'https';
   port: number;
+  restartloop?: RestartLoopConfiguration;
   auth?: {
     type?: 'basic' | 'bearer' | 'oidc';
     user?: string;
@@ -207,23 +227,6 @@ const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
-const DOCKER_WATCH_CONCURRENCY = 10;
-
-function mapWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.all(items.map((item, index) => limit(() => mapper(item, index))));
-}
-
-function allSettledWithDockerWatchConcurrency<T, R>(
-  items: T[],
-  mapper: (item: T, index: number) => Promise<R> | R,
-) {
-  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
-  return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
-}
 
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
@@ -280,14 +283,6 @@ type DockerEventParseErrorInput = Parameters<typeof isRecoverableDockerEventPars
 type DockerContainerInspectPayload = Parameters<typeof updateContainerFromInspectState>[1];
 type DockerImageDetailsWatcher = Parameters<typeof addImageDetailsToContainerOrchestration>[0];
 type DockerImageDetailsContainer = Parameters<typeof addImageDetailsToContainerOrchestration>[1];
-
-interface DockerRecentEvent {
-  timestamp: string;
-  action?: string;
-  type?: string;
-  id?: string;
-  actorId?: string;
-}
 
 type DockerWatcherSourceProbe = {
   name: string;
@@ -360,6 +355,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public remoteAuthBlockedReason?: string;
   public isWatcherDeregistered: boolean = false;
   public isCronWatchInProgress: boolean = false;
+  // True when the last watch() could not enumerate every container (the list
+  // call failed, or some containers could not be inspected). The one-shot
+  // `scan` command reads it, because watch() itself only logs these.
+  public lastScanIncomplete: boolean = false;
   // Bumped on every getContainers() call before its first await, so a
   // stale call's listContainers() result can tell it no longer owns the
   // right to record the claim set (see recordControllerLocalEnumeration()
@@ -393,6 +392,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public cronWatchRescanReason?: string;
   public cronWatchRescanIgnoreMaintenanceWindow: boolean = false;
   public cronWatchDeadlineHandle?: CronWatchDeadlineHandle;
+  private containerStateAlertTracker?: ContainerStateAlertTracker;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
   public pendingDiscoveries: Map<string, { firstSeenAtMs: number; name: string }> = new Map();
@@ -450,6 +450,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
+      ...getContainerFilterConfigurationSchema(this.joi),
       watchevents: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
@@ -458,9 +459,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         .valid(...MAINTENANCE_WINDOW_SCOPES)
         .default(DEFAULT_MAINTENANCE_WINDOW_SCOPE),
       ...getDockerMaturityConfigurationSchema(this.joi),
+      restartloop: getRestartLoopConfigurationSchema(this.joi),
       discoverysettlems: this.joi.number().integer().min(0).default(30_000), // sync w/ DEFAULT_DISCOVERY_SETTLE_MS
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
+        ceiling: this.joi.string().valid('major', 'minor'),
         pin: this.joi.object({
           info: this.joi.boolean().default(true),
         }),
@@ -479,6 +482,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
               exclude: this.joi.string(),
               transform: this.joi.string(),
               family: this.joi.string().valid('strict', 'loose'),
+              ceiling: this.joi.string().valid('major', 'minor'),
               pin: this.joi.object({
                 info: this.joi.boolean(),
               }),
@@ -740,6 +744,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
     }
     await seedControllerLocalEnumeration(this, this.dockerApi, this.log);
+    // The one-shot `scan` command drives watch() itself and exits, so it gets
+    // no cron, startup scan, docker events stream or update listener.
+    if (isObservationMode()) {
+      return;
+    }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(
       this.configuration.cron,
@@ -952,55 +961,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return sleep(ms);
   }
 
-  private toEventTimestamp(rawDockerEvent: Record<string, unknown>): string {
-    const rawTimeNano = rawDockerEvent.timeNano;
-    if (typeof rawTimeNano === 'number' && Number.isFinite(rawTimeNano) && rawTimeNano > 0) {
-      return new Date(Math.trunc(rawTimeNano / 1_000_000)).toISOString();
-    }
-
-    const rawTime = rawDockerEvent.time;
-    if (typeof rawTime === 'number' && Number.isFinite(rawTime) && rawTime > 0) {
-      const timestampMs =
-        rawTime > 1_000_000_000_000 ? Math.trunc(rawTime) : Math.trunc(rawTime * 1000);
-      return new Date(timestampMs).toISOString();
-    }
-
-    return new Date().toISOString();
-  }
-
   recordRecentDockerEvent(dockerEvent: unknown): void {
-    if (!dockerEvent || typeof dockerEvent !== 'object') {
-      return;
+    const recentEvent = toRecentDockerEvent(dockerEvent);
+    if (recentEvent) {
+      appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
     }
-
-    const dockerEventRecord = dockerEvent as Record<string, unknown>;
-    const actor = dockerEventRecord.Actor;
-    const actorId =
-      actor &&
-      typeof actor === 'object' &&
-      typeof (actor as Record<string, unknown>).ID === 'string'
-        ? ((actor as Record<string, unknown>).ID as string)
-        : undefined;
-
-    const recentEvent: DockerRecentEvent = {
-      timestamp: this.toEventTimestamp(dockerEventRecord),
-      action:
-        typeof dockerEventRecord.Action === 'string'
-          ? dockerEventRecord.Action
-          : typeof dockerEventRecord.status === 'string'
-            ? dockerEventRecord.status
-            : undefined,
-      type:
-        typeof dockerEventRecord.Type === 'string'
-          ? dockerEventRecord.Type
-          : typeof dockerEventRecord.scope === 'string'
-            ? dockerEventRecord.scope
-            : undefined,
-      id: typeof dockerEventRecord.id === 'string' ? dockerEventRecord.id : undefined,
-      actorId,
-    };
-
-    appendBoundedHistoryEntry(this.recentDockerEvents, recentEvent, RECENT_DOCKER_EVENT_LIMIT);
   }
 
   private recordAliasFilterDecisions(decisions: AliasFilterDecision[]): void {
@@ -1061,6 +1026,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async deregisterComponent() {
     this.isWatcherDeregistered = true;
     this.isDockerEventsListenerActive = false;
+    this.containerStateAlertTracker?.dispose();
+    this.containerStateAlertTracker = undefined;
     // See scanGeneration's declaration: invalidates any scan already in
     // flight so it discards its results instead of emitting them (DR-72).
     this.scanGeneration++;
@@ -1105,9 +1072,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // Only match containers owned by THIS watcher's agent — remote-agent rows
     // share the same default watcher name ('local') and would otherwise produce
     // a cross-agent match leaving a stale "update available" badge (#386).
+    // UI/API updates emit the bare container name; the trigger path emits
+    // `${watcher}_${name}`. Accept both forms (#1595).
     const matched = containers.find(
       (c) =>
-        `${c.watcher}_${c.name}` === containerName &&
+        (c.name === containerName || `${c.watcher}_${c.name}` === containerName) &&
         normalizeAgentValue(c.agent) === currentWatcherAgent,
     );
     if (!matched) {
@@ -1127,7 +1096,32 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     // the preserveClearedUpdateState guard in container-processing.ts and
     // cannot re-raise a spurious updateAvailable=true badge (#265 regression).
     storeContainer.markPendingFreshStateAfterManualUpdate(matched, Date.now());
+    // The update recreated the container, so the stored record still points at the
+    // removed one. Re-resolve the replacement by name and refresh just that container.
+    const replacementId = await this.findContainerIdByName(matched.name);
+    if (replacementId) {
+      await this.watchContainer(
+        { ...matched, id: replacementId },
+        { emitBatchEvent: false, refreshImageDetails: true },
+      );
+      return;
+    }
     await this.watchContainer(matched, { emitBatchEvent: false });
+  }
+
+  private async findContainerIdByName(containerName: string): Promise<string | undefined> {
+    try {
+      const summaries = await this.dockerApi.listContainers({
+        all: true,
+        filters: { name: [containerName] },
+      });
+      return summaries.find((summary) => summary.Names?.includes(`/${containerName}`))?.Id;
+    } catch (error: unknown) {
+      this.log.debug(
+        `Unable to resolve the replacement container "${containerName}" (${getErrorMessage(error)})`,
+      );
+      return undefined;
+    }
   }
 
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter
@@ -1197,6 +1191,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   }
 
   processDockerEvent(dockerEvent: unknown, streamGeneration?: number) {
+    if (!this.isWatcherDeregistered) {
+      this.containerStateAlertTracker ??= createContainerStateAlertTracker(this);
+      this.containerStateAlertTracker.observe(dockerEvent);
+    }
     return processDockerEventOrchestration(
       this.asDockerEventsWatcher(),
       dockerEvent,
@@ -1281,6 +1279,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       );
       containerEnumerationFailed = true;
     }
+    this.lastScanIncomplete =
+      containerEnumerationFailed || enumerationDiagnostics.enrichmentErrors > 0;
     if (enumerationDiagnostics.enrichmentErrors > 0) {
       this.log.warn(
         `Container enumeration degraded: ${enumerationDiagnostics.enrichmentErrors} container(s) could not be inspected this cycle; suppressing the watcher snapshot so the controller keeps its last-known state`,
@@ -1485,8 +1485,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }));
 
     // Filter on containers to watch
+    const watchFilter = buildContainerWatchFilter(this.configuration);
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
-      isContainerToWatch(getLabel(container.Labels, ddWatch), this.configuration.watchbydefault),
+      shouldWatchContainer(
+        getLabel(container.Labels, ddWatch),
+        this.configuration.watchbydefault,
+        watchFilter,
+        container.Names,
+        container.Labels,
+      ),
     );
     const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,
@@ -1502,6 +1509,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         transformTags: getLabel(container.Labels, ddTagTransform),
         tagFamily: getLabel(container.Labels, ddTagFamily),
         tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
+        tagCeiling: getLabel(container.Labels, ddTagCeiling),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate),
         portLabel: getLabel(container.Labels, ddPortLabel),
         displayName: getLabel(container.Labels, ddDisplayName),
@@ -1670,7 +1678,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.configuration.tag,
       (image) => this.getMatchingImgsetConfiguration(image),
     );
-    return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
+    // The watcher enumerates containers fresh from Docker, so a rejected major/minor line
+    // lives only in the stored policy; fold it in so candidate selection can skip the line.
+    const watchedContainer = withStoredSkipTags(
+      { ...container, tagFamily: tagPolicy.tagFamily, tagCeiling: tagPolicy.tagCeiling },
+      storeContainer.getContainer(container.id)?.updatePolicy?.skipTags,
+    );
+    return findNewVersionState(watchedContainer, logContainer, {
       ...options,
       pinInfoEnabled: tagPolicy.tagPinInfo,
     });

@@ -457,6 +457,9 @@
     "updateInsight": {
       "tooltip": "Newer version available: {tag}. This tag is pinned — drydock won't update it automatically."
     },
+    "updateCandidates": {
+      "title": "Candidates by update type"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
       "rolledBack": "Rolled back",
@@ -481,6 +484,7 @@
       "maturityClockPublished": "Candidate published {date} — {count} more day until the {minDays}-day minimum | Candidate published {date} — {count} more days until the {minDays}-day minimum",
       "maturityClockDetected": "Candidate detected {date} — {count} more day until the {minDays}-day minimum | Candidate detected {date} — {count} more days until the {minDays}-day minimum",
       "groupManualOnly": "Group policy '{group}' allows manual updates only. Drydock won't apply this one automatically.",
+      "securityFastLane": "Fixes {count} critical or high vulnerabilities in the running image ({ids}). Snooze, maturity and maintenance window holds don't apply.",
       "updateAvailableRuleDisabled": "The Update Available notification rule is off, and it also gates automatic updates. Turn it on in Settings > Notifications > Update Available to let Drydock apply this update on its own.",
       "updateButton": "Update now",
       "blockedButton": "Update blocked",
@@ -527,6 +531,7 @@
         "update-available-rule-disabled": "Update Available rule is off",
         "group-notify-only": "Group allows notifications only",
         "group-manual-only": "Group requires manual updates",
+        "security-fast-lane": "Security fast lane",
         "dry-run-trigger": "Dry-run trigger configuration",
         "maturity-releases-not-reached": "Maturity policy waiting"
       },
