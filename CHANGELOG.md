@@ -36,6 +36,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- GHCR, LSCR and Docker Hub publish-date lookups are now shared per image and tag for each scan, so containers on the same image no longer repeat the GitHub package versions paging or the Docker Hub tag request, and each GHCR versions page now goes through the api.github.com rate limiter. This stops a large fleet from burning the anonymous GitHub API quota in one scan.
+- The Home Assistant MQTT trigger no longer clones and redacts the whole container list for every sensor refresh when agent topic segments are on, which made startup discovery quadratic in the container count.
 - The trigger docs no longer say notification rules only reach notification triggers. An empty trigger list on `container-unhealthy` and the container state alerts also runs Command triggers, and the docs now list how to opt out.
 - A Portwing edge agent's over-cap response now fails with a clear error instead of a generic agent failure. Buffered requests and legacy container log replies that exceed Portwing's 16 MiB cap come back as `response_too_large`; the log download endpoint answers 413 for it, and other buffered requests report that the response was too large and to use a streaming request. Older Portwing versions that don't send the code behave as before.
 - A `dd.tag.include` or `dd.tag.exclude` regex that fails to compile no longer widens the candidate tags. Before, the bad filter was skipped with a log warning and the container could be offered tags the filter was meant to block. Now it gets no update candidates and shows an error naming the pattern until you fix it.

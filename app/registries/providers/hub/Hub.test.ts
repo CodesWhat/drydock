@@ -484,4 +484,24 @@ describe('Docker Hub Registry', () => {
   test('publishedAtIsPushDate is true on Hub', () => {
     expect(hub.publishedAtIsPushDate).toBe(true);
   });
+
+  test('containers sharing an image and tag hit Docker Hub once per poll cycle', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { last_updated: '2026-03-01T12:34:56.000Z' } });
+    const image = { name: 'library/nginx', tag: { value: 'latest' } };
+    hub.startDigestCachePollCycle();
+
+    const results = await Promise.all([
+      hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true }),
+      hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true }),
+    ]);
+    await hub.getImagePublishedAt(image, '1.26.0', { usePollCycleCache: true });
+
+    expect(results).toEqual(['2026-03-01T12:34:56.000Z', '2026-03-01T12:34:56.000Z']);
+    expect(axios).toHaveBeenCalledTimes(1);
+
+    hub.endDigestCachePollCycle();
+    await hub.getImagePublishedAt(image, '1.26.0');
+    expect(axios).toHaveBeenCalledTimes(2);
+  });
 });

@@ -2504,7 +2504,7 @@ describe('agenttopicsegment flag', () => {
       ).toBe(true);
     });
 
-    test('flag ON — watcher counts are scoped to agent via getContainers filter', async () => {
+    test('flag ON — watcher counts are scoped to agent via the uncloned getContainersRaw view', async () => {
       const mlContainer = { id: 'c1', watcher: 'local', agent: 'ml', updateAvailable: false };
       const mlContainerUpdate = { id: 'c2', watcher: 'local', agent: 'ml', updateAvailable: true };
       const otherAgentContainer = {
@@ -2514,7 +2514,7 @@ describe('agenttopicsegment flag', () => {
         updateAvailable: true,
       };
       vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
-      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+      vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
         mlContainer,
         mlContainerUpdate,
         otherAgentContainer,
@@ -2538,9 +2538,23 @@ describe('agenttopicsegment flag', () => {
       expect(capturedWatcherUpdateCountValue).toBe('1');
     });
 
+    test('flag ON — a sensor refresh never clones the container list', async () => {
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
+        { id: 'c1', watcher: 'local', agent: 'ml', updateAvailable: false },
+      ] as any);
+      const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
+
+      for (let i = 0; i < 5; i += 1) {
+        await hassAgent.updateContainerSensors({ name: `nginx-${i}`, watcher: 'local', agent: 'ml' });
+      }
+
+      expect(getContainersSpy).not.toHaveBeenCalled();
+    });
+
     test('flag ON — no-agent watcher counts exclude remote-agent containers', async () => {
       vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
-      const getContainersSpy = vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+      const getContainersRawSpy = vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
         { id: 'c1', watcher: 'local', agent: undefined, updateAvailable: false },
         { id: 'c2', watcher: 'local', agent: undefined, updateAvailable: true },
         { id: 'c3', watcher: 'local', agent: 'edge', updateAvailable: true },
@@ -2562,7 +2576,7 @@ describe('agenttopicsegment flag', () => {
         agent: undefined,
       });
 
-      expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'local' });
+      expect(getContainersRawSpy).toHaveBeenCalledWith({ watcher: 'local' });
       expect(capturedWatcherTotalCountValue).toBe('2');
       expect(capturedWatcherUpdateCountValue).toBe('1');
     });
