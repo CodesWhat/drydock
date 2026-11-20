@@ -37,6 +37,8 @@ const ORDERED_STATE_FRAME_TYPES = new Set([
   'dd:container_added',
   'dd:container_updated',
   'dd:container_removed',
+  // die then stop must reach the state alert tracker in order.
+  'dd:container_event',
 ]);
 // Number of consecutive server-initiated ping cycles that may pass without a
 // pong reply before the connection is considered dead. 2 cycles × 30s = 60s,
@@ -444,6 +446,9 @@ export class EdgeAgentAdapter {
       case 'dd:container_added':
       case 'dd:container_updated':
         await this.client.handleEvent(agentEventName, (data as { container?: unknown }).container);
+        return;
+      case 'dd:container_event':
+        await this.client.handleEvent(agentEventName, data);
         return;
       case 'dd:container_removed':
         await this.client.handleEvent(agentEventName, { id: data.id, name: data.name });

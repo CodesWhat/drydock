@@ -4292,6 +4292,57 @@ describe('AgentClient', () => {
       });
     });
 
+    describe('dd:container-event (Portwing)', () => {
+      const stored = { id: 'c1', name: 'nginx', watcher: 'docker', agent: 'test-agent' };
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([]);
+        vi.mocked(storeContainer.getContainer).mockReturnValue(stored as never);
+      });
+
+      afterEach(() => {
+        client.stop();
+        vi.useRealTimers();
+      });
+
+      test('should raise a state alert for a die with a non-zero exit code', async () => {
+        await client.handleEvent('dd:container-event', {
+          containerId: 'c1',
+          name: 'nginx',
+          action: 'die',
+          exitCode: 3,
+          time: 1,
+        });
+        await client.handleEvent('dd:container-event', {
+          containerId: 'c1',
+          name: 'nginx',
+          action: 'start',
+          time: 2,
+        });
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(event.emitContainerStateAlert).toHaveBeenCalledTimes(1);
+        expect(event.emitContainerStateAlert).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'container-exited', exitCode: 3, container: stored }),
+        );
+      });
+
+      test('should drop pending events when the client stops', async () => {
+        await client.handleEvent('dd:container-event', {
+          containerId: 'c1',
+          name: 'nginx',
+          action: 'die',
+          exitCode: 3,
+          time: 1,
+        });
+        client.stop();
+        await vi.advanceTimersByTimeAsync(2000);
+
+        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
+      });
+    });
+
     test('should emit security-alert when agent sends dd:security-alert', async () => {
       await client.handleEvent('dd:security-alert', {
         containerName: 'local_nginx',
