@@ -15,9 +15,11 @@ docker run --rm \
 
 ## What it does and doesn't do
 
-A scan is observation-only. It starts no HTTP server, no scheduler and no Docker events stream, and it reads and writes nothing in the `/store` volume: the database lives in memory for the length of the run. Only watchers and registries are loaded, so no notification or action can fire, and there are no flags to turn them on. Passing `--notify`, `--trigger`, `--action`, `--update` or `--apply` is a usage error. Authentication and agents are not loaded either, so a scan does not need a login and does not talk to remote agents.
+A scan is observation-only. It starts no HTTP server, no scheduler and no Docker events stream, and it reads and writes nothing in the `/store` volume: the database lives in memory for the length of the run.
 
-Logs go to stderr. Stdout carries only the chosen output, so `drydock scan | jq` is safe.
+Because the store is in memory, a scan starts without anything you set in the UI or API and ignores all of it: skipped versions, line rejects, snoozes, group policy and label overrides. An update you skipped or snoozed in the UI can still be reported, so do not read exit code `3` as "something your policy would act on". Only watchers and registries are loaded, so no notification or action can fire, and there are no flags to turn them on. Passing `--notify`, `--trigger`, `--action`, `--update` or `--apply` is a usage error. Authentication and agents are not loaded either, so a scan does not need a login and does not talk to remote agents.
+
+Logs go to stderr. Stdout carries only the chosen output, so piping the scan into `jq` is safe. The image entrypoint's own notices (the `group_add` GID line and the insecure-root warning) also go to stderr.
 
 ## Options
 

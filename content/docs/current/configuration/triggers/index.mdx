@@ -272,7 +272,7 @@ The in-app bell has audit-backed controls for `update-available`, `update-applie
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- when their trigger list is empty, all notification triggers fire (same permissive default as `update-available`). Once you assign specific triggers, only those fire.
 - **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting.
 - **`container-unhealthy`** -- disabled by default. Enable it and assign triggers to receive container health alerts. When its trigger list is empty, all notification triggers fire, and Command triggers run as well. This event always fires regardless of the threshold setting.
-- **`container-stopped`**, **`container-exited`**, **`container-oom-killed`**, **`container-restart-loop`** -- disabled by default, so upgrading never starts sending alerts you did not ask for. Enable the ones you want and assign triggers. When their trigger list is empty, all notification triggers fire, and Command triggers run as well. These events always fire regardless of the threshold setting. See [Container state alerts](#container-state-alerts).
+- **`container-stopped`**, **`container-exited`**, **`container-oom-killed`**, **`container-restart-loop`** -- disabled by default, so upgrading never starts sending alerts you did not ask for. Enable the ones you want and assign triggers. When their trigger list is empty, all notification triggers fire. Command and the update actions never run for them. These events always fire regardless of the threshold setting. See [Container state alerts](#container-state-alerts).
 - **`auth-abuse`**, **`agent-version-mismatch`** -- disabled by default. Enable them and assign triggers. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting. See [Auth abuse and agent version alerts](#auth-abuse-and-agent-version-alerts).
 - **`maturity-cleared`** -- enabled by default. When its trigger list is empty, all notification triggers fire. Unlike the events above, it respects `THRESHOLD` and `AUTO` the same way `update-available` does -- a trigger that would never have announced an update also won't announce its maturity, and `AUTO=false` disables it too.
 - **`update-pending-approval`** -- disabled by default. When its trigger list is empty, all notification triggers fire. It respects `THRESHOLD` and `AUTO` the same way `update-available` does, and fires once per queue row, so a re-seen pending candidate never repeats.
@@ -330,7 +330,7 @@ The restart loop thresholds are per-watcher settings:
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_WATCHER_{watcher_name}_RESTARTLOOP_THRESHOLD` | ⚪ | Crashes inside the window that count as a restart loop | Integer, 2 or more | `3` |
-| `DD_WATCHER_{watcher_name}_RESTARTLOOP_WINDOW` | ⚪ | Window length in seconds | Integer, 1 or more | `300` |
+| `DD_WATCHER_{watcher_name}_RESTARTLOOP_WINDOW` | ⚪ | Window length in seconds (the liveness window, `LIVENESSWINDOW`, is in milliseconds) | Integer, 1 or more | `300` |
 
 In templates, `event.exitCode` and `event.reason` describe the exit. `event.restartCount` and `event.windowSeconds` are set for `container-restart-loop`.
 

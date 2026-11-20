@@ -1,0 +1,26 @@
+{
+  "title": "Configuration",
+  "pages": [
+    "index",
+    "actions",
+    "agents",
+    "dashboard",
+    "authentications",
+    "config-file",
+    "dns",
+    "groups",
+    "hooks",
+    "logs",
+    "registries",
+    "rollback",
+    "security",
+    "self-update",
+    "server",
+    "storage",
+    "timezone",
+    "triggers",
+    "ui",
+    "watchers",
+    "webhooks"
+  ]
+}
