@@ -2,7 +2,8 @@
 // Imported by sync-docs.mjs, next.config.mjs, and version-coupling.test.mjs.
 // Order matters: first entry = default/active version (current docs).
 export const versions = [
-  { slug: "v1.8", source: "current", title: "v1.8" },
+  { slug: "v1.9", source: "current", title: "v1.9" },
+  { slug: "v1.8", source: "v1.8", title: "v1.8" },
   { slug: "v1.7", source: "v1.7", title: "v1.7" },
   { slug: "v1.6", source: "v1.6", title: "v1.6" },
   { slug: "v1.5", source: "v1.5", title: "v1.5" },

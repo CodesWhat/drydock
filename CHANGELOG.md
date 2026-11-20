@@ -8,6 +8,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.9.0-rc.1] - 2026-11-20
+
 > [!WARNING]
 > **Downgrading from 1.9 to 1.8 needs the pre-upgrade backup.** 1.9 applies store schema migrations 15 and 16 (the audit actor column and an update-operation index) on first start, and 1.8 supports migrations up to 14. 1.8 refuses a database with a newer schema and stops at startup with a store-schema-too-new error instead of opening it. Stop Drydock and back up the complete store directory before upgrading, and restore that backup to go back to 1.8. Changes made after the upgrade do not carry back.
 
@@ -3862,7 +3864,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.9.0-rc.1...HEAD
+[1.9.0-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...v1.9.0-rc.1
 [1.8.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...v1.8.0-rc.15
 [1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
 [1.8.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.12...v1.8.0-rc.13
