@@ -41,6 +41,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Release builds no longer run the UI build under emulation on arm64. The Dockerfile's `ui-build` stage now runs on the build host's own platform, since the static assets it produces are the same for every architecture, which fixes the multi-arch release build timing out while vite hung under QEMU.
 - The image entrypoint's notices (the `group_add` GID line and the insecure-root warning) now go to stderr, so `scan` output on stdout stays valid JSON under those settings.
 - The OpenAPI schema for `PATCH /api/v1/containers/{id}/update-policy` now lists the `scope` field (`tag`, `minor` or `major`) that `skip-current` already accepted.
 - Portwing agents no longer get the "upgrade to 1.7.0" warning and Update agent badge, or an agent-version-mismatch alert. The minimum-version check now applies only to Drydock agents, since Portwing versions on its own line.

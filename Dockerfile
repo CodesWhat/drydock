@@ -57,8 +57,11 @@ COPY app/ ./
 RUN npm run build \
     && npm prune --omit=dev
 
-# Build stage for frontend UI
-FROM base AS ui-build
+# Build stage for frontend UI. Runs on the build host's own platform: the output
+# (ui/dist) is static assets, identical for every target arch, so emulating it
+# under QEMU for arm64 only made vite hang (v1.9.0-rc.1 release-cut timeout).
+# Keep the same digest pin as base (#1021).
+FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS ui-build
 WORKDIR /home/node/ui
 
 # Copy ui package.json
