@@ -27,6 +27,15 @@ const DEFAULTS = {
   output: 'portwing-fleet-soak.json',
 };
 
+// Portwing v1.4.0 (#503): bulk stream frames are backpressured, so a short
+// socket pause stalls the producer without evicting. A WebSocket write that
+// cannot finish within writeWait (10 s) closes the connection and the agent
+// reconnects, which is the slow-consumer eviction path.
+const BACKPRESSURE_PAUSE_MS = 3500;
+const BACKPRESSURE_RESUME_WAIT_MS = 20_000;
+const EVICTION_PAUSE_MS = 15_000;
+const EVICTION_RECONNECT_WAIT_MS = 45_000;
+
 function fail(message) {
   throw new Error(`fleet-soak: ${message}`);
 }
@@ -257,6 +266,9 @@ const evidence = {
     initialConnections: 0,
     execSessionsStarted: 0,
     execOutputFrames: 0,
+    backpressurePauses: 0,
+    backpressureResumed: 0,
+    backpressureReconnects: 0,
     slowConsumerReconnects: 0,
     reconnectStorms: 0,
     reconnectsObserved: 0,
@@ -443,17 +455,39 @@ async function run() {
   if (!serverSocket?.pause || !serverSocket?.resume) {
     fail('production EdgeAgentAdapter WebSocket does not expose a pausable socket');
   }
+  const startFollowStream = (onChunk) =>
+    slowAdapter.streamContainerLogs(
+      'c0000000001',
+      { follow: true, timestamps: true },
+      { onChunk, onEnd: () => {}, onError: () => {} },
+    );
+
+  // Phase 1: a short pause must backpressure the stream without eviction.
+  let backpressureFrames = 0;
+  const backpressureStream = startFollowStream(() => {
+    backpressureFrames += 1;
+  });
+  await waitFor('follow stream frames before pause', () => backpressureFrames > 0);
   serverSocket.pause();
-  slowAdapter.streamContainerLogs(
-    'c0000000001',
-    { follow: true, timestamps: true },
-    {
-      onChunk: () => {},
-      onEnd: () => {},
-      onError: () => {},
-    },
+  evidence.phases.backpressurePauses += 1;
+  await sleep(BACKPRESSURE_PAUSE_MS);
+  const framesAtResume = backpressureFrames;
+  serverSocket.resume();
+  await waitFor(
+    'follow stream to resume delivering frames after short pause',
+    () => backpressureFrames > framesAtResume,
+    BACKPRESSURE_RESUME_WAIT_MS,
   );
-  await sleep(3500);
+  evidence.phases.backpressureResumed += 1;
+  if (getAgents().find((agent) => agent.name === slowAgentName) !== slowAgent) {
+    evidence.phases.backpressureReconnects += 1;
+  }
+  backpressureStream?.cancel?.();
+
+  // Phase 2: a pause longer than writeWait must evict and reconnect.
+  serverSocket.pause();
+  startFollowStream(() => {});
+  await sleep(EVICTION_PAUSE_MS);
   serverSocket.resume();
   const reconnectedSlowAgent = await waitFor(
     'slow-consumer eviction and reconnect',
@@ -461,7 +495,7 @@ async function run() {
       const candidate = getAgents().find((agent) => agent.name === slowAgentName);
       return candidate && candidate !== slowAgent ? candidate : undefined;
     },
-    25_000,
+    EVICTION_RECONNECT_WAIT_MS,
   );
   evidence.phases.slowConsumerReconnects = reconnectedSlowAgent ? 1 : 0;
   evidence.phases.reconnectsObserved += 1;
@@ -531,6 +565,13 @@ async function run() {
     'sustained concurrent exec completed',
     evidence.phases.execOutputFrames >= options.agents * options.execPerAgent,
     `${evidence.phases.execOutputFrames} output frames across ${evidence.phases.execSessionsStarted} sessions`,
+  );
+  recordAssertion(
+    'short pause backpressured without reconnect',
+    evidence.phases.backpressurePauses === 1 &&
+      evidence.phases.backpressureResumed === 1 &&
+      evidence.phases.backpressureReconnects === 0,
+    `${evidence.phases.backpressurePauses} pause, ${evidence.phases.backpressureResumed} resumed, ${evidence.phases.backpressureReconnects} reconnects`,
   );
   recordAssertion(
     'slow consumer triggered bounded reconnect',
