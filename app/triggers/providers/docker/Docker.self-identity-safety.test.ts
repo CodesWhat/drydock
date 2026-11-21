@@ -189,10 +189,26 @@ describe('Drydock self identity safety boundary', () => {
     expect(docker.createContainer).toHaveBeenCalledOnce();
   });
 
+  test('refuses a TCP peer sharing the runtime custom hostname without stopping it', async () => {
+    const peerApi = createInspectingDockerApi({
+      'peer-container-id': { Id: 'peer-container-id', Name: '/drydock-peer', Config: { Hostname: 'current-host' } },
+    });
+    const watcher = tcpWatcher(peerApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': watcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(watcher as never);
+    stubTriggerFlow({ running: true });
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow('Drydock container identity is indeterminate');
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+    expect(docker.createContainer).not.toHaveBeenCalled();
+  });
+
   test('treats a TCP watcher daemon that holds this container as the current Drydock', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
     const ownDockerApi = createInspectingDockerApi({
-      'peer-container-id': {
-        Id: 'peer-container-id',
+      'aaaaaaaaaaaa1111': {
+        Id: 'aaaaaaaaaaaa1111',
         Name: '/drydock-peer',
         Config: { Hostname: 'current-host' },
       },
@@ -202,13 +218,15 @@ describe('Drydock self identity safety boundary', () => {
     mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
     vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
 
-    await expect(docker.classifySelfUpdate(createDrydockCandidate())).resolves.toBe('current');
+    await expect(docker.classifySelfUpdate({ ...createDrydockCandidate(), id: 'aaaaaaaaaaaa1111' })).resolves.toBe('current');
   });
 
   test('runs the helper handoff instead of stopping the running container for a TCP self candidate', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
     const ownDockerApi = createInspectingDockerApi({
-      'peer-container-id': {
-        Id: 'peer-container-id',
+      'aaaaaaaaaaaa1111': {
+        Id: 'aaaaaaaaaaaa1111',
         Name: '/drydock-peer',
         Config: { Hostname: 'current-host' },
       },
@@ -222,16 +240,18 @@ describe('Drydock self identity safety boundary', () => {
       .spyOn(docker.selfUpdateOrchestrator, 'execute')
       .mockResolvedValue(true);
 
-    await docker.trigger(createDrydockCandidate());
+    await docker.trigger({ ...createDrydockCandidate(), id: 'aaaaaaaaaaaa1111' });
 
     expect(executeSelfUpdate).toHaveBeenCalledOnce();
     expect(docker.stopContainer).not.toHaveBeenCalled();
   });
 
   test('classifies a same-daemon Drydock container with a different id as a peer', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
     const dockerApi = createInspectingDockerApi({
-      'current-container-id': {
-        Id: 'current-container-id',
+      'aaaaaaaaaaaa1111': {
+        Id: 'aaaaaaaaaaaa1111',
         Name: '/drydock-current',
         Config: { Hostname: 'current-host' },
       },

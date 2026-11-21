@@ -51,7 +51,7 @@ export async function resolveSelfContainerIdentity(
   dockerApi: DockerIdentityApi | undefined,
   hostname = getRuntimeHostname(),
 ): Promise<SelfContainerIdentity | null> {
-  const probe = await probeSelfContainerIdentity(dockerApi, hostname);
+  const probe = await probeSelfContainerIdentity(dockerApi, hostname, true);
   return probe.status === 'found' ? probe.identity : null;
 }
 
@@ -63,6 +63,7 @@ export async function resolveSelfContainerIdentity(
 export async function probeSelfContainerIdentity(
   dockerApi: DockerIdentityApi | undefined,
   hostname = getRuntimeHostname(),
+  trustHostnameMatch = false,
 ): Promise<SelfContainerProbe> {
   const runtimeHostname = hostname?.trim();
   if (!dockerApi || !runtimeHostname || !HOSTNAME_PATTERN.test(runtimeHostname)) {
@@ -125,7 +126,7 @@ export async function probeSelfContainerIdentity(
   if (hostnameMatches.length === 0) {
     return { status: 'absent' };
   }
-  return hostnameMatches.length === 1
+  return hostnameMatches.length === 1 && trustHostnameMatch
     ? { status: 'found', identity: { id: hostnameMatches[0]!.id, name: hostnameMatches[0]!.name } }
     : UNKNOWN_PROBE;
 }
