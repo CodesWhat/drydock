@@ -40,26 +40,46 @@ function getSummaryIdentity(
   return id && name ? { id, name } : null;
 }
 
+export type SelfContainerProbe =
+  | { status: 'found'; identity: SelfContainerIdentity }
+  | { status: 'absent' }
+  | { status: 'unknown' };
+
+const UNKNOWN_PROBE: SelfContainerProbe = { status: 'unknown' };
+
 export async function resolveSelfContainerIdentity(
   dockerApi: DockerIdentityApi | undefined,
   hostname = getRuntimeHostname(),
 ): Promise<SelfContainerIdentity | null> {
+  const probe = await probeSelfContainerIdentity(dockerApi, hostname);
+  return probe.status === 'found' ? probe.identity : null;
+}
+
+/**
+ * Tri-state variant of resolveSelfContainerIdentity: `absent` means the daemon
+ * was listed and inspected cleanly and none of its containers is this process,
+ * which is the only evidence that proves a watcher's daemon is a peer.
+ */
+export async function probeSelfContainerIdentity(
+  dockerApi: DockerIdentityApi | undefined,
+  hostname = getRuntimeHostname(),
+): Promise<SelfContainerProbe> {
   const runtimeHostname = hostname?.trim();
   if (!dockerApi || !runtimeHostname || !HOSTNAME_PATTERN.test(runtimeHostname)) {
-    return null;
+    return UNKNOWN_PROBE;
   }
 
   let summaries: DockerContainerSummary[];
   try {
     summaries = await dockerApi.listContainers({ all: true });
   } catch {
-    return null;
+    return UNKNOWN_PROBE;
   }
   if (
     !Array.isArray(summaries) ||
     summaries.some((summary) => typeof summary.Id !== 'string' || !summary.Id.trim())
   ) {
-    return null;
+    return UNKNOWN_PROBE;
   }
 
   if (DOCKER_ID_PATTERN.test(runtimeHostname)) {
@@ -68,10 +88,11 @@ export async function resolveSelfContainerIdentity(
         typeof summary.Id === 'string' && summary.Id.startsWith(runtimeHostname),
     );
     if (idMatches.length === 1) {
-      return getSummaryIdentity(idMatches[0]);
+      const identity = getSummaryIdentity(idMatches[0]);
+      return identity ? { status: 'found', identity } : UNKNOWN_PROBE;
     }
     if (idMatches.length > 1) {
-      return null;
+      return UNKNOWN_PROBE;
     }
     // No ID prefix match: a recreated container can carry its predecessor's
     // ID as a stale hostname, so fall through to the inspected hostname match.
@@ -83,7 +104,7 @@ export async function resolveSelfContainerIdentity(
     ),
   );
   if (inspected.some((result) => result.status !== 'fulfilled')) {
-    return null;
+    return UNKNOWN_PROBE;
   }
   const inspectedIdentities = inspected.map((result) => {
     const value = (result as PromiseFulfilledResult<DockerContainerInspect>).value;
@@ -95,13 +116,16 @@ export async function resolveSelfContainerIdentity(
       : null;
   });
   if (inspectedIdentities.some((identity) => !identity)) {
-    return null;
+    return UNKNOWN_PROBE;
   }
   const hostnameMatches = inspectedIdentities.filter(
     (identity) => identity?.hostname === runtimeHostname,
   );
 
+  if (hostnameMatches.length === 0) {
+    return { status: 'absent' };
+  }
   return hostnameMatches.length === 1
-    ? { id: hostnameMatches[0]!.id, name: hostnameMatches[0]!.name }
-    : null;
+    ? { status: 'found', identity: { id: hostnameMatches[0]!.id, name: hostnameMatches[0]!.name } }
+    : UNKNOWN_PROBE;
 }

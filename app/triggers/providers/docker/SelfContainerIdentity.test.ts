@@ -1,4 +1,7 @@
-import { resolveSelfContainerIdentity } from './SelfContainerIdentity.js';
+import {
+  probeSelfContainerIdentity,
+  resolveSelfContainerIdentity,
+} from './SelfContainerIdentity.js';
 
 vi.mock('node:os', () => ({ hostname: () => 'kernel-host' }));
 
@@ -233,5 +236,49 @@ describe('resolveSelfContainerIdentity', () => {
     });
 
     await expect(resolveSelfContainerIdentity(dockerApi, 'custom-host')).resolves.toBeNull();
+  });
+});
+
+describe('probeSelfContainerIdentity', () => {
+  test('reports absent only when a clean listing and inspection finds no matching hostname', async () => {
+    const dockerApi = createDockerApi([{ Id: 'cccccccccccc1111' }], {
+      cccccccccccc1111: { Id: 'cccccccccccc1111', Name: '/other', Config: { Hostname: 'other' } },
+    });
+    await expect(probeSelfContainerIdentity(dockerApi, 'custom-host')).resolves.toEqual({
+      status: 'absent',
+    });
+    await expect(probeSelfContainerIdentity(createDockerApi([]), 'aaaaaaaaaaaa')).resolves.toEqual({
+      status: 'absent',
+    });
+  });
+
+  test('reports found for a unique container id prefix match', async () => {
+    const dockerApi = createDockerApi([{ Id: 'aaaaaaaaaaaa1111', Names: ['/drydock'] }]);
+    await expect(probeSelfContainerIdentity(dockerApi, 'aaaaaaaaaaaa')).resolves.toEqual({
+      status: 'found',
+      identity: { id: 'aaaaaaaaaaaa1111', name: 'drydock' },
+    });
+  });
+
+  test.each([
+    ['no api', undefined, 'custom-host'],
+    ['an unusable hostname', createDockerApi([]), ''],
+    [
+      'a prefix match without a name',
+      createDockerApi([{ Id: 'aaaaaaaaaaaa1111' }]),
+      'aaaaaaaaaaaa',
+    ],
+    [
+      'an ambiguous prefix',
+      createDockerApi([
+        { Id: 'aaaaaaaaaaaa1111', Names: ['/a'] },
+        { Id: 'aaaaaaaaaaaa2222', Names: ['/b'] },
+      ]),
+      'aaaaaaaaaaaa',
+    ],
+  ])('reports unknown for %s', async (_d, dockerApi, hostname) => {
+    await expect(probeSelfContainerIdentity(dockerApi as never, hostname)).resolves.toEqual({
+      status: 'unknown',
+    });
   });
 });
