@@ -28,6 +28,8 @@
 # CPE range (< 3.5.10) and matches the patched revision. The OpenVEX statements are `fixed`, scoped
 # to 3.5.9-r1 only. Delete docker/openssl-3.5.9.vex.json and this entry once Grype reads the
 # Alpine fix or the pin moves to a release outside the NVD range. No severity cutoff changes.
+# Five more High advisories with no Alpine fix (CVE-2026-124709, -107494, -121482, -84786, -107493)
+# are `not_affected` (vulnerable_code_not_in_execute_path) for the built-in image paths only.
 vex-documents:
   - docker/zlib-infback9.vex.json
   - docker/openssl-3.5.9.vex.json
