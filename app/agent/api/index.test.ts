@@ -920,40 +920,6 @@ describe('Agent API index', () => {
         expect(useOrder[limiterIdx]).toBeLessThan(useOrder[authIdx]);
       });
 
-      test('should pass requests through when under the rate limit', async () => {
-        process.env.DD_AGENT_SECRET = 'secret';
-        await init();
-
-        // mockRateLimitMiddleware calls next() by default (under-limit behaviour)
-        const req = {};
-        const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
-        const next = vi.fn();
-
-        mockRateLimitMiddleware(req, res, next);
-
-        expect(next).toHaveBeenCalledTimes(1);
-        expect(res.status).not.toHaveBeenCalled();
-      });
-
-      test('should return 429 when the rate limit is exceeded', async () => {
-        process.env.DD_AGENT_SECRET = 'secret';
-        await init();
-
-        // Simulate the rate limiter blocking the request (does not call next)
-        mockRateLimitMiddleware.mockImplementationOnce((_req, res) => {
-          res.status(429).send();
-        });
-
-        const req = {};
-        const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
-        const next = vi.fn();
-
-        mockRateLimitMiddleware(req, res, next);
-
-        expect(res.status).toHaveBeenCalledWith(429);
-        expect(next).not.toHaveBeenCalled();
-      });
-
       test('should register the rate limiter using the middleware returned by rateLimit()', async () => {
         process.env.DD_AGENT_SECRET = 'secret';
         await init();

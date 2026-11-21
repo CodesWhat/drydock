@@ -2247,8 +2247,14 @@ describe('AgentClient', () => {
       client.startSse();
       await vi.advanceTimersByTimeAsync(0);
 
-      // Should not throw
+      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
       stream.emit('data', Buffer.from('data: {invalid json}\n\n'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(handleSpy).not.toHaveBeenCalled();
+      expect(mockLogChild.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Error parsing SSE data'),
+      );
     });
 
     test('should skip SSE lines that do not start with data:', async () => {
