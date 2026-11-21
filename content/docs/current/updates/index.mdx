@@ -5,7 +5,14 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.16 is an opt-in testing candidate with a trigger-scope fix, running-digest scans and openssl `3.5.9-r1`. It begins its own soak when published; it is not v1.8 GA.</Callout>
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.8.0-rc.17 is an opt-in testing candidate that fixes self-update through TCP watchers and socket proxies. Its soak begins when published; it is not v1.8 GA.</Callout>
+
+## v1.8.0-rc.17 Highlights - November 21, 2026
+
+<Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite do not carry back. Read [storage migration](/docs/configuration/storage#upgrade-from-json) first.</Callout>
+
+- Self-update now checks the local Docker daemon through a TCP watcher or socket proxy. When it finds its own container, it uses the helper handoff. If identity cannot be established, it refuses the update before stopping the container ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
+- RC17 includes every rc.16 change below and the OpenSSL OpenVEX updates in the [changelog](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md). Its soak starts at publication. For production, use [v1.7.1](/docs/v1.7/updates).
 
 ## v1.8.0-rc.16 Highlights - November 19, 2026
 

@@ -8,6 +8,13 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+## [1.8.0-rc.17] - 2026-11-21
+
+> [!WARNING]
+> **Release candidate for opt-in testing. SQLite changes the on-disk store.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup imports existing JSON data into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite are not carried back.
+
+This candidate includes every rc.16 change and fixes self-update through a TCP watcher or socket proxy (#1663). Its soak starts when this candidate is published.
+
 ### Security
 
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
@@ -3811,7 +3818,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.16...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.17...HEAD
+[1.8.0-rc.17]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.16...v1.8.0-rc.17
 [1.8.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.15...v1.8.0-rc.16
 [1.8.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.14...v1.8.0-rc.15
 [1.8.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.8.0-rc.13...v1.8.0-rc.14
