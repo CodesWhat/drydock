@@ -242,9 +242,15 @@ describe('resolveSelfContainerIdentity', () => {
 describe('probeSelfContainerIdentity', () => {
   test('does not trust a custom hostname match on an unproven daemon', async () => {
     const dockerApi = createDockerApi([{ Id: 'aaaaaaaaaaaa1111' }], {
-      aaaaaaaaaaaa1111: { Id: 'aaaaaaaaaaaa1111', Name: '/drydock-peer', Config: { Hostname: 'custom-host' } },
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/drydock-peer',
+        Config: { Hostname: 'custom-host' },
+      },
     });
-    await expect(probeSelfContainerIdentity(dockerApi, 'custom-host')).resolves.toEqual({ status: 'unknown' });
+    await expect(probeSelfContainerIdentity(dockerApi, 'custom-host')).resolves.toEqual({
+      status: 'unknown',
+    });
   });
 
   test('reports absent only when a clean listing and inspection finds no matching hostname', async () => {
