@@ -68,3 +68,16 @@ test('spawned agents opt into the plaintext loopback controller URL', async () =
     'ALLOW_INSECURE_EDGE_URL must be set alongside the plaintext DRYDOCK_URL',
   );
 });
+
+test('slow-consumer phases use named backpressure and eviction budgets', async () => {
+  // Portwing v1.4.0 (#503): short pauses backpressure, only a stall past
+  // writeWait (10 s) evicts. The eviction pause must stay above it.
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./portwing-fleet-soak.mjs', import.meta.url), 'utf8');
+  assert.match(source, /BACKPRESSURE_PAUSE_MS = 3500/);
+  assert.match(source, /EVICTION_PAUSE_MS = 15_000/);
+  assert.match(source, /EVICTION_RECONNECT_WAIT_MS = 45_000/);
+  assert.match(source, /backpressurePauses: 0/);
+  assert.match(source, /backpressureResumed: 0/);
+  assert.match(source, /'short pause backpressured without reconnect'/);
+});
