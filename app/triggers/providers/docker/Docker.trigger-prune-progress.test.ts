@@ -105,20 +105,32 @@ test('trigger should catch error when removing digest image fails', async () => 
   docker.configuration = { ...configurationValid, dryrun: false, prune: true };
   docker.log = log;
   stubTriggerFlow();
-  vi.spyOn(docker, 'removeImage').mockRejectedValue(new Error('remove failed'));
+  const removeImageSpy = vi
+    .spyOn(docker, 'removeImage')
+    .mockRejectedValue(new Error('remove failed'));
+  const warn = vi.fn();
+  docker.log = {
+    ...log,
+    child: vi.fn(() => ({ info: vi.fn(), warn, debug: vi.fn(), error: vi.fn() })),
+  };
 
-  // Should not throw
-  await docker.trigger(
-    createTriggerContainer({
-      image: {
-        name: 'test/test',
-        registry: { name: 'hub', url: 'my-registry' },
-        tag: { value: 'latest' },
-        digest: { repo: 'sha256:olddigest' },
-      },
-      updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
-    }),
-  );
+  // The prune failure is swallowed: the update itself still completes.
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'test/test',
+          registry: { name: 'hub', url: 'my-registry' },
+          tag: { value: 'latest' },
+          digest: { repo: 'sha256:olddigest' },
+        },
+        updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
+      }),
+    ),
+  ).resolves.toBeUndefined();
+
+  expect(removeImageSpy).toHaveBeenCalledTimes(1);
+  expect(warn).toHaveBeenCalledWith('Unable to remove previous digest image (remove failed)');
 });
 
 test('trigger should not throw when container does not exist', async () => {
