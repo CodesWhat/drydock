@@ -23,6 +23,10 @@ This candidate includes every rc.16 change and fixes self-update through a TCP w
 
 - Self-update is now detected when the watcher reaches the local Docker daemon over TCP, such as through a socket proxy. Drydock checks whether its own container lives on that daemon and uses the helper-container handoff when it does. If it cannot tell, it refuses the update instead of stopping itself with nothing to recreate it ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
 
+### Upgrade notes
+
+- TCP self-update requires the runtime hostname to match a container ID. If a custom or stale hostname only matches `Config.Hostname`, the update is refused as indeterminate. Recreate that container without a custom `hostname:` to restore the default Docker ID hostname.
+
 ## [1.8.0-rc.16] - 2026-11-19
 
 > [!WARNING]

@@ -12,6 +12,7 @@ import { Callout } from 'fumadocs-ui/components/callout';
 <Callout type="warn">**Testing candidate, not v1.8 GA.** Stop Drydock and back up the complete store directory before upgrading from v1.7 or earlier. First startup migrates JSON into SQLite. Downgrading requires restoring the pre-upgrade snapshot; changes made only in SQLite do not carry back. Read [storage migration](/docs/configuration/storage#upgrade-from-json) first.</Callout>
 
 - Self-update now checks the local Docker daemon through a TCP watcher or socket proxy. When it finds its own container, it uses the helper handoff. If identity cannot be established, it refuses the update before stopping the container ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
+- TCP self-update requires the runtime hostname to match a container ID. If a custom or stale hostname only matches `Config.Hostname`, the update is refused as indeterminate. Recreate that container without a custom `hostname:` to restore the default Docker ID hostname.
 - RC17 includes every rc.16 change below and the OpenSSL OpenVEX updates in the [changelog](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md). Its soak starts at publication. For production, use [v1.7.1](/docs/v1.7/updates).
 
 ## v1.8.0-rc.16 Highlights - November 19, 2026
