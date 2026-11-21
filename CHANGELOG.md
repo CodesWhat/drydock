@@ -12,6 +12,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
+### Fixed
+
+- Self-update is now detected when the watcher reaches the local Docker daemon over TCP, such as through a socket proxy. Drydock checks whether its own container lives on that daemon and uses the helper-container handoff when it does. If it cannot tell, it refuses the update instead of stopping itself with nothing to recreate it ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
+
 ## [1.8.0-rc.16] - 2026-11-19
 
 > [!WARNING]
