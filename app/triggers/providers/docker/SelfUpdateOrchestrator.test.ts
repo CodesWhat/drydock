@@ -117,6 +117,18 @@ describe('SelfUpdateOrchestrator', () => {
     expect(listContainers).toHaveBeenCalledWith({ all: true });
   });
 
+  test('default TCP identity probe refuses an update when Docker is unavailable', async () => {
+    const orchestrator = new SelfUpdateOrchestrator();
+    const container = createContainer();
+    const listContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
+
+    await expect(
+      orchestrator.classifySelfUpdateOverWatcherApi(container, { listContainers }),
+    ).resolves.toBe('indeterminate');
+    expect(listContainers).toHaveBeenCalledWith({ all: true });
+    expect(orchestrator.isSelfUpdate(container)).toBe(false);
+  });
+
   test('identifies only the Docker-resolved current process container as a self-update', async () => {
     const orchestrator = createOrchestrator();
     const self = createContainer({ image: { name: 'drydock' } });
