@@ -25,7 +25,7 @@ This candidate includes every rc.16 change and fixes self-update through a TCP w
 
 ### Upgrade notes
 
-- TCP self-update requires the runtime hostname to match a container ID. If a custom or stale hostname only matches `Config.Hostname`, the update is refused as indeterminate. Recreate that container without a custom `hostname:` to restore the default Docker ID hostname.
+- TCP self-update requires the runtime hostname to match a container ID. If a custom or stale hostname only matches `Config.Hostname`, the update is refused as indeterminate. Recreate that container without a custom `hostname:` to restore the default Docker ID hostname. A daemon containing a host-UTS container is also indeterminate when no hostname matches, because that container can observe a changed host hostname. Remove `uts: host` from the Drydock service and recreate it to use the default Docker ID hostname.
 
 ## [1.8.0-rc.16] - 2026-11-19
 
