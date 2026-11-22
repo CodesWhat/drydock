@@ -189,6 +189,28 @@ describe('Drydock self identity safety boundary', () => {
     expect(docker.createContainer).toHaveBeenCalledOnce();
   });
 
+  test('refuses a TCP host-UTS self candidate without stopping or recreating it', async () => {
+    const ownApi = createInspectingDockerApi({
+      'peer-container-id': {
+        Id: 'peer-container-id',
+        Name: '/drydock-peer',
+        Config: { Hostname: 'old-hostname' },
+        HostConfig: { UTSMode: 'host' },
+      },
+    });
+    const watcher = tcpWatcher(ownApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': watcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(watcher as never);
+    stubTriggerFlow({ running: true });
+
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+      'Drydock container identity is indeterminate',
+    );
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+    expect(docker.createContainer).not.toHaveBeenCalled();
+  });
+
   test('refuses a TCP peer sharing the runtime custom hostname without stopping it', async () => {
     const peerApi = createInspectingDockerApi({
       'peer-container-id': {

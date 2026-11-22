@@ -253,6 +253,23 @@ describe('probeSelfContainerIdentity', () => {
     });
   });
 
+  test.each(['custom-host', 'aaaaaaaaaaaa'])(
+    'does not prove absence from a host-UTS container hostname mismatch (%s)',
+    async (hostname) => {
+      const dockerApi = createDockerApi([{ Id: 'cccccccccccc1111' }], {
+        cccccccccccc1111: {
+          Id: 'cccccccccccc1111',
+          Name: '/drydock-current',
+          Config: { Hostname: 'old-hostname' },
+          HostConfig: { UTSMode: 'host' },
+        },
+      });
+      await expect(probeSelfContainerIdentity(dockerApi, hostname)).resolves.toEqual({
+        status: 'unknown',
+      });
+    },
+  );
+
   test('reports absent only when a clean listing and inspection finds no matching hostname', async () => {
     const dockerApi = createDockerApi([{ Id: 'cccccccccccc1111' }], {
       cccccccccccc1111: { Id: 'cccccccccccc1111', Name: '/other', Config: { Hostname: 'other' } },

@@ -19,6 +19,9 @@ interface DockerContainerInspect {
   Config?: {
     Hostname?: string;
   };
+  HostConfig?: {
+    UTSMode?: string;
+  };
 }
 
 interface DockerIdentityApi {
@@ -113,7 +116,7 @@ export async function probeSelfContainerIdentity(
     const name = normalizeName(value.Name);
     const inspectedHostname = value.Config?.Hostname;
     return id && name && typeof inspectedHostname === 'string' && inspectedHostname.trim()
-      ? { id, name, hostname: inspectedHostname }
+      ? { id, name, hostname: inspectedHostname, utsMode: value.HostConfig?.UTSMode }
       : null;
   });
   if (inspectedIdentities.some((identity) => !identity)) {
@@ -124,7 +127,11 @@ export async function probeSelfContainerIdentity(
   );
 
   if (hostnameMatches.length === 0) {
-    return { status: 'absent' };
+    // Host UTS containers observe a mutable host hostname, so Config.Hostname
+    // cannot prove this process is absent from their daemon.
+    return inspectedIdentities.some((identity) => identity!.utsMode === 'host')
+      ? UNKNOWN_PROBE
+      : { status: 'absent' };
   }
   return hostnameMatches.length === 1 && trustHostnameMatch
     ? { status: 'found', identity: { id: hostnameMatches[0]!.id, name: hostnameMatches[0]!.name } }
