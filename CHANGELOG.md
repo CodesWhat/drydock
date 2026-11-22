@@ -45,6 +45,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Self-update is now detected when the watcher reaches the local Docker daemon over TCP, such as through a socket proxy. Drydock checks whether its own container lives on that daemon and uses the helper-container handoff when it does. If it cannot tell, it refuses the update instead of stopping itself with nothing to recreate it ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
 - Release builds no longer run the UI build under emulation on arm64. The Dockerfile's `ui-build` stage now runs on the build host's own platform, since the static assets it produces are the same for every architecture, which fixes the multi-arch release build timing out while vite hung under QEMU.
 - The image entrypoint's notices (the `group_add` GID line and the insecure-root warning) now go to stderr, so `scan` output on stdout stays valid JSON under those settings.
 - The OpenAPI schema for `PATCH /api/v1/containers/{id}/update-policy` now lists the `scope` field (`tag`, `minor` or `major`) that `skip-current` already accepted.
