@@ -1,0 +1,5 @@
+---
+name: drydock GitHub Actions CodeQL config
+
+queries:
+  - uses: security-extended

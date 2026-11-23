@@ -1,7 +1,7 @@
 {
-  "$comment": "qlty-managed markdownlint — see .qlty/qlty.toml",
   "MD013": false,
   "MD024": false,
   "MD033": false,
-  "MD041": false
+  "MD041": false,
+  "$comment": "qlty-managed markdownlint \u2014 see .qlty/qlty.toml"
 }

@@ -87,9 +87,9 @@ const requiredFragments = [
   '[`GOVERNANCE.md`](GOVERNANCE.md)',
   '[`SECURITY-ASSURANCE.md`](SECURITY-ASSURANCE.md)',
   '[`SECURITY.md`](SECURITY.md)',
-  'https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left',
-  'https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left',
-  'https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left',
+  'https://www.star-history.com/?repos=CodesWhat%2Fdrydock&type=timeline&legend=top-left',
+  'https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left',
+  'https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&legend=top-left',
 ];
 
 describe.each(translatedReadmes)('%s', (readme) => {
@@ -157,13 +157,13 @@ describe.each(allReadmes)('%s star history', (readme) => {
     // charts again. Both theme variants must be wired into the actual <picture>
     // sources and fallback <img>, not merely mentioned somewhere in the file.
     expect(content).toContain(
-      'href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left"',
+      'href="https://www.star-history.com/?repos=CodesWhat%2Fdrydock&type=timeline&legend=top-left"',
     );
     expect(content).toMatch(
-      /<source media="\(prefers-color-scheme: dark\)" srcset="https:\/\/api\.star-history\.com\/svg\?repos=CodesWhat\/drydock&type=timeline&theme=dark&legend=top-left"/,
+      /<source media="\(prefers-color-scheme: dark\)" srcset="https:\/\/api\.star-history\.com\/chart\?repos=CodesWhat\/drydock&type=timeline&theme=dark&legend=top-left"/,
     );
     expect(content).toMatch(
-      /<img[^>]*src="https:\/\/api\.star-history\.com\/svg\?repos=CodesWhat\/drydock&type=timeline&legend=top-left"/,
+      /<img[^>]*src="https:\/\/api\.star-history\.com\/chart\?repos=CodesWhat\/drydock&type=timeline&legend=top-left"/,
     );
     // The committed-SVG chart, the self-hosted route and Warpchart are all
     // retired. The self-hosted route is forbidden in any attribute (src/href),

@@ -818,3 +818,59 @@ test('web readiness probe outwaits the server-side live stats timeout', () => {
   expect(statsTimeoutMs).toBeGreaterThan(0);
   expect(probeSeconds * 1000).toBeGreaterThan(statsTimeoutMs);
 });
+
+test('CodeQL scans workflow sources separately from JavaScript custom queries', () => {
+  const job = loadWorkflow().jobs?.codeql;
+  expect(job?.strategy?.matrix?.language).toEqual(['javascript-typescript', 'actions']);
+  const steps = job?.steps ?? [];
+  const init = steps.find((step) => step.name === 'Initialize CodeQL');
+  expect(init?.with?.['config-file']).toContain('codeql-actions.yml');
+  expect(init?.with?.['config-file']).toContain('codeql-config.yml');
+  const autobuild = steps.find((step) => step.name === 'Autobuild');
+  expect(autobuild?.if).toBe("matrix.language != 'actions'");
+  const config = yaml.parse(
+    readFileSync(new URL('../codeql/codeql-actions.yml', import.meta.url), 'utf8'),
+  );
+  expect(config.queries).toEqual([{ uses: 'security-extended' }]);
+});
+
+test('Codecov records explicit comparisons and fresh app/UI report ownership', () => {
+  const source = () => readFileSync(new URL('../../codecov.yml', import.meta.url), 'utf8');
+  expect(source).not.toThrow();
+  const config = yaml.parse(source());
+  for (const kind of ['project', 'patch']) {
+    expect(config.coverage.status[kind].default).toEqual({
+      target: 'auto',
+      threshold: 0,
+      informational: false,
+      if_not_found: 'failure',
+      if_ci_failed: 'error',
+    });
+  }
+  expect(config.codecov.notify.after_n_builds).toBe(2);
+  expect(config.codecov.require_ci_to_pass).toBe(true);
+  expect(config.flags).toEqual({
+    app: { paths: ['app/'], carryforward: false },
+    ui: { paths: ['ui/'], carryforward: false },
+  });
+});
+
+test('fleet soak covers helper edits and nested Go setup inputs', () => {
+  const workflow = yaml.parse(
+    readFileSync(new URL('../workflows/quality-portwing-fleet-soak.yml', import.meta.url), 'utf8'),
+  );
+  expect(workflow.on.pull_request.paths).toContain('scripts/lib/slow-consumer-reconnect.mjs');
+  const steps = workflow.jobs['fleet-soak'].steps;
+  const setupGo = steps.find((step: { uses?: string }) =>
+    step.uses?.startsWith('actions/setup-go@'),
+  );
+  expect(setupGo.with['cache-dependency-path']?.trim().split(/\s+/)).toEqual([
+    'portwing/go.mod',
+    'portwing/go.sum',
+  ]);
+  const harden = steps.find((step: { name?: string }) => step.name === 'Harden Runner');
+  expect(harden.with['egress-policy']).toBe('block');
+  expect(harden.with['allowed-endpoints'].split(/\s+/)).toContain(
+    'release-assets.githubusercontent.com:443',
+  );
+});

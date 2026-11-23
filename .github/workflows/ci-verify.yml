@@ -270,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [javascript-typescript]
+        language: [javascript-typescript, actions]
 
     steps:
       - name: Harden Runner
@@ -287,9 +287,10 @@ jobs:
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
         with:
           languages: ${{ matrix.language }}
-          config-file: ./.github/codeql/codeql-config.yml
+          config-file: ${{ matrix.language == 'actions' && './.github/codeql/codeql-actions.yml' || './.github/codeql/codeql-config.yml' }}
 
       - name: Autobuild
+        if: matrix.language != 'actions'
         uses: github/codeql-action/autobuild@9b3254085494b55a0f7c4c2b3d2d52cc712ce370  # v4.39.1
 
       - name: Perform CodeQL Analysis
