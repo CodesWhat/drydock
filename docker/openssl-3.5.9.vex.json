@@ -76,6 +76,101 @@
       ],
       "status": "fixed",
       "impact_statement": "The OpenSSL QUIC client can hit a use-after-free against a malicious QUIC server. Alpine fixed this in openssl 3.5.9-r1 (listed under 3.5.9-r1 in the Alpine v3.24 secdb) by backporting the patch. Grype only has the NVD CPE range (< 3.5.10) for this package, so it flags the patched revision. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Remove this document (and its vex-documents entry) when the Dockerfile pin reaches an upstream release at or above the NVD fixed version or Grype reads the Alpine fix."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-124709"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "A QUIC server can keep stream state for rejected and reset streams. The image runs no OpenSSL QUIC server. Drydock serves HTTP and HTTPS over TCP (app/api/index.ts, https.createServer), and Node links its own bundled OpenSSL rather than the system library. This statement covers the built-in image paths only. Operator-configured Command actions or explicitly trusted image hooks that run arbitrary programs are outside it. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Reassess if the image adds an OpenSSL consumer or the package revision changes."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-107494"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "A flood of QUIC RETIRE_CONNECTION_ID frames can exhaust the connection ID queue. The image has no OpenSSL-native QUIC client or server path. Alpine curl 8.23 has no HTTP/3 backend (native OpenSSL QUIC support was removed in curl 8.19), git HTTPS goes through that curl, and Node uses TLS over TCP. This statement covers the built-in image paths only. Operator-configured Command actions or explicitly trusted image hooks that run arbitrary programs are outside it. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Reassess if the image adds an OpenSSL consumer or the package revision changes."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-121482"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Verifying CMS or PKCS#7 SignedData with CRL checking enabled can burn quadratic CPU. No built-in path verifies CMS or PKCS#7 data or enables CRL-based verification. Drydock registry TLS options are ca, cert, key and rejectUnauthorized only (BaseRegistry.ts), and nothing turns on CRL checking. This statement covers the built-in image paths only. Operator-configured Command actions or explicitly trusted image hooks that run arbitrary programs are outside it. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Reassess if the image adds an OpenSSL consumer or the package revision changes."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-84786"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "A DANE TLS client can dereference NULL. No consumer in the image enables DANE: not Node, curl, git, busybox ssl_client, or the healthcheck loopback openssl s_client. This statement covers the built-in image paths only. Operator-configured Command actions or explicitly trusted image hooks that run arbitrary programs are outside it. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Reassess if the image adds an OpenSSL consumer or the package revision changes."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-107493"
+      },
+      "products": [
+        {
+          "@id": "pkg:apk/alpine/openssl@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libssl3@3.5.9-r1"
+        },
+        {
+          "@id": "pkg:apk/alpine/libcrypto3@3.5.9-r1"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "PEM_X509_INFO_read_bio_ex frees a caller-supplied stack on failure. The CA loaders in curl (lib/vtls/openssl.c) and OpenSSL (crypto/x509/by_file.c) pass a NULL stack, and Node uses PEM_read_bio_X509_AUX, so the existing-stack failure branch is never used. This statement covers the built-in image paths only. Operator-configured Command actions or explicitly trusted image hooks that run arbitrary programs are outside it. Only Alpine openssl, libssl3 and libcrypto3 3.5.9-r1 are covered; no other revision is. Reassess if the image adds an OpenSSL consumer or the package revision changes."
     }
   ]
 }

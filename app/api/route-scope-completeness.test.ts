@@ -1,4 +1,5 @@
 import express from 'express';
+import { requireAuthentication } from './auth.js';
 import {
   collectRouteScopes,
   DYNAMIC_SCOPE,
@@ -206,10 +207,12 @@ vi.mock('../configuration/index.js', async (importOriginal) => {
 
 describe('route scope completeness', () => {
   let declarations: RouteScopeDeclaration[];
+  let apiRouter: { stack: { handle?: unknown; route?: { path: string } }[] };
 
   beforeAll(async () => {
     const api = await import('./api.js');
-    declarations = collectRouteScopes(api.init(), '/api/v1');
+    apiRouter = api.init() as unknown as typeof apiRouter;
+    declarations = collectRouteScopes(apiRouter, '/api/v1');
   });
 
   test('every route under /api/v1 declares the scope that reaches it', () => {
@@ -262,5 +265,42 @@ describe('route scope completeness', () => {
     expect(
       findUndeclaredRoutes(collectRouteScopes(router, '/api/v1')).map(formatRouteScope),
     ).toStrictEqual(['POST /api/v1/added-without-a-scope → UNDECLARED']);
+  });
+
+  test('every protected router is mounted after requireAuthentication, public ones are listed', () => {
+    const authIndex = apiRouter.stack.findIndex((layer) => layer.handle === requireAuthentication);
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(apiRouter.stack.filter((layer) => layer.handle === requireAuthentication)).toHaveLength(
+      1,
+    );
+
+    const mountPathOf = (layer: { handle?: unknown; route?: { path: string } }) =>
+      layer.route
+        ? `route:${layer.route.path}`
+        : ((layer.handle as Record<symbol, unknown> | undefined)?.[
+            Symbol.for('drydock.api.mountPath')
+          ] as string | undefined);
+
+    const before = apiRouter.stack.slice(0, authIndex).map(mountPathOf).filter(Boolean);
+    expect([...before].sort()).toStrictEqual([
+      '/internal',
+      '/self-update',
+      '/webhook',
+      '/webhooks',
+      'route:/openapi.json',
+    ]);
+
+    // Everything mounted after the auth line is a sub-router or the terminal 404.
+    const after = apiRouter.stack
+      .slice(authIndex + 1)
+      .map(mountPathOf)
+      .filter(Boolean);
+    expect(after).toContain('/app');
+    expect(after).toContain('/store');
+    expect(after).toContain('/debug');
+    expect(after).toContain('/containers');
+    expect(after).toContain('/api-keys');
+    expect(after).not.toContain('/webhook');
+    expect(after).not.toContain('/internal');
   });
 });

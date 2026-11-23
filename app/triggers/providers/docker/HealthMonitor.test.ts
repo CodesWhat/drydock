@@ -163,6 +163,72 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  test('should close the window without a rollback when the healthcheck is still starting', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'starting' } },
+    });
+
+    startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 30000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    const inspect = dockerApi.getContainer.mock.results[0].value.inspect;
+    expect(inspect).toHaveBeenCalledTimes(3);
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('window expired'));
+    expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+
+    // The window is closed, so the poll has stopped.
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(inspect).toHaveBeenCalledTimes(3);
+  });
+
+  test('should poll through the whole window when every inspect fails, then close it without a rollback', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var inspect = vi.fn().mockRejectedValue(new Error('connection refused'));
+
+    startHealthMonitor({
+      dockerApi: { getContainer: vi.fn().mockReturnValue({ inspect }) },
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 30000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    expect(inspect).toHaveBeenCalledTimes(3);
+    expect(log.warn).toHaveBeenCalledTimes(3);
+    expect(log.warn).toHaveBeenCalledWith(
+      'Error inspecting container test-container during health monitoring: connection refused',
+    );
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+    expect(mockInsertAudit).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(inspect).toHaveBeenCalledTimes(3);
+  });
+
   test('should trigger rollback when container becomes unhealthy', async () => {
     var log = createMockLog();
     var triggerInstance = createMockTriggerInstance();
@@ -1625,6 +1691,79 @@ describe('HealthMonitor', () => {
       );
       expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
       expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('polls through the whole window when every inspect fails, then closes the window without a rollback', async () => {
+      const inspect = vi.fn().mockRejectedValue(new Error('No such container'));
+      const log = createMockLog();
+      const triggerInstance = createMockTriggerInstance();
+      mockGetBackupsByName.mockReturnValue([backup]);
+      startHealthMonitor({
+        dockerApi: { getContainer: vi.fn().mockReturnValue({ inspect }) },
+        container: createMonitoredContainer(),
+        containerId: 'container-123',
+        containerName: 'test-container',
+        backupImageTag: '2.0.0',
+        backupScope: { containerName: 'test-container' },
+        window: 60_000,
+        interval: 10_000,
+        mode: 'liveness',
+        baselineRestartCount: 0,
+        triggerInstance,
+        log,
+      });
+
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      // Every tick before the window closed tried and failed to inspect.
+      expect(inspect).toHaveBeenCalledTimes(6);
+      expect(log.warn).toHaveBeenCalledTimes(6);
+      expect(log.warn).toHaveBeenCalledWith(
+        'Error inspecting container test-container during health monitoring: No such container',
+      );
+      // Expiry closed the window and stopped the poll: nothing more is inspected.
+      expect(log.info).toHaveBeenCalledWith(
+        expect.stringContaining('Liveness watch window expired'),
+      );
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(inspect).toHaveBeenCalledTimes(6);
+      // The failing inspects never produced a verdict, so no rollback ran.
+      expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+      expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+      expect(mockInsertAudit).not.toHaveBeenCalled();
+    });
+
+    test('a failing inspect does not block a later poll from detecting the exit', async () => {
+      const inspect = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('transient'))
+        .mockResolvedValue({ RestartCount: 0, State: { Running: false, ExitCode: 1 } });
+      const log = createMockLog();
+      const triggerInstance = createMockTriggerInstance();
+      mockGetBackupsByName.mockReturnValue([backup]);
+      const abortController = startHealthMonitor({
+        dockerApi: { getContainer: vi.fn().mockReturnValue({ inspect }) },
+        container: createMonitoredContainer(),
+        containerId: 'container-123',
+        containerName: 'test-container',
+        backupImageTag: '2.0.0',
+        backupScope: { containerName: 'test-container' },
+        window: 60_000,
+        interval: 10_000,
+        mode: 'liveness',
+        baselineRestartCount: 0,
+        triggerInstance,
+        log,
+      });
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('transient'));
+      expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('exited with exit code 1'));
+      expect(triggerInstance.recreateContainer).toHaveBeenCalled();
+      abortController.abort();
     });
 
     test('keeps watching when the inspection carries no State', async () => {

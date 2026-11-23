@@ -20,5 +20,5 @@ ci.config.yml
 babel.config.js
 jest.config.js
 nodemon.json
-**/.DS_Store
 **/Thumbs.db
+**/.DS_Store
