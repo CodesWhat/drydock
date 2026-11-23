@@ -177,6 +177,20 @@ function isDirectLocalDockerWatcher(
   return !!candidate.dockerApi;
 }
 
+function isTcpDockerWatcher(
+  registryId: string,
+  watcher: unknown,
+): watcher is { dockerApi: unknown } {
+  if (!registryId.startsWith('docker.') || !watcher || typeof watcher !== 'object') {
+    return false;
+  }
+  const candidate = watcher as DirectLocalDockerWatcher;
+  return (
+    !normalizeNonEmptyString(candidate.agent) &&
+    !!normalizeNonEmptyString(candidate.configuration?.host)
+  );
+}
+
 function getPreferredLabelValue(labels, ddKey, _logger?) {
   return labels?.[ddKey];
 }
@@ -2041,6 +2055,12 @@ class Docker<
       ? `${container.agent}.docker.${container.watcher}`
       : `docker.${container.watcher}`;
     if (!isDirectLocalDockerWatcher(candidateRegistryId, candidateWatcher)) {
+      if (isTcpDockerWatcher(candidateRegistryId, candidateWatcher)) {
+        return this.selfUpdateOrchestrator.classifySelfUpdateOverWatcherApi(
+          container,
+          candidateWatcher.dockerApi,
+        );
+      }
       return this.selfUpdateOrchestrator.classifySelfUpdate(container, undefined, 'peer');
     }
     const localRuntime = await this.resolveAuthoritativeLocalDockerRuntime();

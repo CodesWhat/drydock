@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import {
+  probeSelfContainerIdentity,
   resolveSelfContainerIdentity,
   type SelfContainerIdentity,
+  type SelfContainerProbe,
 } from './SelfContainerIdentity.js';
 import {
   executeSelfUpdateTransition,
@@ -63,6 +65,7 @@ interface SelfUpdateOrchestratorDependencies {
   resolveFinalizeUrl: () => string;
   resolveFinalizeSecret: (operationId: string) => string;
   resolveSelfContainerIdentity: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
+  probeSelfContainerIdentity: (dockerApi: unknown) => Promise<SelfContainerProbe>;
   finalizeObservedHelperOperation: (
     operationId: string,
     status: 'succeeded' | 'rolled-back' | 'failed',
@@ -96,6 +99,7 @@ interface SelfUpdateOrchestratorConstructorOptions {
   resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
   resolveFinalizeSecret?: (operationId: string) => string;
   resolveSelfContainerIdentity?: (dockerApi: unknown) => Promise<SelfContainerIdentity | null>;
+  probeSelfContainerIdentity?: (dockerApi: unknown) => Promise<SelfContainerProbe>;
   finalizeObservedHelperOperation?: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
   waitForObservedHelperCompletion?: typeof waitForSelfUpdateHelperCompletion;
   resolveObserverNetworkMode?: () => Promise<string>;
@@ -133,6 +137,8 @@ class SelfUpdateOrchestrator {
   resolveFinalizeSecret: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
 
   resolveSelfContainerIdentity: SelfUpdateOrchestratorDependencies['resolveSelfContainerIdentity'];
+
+  probeSelfContainerIdentity: SelfUpdateOrchestratorDependencies['probeSelfContainerIdentity'];
 
   finalizeObservedHelperOperation: SelfUpdateOrchestratorDependencies['finalizeObservedHelperOperation'];
 
@@ -181,6 +187,9 @@ class SelfUpdateOrchestrator {
     this.resolveSelfContainerIdentity =
       options.resolveSelfContainerIdentity ||
       ((dockerApi) => resolveSelfContainerIdentity(dockerApi as never));
+    this.probeSelfContainerIdentity =
+      options.probeSelfContainerIdentity ||
+      ((dockerApi) => probeSelfContainerIdentity(dockerApi as never));
     this.finalizeObservedHelperOperation =
       options.finalizeObservedHelperOperation ||
       (() => missingDependency('finalizeObservedHelperOperation'));
@@ -247,6 +256,30 @@ class SelfUpdateOrchestrator {
       idMatches || (!!containerName && containerName === identityName) ? 'current' : 'peer';
     this.selfUpdateClassifications.set(container, classification);
     return classification;
+  }
+
+  /**
+   * Classify a Drydock-image candidate whose watcher reaches its daemon over TCP.
+   * The candidate is only a peer when this process is proven absent from that
+   * daemon; unproven identity stays indeterminate so the update is refused.
+   */
+  async classifySelfUpdateOverWatcherApi(
+    container: SelfUpdateContainerRef,
+    dockerApi: unknown,
+  ): Promise<SelfUpdateClassification> {
+    let probe: SelfContainerProbe;
+    try {
+      probe = await this.probeSelfContainerIdentity(dockerApi);
+    } catch {
+      probe = { status: 'unknown' };
+    }
+    if (probe.status === 'found') {
+      return this.classifySelfUpdateFromIdentity(container, probe.identity);
+    }
+    if (probe.status === 'absent') {
+      return this.classifySelfUpdate(container, undefined, 'peer');
+    }
+    return this.classifySelfUpdateAsIndeterminate(container);
   }
 
   classifySelfUpdateAsIndeterminate(container: SelfUpdateContainerRef): SelfUpdateClassification {

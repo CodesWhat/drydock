@@ -1693,8 +1693,17 @@ describe('Auth Router', () => {
       });
 
       const app = createApp();
-      // Should not throw
-      auth.init(app);
+      expect(() => auth.init(app)).not.toThrow();
+
+      expect(mockAuth.getAuthenticator).toHaveBeenCalledWith(app);
+      expect(log.warn).toHaveBeenCalledWith(
+        'Unable to apply authentication bad.strategy (Strategy error)',
+      );
+      // Fail closed: the broken strategy leaves no usable provider behind.
+      expect(auth.isAuthenticationReady()).toBe(false);
+      expect(getAuthenticators().map((authenticator) => authenticator.id)).not.toContain(
+        'bad.strategy',
+      );
     });
 
     test('should stringify non-Error authenticator registration failures', () => {

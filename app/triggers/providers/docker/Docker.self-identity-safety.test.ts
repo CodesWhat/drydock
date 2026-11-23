@@ -5,7 +5,10 @@ import {
   registerCommonDockerBeforeEach,
   stubTriggerFlow,
 } from './Docker.test.helpers.js';
-import { resolveSelfContainerIdentity } from './SelfContainerIdentity.js';
+import {
+  probeSelfContainerIdentity,
+  resolveSelfContainerIdentity,
+} from './SelfContainerIdentity.js';
 
 registerCommonDockerBeforeEach();
 
@@ -40,17 +43,29 @@ function createDirectWatcher(dockerApi: unknown, socket = '/var/run/docker.sock'
   };
 }
 
+function tcpWatcher(dockerApi: unknown) {
+  return {
+    type: 'docker',
+    dockerApi,
+    configuration: { host: 'docker-socket-proxy', port: 2375, protocol: 'http' },
+  };
+}
+
 describe('Drydock self identity safety boundary', () => {
   const { mockGetState } = getDockerTestMocks();
   const originalResolver = docker.selfUpdateOrchestrator.resolveSelfContainerIdentity;
+  const originalProbe = docker.selfUpdateOrchestrator.probeSelfContainerIdentity;
 
   beforeEach(() => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (dockerApi) =>
+      probeSelfContainerIdentity(dockerApi as never, 'current-host');
     docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = (dockerApi) =>
       resolveSelfContainerIdentity(dockerApi as never, 'current-host');
   });
 
   afterEach(() => {
     docker.selfUpdateOrchestrator.resolveSelfContainerIdentity = originalResolver;
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = originalProbe;
     vi.restoreAllMocks();
   });
 
@@ -169,71 +184,199 @@ describe('Drydock self identity safety boundary', () => {
 
     await expect(docker.trigger(createDrydockCandidate())).resolves.toBeUndefined();
 
+    expect(remoteDockerApi.listContainers).toHaveBeenCalled();
     expect(docker.stopContainer).toHaveBeenCalledOnce();
     expect(docker.createContainer).toHaveBeenCalledOnce();
   });
 
-  test('proves a same-hostname container on a remote daemon is a peer', async () => {
-    const localDockerApi = createInspectingDockerApi({
-      'local-self-id': {
-        Id: 'local-self-id',
-        Name: '/drydock-local',
-        Config: { Hostname: 'current-host' },
-      },
-    });
-    const remoteDockerApi = createInspectingDockerApi({
+  test('refuses a TCP host-UTS self candidate without stopping or recreating it', async () => {
+    const ownApi = createInspectingDockerApi({
       'peer-container-id': {
         Id: 'peer-container-id',
         Name: '/drydock-peer',
-        Config: { Hostname: 'current-host' },
+        Config: { Hostname: 'old-hostname' },
+        HostConfig: { UTSMode: 'host' },
       },
     });
+    const watcher = tcpWatcher(ownApi);
     const state = mockGetState();
-    const remoteWatcher = {
-      dockerApi: remoteDockerApi,
-      configuration: { host: 'remote-daemon', port: 2375, protocol: 'http' },
-    };
-    mockGetState.mockReturnValue({
-      ...state,
-      watcher: {
-        ...state.watcher,
-        'docker.local': {
-          dockerApi: localDockerApi,
-          configuration: { socket: '/var/run/docker.sock' },
-        },
-      },
-    });
-    vi.spyOn(docker, 'getWatcher').mockReturnValue(remoteWatcher as never);
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': watcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(watcher as never);
     stubTriggerFlow({ running: true });
 
-    await expect(docker.trigger(createDrydockCandidate())).resolves.toBeUndefined();
-
-    expect(localDockerApi.listContainers).not.toHaveBeenCalled();
-    expect(remoteDockerApi.listContainers).not.toHaveBeenCalled();
-    expect(docker.stopContainer).toHaveBeenCalledOnce();
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+      'Drydock container identity is indeterminate',
+    );
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+    expect(docker.createContainer).not.toHaveBeenCalled();
   });
 
-  test('treats a remote-only same-hostname Drydock container as a peer', async () => {
-    const remoteDockerApi = createInspectingDockerApi({
+  test('refuses a TCP peer sharing the runtime custom hostname without stopping it', async () => {
+    const peerApi = createInspectingDockerApi({
       'peer-container-id': {
         Id: 'peer-container-id',
         Name: '/drydock-peer',
         Config: { Hostname: 'current-host' },
       },
     });
+    const watcher = tcpWatcher(peerApi);
     const state = mockGetState();
-    const remoteWatcher = {
-      dockerApi: remoteDockerApi,
-      configuration: { host: 'remote-daemon', port: 2375, protocol: 'http' },
-    };
-    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': remoteWatcher } });
-    vi.spyOn(docker, 'getWatcher').mockReturnValue(remoteWatcher as never);
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': watcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(watcher as never);
+    stubTriggerFlow({ running: true });
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+      'Drydock container identity is indeterminate',
+    );
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+    expect(docker.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('treats a TCP watcher daemon that holds this container as the current Drydock', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
+    const ownDockerApi = createInspectingDockerApi({
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/drydock-peer',
+        Config: { Hostname: 'current-host' },
+      },
+    });
+    const proxyWatcher = tcpWatcher(ownDockerApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+
+    await expect(
+      docker.classifySelfUpdate({ ...createDrydockCandidate(), id: 'aaaaaaaaaaaa1111' }),
+    ).resolves.toBe('current');
+  });
+
+  test('runs the helper handoff instead of stopping the running container for a TCP self candidate', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
+    const ownDockerApi = createInspectingDockerApi({
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/drydock-peer',
+        Config: { Hostname: 'current-host' },
+      },
+    });
+    const proxyWatcher = tcpWatcher(ownDockerApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+    stubTriggerFlow({ running: true });
+    const executeSelfUpdate = vi
+      .spyOn(docker.selfUpdateOrchestrator, 'execute')
+      .mockResolvedValue(true);
+
+    await docker.trigger({ ...createDrydockCandidate(), id: 'aaaaaaaaaaaa1111' });
+
+    expect(executeSelfUpdate).toHaveBeenCalledOnce();
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+  });
+
+  test('classifies a same-daemon Drydock container with a different id as a peer', async () => {
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, 'aaaaaaaaaaaa');
+    const dockerApi = createInspectingDockerApi({
+      aaaaaaaaaaaa1111: {
+        Id: 'aaaaaaaaaaaa1111',
+        Name: '/drydock-current',
+        Config: { Hostname: 'current-host' },
+      },
+    });
+    const proxyWatcher = tcpWatcher(dockerApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+
+    await expect(docker.classifySelfUpdate(createDrydockCandidate())).resolves.toBe('peer');
+  });
+
+  test.each([
+    ['inspection returns a 500', () => Object.assign(new Error('boom'), { statusCode: 500 })],
+    [
+      'the daemon refuses the connection',
+      () => Object.assign(new Error('x'), { code: 'ECONNREFUSED' }),
+    ],
+  ])(
+    'refuses a TCP watcher update without stopping the container when %s',
+    async (_d, makeError) => {
+      const dockerApi = {
+        listContainers: vi.fn().mockResolvedValue([{ Id: 'some-container-id', Names: ['/x'] }]),
+        getContainer: vi.fn(() => ({ inspect: vi.fn().mockRejectedValue(makeError()) })),
+      };
+      const proxyWatcher = tcpWatcher(dockerApi);
+      const state = mockGetState();
+      mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+      vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+      stubTriggerFlow({ running: true });
+
+      await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+        'Drydock container identity is indeterminate',
+      );
+
+      expect(docker.stopContainer).not.toHaveBeenCalled();
+      expect(docker.createContainer).not.toHaveBeenCalled();
+    },
+  );
+
+  test('refuses a TCP watcher update when the listing fails', async () => {
+    const proxyWatcher = tcpWatcher({
+      listContainers: vi.fn().mockRejectedValue(new Error('proxy denied')),
+      getContainer: vi.fn(),
+    });
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
     stubTriggerFlow({ running: true });
 
-    await expect(docker.trigger(createDrydockCandidate())).resolves.toBeUndefined();
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+      'Drydock container identity is indeterminate',
+    );
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+  });
 
-    expect(remoteDockerApi.listContainers).not.toHaveBeenCalled();
-    expect(docker.stopContainer).toHaveBeenCalledOnce();
+  test('refuses a TCP watcher update when this container identity is unknown', async () => {
+    const dockerApi = createInspectingDockerApi({});
+    const proxyWatcher = tcpWatcher(dockerApi);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = (api) =>
+      probeSelfContainerIdentity(api as never, '');
+    stubTriggerFlow({ running: true });
+
+    await expect(docker.trigger(createDrydockCandidate())).rejects.toThrow(
+      'Drydock container identity is indeterminate',
+    );
+    expect(docker.stopContainer).not.toHaveBeenCalled();
+  });
+
+  test('returns indeterminate when the identity probe itself rejects', async () => {
+    const proxyWatcher = tcpWatcher(createInspectingDockerApi({}));
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+    docker.selfUpdateOrchestrator.probeSelfContainerIdentity = vi
+      .fn()
+      .mockRejectedValue(new Error('probe crashed'));
+
+    await expect(docker.classifySelfUpdate(createDrydockCandidate())).resolves.toBe(
+      'indeterminate',
+    );
+  });
+
+  test('returns indeterminate for a TCP watcher without a Docker API', async () => {
+    const proxyWatcher = tcpWatcher(undefined);
+    const state = mockGetState();
+    mockGetState.mockReturnValue({ ...state, watcher: { 'docker.test': proxyWatcher } });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue(proxyWatcher as never);
+
+    await expect(docker.classifySelfUpdate(createDrydockCandidate())).resolves.toBe(
+      'indeterminate',
+    );
   });
 
   test('resolves observer network mode only from authoritative local runtime evidence', async () => {

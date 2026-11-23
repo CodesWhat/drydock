@@ -133,13 +133,13 @@ describe('enforceOidcAccessPolicy', () => {
   });
 
   test('denial messages never contain claim values', () => {
-    try {
+    const attempt = () =>
       enforceOidcAccessPolicy(
         { allowedemails: 'a@one.test' },
         { email: 'secret.person@private.test' },
       );
-    } catch (error) {
-      expect((error as Error).message).not.toContain('secret.person');
-    }
+
+    expect(attempt).toThrow('email is not on the allowlist');
+    expect(attempt).not.toThrow(/secret\.person|private\.test/);
   });
 });

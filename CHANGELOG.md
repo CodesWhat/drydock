@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Security
+
+- **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
+
 ## [1.9.0-rc.1] - 2026-11-20
 
 > [!WARNING]
@@ -41,6 +45,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Fixed
 
+- Self-update is now detected when the watcher reaches the local Docker daemon over TCP, such as through a socket proxy. Drydock checks whether its own container lives on that daemon and uses the helper-container handoff when it does. If it cannot tell, it refuses the update instead of stopping itself with nothing to recreate it ([#1663](https://github.com/CodesWhat/drydock/issues/1663)).
 - Release builds no longer run the UI build under emulation on arm64. The Dockerfile's `ui-build` stage now runs on the build host's own platform, since the static assets it produces are the same for every architecture, which fixes the multi-arch release build timing out while vite hung under QEMU.
 - The image entrypoint's notices (the `group_add` GID line and the insecure-root warning) now go to stderr, so `scan` output on stdout stays valid JSON under those settings.
 - The OpenAPI schema for `PATCH /api/v1/containers/{id}/update-policy` now lists the `scope` field (`tag`, `minor` or `major`) that `skip-current` already accepted.

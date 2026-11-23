@@ -1751,20 +1751,32 @@ test('trigger should catch error when removing digest image fails', async () => 
   docker.configuration = { ...configurationValid, dryrun: false, prune: true };
   docker.log = log;
   stubTriggerFlow();
-  vi.spyOn(docker, 'removeImage').mockRejectedValue(new Error('remove failed'));
+  const removeImageSpy = vi
+    .spyOn(docker, 'removeImage')
+    .mockRejectedValue(new Error('remove failed'));
+  const warn = vi.fn();
+  docker.log = {
+    ...log,
+    child: vi.fn(() => ({ info: vi.fn(), warn, debug: vi.fn(), error: vi.fn() })),
+  };
 
-  // Should not throw
-  await docker.trigger(
-    createTriggerContainer({
-      image: {
-        name: 'test/test',
-        registry: { name: 'hub', url: 'my-registry' },
-        tag: { value: 'latest' },
-        digest: { repo: 'sha256:olddigest' },
-      },
-      updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
-    }),
-  );
+  // The prune failure is swallowed: the update itself still completes.
+  await expect(
+    docker.trigger(
+      createTriggerContainer({
+        image: {
+          name: 'test/test',
+          registry: { name: 'hub', url: 'my-registry' },
+          tag: { value: 'latest' },
+          digest: { repo: 'sha256:olddigest' },
+        },
+        updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
+      }),
+    ),
+  ).resolves.toBeUndefined();
+
+  expect(removeImageSpy).toHaveBeenCalledTimes(1);
+  expect(warn).toHaveBeenCalledWith('Unable to remove previous digest image (remove failed)');
 });
 
 test('trigger should not throw when container does not exist', async () => {
@@ -4488,11 +4500,22 @@ describe('scheduleDeferredReconciliation', () => {
     const storeContainer = await import('../../../store/container.js');
     (storeContainer.getContainers as any).mockReturnValue([]);
 
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+    mockMarkOperationTerminal.mockReset();
+
     const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
     callback('nonexistent', 'op-2', 5_000);
 
     await vi.advanceTimersByTimeAsync(5_000);
 
+    // Nothing to reconcile and nothing to fail: no reconcile attempt, no terminal write.
+    expect(reconcileSpy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
     vi.useRealTimers();
   });
 
