@@ -454,11 +454,11 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 <h2 align="center" id="star-history">Star History</h2>
 
 <div align="center">
-  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
+  <a href="https://www.star-history.com/?repos=CodesWhat%2Fdrydock&type=timeline&legend=top-left">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-      <img alt="Star history for CodesWhat/drydock" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <img alt="Star history for CodesWhat/drydock" src="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
     </picture>
   </a>
 </div>
@@ -507,7 +507,7 @@ These three tools are designed to layer: sockguard filters the socket, portwing 
 
 See [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) for the full compatibility matrix across all three tools.
 
-Small, sharp tools from one developer and a lot of agents. More at [codeswhat.com](https://codeswhat.com).
+[CodesWhat](https://codeswhat.com): small, sharp tools from one developer and a lot of agents.
 
 ---
 

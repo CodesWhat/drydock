@@ -451,11 +451,11 @@ Apenas temas gerais; consulte [CHANGELOG.md](CHANGELOG.md) para detalhes de cada
 <h2 align="center" id="star-history">História da estrela</h2>
 
 <div align="center">
-  <a href="https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left">
+  <a href="https://www.star-history.com/?repos=CodesWhat%2Fdrydock&type=timeline&legend=top-left">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
+      <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=CodesWhat/drydock&type=timeline&legend=top-left" />
     </picture>
   </a>
 </div>
