@@ -1,5 +1,5 @@
 ---
-# qlty-managed yamllint — see .qlty/qlty.toml
+# yamllint is managed by Qlty — see .qlty/qlty.toml
 extends: default
 rules:
   document-start: disable
