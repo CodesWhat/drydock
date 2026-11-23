@@ -854,3 +854,23 @@ test('Codecov records explicit comparisons and fresh app/UI report ownership', (
     ui: { paths: ['ui/'], carryforward: false },
   });
 });
+
+test('fleet soak covers helper edits and nested Go setup inputs', () => {
+  const workflow = yaml.parse(
+    readFileSync(new URL('../workflows/quality-portwing-fleet-soak.yml', import.meta.url), 'utf8'),
+  );
+  expect(workflow.on.pull_request.paths).toContain('scripts/lib/slow-consumer-reconnect.mjs');
+  const steps = workflow.jobs['fleet-soak'].steps;
+  const setupGo = steps.find((step: { uses?: string }) =>
+    step.uses?.startsWith('actions/setup-go@'),
+  );
+  expect(setupGo.with['cache-dependency-path']?.trim().split(/\s+/)).toEqual([
+    'portwing/go.mod',
+    'portwing/go.sum',
+  ]);
+  const harden = steps.find((step: { name?: string }) => step.name === 'Harden Runner');
+  expect(harden.with['egress-policy']).toBe('block');
+  expect(harden.with['allowed-endpoints'].split(/\s+/)).toContain(
+    'release-assets.githubusercontent.com:443',
+  );
+});
