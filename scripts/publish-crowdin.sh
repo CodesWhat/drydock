@@ -4,6 +4,7 @@ set -euo pipefail
 : "${BASE_BRANCH:?Set BASE_BRANCH to the resolved integration branch}"
 : "${GH_REPO:?Set GH_REPO to the repository}"
 
+integration_head=$(git rev-parse HEAD)
 git add -- ui/src/locales
 if git diff --cached --quiet; then
 	echo 'No translation changes to publish.'
@@ -16,7 +17,8 @@ git switch -c crowdin-download
 git commit -m 'chore(i18n): sync translations from Crowdin'
 download_head=$(git rev-parse HEAD)
 
-# Merge the download into the existing branch while the checkout is clean.
+# Merge the integration baseline before applying the fresh download, so
+# squash-merged branches do not replay locale changes that already landed.
 # Conflicts and concurrent remote updates fail before any history is replaced.
 remote_ref=$(git ls-remote --heads origin refs/heads/l10n_crowdin)
 publish=true
@@ -24,7 +26,8 @@ if [ -n "$remote_ref" ]; then
 	git fetch origin refs/heads/l10n_crowdin
 	remote_head=$(git rev-parse FETCH_HEAD)
 	git switch -c l10n_crowdin FETCH_HEAD
-	git merge --no-edit -m 'chore(i18n): merge downloaded translations' "$download_head"
+	git merge --no-edit -m 'chore(i18n): sync integration baseline' "$integration_head"
+	git cherry-pick --empty=drop "$download_head"
 	if git diff --quiet "$remote_head" HEAD; then
 		echo 'Localization branch content unchanged.'
 		publish=false
@@ -38,9 +41,8 @@ fi
 
 pulls="repos/${GH_REPO}/pulls"
 existing=$(gh api --method GET "$pulls" -f state=open \
-	-f "head=${GH_REPO%%/*}:l10n_crowdin" --jq '.[0].number // empty')
+	-f "head=${GH_REPO%%/*}:l10n_crowdin" -f "base=${BASE_BRANCH}" --jq '.[0].number // empty')
 if [ -n "$existing" ]; then
-	gh api --method PATCH "${pulls}/${existing}" -f "base=${BASE_BRANCH}" --silent
 	pr=$existing
 else
 	pr=$(gh api --method POST "$pulls" -f "base=${BASE_BRANCH}" -f head=l10n_crowdin \

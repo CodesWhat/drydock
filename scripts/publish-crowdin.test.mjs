@@ -79,6 +79,7 @@ test('publishes new translations without advancing the integration branch', () =
     const calls = readFileSync(join(root, 'gh-calls'), 'utf8');
     assert.match(calls, /api --method POST repos\/CodesWhat\/drydock\/pulls -f base=dev\/v1\.9/);
     assert.match(calls, /head=CodesWhat:l10n_crowdin/);
+    assert.match(calls, /api --method GET .* -f base=dev\/v1\.9/);
   });
 });
 
@@ -101,10 +102,8 @@ test('retains existing localization commits and updates their existing PR', () =
       '{"retained":true}\n',
     );
     const calls = readFileSync(join(root, 'gh-calls'), 'utf8');
-    assert.match(
-      calls,
-      /api --method PATCH repos\/CodesWhat\/drydock\/pulls\/42 -f base=dev\/v1\.9/,
-    );
+    assert.match(calls, /api --method GET repos\/CodesWhat\/drydock\/pulls\/42 /);
+    assert.doesNotMatch(calls, /api --method PATCH/);
     assert.doesNotMatch(calls, /api --method POST repos\/CodesWhat\/drydock\/pulls /);
   });
 });
@@ -128,6 +127,34 @@ test('an identical pending translation tree does not create another CI push', ()
         encoding: 'utf8',
       }).trim(),
       previous,
+    );
+  });
+});
+
+test('updates a persistent branch after its previous PR was squash merged', () => {
+  fixture(({ git, locale, remote, publish }) => {
+    git('switch', '-c', 'l10n_crowdin');
+    writeFileSync(locale, '{"message":"first translation"}\n');
+    git('add', '.');
+    git('commit', '-m', 'test: publish first translation');
+    git('push', 'origin', 'l10n_crowdin');
+    const previous = git('rev-parse', 'HEAD');
+    git('switch', 'dev/v1.9');
+    git('merge', '--squash', 'l10n_crowdin');
+    git('commit', '-m', 'test: squash first translation');
+    git('push', 'origin', 'dev/v1.9');
+    const integration = git('rev-parse', 'HEAD');
+    git('branch', '-D', 'l10n_crowdin');
+    writeFileSync(locale, '{"message":"later translation"}\n');
+    const result = publish();
+    assert.equal(result.status, 0, result.stderr);
+    assert.ok(git('rev-list', 'HEAD').split('\n').includes(previous));
+    const remoteGit = (...args) =>
+      runGit(['--git-dir', remote, ...args], { encoding: 'utf8' }).trim();
+    assert.equal(remoteGit('rev-parse', 'dev/v1.9'), integration);
+    assert.equal(
+      remoteGit('show', 'l10n_crowdin:ui/src/locales/de/messages.json'),
+      '{"message":"later translation"}',
     );
   });
 });
