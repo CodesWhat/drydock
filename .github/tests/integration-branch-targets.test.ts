@@ -83,8 +83,8 @@ test('Crowdin resolves its PR base at run time instead of hardcoding a branch', 
   expect(run).toContain('base="${DEFAULT_BRANCH}"');
   expect(resolve.env?.DEFAULT_BRANCH).toBe('${{ github.event.repository.default_branch }}');
 
-  const action = crowdinStep('crowdin/github-action@');
-  expect(action.with?.pull_request_base_branch_name).toBe('${{ steps.base.outputs.name }}');
+  const publisher = crowdinStep('Publish translations without rewriting branch history');
+  expect(publisher.env?.BASE_BRANCH).toBe('${{ steps.base.outputs.name }}');
 
   // ls-remote needs real history, and the default shallow clone has none.
   expect(crowdinStep('actions/checkout@').with?.['fetch-depth']).toBe(0);

@@ -60,7 +60,17 @@ test('Crowdin checks out the resolved integration branch before creating its bra
   expect(baseStepIndex).toBeGreaterThanOrEqual(0);
   expect(checkoutStepIndex).toBeGreaterThan(baseStepIndex);
   expect(crowdinStepIndex).toBeGreaterThan(checkoutStepIndex);
-  expect(steps[crowdinStepIndex]?.with?.skip_ref_checkout).toBe(true);
+  expect(steps[crowdinStepIndex]?.with?.push_translations).toBe(false);
+  expect(steps[crowdinStepIndex]?.with?.create_pull_request).toBe(false);
+  expect(steps[crowdinStepIndex]?.env?.GITHUB_TOKEN).toBeUndefined();
+  const publishStepIndex = steps.findIndex(
+    (step) => step.name === 'Publish translations without rewriting branch history',
+  );
+  const appStepIndex = steps.findIndex((step) => step.id === 'app-token');
+  expect(appStepIndex).toBeGreaterThan(crowdinStepIndex);
+  expect(publishStepIndex).toBeGreaterThan(appStepIndex);
+  expect(steps[publishStepIndex]?.env?.BASE_BRANCH).toBe('${{ steps.base.outputs.name }}');
+  expect(steps[publishStepIndex]?.run).toContain('bash scripts/publish-crowdin.sh');
 
   expect(checkoutStep?.env?.BASE).toBe('${{ steps.base.outputs.name }}');
   expect(checkoutStep?.run).not.toContain('${{ steps.base.outputs.name }}');
