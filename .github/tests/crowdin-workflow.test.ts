@@ -60,6 +60,7 @@ test('Crowdin checks out the resolved integration branch before creating its bra
   expect(baseStepIndex).toBeGreaterThanOrEqual(0);
   expect(checkoutStepIndex).toBeGreaterThan(baseStepIndex);
   expect(crowdinStepIndex).toBeGreaterThan(checkoutStepIndex);
+  expect(steps[crowdinStepIndex]?.with?.skip_ref_checkout).toBe(true);
 
   expect(checkoutStep?.env?.BASE).toBe('${{ steps.base.outputs.name }}');
   expect(checkoutStep?.run).not.toContain('${{ steps.base.outputs.name }}');

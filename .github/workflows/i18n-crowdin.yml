@@ -340,6 +340,9 @@ jobs:
       - uses: crowdin/github-action@8f01d54f70f1713ee3f09d82c2bbb2daeac28689  # v2.17.1
         with:
           user: auto
+          # Keep the resolved integration checkout. Switching back to the event
+          # ref after downloading translations can overwrite those local edits.
+          skip_ref_checkout: true
           upload_sources: true
           upload_translations: true
           download_translations: true
