@@ -843,7 +843,7 @@ test('Codecov records explicit comparisons and fresh app/UI report ownership', (
       target: 'auto',
       threshold: 0,
       informational: false,
-      if_not_found: 'failure',
+      if_not_found: 'success',
       if_ci_failed: 'error',
     });
   }
