@@ -83,3 +83,16 @@ test('slow-consumer phases use backpressure and observed eviction budgets', asyn
   assert.match(source, /backpressureResumed: 0/);
   assert.match(source, /'short pause backpressured without reconnect'/);
 });
+
+test('slow consumer pauses through the websocket, not the raw socket', async () => {
+  // ws 8.x receiverOnDrain resumes the raw socket unless ws.pause() set
+  // isPaused, so a raw _socket.pause() gets undone under heavy inbound traffic
+  // and the agent never hits its write timeout.
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./portwing-fleet-soak.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /_socket/);
+  assert.match(source, /slowAdapter\?\.ws\?\.pause/);
+  assert.match(source, /slowAdapter\?\.ws\?\.resume/);
+  assert.match(source, /pause: \(\) => slowAdapter\.ws\.pause\(\)/);
+  assert.match(source, /resume: \(\) => slowAdapter\.ws\.resume\(\)/);
+});
