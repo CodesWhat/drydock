@@ -2,6 +2,7 @@
 # lines, branches, functions and statements. UI Vue floors remain 87.89%,
 # 81.57%, 84.39% and 87.54%, respectively, in ui/vitest.config.ts.
 # Codecov statuses are comparisons, not additional required branch contexts.
+# A missing base report passes because dev branches have no push uploads.
 # auto uses base coverage; threshold 0 permits no drop, not a fixed minimum.
 codecov:
   require_ci_to_pass: true
@@ -15,14 +16,14 @@ coverage:
         target: auto
         threshold: 0
         informational: false
-        if_not_found: failure
+        if_not_found: success
         if_ci_failed: error
     patch:
       default:
         target: auto
         threshold: 0
         informational: false
-        if_not_found: failure
+        if_not_found: success
         if_ci_failed: error
 
 # Each CI run uploads fresh app and UI reports. Never substitute older runs.
