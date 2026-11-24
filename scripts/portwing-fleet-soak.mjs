@@ -454,10 +454,15 @@ async function run() {
     fail(`missing ${slowAgentName}`);
   }
   const slowAdapter = slowAgent.edgeAdapter;
-  const serverSocket = slowAdapter?.ws?._socket;
-  if (!serverSocket?.pause || !serverSocket?.resume) {
-    fail('production EdgeAgentAdapter WebSocket does not expose a pausable socket');
+  // Pause through the websocket: ws 8.x receiverOnDrain resumes the raw socket
+  // unless ws.pause() set isPaused, which would undo a raw socket pause.
+  if (!slowAdapter?.ws?.pause || !slowAdapter?.ws?.resume) {
+    fail('production EdgeAgentAdapter WebSocket does not expose pause/resume');
   }
+  const serverSocket = {
+    pause: () => slowAdapter.ws.pause(),
+    resume: () => slowAdapter.ws.resume(),
+  };
   const startFollowStream = (onChunk) =>
     slowAdapter.streamContainerLogs(
       'c0000000001',
