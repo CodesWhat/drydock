@@ -14,6 +14,7 @@ import {
 import { getContainerMaintenanceWindowOpen } from '../../../model/watcher-maintenance-window.js';
 import { getUpdateMode } from '../../../store/settings.js';
 import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
+import { getImagePreloadView } from '../../../updates/image-preload-state.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import {
@@ -168,7 +169,11 @@ export function attachUpdateEligibility(
     maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, watchers),
   };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
-  return createProjectionView(container, [['updateEligibility', updateEligibility]]);
+  const imagePreload = getImagePreloadView(container);
+  return createProjectionView(container, [
+    ['updateEligibility', updateEligibility],
+    ...(imagePreload ? ([['imagePreload', imagePreload]] as const) : []),
+  ]);
 }
 
 interface DependencyCounts {

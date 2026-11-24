@@ -1134,6 +1134,24 @@ export const openApiSchemas = {
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,
   },
+  ImagePreload: {
+    type: 'object',
+    description:
+      'State of the optional background download of a held update candidate. Absent means none. ' +
+      'Only reported while it matches the current candidate.',
+    properties: {
+      status: { type: 'string', enum: ['pending', 'done', 'failed'] },
+      image: { type: 'string', description: 'Image reference that was pulled.' },
+      digest: {
+        type: 'string',
+        description: 'Immutable digest the candidate was pinned to, when known.',
+      },
+      updatedAt: { type: 'string', format: 'date-time' },
+      error: { type: 'string' },
+    },
+    required: ['status', 'image', 'updatedAt'],
+    additionalProperties: false,
+  },
   ContainerResource: {
     type: 'object',
     properties: {
@@ -1158,6 +1176,7 @@ export const openApiSchemas = {
         },
         additionalProperties: true,
       },
+      imagePreload: { $ref: '#/components/schemas/ImagePreload' },
       notificationSkips: {
         type: 'array',
         items: { $ref: '#/components/schemas/ContainerNotificationSkip' },

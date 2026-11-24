@@ -339,6 +339,15 @@ export interface Container {
   updateMaturityLevel?: 'hot' | 'mature' | 'established';
   updateOperation?: ContainerUpdateOperationState;
   updateEligibility?: import('./update-eligibility.js').UpdateEligibility;
+  // Attached by the container API only, never persisted: state of the optional background
+  // download of this container's held update candidate (absent means none).
+  imagePreload?: {
+    status: 'pending' | 'done' | 'failed';
+    image: string;
+    digest?: string;
+    updatedAt: string;
+    error?: string;
+  };
   // List-view badge counts (#219, design §4) — attached only by the container
   // list handler, derived from buildDependencyGraph over the whole fleet, not
   // persisted. Full graph detail lives behind GET /containers/dependencies.

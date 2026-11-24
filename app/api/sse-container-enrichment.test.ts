@@ -39,6 +39,7 @@ vi.mock('../store/update-operation.js', () => ({
   getActiveOperationByContainerIdentity: mockGetActiveOperationByContainerIdentity,
 }));
 
+import { resetImagePreloads, setImagePreload } from '../updates/image-preload-state.js';
 import { toApiContainer } from './container/shared.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 
@@ -558,6 +559,38 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       );
       expect(blocker).toBeDefined();
       expect(mockGetAgent).toHaveBeenCalledWith('');
+    });
+  });
+
+  describe('image preload', () => {
+    afterEach(() => {
+      resetImagePreloads();
+    });
+
+    test('carries the preload state of the current candidate', () => {
+      const payload = {
+        id: 'c1',
+        name: 'mysql',
+        image: { tag: { value: '9.6.0' } },
+        result: { tag: '9.7.0', digest: 'sha256:a' },
+      } as any;
+      expect(enrichContainerLifecyclePayloadWithEligibility(payload)).not.toHaveProperty(
+        'imagePreload',
+      );
+      setImagePreload(payload, {
+        status: 'pending',
+        image: 'mysql@sha256:a',
+        digest: 'sha256:a',
+        candidate: 'sha256:a',
+        host: 'local.local',
+      });
+      const result = enrichContainerLifecyclePayloadWithEligibility(payload) as any;
+      expect(result.imagePreload).toEqual({
+        status: 'pending',
+        image: 'mysql@sha256:a',
+        digest: 'sha256:a',
+        updatedAt: expect.any(String),
+      });
     });
   });
 });

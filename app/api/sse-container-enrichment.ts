@@ -13,6 +13,7 @@ import {
   getActiveOperationByContainerIdentity,
 } from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
+import { getImagePreloadView } from '../updates/image-preload-state.js';
 
 /**
  * Exported so the approvals API can compute a row's live eligibility through exactly the
@@ -57,7 +58,12 @@ export function enrichContainerLifecyclePayloadWithEligibility(
   try {
     const container = payload as unknown as Container;
     const eligibility = computeUpdateEligibility(container, buildEligibilityContext(container));
-    return { ...payload, updateEligibility: eligibility };
+    const imagePreload = getImagePreloadView(container);
+    return {
+      ...payload,
+      updateEligibility: eligibility,
+      ...(imagePreload ? { imagePreload } : {}),
+    };
   } catch {
     return payload;
   }

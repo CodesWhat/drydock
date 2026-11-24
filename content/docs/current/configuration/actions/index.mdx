@@ -161,6 +161,19 @@ Docker and Docker Compose actions download images through the Docker daemon, so 
 - Each throttle logs one warning naming the registry, how many pulls are waiting and the delay. A pull that has to wait logs that it is waiting for a slot.
 - The pull timeout (`PULLTIMEOUT`) starts when the pull gets a slot, so time spent queued does not count against it. The image reference being pulled, including a digest pin, is never changed by pacing.
 
+## Image preload
+
+By default an update's image is pulled when the update runs. With `PRELOAD` set on a Docker or Docker Compose action, Drydock downloads the candidate image in the background while the update is held, so a later install or maintenance window starts with the layers already on the host.
+
+- `PRELOAD=true` covers every container this action owns, `PRELOAD=label` only containers with `dd.update.preload=true`, and `false` (the default) turns it off. The label `dd.update.preload=false` opts a single container out. A label cannot turn preloading on while the option is `false`.
+- Only held updates are preloaded: approval pending, maintenance window closed, maturity not reached, or manual-only. An update that installs on its own right away is not, and neither is one that is snoozed, skipped, blocked by a security scan or below the action's threshold.
+- The pull uses the candidate's digest when the registry reported one, and goes through the same [pull pacing](#pull-pacing), timeout and registry credentials as an update. The running container is never stopped, renamed or recreated.
+- If the candidate changes, the old preload stops being reported and the new candidate is pulled on the next scan. A failed preload is retried after 15 minutes.
+- A preload does not replace any install check. The update still pulls, scans and applies your policy when it runs.
+- `PRELOADCONCURRENCY` (default `1`) bounds simultaneous preload pulls per Docker host, and `PRELOADMAXCANDIDATES` (default `5`) bounds how many preloaded candidates are kept per host. Docker has no free-space probe, so these two limits are the disk guard. Extra candidates wait for a later scan.
+- Containers excluded with `dd.action.exclude`, locally built images, containers without a Docker watcher and agent containers are never preloaded from the controller. An agent preloads on its own host when its own action sets `PRELOAD`; that state is not reported back to the controller.
+- Preload state is kept in memory, so it resets on restart. The container API reports it as `imagePreload` with `status` (`pending`, `done` or `failed`), `image`, `digest` and `updatedAt`. No `imagePreload` means none.
+
 ## Health-gate SSE heartbeat
 
 When drydock waits for a new container to pass its health gate (images with long healthcheck intervals, like vaultwarden's 60 s check), the UI receives no SSE events between the `health-gate` phase (start of wait) and `health-gate-passed` (end of wait). The health-gate heartbeat fixes this by re-emitting the same `health-gate` phase event at a configurable interval, keeping the UI informed in near-real-time without relying on REST reconciliation.
