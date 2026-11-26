@@ -1,6 +1,6 @@
 import type { Container } from '../model/container.js';
 
-export type ImagePreloadStatus = 'pending' | 'done' | 'failed';
+type ImagePreloadStatus = 'pending' | 'done' | 'failed';
 
 /** What the API reports for a container. Absent means no preload (status "none"). */
 export interface ImagePreloadState {
