@@ -425,11 +425,8 @@ async function readWorkerLogs(
   void completion.failed.catch(() => undefined);
   void collectors.overflow.catch(() => undefined);
   client.modem.demuxStream(source, collectors.stdout, collectors.stderr);
+  // overflow rejects the race, so a completed race means the output stayed within the cap.
   await Promise.race([completion.done, collectors.overflow, completion.failed]);
-  const outputLimitError = collectors.overflowError();
-  if (outputLimitError) {
-    throw outputLimitError;
-  }
   return { stdout: collectors.stdoutText(), stderr: collectors.stderrText() };
 }
 

@@ -124,6 +124,19 @@ describe('createDockerScannerBackend', () => {
       await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
     });
 
+    test('ignores a late error on the logs stream once the output is read', async () => {
+      const logsSource = new EventEmitter();
+      const { backend } = createHarness({
+        stdout: 'partial',
+        logsStdout: '{"matches":[]}',
+        logs: async () => logsSource,
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+      logsSource.emit('error', new Error('late logs error'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
     test('applies the byte cap to logs output', async () => {
       const { backend, container } = createHarness({
         stdout: 'ok',
