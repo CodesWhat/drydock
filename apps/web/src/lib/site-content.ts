@@ -375,7 +375,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.9.0-rc.1",
+    version: "v1.9.0-rc.2",
     title: "Policy depth & Ecosystem (RC, testing only)",
     emoji: "\u{1F9ED}",
     status: "next",

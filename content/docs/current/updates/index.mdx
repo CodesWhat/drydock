@@ -5,7 +5,15 @@ description: "Release update notes and feature highlights, with direct links to 
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.9.0-rc.1 is the first opt-in testing candidate of the v1.9 line. It begins its own soak when published; it is not v1.9 GA. [v1.8](/docs/v1.8/updates) remains a release candidate line.</Callout>
+<Callout type="warn">**Current release status:** [v1.7.1](/docs/v1.7/updates) is the stable maintenance release. v1.9.0-rc.2 is an opt-in testing candidate of the v1.9 line that adds image preloading for held updates and fixes self-update through TCP watchers. It begins its own soak when published; it is not v1.9 GA. [v1.8](/docs/v1.8/updates) remains a release candidate line.</Callout>
+
+## v1.9.0-rc.2 Highlights - November 26, 2026
+
+<Callout type="warn">**Testing candidate, not v1.9 GA.** Back up the complete store directory before upgrading from v1.8. 1.9 applies store schema migrations 15 and 16 on first start, and v1.8 refuses a database with a newer schema, so downgrading needs the pre-upgrade backup. Read [storage migration](/docs/configuration/storage#upgrade-from-json) first.</Callout>
+
+- **Image preload.** Docker and Docker Compose actions can download a held update's image ahead of time with the `PRELOAD` option, so approval or the maintenance window only has to recreate the container. See the [Docker action docs](/docs/configuration/actions).
+- **Self-update through TCP watchers.** Self-update now finds its own container through a TCP watcher or socket proxy and uses the helper handoff. If identity cannot be established, it refuses the update instead of stopping the container.
+- RC2 includes every rc.1 change below and the OpenSSL OpenVEX updates in the [changelog](https://github.com/CodesWhat/drydock/blob/main/CHANGELOG.md). Its soak starts at publication. For production, use [v1.7.1](/docs/v1.7/updates).
 
 ## v1.9.0-rc.1 Highlights - November 20, 2026
 
