@@ -159,6 +159,7 @@ const navGroups = computed<NavGroup[]>(() => [
     label: t('appShell.layout.nav.manageGroup'),
     items: [
       { label: t('appShell.layout.nav.hosts'), icon: 'servers', route: ROUTES.SERVERS },
+      { label: t('appShell.layout.nav.fleetHealth'), icon: 'uptime', route: ROUTES.FLEET },
       { label: t('appShell.layout.nav.registries'), icon: 'registries', route: ROUTES.REGISTRIES },
       { label: t('appShell.layout.nav.watchers'), icon: 'watchers', route: ROUTES.WATCHERS },
       { label: t('appShell.layout.nav.images'), icon: 'images', route: ROUTES.IMAGES },

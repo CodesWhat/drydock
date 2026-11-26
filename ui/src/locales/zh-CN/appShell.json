@@ -72,6 +72,7 @@
         "systemLogs": "系统日志",
         "manageGroup": "管理",
         "hosts": "主机",
+        "fleetHealth": "集群健康状态",
         "registries": "仓库",
         "watchers": "监视器",
         "images": "镜像",

@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Changed
+
+- Fleet Health now has its own page in the left navigation instead of sitting above the container list, which frees up that space on the Containers view. The roster, reload and inventory refresh controls are unchanged. Requested in discussion #1686 and #1572.
+
 ### Security
 
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.

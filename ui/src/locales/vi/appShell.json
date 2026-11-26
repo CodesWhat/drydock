@@ -72,6 +72,7 @@
         "systemLogs": "Nhật ký hệ thống",
         "manageGroup": "Quản lý",
         "hosts": "Máy chủ",
+        "fleetHealth": "Trạng thái cụm",
         "registries": "Registry",
         "watchers": "Watcher",
         "images": "Image",

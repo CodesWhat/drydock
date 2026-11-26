@@ -72,6 +72,7 @@
         "systemLogs": "시스템 로그",
         "manageGroup": "관리",
         "hosts": "호스트",
+        "fleetHealth": "플릿 상태",
         "registries": "레지스트리",
         "watchers": "워처",
         "images": "이미지",

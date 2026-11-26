@@ -72,6 +72,7 @@
         "systemLogs": "سجلات النظام",
         "manageGroup": "إدارة",
         "hosts": "المضيفون",
+        "fleetHealth": "حالة الأسطول",
         "registries": "السجلات",
         "watchers": "المراقبون",
         "images": "الصور",

@@ -72,6 +72,7 @@
         "systemLogs": "システムログ",
         "manageGroup": "管理",
         "hosts": "ホスト",
+        "fleetHealth": "フリートの状態",
         "registries": "レジストリ",
         "watchers": "ウォッチャー",
         "images": "イメージ",

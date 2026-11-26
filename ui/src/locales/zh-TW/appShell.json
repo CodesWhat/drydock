@@ -72,6 +72,7 @@
         "systemLogs": "系統日誌",
         "manageGroup": "管理",
         "hosts": "主機",
+        "fleetHealth": "叢集健康狀態",
         "registries": "倉庫",
         "watchers": "監視器",
         "images": "映像檔",

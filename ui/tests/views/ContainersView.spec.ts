@@ -9,8 +9,7 @@ import { resetDependencyGraphState, useDependencyGraph } from '@/composables/use
 import { useToast } from '@/composables/useToast';
 import { preferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
-import { getAllWatchers, refreshWatcherInventory } from '@/services/watcher';
-import type { ApiAgent, ApiComponent } from '@/types/api';
+import { getAllWatchers } from '@/services/watcher';
 import type { Container } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
@@ -757,71 +756,10 @@ describe('ContainersView', () => {
     expect(requestStartedAt).toBeLessThanOrEqual(Date.now());
   });
 
-  it('restores local fleet counts after a successful list retry, without treating an action error as stale inventory', async () => {
-    vi.mocked(getAllWatchers).mockResolvedValue([
-      {
-        id: 'docker.one',
-        type: 'docker',
-        name: 'one',
-        configuration: {},
-        metadata: { inventoryRefreshSupported: true },
-      } satisfies ApiComponent,
-    ]);
+  it('no longer renders fleet health above the container list (#1686)', async () => {
     const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
-    const vm = wrapper.vm as any;
-    vm.error = 'an unrelated action failed';
-    await flushPromises();
-    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
-    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
-    await vm.loadContainers();
-    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('Unavailable');
-    await vm.loadContainers();
-    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
-  });
-  it('mounts fleet-wide health above filters and reports an inventory list reload failure separately', async () => {
-    vi.mocked(getAgents).mockResolvedValue([
-      {
-        name: 'empty',
-        host: '127.0.0.1',
-        connected: true,
-        containers: { total: 0, running: 0, stopped: 0 },
-      } satisfies ApiAgent,
-    ]);
-    vi.mocked(getAllWatchers).mockResolvedValue([
-      {
-        id: 'empty.docker.one',
-        type: 'docker',
-        name: 'one',
-        agent: 'empty',
-        configuration: {},
-        metadata: { inventoryRefreshSupported: true },
-      } satisfies ApiComponent,
-    ]);
-    vi.mocked(refreshWatcherInventory).mockResolvedValueOnce({
-      context: {
-        origin: 'inventory',
-        operationId: 'op',
-        source: { type: 'docker', name: 'one', agent: 'empty' },
-      },
-      authoritative: true,
-      containers: [],
-      removedIds: [],
-      errors: [],
-    });
-    const wrapper = await mountContainersView([makeContainer({ id: 'local', name: 'local' })]);
-    expect(wrapper.findAll('[data-test="fleet-health-row"]')).toHaveLength(1);
-    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
-    mockFilteredContainers.value = [];
-    await flushPromises();
-    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('0 containers');
-    mockGetAllContainers.mockRejectedValueOnce(new Error('list unavailable'));
-    await wrapper.get('[data-test="fleet-inventory-refresh"]').trigger('click');
-    await flushPromises();
-    expect(
-      (wrapper.vm as any).fleetHealth.outcomes.value?.[JSON.stringify(['agent', 'empty'])] ??
-        (wrapper.vm as any).fleetHealth.outcomes[JSON.stringify(['agent', 'empty'])],
-    ).toMatchObject({ complete: true, reloadFailed: true });
-    expect(refreshWatcherInventory).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-test="fleet-health-row"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="fleet-health-reload"]').exists()).toBe(false);
   });
   it('plans fleet Update all from live filtered rows without changing selection', async () => {
     const { useContainerSelection } = await import('@/composables/useContainerSelection');

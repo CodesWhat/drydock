@@ -30,6 +30,7 @@ export const ROUTES = {
   CONFIG: '/config',
   REGISTRIES: '/registries',
   AGENTS: '/agents',
+  FLEET: '/fleet',
   TRIGGERS: '/triggers',
   WATCHERS: '/watchers',
   IMAGES: '/images',
