@@ -3683,3 +3683,16 @@ describe('runCommand heartbeat', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+test('Trivy truncated JSON output should explain the likely proxy cut', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    callback(null, '{"Results":[{"Target":"abc', '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('Trivy output was incomplete or not valid JSON');
+  expect(result.error).toContain('DD_SECURITY_AVAILABILITY_POLICY=warn');
+});
