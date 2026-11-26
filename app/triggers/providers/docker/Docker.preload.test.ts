@@ -81,6 +81,27 @@ describe('configuration', () => {
     expect(docker.validateConfiguration({ preload: value }).preload).toBe(expected);
   });
 
+  test.each(['preloadconcurrency', 'preloadmaxcandidates'])(
+    '%s takes a positive integer',
+    (key) => {
+      expect(docker.validateConfiguration({ [key]: 3 })[key]).toBe(3);
+      expect(docker.validateConfiguration({ [key]: '2' })[key]).toBe(2);
+    },
+  );
+
+  test.each([
+    ['preloadconcurrency', 0],
+    ['preloadconcurrency', -1],
+    ['preloadconcurrency', 1.5],
+    ['preloadconcurrency', 'many'],
+    ['preloadmaxcandidates', 0],
+    ['preloadmaxcandidates', -1],
+    ['preloadmaxcandidates', 1.5],
+    ['preloadmaxcandidates', 'many'],
+  ])('%s=%s is rejected', (key, value) => {
+    expect(() => docker.validateConfiguration({ [key]: value })).toThrow();
+  });
+
   test('an unknown preload value is rejected', () => {
     expect(() => docker.validateConfiguration({ preload: 'sometimes' })).toThrow();
   });
@@ -97,6 +118,67 @@ describe('lifecycle', () => {
     expect(start).toHaveBeenCalledTimes(1);
     await docker.deregisterComponent();
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('rollback backups', () => {
+  test('isRollbackTag matches the retained backup tags of the container', async () => {
+    const backupStore = await import('../../../store/backup.js');
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([{ imageTag: '1' }] as never);
+    expect(docker.isRollbackTag(container, '1')).toBe(true);
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([{ imageTag: '1' }] as never);
+    expect(docker.isRollbackTag(container, '2')).toBe(false);
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue(undefined as never);
+    expect(docker.isRollbackTag(container, '1')).toBe(false);
+  });
+});
+
+describe('a preload only makes image calls on the Docker API', () => {
+  function lifecycleApi(present: boolean) {
+    const lifecycle = {
+      getContainer: vi.fn(),
+      createContainer: vi.fn(),
+      listContainers: vi.fn(),
+    };
+    const api = pullApi();
+    const dockerApi = {
+      ...lifecycle,
+      ...api.dockerApi,
+      getImage: vi.fn(() => ({
+        inspect: present
+          ? vi.fn().mockResolvedValue({})
+          : vi.fn().mockRejectedValue(new Error('404')),
+      })),
+    };
+    return { dockerApi, lifecycle, finish: api.finish };
+  }
+
+  function arrangeReal(dockerApi: unknown) {
+    vi.spyOn(preloader, 'evaluate').mockReturnValue({ preload: true });
+    vi.spyOn(docker, 'getWatcher').mockReturnValue({ dockerApi } as never);
+    vi.spyOn(docker, 'resolveRegistryManager').mockReturnValue({
+      getAuthPull: vi.fn().mockResolvedValue(undefined),
+      getImageFullName: (_image: unknown, ref: string) => `a/b@${ref}`,
+    } as never);
+    docker.log = createMockLog('info', 'warn', 'debug') as never;
+  }
+
+  test.each([
+    ['already cached', true],
+    ['newly pulled', false],
+  ])('%s', async (_name, present) => {
+    const { dockerApi, lifecycle, finish } = lifecycleApi(present);
+    arrangeReal(dockerApi);
+    await preloader.handleReport(container);
+    await vi.advanceTimersByTimeAsync(0);
+    finish();
+    await preloader.idle();
+    expect(getImagePreload(container)?.status).toBe('done');
+    expect(dockerApi.getImage).toHaveBeenCalledWith('a/b@sha256:abc');
+    expect(dockerApi.pull).toHaveBeenCalledTimes(present ? 0 : 1);
+    for (const spy of Object.values(lifecycle)) {
+      expect(spy).not.toHaveBeenCalled();
+    }
   });
 });
 

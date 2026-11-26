@@ -1,7 +1,8 @@
 import * as event from '../../../event/index.js';
 import { selectActionTrigger } from '../../../model/action-policy.js';
-import { classifyApprovalCandidate } from '../../../model/approval.js';
+import { chooseApprovalCandidate, classifyApprovalCandidate } from '../../../model/approval.js';
 import { type Container, fullName, hasRawUpdate } from '../../../model/container.js';
+import { resolveUpdateModeCeiling } from '../../../model/group-policy.js';
 import {
   computeUpdateEligibility,
   type UpdateBlockerReason,
@@ -12,9 +13,13 @@ import { getUpdateMode } from '../../../store/settings.js';
 import { getActiveOperationByContainerId } from '../../../store/update-operation.js';
 import {
   clearImagePreload,
-  countImagePreloads,
+  countRetainedImagePreloads,
   getPreloadCandidate,
+  hasRetainedImagePreload,
+  type ImagePreloadState,
   peekImagePreload,
+  releaseImagePreload,
+  retainImagePreload,
   setImagePreload,
 } from '../../../updates/image-preload-state.js';
 import { getErrorMessage } from '../../../util/error.js';
@@ -67,7 +72,7 @@ export interface ImagePreloaderHost {
   getId: () => string;
   log: PreloadLog;
   configuration: PreloadConfiguration & { order?: number };
-  getWatcher: (container: Container) => { dockerApi: unknown };
+  getWatcher: (container: Container) => { dockerApi?: unknown };
   resolveRegistryManager: (
     container: Container,
     log: PreloadLog,
@@ -76,6 +81,10 @@ export interface ImagePreloaderHost {
   getNewImageFullName: (registry: PreloadRegistry, container: Container) => string;
   isImageOnHost: (dockerApi: unknown, imageReference: string) => Promise<boolean>;
   pullImage: (dockerApi: unknown, auth: unknown, image: string, log: PreloadLog) => Promise<void>;
+  /** Non-forced removal: the daemon refuses an image a container still uses. */
+  removeImage: (dockerApi: unknown, image: string, log: PreloadLog) => Promise<void>;
+  /** Is this tag one of the container's retained rollback backups? */
+  isRollbackTag: (container: Container, tag: string) => boolean;
 }
 
 export type PreloadDecision = { preload: true } | { preload: false; reason: string };
@@ -86,13 +95,14 @@ function readLabel(container: Container): boolean | undefined {
     return undefined;
   }
   const value = raw.trim().toLowerCase();
-  if (['true', '1', 'yes', 'on'].includes(value)) {
+  if (value === 'true') {
     return true;
   }
-  if (['false', '0', 'no', 'off'].includes(value)) {
-    return false;
-  }
-  return undefined;
+  return value === 'false' ? false : undefined;
+}
+
+function getStatusCode(error: unknown): number | undefined {
+  return (error as { statusCode?: number } | null | undefined)?.statusCode;
 }
 
 /**
@@ -123,7 +133,7 @@ export default class ImagePreloader {
       { id: `${this.host.getId()}.preload`, order: this.host.configuration.order },
     );
     this.unregisterRemoved = event.registerContainerRemoved((container) => {
-      clearImagePreload(container as unknown as Container);
+      this.track(this.discard(container as unknown as Container), 'Preload cleanup');
     });
   }
 
@@ -166,7 +176,7 @@ export default class ImagePreloader {
     if (winner.state === 'blocked') {
       return { preload: false, reason: `excluded from this action (${winner.reason})` };
     }
-    let dockerWatcher: { dockerApi: unknown } | undefined;
+    let dockerWatcher: { dockerApi?: unknown } | undefined;
     try {
       dockerWatcher = this.host.getWatcher(container);
     } catch {
@@ -189,6 +199,9 @@ export default class ImagePreloader {
     if (refusal) {
       return { preload: false, reason: `update not wanted (${refusal.reason})` };
     }
+    if (resolveUpdateModeCeiling(container, getUpdateMode()).value === 'notify') {
+      return { preload: false, reason: 'update mode is notify, updates are never applied' };
+    }
     const verdict = classifyApprovalCandidate(
       container,
       registryState.trigger as never,
@@ -207,21 +220,68 @@ export default class ImagePreloader {
    * Evaluate a report and start a background pull when warranted. Returns immediately so a
    * slow pull never holds up the ordered container-report handlers.
    */
-  async handleReport(container: Container): Promise<void> {
-    if (!hasRawUpdate(container)) {
-      clearImagePreload(container);
+  async handleReport(reported: Container): Promise<void> {
+    if (!hasRawUpdate(reported)) {
+      this.track(this.discard(reported), `Preload cleanup for ${fullName(reported)}`);
       return;
     }
+    // A trigger with separate update types acts on the best candidate inside its threshold,
+    // so that is the image worth warming, not the primary it will never apply.
+    const container = chooseApprovalCandidate(reported, getState().trigger as never);
     const decision = this.evaluate(container);
     if ('reason' in decision) {
       this.host.log.debug(`Preload skipped for ${fullName(container)}: ${decision.reason}`);
       return;
     }
-    const task = this.preload(container).catch((error: unknown) => {
-      this.host.log.warn(`Preload failed for ${fullName(container)} (${getErrorMessage(error)})`);
+    this.track(this.preload(container), `Preload failed for ${fullName(container)}`);
+  }
+
+  private track(work: Promise<void>, label: string): void {
+    const task = work.catch((error: unknown) => {
+      this.host.log.warn(`${label} (${getErrorMessage(error)})`);
     });
     this.pulling.add(task);
     void task.finally(() => this.pulling.delete(task));
+  }
+
+  /** Forget a container's preload and give back the image it owned. */
+  private async discard(container: Container): Promise<void> {
+    const existing = peekImagePreload(container);
+    if (!existing) {
+      return;
+    }
+    clearImagePreload(container);
+    await this.releaseImage(container, existing);
+  }
+
+  /**
+   * Give up a container's claim on a preloaded image and remove it from the host once nothing
+   * else owns it. Returns false only when a removal failed, so the caller can defer and keep
+   * the reference counted against the cap. An image the daemon says is gone (404) or in use
+   * (409, it was installed or a container needs it) is no longer a preload either way.
+   */
+  private async releaseImage(container: Container, state: ImagePreloadState): Promise<boolean> {
+    if (!releaseImagePreload(state.host, state.image, container)) {
+      return true;
+    }
+    if (!state.digest && this.host.isRollbackTag(container, state.candidate)) {
+      return true;
+    }
+    try {
+      const { dockerApi } = this.host.getWatcher(container);
+      await this.host.removeImage(dockerApi, state.image, this.host.log);
+      return true;
+    } catch (error: unknown) {
+      const statusCode = getStatusCode(error);
+      if (statusCode === 404 || statusCode === 409) {
+        return true;
+      }
+      retainImagePreload(state.host, state.image, container);
+      this.host.log.warn(
+        `Preload image ${state.image} could not be removed (${getErrorMessage(error)})`,
+      );
+      return false;
+    }
   }
 
   private async preload(container: Container): Promise<void> {
@@ -230,16 +290,18 @@ export default class ImagePreloader {
       return;
     }
     const existing = peekImagePreload(container);
-    if (existing?.candidate === candidate) {
+    const sameCandidate = existing?.candidate === candidate ? existing : undefined;
+    if (sameCandidate) {
       const retryDue =
-        existing.status === 'failed' &&
-        Date.now() - Date.parse(existing.updatedAt) >= PRELOAD_RETRY_AFTER_MS;
-      if (existing.status !== 'failed' || !retryDue) {
+        sameCandidate.status === 'failed' &&
+        Date.now() - Date.parse(sameCandidate.updatedAt) >= PRELOAD_RETRY_AFTER_MS;
+      if (sameCandidate.status === 'pending' || (sameCandidate.status === 'failed' && !retryDue)) {
         return;
       }
     }
 
-    const host = `${container.agent ?? 'local'}.${container.watcher}`;
+    // Agent containers are refused by evaluate(), so every preload is on a local watcher.
+    const host = `local.${container.watcher}`;
     const concurrency = this.host.configuration.preloadconcurrency ?? DEFAULT_PRELOAD_CONCURRENCY;
     if ((this.inFlight.get(host) ?? 0) >= concurrency) {
       this.host.log.debug(
@@ -247,36 +309,57 @@ export default class ImagePreloader {
       );
       return;
     }
-    const maxCandidates =
-      this.host.configuration.preloadmaxcandidates ?? DEFAULT_PRELOAD_MAX_CANDIDATES;
-    if (countImagePreloads(host, container) >= maxCandidates) {
-      this.host.log.info(
-        `Preload skipped for ${fullName(container)}: ${host} already holds ${maxCandidates} preloaded candidate(s)`,
+    if (existing && !sameCandidate && !(await this.releaseImage(container, existing))) {
+      this.host.log.warn(
+        `Preload deferred for ${fullName(container)}: the superseded image ${existing.image} is still on ${host}`,
       );
       return;
     }
 
-    const registry = this.host.resolveRegistryManager(container, this.host.log, {
-      allowAnonymousFallback: true,
-    });
     const digest = container.result?.digest;
-    const image = digest
-      ? registry.getImageFullName(container.image, digest)
-      : this.host.getNewImageFullName(registry, container);
-    const record = { image, digest, candidate, host };
-
+    let record = { image: candidate, digest, candidate, host };
     this.inFlight.set(host, (this.inFlight.get(host) ?? 0) + 1);
-    setImagePreload(container, { ...record, status: 'pending' });
+    if (sameCandidate?.status !== 'done') {
+      setImagePreload(container, { ...record, status: 'pending' });
+    }
     try {
+      const registry = this.host.resolveRegistryManager(container, this.host.log, {
+        allowAnonymousFallback: true,
+      });
+      const image = digest
+        ? registry.getImageFullName(container.image, digest)
+        : this.host.getNewImageFullName(registry, container);
+      record = { ...record, image };
+      const maxCandidates =
+        this.host.configuration.preloadmaxcandidates ?? DEFAULT_PRELOAD_MAX_CANDIDATES;
+      if (
+        !hasRetainedImagePreload(host, image) &&
+        countRetainedImagePreloads(host) >= maxCandidates
+      ) {
+        clearImagePreload(container);
+        this.host.log.info(
+          `Preload skipped for ${fullName(container)}: ${host} already holds ${maxCandidates} preloaded image(s)`,
+        );
+        return;
+      }
+      retainImagePreload(host, image, container);
+      if (sameCandidate?.status !== 'done') {
+        setImagePreload(container, { ...record, status: 'pending' });
+      }
       const { dockerApi } = this.host.getWatcher(container);
       if (await this.host.isImageOnHost(dockerApi, image)) {
         this.settle(container, candidate, { ...record, status: 'done' });
         return;
       }
+      if (sameCandidate?.status === 'done') {
+        // Cleanup or an operator removed it: the entry no longer describes the host.
+        this.settle(container, candidate, { ...record, status: 'pending' });
+      }
       const auth = await registry.getAuthPull();
       await this.host.pullImage(dockerApi, auth, image, this.host.log);
       this.settle(container, candidate, { ...record, status: 'done' });
     } catch (error: unknown) {
+      releaseImagePreload(host, record.image, container);
       this.settle(container, candidate, {
         ...record,
         status: 'failed',

@@ -2,6 +2,7 @@ import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import yaml from 'yaml';
 import { getState } from '../../../registry/index.js';
+import Trigger from '../Trigger.js';
 import Dockercompose, {
   testable_getImageRepositoryKey,
   testable_hasExplicitRegistryHost,
@@ -110,6 +111,40 @@ describe('Dockercompose Trigger', () => {
       watchMock: watch,
       getStateMock: getState,
     }));
+  });
+
+  test('accepts the image preload options and inherits the defaults', () => {
+    const explicit = trigger.validateConfiguration({
+      file: '/opt/compose.yml',
+      preload: 'label',
+      preloadconcurrency: 2,
+      preloadmaxcandidates: '3',
+    });
+    expect(explicit).toMatchObject({
+      preload: 'label',
+      preloadconcurrency: 2,
+      preloadmaxcandidates: 3,
+    });
+    expect(trigger.validateConfiguration({ file: '/opt/compose.yml' })).toMatchObject({
+      preload: false,
+      preloadconcurrency: 1,
+      preloadmaxcandidates: 5,
+    });
+    expect(() =>
+      trigger.validateConfiguration({ file: '/opt/compose.yml', preloadconcurrency: 0 }),
+    ).toThrow();
+  });
+
+  test('init starts the inherited image preloader and deregister stops it', async () => {
+    vi.spyOn(Trigger.prototype, 'init').mockResolvedValue(undefined);
+    vi.spyOn(Trigger.prototype, 'deregisterComponent').mockResolvedValue(undefined);
+    const preloader = trigger.imagePreloader;
+    const start = vi.spyOn(preloader, 'start').mockImplementation(() => undefined);
+    const stop = vi.spyOn(preloader, 'stop').mockImplementation(() => undefined);
+    await trigger.init();
+    expect(start).toHaveBeenCalledTimes(1);
+    await trigger.deregisterComponent();
+    expect(stop).toHaveBeenCalledTimes(1);
   });
 
   // getComposeFileForContainer

@@ -1,5 +1,6 @@
 import type { Container } from '../../../model/container.js';
 import {
+  countRetainedImagePreloads,
   getImagePreload,
   getImagePreloadView,
   peekImagePreload,
@@ -21,6 +22,8 @@ const mocks = vi.hoisted(() => ({
   classifyApprovalCandidate: vi.fn(),
   computeUpdateEligibility: vi.fn(),
   getContainerMaintenanceWindowOpen: vi.fn(),
+  chooseApprovalCandidate: vi.fn(),
+  resolveUpdateModeCeiling: vi.fn(),
 }));
 
 vi.mock('../../../event/index.js', () => ({
@@ -37,6 +40,10 @@ vi.mock('../../../model/action-policy.js', () => ({
 }));
 vi.mock('../../../model/approval.js', () => ({
   classifyApprovalCandidate: mocks.classifyApprovalCandidate,
+  chooseApprovalCandidate: mocks.chooseApprovalCandidate,
+}));
+vi.mock('../../../model/group-policy.js', () => ({
+  resolveUpdateModeCeiling: mocks.resolveUpdateModeCeiling,
 }));
 vi.mock('../../../model/update-eligibility.js', () => ({
   computeUpdateEligibility: mocks.computeUpdateEligibility,
@@ -77,6 +84,8 @@ function makeHost(configuration: Record<string, unknown> = { preload: true }) {
     getNewImageFullName: vi.fn(() => 'org/web:1.1.0'),
     isImageOnHost: vi.fn().mockResolvedValue(false),
     pullImage: vi.fn().mockResolvedValue(undefined),
+    removeImage: vi.fn().mockResolvedValue(undefined),
+    isRollbackTag: vi.fn().mockReturnValue(false),
   };
   return { host, dockerApi, registry, log };
 }
@@ -97,6 +106,8 @@ beforeEach(() => {
   mocks.computeUpdateEligibility.mockReturnValue({ eligible: true, blockers: [] });
   mocks.classifyApprovalCandidate.mockReturnValue('queue');
   mocks.getContainerMaintenanceWindowOpen.mockReturnValue(undefined);
+  mocks.chooseApprovalCandidate.mockImplementation((container: Container) => container);
+  mocks.resolveUpdateModeCeiling.mockReturnValue({ value: 'auto', source: 'global' });
 });
 
 describe('resolvePreloadMode', () => {
@@ -136,7 +147,9 @@ describe('registration', () => {
 
     const removedHandler = mocks.registerContainerRemoved.mock.calls[0][0];
     removedHandler(makeContainer());
+    await preloader.idle();
     expect(peekImagePreload(makeContainer())).toBeUndefined();
+    expect(host.removeImage).toHaveBeenCalledTimes(1);
 
     preloader.stop();
     expect(offReport).toHaveBeenCalledTimes(1);
@@ -167,8 +180,6 @@ describe('held updates preload without touching the running container', () => {
       digest: 'sha256:aaa',
       updatedAt: expect.any(String),
     });
-    // Only image calls are made on the host: nothing stops or recreates the container.
-    expect(Object.keys(dockerApi)).toEqual(['id']);
   });
 
   test.each([
@@ -266,6 +277,7 @@ describe('candidate change', () => {
     const { preloader, host } = arrange();
     await preloader.handleReport(makeContainer());
     await preloader.idle();
+    host.isImageOnHost.mockResolvedValue(true);
     await preloader.handleReport(makeContainer());
     await preloader.idle();
     expect(host.pullImage).toHaveBeenCalledTimes(1);
@@ -473,7 +485,11 @@ describe('limits', () => {
     const { preloader, host, log } = arrange({ preload: true, preloadmaxcandidates: 1 });
     await preloader.handleReport(makeContainer());
     await preloader.idle();
-    const other = makeContainer({ id: 'c2', name: 'api' });
+    const other = makeContainer({
+      id: 'c2',
+      name: 'api',
+      result: { tag: '1.1.0', digest: 'sha256:ccc' },
+    });
     await preloader.handleReport(other);
     await preloader.idle();
     expect(host.pullImage).toHaveBeenCalledTimes(1);
@@ -487,6 +503,17 @@ describe('limits', () => {
     expect(host.pullImage).toHaveBeenCalledTimes(2);
   });
 
+  test('containers sharing one image reference count once against the cap', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadmaxcandidates: 1 });
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    host.isImageOnHost.mockResolvedValue(true);
+    await preloader.handleReport(makeContainer({ id: 'c2', name: 'api' }));
+    await preloader.idle();
+    expect(host.pullImage).toHaveBeenCalledTimes(1);
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+  });
+
   test('defaults apply when limits are not configured', async () => {
     const { preloader, host } = arrange({ preload: true });
     await preloader.handleReport(makeContainer());
@@ -494,11 +521,316 @@ describe('limits', () => {
     expect(host.pullImage).toHaveBeenCalledTimes(1);
   });
 
-  test('a host with an agent name keeps its own budget key', async () => {
+  test('the budget key is the local watcher', async () => {
     const { preloader } = arrange();
     const container = makeContainer();
     await preloader.handleReport(container);
     await preloader.idle();
     expect(peekImagePreload(container)?.host).toBe('local.local');
+  });
+});
+
+const withDigest = (digest: string, overrides: Record<string, unknown> = {}) =>
+  makeContainer({ result: { tag: '1.1.0', digest }, ...overrides });
+
+describe('retained image accounting', () => {
+  test('replacing the candidate removes the superseded image so the cap holds', async () => {
+    const { preloader, host, dockerApi } = arrange({ preload: true, preloadmaxcandidates: 1 });
+    for (const digest of ['sha256:aaa', 'sha256:bbb', 'sha256:ccc']) {
+      await preloader.handleReport(withDigest(digest));
+      await preloader.idle();
+    }
+    expect(host.pullImage).toHaveBeenCalledTimes(3);
+    expect(host.removeImage.mock.calls.map((call) => call[1])).toEqual([
+      'org/web@sha256:aaa',
+      'org/web@sha256:bbb',
+    ]);
+    expect(host.removeImage).toHaveBeenCalledWith(dockerApi, 'org/web@sha256:aaa', host.log);
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+    expect(getImagePreload(withDigest('sha256:ccc'))?.status).toBe('done');
+  });
+
+  test('a failed removal keeps the reference counted and defers the new pull', async () => {
+    const { preloader, host, log } = arrange({ preload: true, preloadmaxcandidates: 1 });
+    await preloader.handleReport(withDigest('sha256:aaa'));
+    await preloader.idle();
+    host.removeImage.mockRejectedValueOnce(new Error('daemon down'));
+
+    await preloader.handleReport(withDigest('sha256:bbb'));
+    await preloader.idle();
+    expect(host.pullImage).toHaveBeenCalledTimes(1);
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('could not be removed'));
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Preload deferred'));
+    expect(peekImagePreload(withDigest('sha256:bbb'))?.candidate).toBe('sha256:aaa');
+
+    await preloader.handleReport(withDigest('sha256:bbb'));
+    await preloader.idle();
+    expect(host.pullImage).toHaveBeenCalledTimes(2);
+    expect(getImagePreload(withDigest('sha256:bbb'))?.status).toBe('done');
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+  });
+
+  test.each([404, 409])(
+    'a %s from the daemon means the image is no longer a preload',
+    async (statusCode) => {
+      const { preloader, host } = arrange({ preload: true, preloadmaxcandidates: 1 });
+      await preloader.handleReport(withDigest('sha256:aaa'));
+      await preloader.idle();
+      host.removeImage.mockRejectedValueOnce(Object.assign(new Error('nope'), { statusCode }));
+      await preloader.handleReport(withDigest('sha256:bbb'));
+      await preloader.idle();
+      expect(host.pullImage).toHaveBeenCalledTimes(2);
+      expect(countRetainedImagePreloads('local.local')).toBe(1);
+    },
+  );
+
+  test('a removal that rejects without an error object still defers', async () => {
+    const { preloader, host } = arrange();
+    await preloader.handleReport(withDigest('sha256:aaa'));
+    await preloader.idle();
+    host.removeImage.mockRejectedValueOnce(undefined);
+    await preloader.handleReport(withDigest('sha256:bbb'));
+    await preloader.idle();
+    expect(host.pullImage).toHaveBeenCalledTimes(1);
+  });
+
+  test('an image another container still owns is not removed', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadmaxcandidates: 2 });
+    await preloader.handleReport(withDigest('sha256:aaa'));
+    await preloader.idle();
+    host.isImageOnHost.mockResolvedValue(true);
+    await preloader.handleReport(withDigest('sha256:aaa', { id: 'c2', name: 'api' }));
+    await preloader.idle();
+
+    await preloader.handleReport(withDigest('sha256:bbb'));
+    await preloader.idle();
+    expect(host.removeImage).not.toHaveBeenCalled();
+    expect(countRetainedImagePreloads('local.local')).toBe(2);
+
+    await preloader.handleReport(withDigest('sha256:bbb', { id: 'c2', name: 'api' }));
+    await preloader.idle();
+    expect(host.removeImage).toHaveBeenCalledTimes(1);
+  });
+
+  test('a tag that is a retained rollback backup is released but never removed', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadmaxcandidates: 1 });
+    host.isRollbackTag.mockReturnValue(true);
+    const first = makeContainer({ result: { tag: '1.1.0' } });
+    await preloader.handleReport(first);
+    await preloader.idle();
+    host.getNewImageFullName.mockReturnValue('org/web:1.2.0');
+    await preloader.handleReport(makeContainer({ result: { tag: '1.2.0' } }));
+    await preloader.idle();
+    expect(host.isRollbackTag).toHaveBeenCalledWith(expect.anything(), '1.1.0');
+    expect(host.removeImage).not.toHaveBeenCalled();
+    expect(host.pullImage).toHaveBeenCalledTimes(2);
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+  });
+
+  test('a superseded tag that is not a rollback backup is removed', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadmaxcandidates: 1 });
+    await preloader.handleReport(makeContainer({ result: { tag: '1.1.0' } }));
+    await preloader.idle();
+    host.getNewImageFullName.mockReturnValue('org/web:1.2.0');
+    await preloader.handleReport(makeContainer({ result: { tag: '1.2.0' } }));
+    await preloader.idle();
+    expect(host.removeImage).toHaveBeenCalledWith(expect.anything(), 'org/web:1.1.0', host.log);
+  });
+
+  test('a withdrawn candidate removes its image', async () => {
+    const { preloader, host } = arrange();
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(host.removeImage).toHaveBeenCalledWith(
+      expect.anything(),
+      'org/web@sha256:aaa',
+      host.log,
+    );
+    expect(countRetainedImagePreloads('local.local')).toBe(0);
+  });
+
+  test('cleanup of a container that never preloaded does nothing', async () => {
+    const { preloader, host } = arrange();
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(host.removeImage).not.toHaveBeenCalled();
+  });
+
+  test('a cleanup that cannot reach the host is logged with its container', async () => {
+    const { preloader, host, log } = arrange();
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    host.getWatcher.mockImplementation(() => {
+      throw new Error('No watcher');
+    });
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('could not be removed'));
+  });
+
+  test('a failed pull gives the reference back', async () => {
+    const { preloader, host } = arrange();
+    host.pullImage.mockRejectedValueOnce(new Error('boom'));
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    expect(countRetainedImagePreloads('local.local')).toBe(0);
+  });
+
+  test('an unexpected cleanup failure is logged, not thrown', async () => {
+    const { preloader, log } = arrange();
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    vi.spyOn(
+      preloader as unknown as { releaseImage: () => Promise<boolean> },
+      'releaseImage',
+    ).mockRejectedValueOnce(new Error('unexpected'));
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('unexpected'));
+  });
+});
+
+describe('registry resolution failures', () => {
+  test('an unresolvable registry records a failed preload and waits out the cool-down', async () => {
+    vi.useFakeTimers();
+    try {
+      const { preloader, host, log } = arrange();
+      host.resolveRegistryManager.mockImplementation(() => {
+        throw new Error('unsupported registry');
+      });
+      const container = makeContainer();
+      await preloader.handleReport(container);
+      await preloader.idle();
+      expect(getImagePreloadView(container)).toMatchObject({
+        status: 'failed',
+        error: 'unsupported registry',
+      });
+      expect(countRetainedImagePreloads('local.local')).toBe(0);
+      expect(log.warn).toHaveBeenCalledTimes(1);
+
+      await preloader.handleReport(container);
+      await preloader.idle();
+      expect(host.resolveRegistryManager).toHaveBeenCalledTimes(1);
+      expect(log.warn).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(PRELOAD_RETRY_AFTER_MS + 1);
+      host.resolveRegistryManager.mockReturnValue(makeHost().registry);
+      await preloader.handleReport(container);
+      await preloader.idle();
+      expect(host.resolveRegistryManager).toHaveBeenCalledTimes(2);
+      expect(getImagePreload(container)?.status).toBe('done');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('a recorded preload is rechecked against the host', () => {
+  test('an image that cleanup removed is pulled again', async () => {
+    const { preloader, host } = arrange();
+    const container = makeContainer();
+    await preloader.handleReport(container);
+    await preloader.idle();
+    host.isImageOnHost.mockResolvedValue(false);
+    await preloader.handleReport(container);
+    await preloader.idle();
+    expect(host.isImageOnHost).toHaveBeenCalledTimes(2);
+    expect(host.pullImage).toHaveBeenCalledTimes(2);
+    expect(getImagePreload(container)?.status).toBe('done');
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+  });
+
+  test('the status goes back to pending while the image is fetched again', async () => {
+    const { preloader, host } = arrange();
+    const container = makeContainer();
+    await preloader.handleReport(container);
+    await preloader.idle();
+    let finish: () => void = () => undefined;
+    host.pullImage.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    await preloader.handleReport(container);
+    await vi.waitFor(() => expect(getImagePreload(container)?.status).toBe('pending'));
+    finish();
+    await preloader.idle();
+    expect(getImagePreload(container)?.status).toBe('done');
+  });
+
+  test('an image still on the host is inspected but not pulled', async () => {
+    const { preloader, host } = arrange();
+    const container = makeContainer({ result: { tag: '1.1.0' } });
+    await preloader.handleReport(container);
+    await preloader.idle();
+    host.isImageOnHost.mockResolvedValue(true);
+    await preloader.handleReport(container);
+    await preloader.idle();
+    expect(host.isImageOnHost).toHaveBeenCalledTimes(2);
+    expect(host.pullImage).toHaveBeenCalledTimes(1);
+    expect(getImagePreload(container)?.status).toBe('done');
+  });
+
+  test('a preload still in flight is not started twice', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadconcurrency: 2 });
+    let finish: () => void = () => undefined;
+    host.pullImage.mockImplementationOnce(() => new Promise<void>((resolve) => (finish = resolve)));
+    await preloader.handleReport(makeContainer());
+    await vi.waitFor(() => expect(host.pullImage).toHaveBeenCalledTimes(1));
+    await preloader.handleReport(makeContainer());
+    await Promise.resolve();
+    expect(host.isImageOnHost).toHaveBeenCalledTimes(1);
+    finish();
+    await preloader.idle();
+  });
+});
+
+describe('update mode and projected candidates', () => {
+  test('a notify ceiling never applies updates, so nothing is preloaded', () => {
+    mocks.resolveUpdateModeCeiling.mockReturnValue({ value: 'notify', source: 'global' });
+    const { preloader } = arrange();
+    expect(preloader.evaluate(makeContainer())).toEqual({
+      preload: false,
+      reason: 'update mode is notify, updates are never applied',
+    });
+    expect(mocks.resolveUpdateModeCeiling).toHaveBeenCalledWith(expect.anything(), 'auto');
+  });
+
+  test('a manual ceiling still preloads', () => {
+    mocks.resolveUpdateModeCeiling.mockReturnValue({ value: 'manual', source: 'group' });
+    const { preloader } = arrange();
+    expect(preloader.evaluate(makeContainer()).preload).toBe(true);
+  });
+
+  test('the candidate a separate-update-types trigger would apply is the one preloaded', async () => {
+    const { preloader, host } = arrange();
+    const reported = makeContainer({ result: { tag: '2.0.0', digest: 'sha256:major' } });
+    mocks.chooseApprovalCandidate.mockReturnValue(
+      makeContainer({ result: { tag: '1.3.0', digest: 'sha256:minor' } }),
+    );
+    await preloader.handleReport(reported);
+    await preloader.idle();
+    expect(mocks.chooseApprovalCandidate).toHaveBeenCalledWith(reported, {});
+    expect(host.pullImage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'org/web@sha256:minor',
+      host.log,
+    );
+  });
+});
+
+describe('dd.update.preload label spellings', () => {
+  test.each(['1', 'yes', 'on'])('%s is not a boolean label value', (value) => {
+    const { preloader } = arrange({ preload: 'label' });
+    expect(
+      preloader.evaluate(makeContainer({ labels: { 'dd.update.preload': value } })).preload,
+    ).toBe(false);
+  });
+
+  test.each(['0', 'no', 'off'])('%s does not opt a container out', (value) => {
+    const { preloader } = arrange();
+    expect(
+      preloader.evaluate(makeContainer({ labels: { 'dd.update.preload': value } })).preload,
+    ).toBe(true);
   });
 });
