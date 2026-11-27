@@ -406,6 +406,29 @@ function createOutputCollectors(maxOutputBytes: number): {
   };
 }
 
+// A worker can exit cleanly and close attach before the separate wait response arrives, so the
+// stream ending first is not proof of truncation. Complete output parses as one JSON document or
+// as one JSON document per line; a cut-off report does not.
+function isCompleteJsonOutput(output: string): boolean {
+  const trimmed = output.trim();
+  if (trimmed === '') {
+    return false;
+  }
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return trimmed.split('\n').every((line) => {
+      try {
+        JSON.parse(line);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+}
+
 async function readWorkerLogs(
   client: DockerScannerClient,
   container: DockerScannerContainer,
@@ -676,7 +699,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         ) {
           throw logsError;
         }
-        if (streamClosedBeforeExit) {
+        if (streamClosedBeforeExit && exitCode === 0 && !isCompleteJsonOutput(stdout)) {
           throw new Error(
             'Scanner worker attach stream closed before the scanner exited and its logs could not be read; a socket proxy in front of the Docker API may have cut the connection',
           );

@@ -166,6 +166,51 @@ describe('createDockerScannerBackend', () => {
       );
     });
 
+    test('keeps complete attach output when logs fail and the stream closed before the wait response', async () => {
+      const { backend } = createHarness({
+        stdout: '{"matches":[]}',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+    });
+
+    test('accepts line-delimited JSON attach output when logs fail', async () => {
+      const { backend } = createHarness({
+        stdout: '{"a":1}\n{"b":2}\n',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ exitCode: 0 });
+    });
+
+    test('keeps the nonzero-exit diagnostics when logs fail and the stream closed early', async () => {
+      const { backend } = createHarness({
+        stdout: '{"matches":["x',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 2 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).rejects.not.toThrow(/attach stream closed/);
+    });
+
     test('falls back to attach output when logs fail but the stream ended after exit', async () => {
       const holder: { stream?: EventEmitter } = {};
       const harness = createHarness({
