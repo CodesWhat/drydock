@@ -116,6 +116,12 @@ Quay.io has a push-date API but Drydock does not yet read it; Quay is treated as
 | --- | --- | --- |
 | `result.publishedAtTrusted` | boolean | `true` when `result.publishedAt` came from a trusted registry push-date source (Docker Hub or GHCR). Absent or `false` for all other registries. When `true`, the policy gate uses `publishedAt` as the start of the maturity clock; when `false` or absent, the gate falls back to `updateDetectedAt` (or `firstSeenAt` when `updateDetectedAt` is missing or fails to parse). |
 
+#### `result.updateCandidates` field
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `result.updateCandidates` | object | The newest `patch`, `minor` and `major` tag measured against the running version. Each entry carries `tag` and `semverDiff`, plus a `digest` when the lookup resolved one. A kind with no candidate is left out, and the object is only present when at least two kinds are on offer. `result.tag` stays the highest allowed candidate. Every candidate passes through `dd.tag.include`, `dd.tag.exclude`, `dd.tag.ceiling` and the other tag filters. See [Candidates per update type](/docs/configuration/watchers#candidates-per-update-type). |
+
 ## Get container summary
 
 Returns a lightweight summary of container and security counts, used by the dashboard sidebar.
@@ -807,7 +813,7 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
 | `env[].value` | string | Unredacted value |
 | `env[].sensitive` | boolean | Whether the key matches a known sensitive pattern or the value is a URL containing credentials |
 
-Returns 200 with the env array on success, 404 if the container is not found, or 429 if rate-limited.
+Returns 200 with the env array on success, 404 if the container is not found, 429 if rate-limited, or 501 for containers on Portwing agents.
 
 ### Authentication
 

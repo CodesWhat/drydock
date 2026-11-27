@@ -39,11 +39,10 @@ Container updates are executed by the Docker and Docker Compose action triggers.
 | --- | --- |
 | `DD_ACTION_*` | Current — recommended for action triggers |
 | `DD_NOTIFICATION_*` | Current — recommended for notification triggers |
-| `DD_TRIGGER_*` | Removed in v1.7.0 |
 
 When the same trigger is defined under multiple prefixes, the merge priority is: `DD_NOTIFICATION_*` > `DD_ACTION_*`.
 
-Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replaced the removed `dd.trigger.include` / `dd.trigger.exclude`.
+Container labels follow the same pattern: `dd.action.include` / `dd.action.exclude` replaced the removed `dd.trigger.*` include/exclude labels. See [Deprecations](/docs/deprecations#legacy-trigger-labels).
 
 <Callout type="info">Action triggers (Docker, Docker Compose, Portainer, Command) default to `AUTO=oninclude`, meaning they only auto-update containers that have an explicit `dd.action.include` label matching the trigger name. Notification triggers default to `AUTO=true`.</Callout>
 
