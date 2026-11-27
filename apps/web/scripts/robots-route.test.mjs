@@ -27,10 +27,7 @@ test("robots still advertises the sitemap", () => {
   assert.match(source, /sitemap: `\$\{BASE_URL\}\/sitemap\.xml`/);
 });
 
-test("robots disallows every superseded docs version but never the current one", async () => {
-  const { versions } = await import("./docs-versions.mjs");
-  assert.match(source, /versions\.slice\(1\)/);
-  assert.match(source, /\/docs\/\$\{v\.slug\}\//);
-  assert.doesNotMatch(source, /versions\[0\]/);
-  assert.ok(versions.length > 1);
+test("robots leaves archived docs versions crawlable so their self-canonicals are read", () => {
+  assert.doesNotMatch(source, /"\/docs/);
+  assert.doesNotMatch(source, /docs-versions/);
 });

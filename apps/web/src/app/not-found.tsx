@@ -16,6 +16,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: `Page Not Found | ${SITE_CONFIG.name}`,
     siteName: SITE_CONFIG.name,
+    locale: SITE_CONFIG.locale,
+    images: [{ url: SITE_CONFIG.ogImage, width: 1200, height: 630, alt: "Page Not Found" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `Page Not Found | ${SITE_CONFIG.name}`,
+    creator: SITE_CONFIG.twitterCreator,
     images: [SITE_CONFIG.ogImage],
   },
 };

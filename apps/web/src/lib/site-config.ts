@@ -70,6 +70,23 @@ export const REPO_SLUG = `${SITE_CONFIG.githubOwner}/${SITE_CONFIG.githubRepo}`;
  */
 export const DOCS_VERSION: string = versions[0].slug;
 export const DOCS_ROOT = `/docs/${DOCS_VERSION}`;
+/**
+ * Docs line of the latest stable release, derived from SITE_CONFIG.stableVersion
+ * ("1.7.1" -> "v1.7"). Lines listed before it in the versions config have no GA
+ * release yet, so their pages carry a pre-release notice pointing back here.
+ */
+export const STABLE_DOCS_VERSION: string = (() => {
+  const [major, minor] = SITE_CONFIG.stableVersion.split(".");
+  return `v${major}.${minor}`;
+})();
+export const STABLE_DOCS_ROOT = `/docs/${STABLE_DOCS_VERSION}`;
+
+/** True when the docs line is newer than the latest stable line. */
+export function isPreReleaseDocsLine(slug: string): boolean {
+  const index = versions.findIndex((v) => v.slug === slug);
+  const stableIndex = versions.findIndex((v) => v.slug === STABLE_DOCS_VERSION);
+  return index !== -1 && stableIndex !== -1 && index < stableIndex;
+}
 /** Canonical GitHub repository URL. */
 export const GITHUB_URL = `https://github.com/${REPO_SLUG}`;
 /** GitHub releases page. */

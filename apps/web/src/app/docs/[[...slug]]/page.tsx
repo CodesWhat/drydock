@@ -1,3 +1,4 @@
+import { Callout } from "fumadocs-ui/components/callout";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
 import type { StaticImageData } from "next/image";
@@ -5,10 +6,16 @@ import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
 import { JsonLd } from "@/components/json-ld";
-import { BASE_URL, DOCS_ROOT, SITE_CONFIG } from "@/lib/site-config";
+import {
+  BASE_URL,
+  DOCS_ROOT,
+  isPreReleaseDocsLine,
+  SITE_CONFIG,
+  STABLE_DOCS_ROOT,
+  STABLE_DOCS_VERSION,
+} from "@/lib/site-config";
 import { getDocsPage, source } from "@/lib/source";
 import { buildDocsJsonLd } from "@/lib/structured-data";
-import { versions } from "../../../../scripts/docs-versions.mjs";
 
 // The current docs index would otherwise be titled "Introduction | Drydock".
 const DOCS_INDEX_TITLE = "Drydock Documentation | Docker Container Update Monitor";
@@ -56,11 +63,26 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     crumbs,
   });
 
+  // A line with no GA release is a release candidate. Send readers on the stable
+  // line to the matching page when it exists, otherwise to that line's docs root.
+  const stableCounterpart = getDocsPage([STABLE_DOCS_VERSION, ...rest]);
+  const stableHref = stableCounterpart?.url ?? STABLE_DOCS_ROOT;
+
   return (
     <DocsPage toc={data.toc} full={data.full}>
       <JsonLd data={docsJsonLd} />
       <DocsTitle>{data.title}</DocsTitle>
       <DocsDescription>{data.description}</DocsDescription>
+      {isPreReleaseDocsLine(versionSlug) && (
+        <Callout type="warn" title="Pre-release docs">
+          These docs cover {versionSlug}, a release candidate that isn't generally available yet.
+          Running the stable release? Read the{" "}
+          <a href={stableHref}>
+            {stableCounterpart ? "matching page" : "docs"} for {STABLE_DOCS_VERSION}
+          </a>
+          .
+        </Callout>
+      )}
       <DocsBody>
         <MDX components={{ ...defaultMdxComponents, img: MdxImage }} />
       </DocsBody>
@@ -78,14 +100,9 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
   if (!page) notFound();
 
   const url = `${BASE_URL}${page.url}`;
-  const [versionSlug, ...rest] = page.slugs;
-  const isArchived =
-    versionSlug !== versions[0].slug && versions.some((v) => v.slug === versionSlug);
-  // An archived page canonicalises to the same page in the current docs when one
-  // exists, and to the current docs root when it doesn't, so old versions never
-  // compete with the current docs. robots.txt also disallows archived versions.
-  const currentCounterpart = isArchived ? getDocsPage([versions[0].slug, ...rest]) : undefined;
-  const canonical = isArchived ? `${BASE_URL}${currentCounterpart?.url ?? DOCS_ROOT}` : url;
+  // Every version, archived ones included, canonicalises to itself so a reader on the
+  // stable line lands on docs that match what they run.
+  const canonical = url;
   const isCurrentIndex = page.url === DOCS_ROOT;
   const title = isCurrentIndex ? DOCS_INDEX_TITLE : page.data.title;
   const socialTitle = isCurrentIndex
@@ -104,7 +121,8 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
       url,
       type: "article",
       siteName: SITE_CONFIG.name,
-      images: [SITE_CONFIG.ogImage],
+      locale: SITE_CONFIG.locale,
+      images: [{ url: SITE_CONFIG.ogImage, width: 1200, height: 630, alt: socialTitle }],
     },
     twitter: {
       title: socialTitle,

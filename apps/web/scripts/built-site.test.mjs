@@ -83,8 +83,26 @@ test("every internal link on / and the docs landing resolves", opts, () => {
   assert.deepEqual(unresolved, []);
 });
 
-test("archived docs pages canonicalise to the current docs", opts, () => {
-  const html = read("server/app/docs/v1.7.html");
-  const canonical = html.match(/<link rel="canonical" href="([^"]+)"/u)?.[1];
-  assert.equal(canonical, "https://getdrydock.com/docs/v1.9");
+test("archived docs pages canonicalise to themselves, not the current docs", opts, () => {
+  for (const path of ["/docs/v1.7", "/docs/v1.8"]) {
+    const html = read(`server/app${path}.html`);
+    const canonical = html.match(/<link rel="canonical" href="([^"]+)"/u)?.[1];
+    assert.equal(canonical, `https://getdrydock.com${path}`);
+  }
+});
+
+test("pre-release docs lines show a notice linking to the stable line", opts, () => {
+  const notice = /Pre-release docs/u;
+  for (const path of ["/docs/v1.9", "/docs/v1.8"]) {
+    const html = read(`server/app${path}.html`);
+    assert.match(html, notice, `${path} has no pre-release notice`);
+    assert.match(html, /href="\/docs\/v1\.7[^"]*"/u, `${path} notice does not link to v1.7`);
+  }
+  assert.doesNotMatch(read("server/app/docs/v1.7.html"), notice);
+  assert.doesNotMatch(read("server/app/docs/v1.6.html"), notice);
+});
+
+test("robots.txt does not disallow archived docs versions", opts, () => {
+  const body = read("server/app/robots.txt.body");
+  assert.doesNotMatch(body, /Disallow: \/docs\//u);
 });
