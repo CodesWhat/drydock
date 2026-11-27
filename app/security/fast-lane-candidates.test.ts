@@ -233,6 +233,24 @@ describe('fast lane candidate scanning', () => {
       expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
     });
 
+    test('a replica the remembered scan cannot serve is scanned fresh instead of being marked attempted', async () => {
+      mocks.getContainersRaw.mockReturnValue([candidate({ id: 'a' })]);
+      await scanFastLaneCandidates(options());
+      const newer = {
+        scan: { ...runningScan, scannedAt: '2026-02-01T00:00:00.000Z' },
+      };
+      mocks.getContainersRaw.mockReturnValue([
+        candidate({ id: 'b' }),
+        candidate({ id: 'c', security: newer }),
+      ]);
+      mocks.scanImageForVulnerabilities.mockResolvedValue({
+        ...passedScan,
+        scannedAt: '2026-02-02T00:00:00.000Z',
+      });
+      expect(await scanFastLaneCandidates(options())).toBe(2);
+      expect(mocks.scanImageForVulnerabilities).toHaveBeenCalledTimes(2);
+    });
+
     test('a failed shared scan is attempted once and stores nothing for any replica', async () => {
       mocks.getContainersRaw.mockReturnValue([candidate({ id: 'a' }), candidate({ id: 'b' })]);
       mocks.scanImageForVulnerabilities.mockRejectedValueOnce(new Error('registry down'));

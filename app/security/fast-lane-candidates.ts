@@ -126,15 +126,21 @@ async function processCandidateGroup(
   containers: Container[],
   signal: AbortSignal,
 ): Promise<number> {
-  for (const container of containers) {
-    attemptedCandidates.add(candidateKey(container));
-  }
   const remembered = candidateScanByDigest.get(digest);
   let shared = remembered;
-  if (!containers.some((container) => isScanUsableFor(container, digest, remembered))) {
-    shared = await scanCandidateDigest(containers[0], digest, signal);
-    if (shared) {
-      rememberCandidateScan(digest, shared);
+  // Members the remembered scan cannot serve (their running scan is newer) get a fresh scan.
+  // Only those are marked attempted, so no member is parked on a scan that was never its own.
+  const unserved = containers.filter(
+    (container) => !isScanUsableFor(container, digest, remembered),
+  );
+  for (const container of unserved) {
+    attemptedCandidates.add(candidateKey(container));
+  }
+  if (unserved.length > 0) {
+    const fresh = await scanCandidateDigest(unserved[0], digest, signal);
+    if (fresh) {
+      rememberCandidateScan(digest, fresh);
+      shared = fresh;
     }
   }
   let stored = 0;
