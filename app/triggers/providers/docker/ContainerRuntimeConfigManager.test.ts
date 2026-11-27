@@ -1595,4 +1595,101 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(result).toHaveProperty('Cmd', ['/start.sh']);
     expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Entrypoint'));
   });
+
+  describe('Healthcheck reconciliation', () => {
+    const oldCheck = {
+      Test: ['CMD', 'curl', '-f', 'http://localhost/old'],
+      Interval: 30_000_000_000,
+      Timeout: 5_000_000_000,
+      Retries: 3,
+    };
+    const newCheck = {
+      Test: ['CMD', 'wget', '-q', 'http://localhost/new'],
+      Interval: 10_000_000_000,
+      Timeout: 5_000_000_000,
+      Retries: 3,
+    };
+    const run = (cloned: unknown, source: unknown, target: unknown, log = createLog()) =>
+      createManager().sanitizeClonedRuntimeConfig(
+        { Healthcheck: cloned },
+        { Healthcheck: source },
+        { Healthcheck: target },
+        undefined,
+        log,
+      ).Healthcheck;
+
+    test('adopts the new image healthcheck when the old one was inherited', () => {
+      const log = createLog();
+      expect(run(oldCheck, oldCheck, newCheck, log)).toEqual(newCheck);
+      expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Healthcheck'));
+    });
+
+    test('drops the healthcheck when the new image removed it', () => {
+      expect(run(oldCheck, oldCheck, undefined)).toBeUndefined();
+    });
+
+    test('keeps a user-set interval while the test follows the image', () => {
+      const result = run({ ...oldCheck, Interval: 99_000_000_000 }, oldCheck, newCheck) as Record<
+        string,
+        unknown
+      >;
+      expect(result.Interval).toBe(99_000_000_000);
+      expect(result.Test).toEqual(newCheck.Test);
+    });
+
+    test('keeps a user-set test', () => {
+      const userTest = ['CMD-SHELL', 'true'];
+      const result = run({ ...oldCheck, Test: userTest }, oldCheck, newCheck) as Record<
+        string,
+        unknown
+      >;
+      expect(result.Test).toEqual(userTest);
+      expect(result.Interval).toBe(newCheck.Interval);
+    });
+
+    test('keeps an explicit NONE', () => {
+      expect(run({ Test: ['NONE'] }, oldCheck, newCheck)).toEqual({ Test: ['NONE'] });
+    });
+
+    test('keeps a user healthcheck when the source image had none', () => {
+      expect(run(oldCheck, undefined, newCheck)).toEqual(oldCheck);
+    });
+
+    test('drops fields the target image does not set', () => {
+      expect(run(oldCheck, oldCheck, { Test: newCheck.Test })).toEqual({ Test: newCheck.Test });
+    });
+
+    test('leaves an unchanged healthcheck alone', () => {
+      const log = createLog();
+      const manager = createManager();
+      expect(
+        manager.reconcileHealthcheck(
+          oldCheck,
+          { Healthcheck: oldCheck },
+          { Healthcheck: oldCheck },
+          log,
+        ),
+      ).toBe(oldCheck);
+      expect(log.info).not.toHaveBeenCalled();
+    });
+
+    test('rollback restores the old image default', () => {
+      expect(run(newCheck, newCheck, oldCheck)).toEqual(oldCheck);
+    });
+
+    test('preserves the clone when an image is unknown or there is no healthcheck', () => {
+      const manager = createManager();
+      expect(
+        manager.reconcileHealthcheck(oldCheck, undefined, { Healthcheck: newCheck }, undefined),
+      ).toBe(oldCheck);
+      expect(
+        manager.reconcileHealthcheck(oldCheck, { Healthcheck: oldCheck }, undefined, undefined),
+      ).toBe(oldCheck);
+      expect(manager.reconcileHealthcheck(undefined, {}, {}, undefined)).toBeUndefined();
+    });
+
+    test('treats zero and empty values as unset', () => {
+      expect(run({ Retries: 0, Test: [] }, {}, newCheck)).toEqual(newCheck);
+    });
+  });
 });
