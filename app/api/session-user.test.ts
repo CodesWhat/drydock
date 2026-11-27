@@ -160,6 +160,28 @@ describe('serializeSessionUser', () => {
     expect(deserializeSessionUser(serializeSessionUser(user))).toEqual(user);
   });
 
+  test('round-trips the provider that minted an OIDC session', () => {
+    const user = {
+      username: 'alice',
+      identity: { type: 'oidc' as const, providerId: 'oidc.partner' },
+    };
+    expect(serializeSessionUser(user)).toBe(
+      '{"v":2,"kind":"oidc","username":"alice","providerId":"oidc.partner"}',
+    );
+    expect(deserializeSessionUser(serializeSessionUser(user))).toEqual(user);
+    const mapped = {
+      username: 'alice',
+      identity: { type: 'oidc' as const, providerId: 'oidc.corp', role: 'viewer' as const },
+    };
+    expect(deserializeSessionUser(serializeSessionUser(mapped))).toEqual(mapped);
+  });
+
+  test('rejects an OIDC identity with an empty provider id', () => {
+    expect(() =>
+      deserializeSessionUser('{"v":2,"kind":"oidc","username":"alice","providerId":""}'),
+    ).toThrow();
+  });
+
   test('writes a v2 OIDC payload', () => {
     expect(serializeSessionUser({ username: 'alice', identity: { type: 'oidc' } })).toBe(
       '{"v":2,"kind":"oidc","username":"alice"}',

@@ -243,6 +243,20 @@ describe('session-principal', () => {
       expect(session[SESSION_USER_KEY]).toEqual({ user: V2_OIDC });
     });
 
+    test('persists the provider that minted an OIDC principal', () => {
+      const session: Record<string, unknown> = {};
+
+      writeSessionPrincipal(createRequest(session), {
+        kind: 'oidc',
+        username: 'admin',
+        providerId: 'oidc.partner',
+      });
+
+      expect(session[SESSION_USER_KEY]).toEqual({
+        user: '{"v":2,"kind":"oidc","username":"admin","providerId":"oidc.partner"}',
+      });
+    });
+
     test('persists the mapped role of an OIDC principal', () => {
       const session: Record<string, unknown> = {};
 

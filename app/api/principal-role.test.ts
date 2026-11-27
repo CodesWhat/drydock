@@ -101,6 +101,21 @@ describe('resolvePrincipalRole', () => {
     expect(isOidcRoleMappingActive()).toBe(true);
   });
 
+  test('scopes the OIDC mapping check to the provider that minted a session', () => {
+    const oidc = (id: string, mapsRolesFromClaims: boolean): Authenticator => ({
+      id,
+      persistsSession: false,
+      mapsRolesFromClaims,
+      authenticate: () => Promise.resolve(undefined),
+    });
+    mockGetAuthenticators.mockReturnValue([oidc('oidc.corp', true), oidc('oidc.partner', false)]);
+    expect(isOidcRoleMappingActive('oidc.partner')).toBe(false);
+    expect(isOidcRoleMappingActive('oidc.corp')).toBe(true);
+    // A provider that is gone falls back to the instance-wide answer.
+    expect(isOidcRoleMappingActive('oidc.removed')).toBe(true);
+    expect(isOidcRoleMappingActive()).toBe(true);
+  });
+
   test('an OIDC bearer is admin until group mapping exists', () => {
     expect(resolveHumanRole({ kind: 'oidc', username: 'carol' })).toBe('admin');
   });

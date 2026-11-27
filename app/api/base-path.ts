@@ -26,10 +26,24 @@ export function stripBasePath(url: string, basePath: string): string {
   return url;
 }
 
-/** Express middleware that strips the base path so every router sees root-relative paths. */
+/**
+ * Express middleware that strips the base path so every router sees
+ * root-relative paths.
+ *
+ * `req.originalUrl` is left as the browser's path, with the prefix: the session
+ * cookie is scoped to the base path and express-session skips any request whose
+ * `originalUrl` sits outside it, and the OIDC callback rebuilds its redirect
+ * URI from it. Behind a proxy that strips the prefix the request arrives
+ * without one, so the prefix is put back on `originalUrl` to make both shapes
+ * look the same from here on.
+ */
 export function createBasePathMiddleware(basePath: string) {
   return (req: Request, _res: Response, next: NextFunction) => {
-    req.url = stripBasePath(req.url, basePath);
+    const stripped = stripBasePath(req.url, basePath);
+    if (stripped === req.url && req.originalUrl === req.url) {
+      req.originalUrl = `${basePath}${req.url}`;
+    }
+    req.url = stripped;
     next();
   };
 }

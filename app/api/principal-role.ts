@@ -31,9 +31,24 @@ function unknownSubjectRole(authenticators: readonly Authenticator[]): Role {
 /**
  * An OIDC provider derives roles from group claims, so a session of its that
  * carries no role predates the mapping and must sign in again.
+ *
+ * With `providerId`, the answer is that provider's own mapping, so a provider
+ * that maps nothing keeps its sessions while another one maps groups. A
+ * provider that is no longer registered, or no `providerId` at all (a session
+ * minted before the provider was recorded), falls back to whether any
+ * provider maps roles.
+ * @param providerId - the authenticator that minted the session, when known
  */
-export function isOidcRoleMappingActive(): boolean {
-  return getAuthenticators().some((authenticator) => authenticator.mapsRolesFromClaims === true);
+export function isOidcRoleMappingActive(providerId?: string): boolean {
+  const authenticators = getAuthenticators();
+  const provider =
+    providerId === undefined
+      ? undefined
+      : authenticators.find((authenticator) => authenticator.id === providerId);
+  if (provider !== undefined) {
+    return provider.mapsRolesFromClaims === true;
+  }
+  return authenticators.some((authenticator) => authenticator.mapsRolesFromClaims === true);
 }
 
 function roleOf(authenticator: Authenticator): Role {

@@ -1088,6 +1088,7 @@ class Oidc extends Authentication<OidcConfiguration> {
     const principal: AuthenticatedPrincipal = {
       kind: 'oidc',
       username: user.username,
+      providerId: this.getId(),
       ...(user.role === undefined ? {} : { role: user.role }),
     };
     writeSessionPrincipal(req as unknown as AuthRequest, principal);

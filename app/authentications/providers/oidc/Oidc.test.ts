@@ -6,6 +6,7 @@ import session from 'express-session';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import { setRememberMe } from '../../../api/auth-remember-me.js';
+import { createBasePathMiddleware } from '../../../api/base-path.js';
 import { requireSameOriginForMutations } from '../../../api/csrf.js';
 import * as configuration from '../../../configuration/index.js';
 
@@ -125,7 +126,7 @@ function failSessionPersistence(session: any, message: string) {
 /** Assert the callback persisted the identity under the session user key. */
 function expectPersistedUser(session: any, username: string) {
   expect(session.passport).toEqual({
-    user: JSON.stringify({ v: 2, kind: 'oidc', username }),
+    user: JSON.stringify({ v: 2, kind: 'oidc', username, providerId: oidc.getId() }),
   });
 }
 
@@ -1483,6 +1484,38 @@ test('callback should fall back to slash redirect when public url is empty', asy
     getPublicUrlSpy.mockRestore();
   }
 });
+
+test.each([
+  ['forwards the prefix', '/drydock'],
+  ['strips the prefix', ''],
+])(
+  'callback keeps the base path in the token exchange URL when the proxy %s',
+  async (_shape, upstreamPrefix) => {
+    mockSuccessfulGrant(openidClientMock);
+    const getPublicUrlSpy = vi
+      .spyOn(configuration, 'getPublicUrl')
+      .mockReturnValue('https://dd.example.com/drydock');
+
+    try {
+      const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+      const req = createCallbackReq(
+        `${upstreamPrefix}/auth/oidc/default/cb?code=abc&state=valid-state`,
+        session,
+      );
+      req.url = req.originalUrl;
+      createBasePathMiddleware('/drydock')(req, {} as never, () => {});
+
+      await oidc.callback(req, createRes());
+
+      const callbackUrl = openidClientMock.authorizationCodeGrant.mock.calls[0][1] as URL;
+      expect(callbackUrl.href).toBe(
+        'https://dd.example.com/drydock/auth/oidc/default/cb?code=abc&state=valid-state',
+      );
+    } finally {
+      getPublicUrlSpy.mockRestore();
+    }
+  },
+);
 
 test('callback should return 401 when login fails with error', async () => {
   mockSuccessfulGrant(openidClientMock);
@@ -4516,7 +4549,12 @@ describe('group-to-role mapping', () => {
 
   test('puts the role on the principal of the login', async () => {
     const { req } = await runLogin({ admingroup: 'dd-admins' }, { groups: [] });
-    expect(req.principal).toEqual({ kind: 'oidc', username: 'user@example.com', role: 'viewer' });
+    expect(req.principal).toEqual({
+      kind: 'oidc',
+      username: 'user@example.com',
+      providerId: oidc.getId(),
+      role: 'viewer',
+    });
   });
 
   test('a bearer token carries the mapped role', async () => {

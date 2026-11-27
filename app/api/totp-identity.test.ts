@@ -108,6 +108,34 @@ describe('totp-identity', () => {
       mockIsOidcRoleMappingActive.mockReturnValue(false);
     });
 
+    test('a role-less OIDC session is checked against the provider that minted it', () => {
+      mockIsOidcRoleMappingActive.mockImplementation(
+        (providerId?: string) => providerId !== 'oidc.partner',
+      );
+      expect(
+        checkSessionIdentity({
+          username: 'alice',
+          identity: { type: 'oidc', providerId: 'oidc.partner' },
+        }),
+      ).toBe('valid');
+      expect(mockIsOidcRoleMappingActive).toHaveBeenCalledWith('oidc.partner');
+      expect(
+        checkSessionIdentity({
+          username: 'alice',
+          identity: { type: 'oidc', providerId: 'oidc.corp' },
+        }),
+      ).toBe('stale');
+      mockIsOidcRoleMappingActive.mockReset();
+      mockIsOidcRoleMappingActive.mockReturnValue(false);
+    });
+
+    test('a legacy session is stale once an OIDC role mapping is configured', () => {
+      mockIsOidcRoleMappingActive.mockReturnValue(true);
+      expect(checkSessionIdentity({ username: 'alice' })).toBe('stale');
+      expect(mockHasEnrolledUsername).not.toHaveBeenCalled();
+      mockIsOidcRoleMappingActive.mockReturnValue(false);
+    });
+
     test('an OIDC session that carries a role stays valid under a mapping', () => {
       mockIsOidcRoleMappingActive.mockReturnValue(true);
       expect(

@@ -48,6 +48,8 @@ const v2OidcSchema = joi
     username: joi.string().required(),
     // Absent on a session minted before group-to-role mapping, or while none is configured.
     role: joi.string().valid(...ROLES),
+    // Absent on a session minted before the provider was recorded.
+    providerId: joi.string(),
   })
   .required()
   .unknown(false);
@@ -75,9 +77,14 @@ function parseSessionUserValue(value: unknown): SessionUser {
   if (kind === 'oidc') {
     const oidc = validate(v2OidcSchema, value);
     const role = oidc.role as Role | undefined;
+    const providerId = oidc.providerId as string | undefined;
     return {
       username: oidc.username as string,
-      identity: role === undefined ? { type: 'oidc' } : { type: 'oidc', role },
+      identity: {
+        type: 'oidc',
+        ...(role === undefined ? {} : { role }),
+        ...(providerId === undefined ? {} : { providerId }),
+      },
     };
   }
 
@@ -125,6 +132,7 @@ export function serializeSessionUser(user: SessionUser): string {
       kind: 'oidc',
       username: user.username,
       ...(identity.role === undefined ? {} : { role: identity.role }),
+      ...(identity.providerId === undefined ? {} : { providerId: identity.providerId }),
     });
   }
   return JSON.stringify({

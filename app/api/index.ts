@@ -363,7 +363,8 @@ function createApp() {
 
   // Served under a sub-path (DD_SERVER_BASEPATH): strip the prefix first so
   // every router below keeps matching root-relative paths. req.originalUrl
-  // still carries the prefix for the OIDC callback.
+  // carries the prefix in both proxy shapes, for the session cookie path and
+  // the OIDC callback.
   if (configuration.basepath) {
     app.use(createBasePathMiddleware(configuration.basepath));
   }

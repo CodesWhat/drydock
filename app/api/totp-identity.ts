@@ -109,9 +109,19 @@ function checkLocalIdentity(
 export function checkSessionIdentity(user: SessionUser): SessionIdentityCheck {
   const { identity } = user;
   if (identity?.type === 'oidc') {
-    // A role-less OIDC session predates group mapping. Once a mapping exists
-    // it must not keep the admin it was minted with, so the user signs in again.
-    return identity.role === undefined && isOidcRoleMappingActive() ? 'stale' : 'valid';
+    // A role-less OIDC session predates group mapping on its provider. Once
+    // that provider maps roles it must not keep the admin it was minted with,
+    // so the user signs in again.
+    return identity.role === undefined && isOidcRoleMappingActive(identity.providerId)
+      ? 'stale'
+      : 'valid';
+  }
+
+  // A legacy session never recorded its provider, so an OIDC one would resolve
+  // through any Basic account sharing its name. Once OIDC maps roles that is a
+  // way around the mapping, so the user signs in again and gets a typed session.
+  if (identity === undefined && isOidcRoleMappingActive()) {
+    return 'stale';
   }
 
   try {

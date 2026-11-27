@@ -33,7 +33,12 @@ interface HumanPrincipalBase extends PrincipalBase {
  * legacy `{ username }` session, whose origin was never recorded.
  */
 export type SessionIdentity =
-  | { readonly type: 'oidc'; readonly role?: Role }
+  | {
+      readonly type: 'oidc';
+      readonly role?: Role;
+      /** The authenticator that minted the session; absent on one minted before it was recorded. */
+      readonly providerId?: string;
+    }
   | ({ readonly type: 'local' } & LocalIdentityFields);
 
 /** Identity restored from an existing express-session cookie. */
@@ -54,6 +59,8 @@ interface BasicPrincipal extends HumanPrincipalBase {
 /** Identity proven by an `Authorization: Bearer` OIDC access token. */
 interface OidcPrincipal extends HumanPrincipalBase {
   readonly kind: 'oidc';
+  /** The authenticator that signed the user in, recorded when it becomes a session. */
+  readonly providerId?: string;
 }
 
 /**
