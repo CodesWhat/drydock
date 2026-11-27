@@ -1,5 +1,9 @@
 import { DEFAULTS } from '@/preferences/schema';
-import { getPreferences, updatePreferences } from '@/services/preferences';
+import {
+  getPreferences,
+  PreferencesRevisionConflictError,
+  updatePreferences,
+} from '@/services/preferences';
 
 const envelope = {
   apiVersion: 1,
@@ -7,6 +11,7 @@ const envelope = {
   schemaVersion: 11,
   preferences: DEFAULTS,
   updatedAt: '2026-07-11T12:00:00.000Z',
+  revision: 2,
 };
 
 describe('preferences service', () => {
@@ -89,5 +94,35 @@ describe('preferences service', () => {
     await expect(updatePreferences(11, DEFAULTS)).rejects.toThrow(
       'API returned invalid JSON. (HTTP 500)',
     );
+  });
+
+  it('sends the known revision with the PATCH body', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(envelope),
+    } as any);
+    await updatePreferences(11, DEFAULTS, 2);
+    const init = vi.mocked(fetch).mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toMatchObject({ revision: 2 });
+  });
+
+  it('raises a conflict error for a stale revision 409', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockResolvedValue({ error: 'PREFERENCES_REVISION_STALE', currentRevision: 5 }),
+    } as any);
+    await expect(updatePreferences(11, DEFAULTS, 2)).rejects.toBeInstanceOf(
+      PreferencesRevisionConflictError,
+    );
+  });
+
+  it('reports a 409 with an unreadable body as a plain HTTP error', async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: vi.fn().mockRejectedValue(new Error()),
+    } as any);
+    await expect(updatePreferences(11, DEFAULTS)).rejects.toThrow('HTTP 409');
   });
 });

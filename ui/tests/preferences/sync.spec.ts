@@ -1,6 +1,7 @@
 import type { PreferencesSchema } from '@/preferences/schema';
 
 const mocks = vi.hoisted(() => ({
+  ConflictError: class PreferencesRevisionConflictError extends Error {},
   getPreferences: vi.fn(),
   updatePreferences: vi.fn(),
   migrate: vi.fn((value: unknown) => value),
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/services/preferences', () => ({
   getPreferences: mocks.getPreferences,
   updatePreferences: mocks.updatePreferences,
+  PreferencesRevisionConflictError: mocks.ConflictError,
 }));
 vi.mock('@/preferences/migrate', () => ({ migrate: mocks.migrate }));
 vi.mock('@/preferences/font-size', () => ({ applyFontSize: mocks.applyFontSize }));
@@ -52,8 +54,16 @@ async function load(registerListeners = true) {
 function response(
   preferences: PreferencesSchema | Record<string, unknown> | null,
   schemaVersion = 11,
+  revision = 1,
 ) {
-  return { apiVersion: 1, username: 'alice', schemaVersion, preferences, updatedAt: 'now' };
+  return {
+    apiVersion: 1,
+    username: 'alice',
+    schemaVersion,
+    preferences,
+    updatedAt: 'now',
+    revision,
+  };
 }
 
 function deferred<T>() {
@@ -72,6 +82,7 @@ describe('preference sync engine', () => {
     vi.clearAllMocks();
     mocks.getPreferences.mockReset();
     mocks.updatePreferences.mockReset();
+    mocks.updatePreferences.mockResolvedValue({ revision: 1 });
     mocks.migrate.mockReset();
     mocks.nextTick.mockReset();
     mocks.migrate.mockImplementation((value) => value);
@@ -187,6 +198,7 @@ describe('preference sync engine', () => {
       expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
         preferences.schemaVersion,
         preferences,
+        enabled ? 0 : 1,
       );
     }
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
@@ -655,5 +667,298 @@ describe('preference sync engine', () => {
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(3000);
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+  });
+
+  describe('revision handling', () => {
+    async function hydrated(revision = 1) {
+      const loaded = await load();
+      const server = structuredClone(loaded.preferences);
+      server.sync.enabled = true;
+      mocks.getPreferences.mockResolvedValue(response(server, 11, revision));
+      await loaded.sync.hydrateFromServer('alice');
+      mocks.getPreferences.mockClear();
+      return { ...loaded, server };
+    }
+
+    function edit(preferences: PreferencesSchema, mutate: (value: PreferencesSchema) => void) {
+      mutate(preferences);
+      mocks.watchCallbacks[0]();
+    }
+
+    it('sends the hydrated revision and then the one each write returns', async () => {
+      const { preferences } = await hydrated(7);
+      mocks.updatePreferences.mockResolvedValue({ revision: 8 });
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        7,
+      );
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = false;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        8,
+      );
+    });
+
+    it('keeps the revision when a write response carries none', async () => {
+      const { preferences } = await hydrated(4);
+      mocks.updatePreferences.mockResolvedValue({});
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = false;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        4,
+      );
+    });
+
+    it('treats a server envelope without a revision as revision 0', async () => {
+      const { sync, preferences } = await load();
+      preferences.sync.enabled = true;
+      const server = structuredClone(preferences);
+      mocks.getPreferences.mockResolvedValue({ ...response(server), revision: undefined });
+      await sync.hydrateFromServer('alice');
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        0,
+      );
+    });
+
+    it('survives a lost-response PATCH followed by an edit on a second device', async () => {
+      const { preferences, server } = await hydrated(1);
+      // Device A edits the layout. The server commits it (revision 2), but the
+      // response is lost, so A still holds revision 1. Device B then changes
+      // the appearance (revision 3). A's retry finds the document has moved
+      // and is answered with a stale-revision conflict.
+      const onServer = structuredClone(server);
+      onServer.layout.sidebarCollapsed = true;
+      onServer.appearance.fontSize = 1.3;
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 3));
+
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
+      expect(preferences.appearance.fontSize).toBe(1.3);
+      expect(preferences.layout.sidebarCollapsed).toBe(true);
+      expect(mocks.applyFontSize).toHaveBeenCalledWith(1.3);
+      // Nothing is left to push: the server already has both edits.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-sends an unsaved local edit against the fresh revision after merging', async () => {
+      const { preferences, server } = await hydrated(1);
+      const onServer = structuredClone(server);
+      onServer.appearance.fontSize = 1.3;
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 2));
+
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(preferences.appearance.fontSize).toBe(1.3);
+      expect(preferences.layout.sidebarCollapsed).toBe(true);
+
+      mocks.updatePreferences.mockResolvedValue({ revision: 3 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        2,
+      );
+      expect(preferences.appearance.fontSize).toBe(1.3);
+    });
+
+    it('lets the server win a section both devices changed', async () => {
+      const { preferences, server } = await hydrated(1);
+      const onServer = structuredClone(server);
+      onServer.appearance.fontSize = 1.3;
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 2));
+
+      edit(preferences, (value) => {
+        value.appearance.fontSize = 1.1;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(preferences.appearance).toEqual(onServer.appearance);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+    });
+
+    it('takes the server document when no base was ever recorded', async () => {
+      const { sync, preferences } = await load();
+      mocks.getPreferences.mockResolvedValue(response(null, 11, 0));
+      await sync.hydrateFromServer('alice');
+      preferences.sync.enabled = true;
+      const onServer = structuredClone(preferences);
+      onServer.appearance.fontSize = 1.3;
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 4));
+
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(preferences.appearance.fontSize).toBe(1.3);
+      expect(preferences.layout.sidebarCollapsed).toBe(onServer.layout.sidebarCollapsed);
+    });
+
+    it('re-sends the local blob when the server holds nothing', async () => {
+      const { preferences } = await hydrated(1);
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(null, 11, 5));
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      mocks.updatePreferences.mockResolvedValue({ revision: 6 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        5,
+      );
+      expect(preferences.layout.sidebarCollapsed).toBe(true);
+    });
+
+    it('falls back to revision 0 when the conflict re-fetch carries no revision', async () => {
+      const { preferences } = await hydrated(3);
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue({ ...response(null), revision: undefined });
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        0,
+      );
+    });
+
+    it('keeps the local blob when the server copy has sync switched off', async () => {
+      const { preferences, server } = await hydrated(1);
+      const onServer = structuredClone(server);
+      onServer.sync.enabled = false;
+      onServer.appearance.fontSize = 1.3;
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 6));
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(preferences.appearance.fontSize).not.toBe(1.3);
+      mocks.updatePreferences.mockResolvedValue({ revision: 7 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        6,
+      );
+    });
+
+    it('keeps the edit pending when the re-fetch after a conflict fails', async () => {
+      const { preferences } = await hydrated(1);
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockRejectedValueOnce(new Error('offline'));
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
+      mocks.updatePreferences.mockResolvedValue({ revision: 2 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+    });
+
+    it('discards a conflict resolution that finishes after the user changed', async () => {
+      const { sync, preferences, server } = await hydrated(1);
+      const refetch = deferred<ReturnType<typeof response>>();
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockReturnValue(refetch.promise);
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = true;
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      sync.syncAuthenticatedUser('bob');
+      const onServer = structuredClone(server);
+      onServer.appearance.fontSize = 1.3;
+      refetch.resolve(response(onServer, 11, 9));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(preferences.appearance.fontSize).not.toBe(1.3);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+    });
+
+    it('lets an explicit push overwrite after a stale revision', async () => {
+      const { sync, preferences } = await load();
+      preferences.sync.enabled = true;
+      mocks.updatePreferences
+        .mockRejectedValueOnce(new mocks.ConflictError('stale'))
+        .mockResolvedValueOnce({ revision: 6 });
+      mocks.getPreferences.mockResolvedValue(response(null, 11, 5));
+      await sync.pushInitialSync('alice');
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        5,
+      );
+    });
+
+    it('treats a refetch envelope without a revision as revision 0 during an explicit push', async () => {
+      const { sync, preferences } = await load();
+      preferences.sync.enabled = true;
+      mocks.updatePreferences
+        .mockRejectedValueOnce(new mocks.ConflictError('stale'))
+        .mockResolvedValueOnce({ revision: 1 });
+      mocks.getPreferences.mockResolvedValue({ ...response(null), revision: undefined });
+      await sync.pushInitialSync('alice');
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        0,
+      );
+    });
+
+    it('forgets the revision and base when the signed-in user changes', async () => {
+      const { sync, preferences } = await hydrated(9);
+      sync.syncAuthenticatedUser('bob');
+      preferences.sync.enabled = true;
+      await sync.pushInitialSync('bob');
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        0,
+      );
+    });
   });
 });

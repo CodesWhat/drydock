@@ -19,10 +19,18 @@ const router = express.Router();
 // fails CI instead of 409ing every sync write at runtime.
 export const PREFERENCES_API_VERSION = 1;
 
+// Error code of the 409 returned when a PATCH carries a stale revision. The
+// UI matches on it to tell "re-fetch and merge" apart from an API version
+// mismatch, which is also a 409.
+export const PREFERENCES_REVISION_STALE_ERROR = 'PREFERENCES_REVISION_STALE';
+
 const preferencesPatchSchema = joi.object({
   apiVersion: joi.number().valid(PREFERENCES_API_VERSION).required(),
   schemaVersion: joi.number().integer().min(1).required(),
   preferences: joi.object().unknown(true).required(),
+  // The revision the client last saw. Omitted means an unconditional write
+  // (older clients); present means "only if nobody wrote since".
+  revision: joi.number().integer().min(0),
 });
 
 // No per-route size validation here: PATCH bodies are already bounded by the
@@ -38,6 +46,7 @@ interface PreferencesResponseEnvelope {
   schemaVersion: number | null;
   preferences: Record<string, unknown> | null;
   updatedAt: string | null;
+  revision: number;
 }
 
 /**
@@ -62,6 +71,7 @@ function buildEnvelope(
     schemaVersion: record?.schemaVersion ?? null,
     preferences: record?.preferences ?? null,
     updatedAt: record?.updatedAt ?? null,
+    revision: record?.revision ?? 0,
   };
 }
 
@@ -112,7 +122,17 @@ function updatePreferences(req: AuthRequest, res: Response): void {
     username,
     validated.value.schemaVersion,
     validated.value.preferences,
+    validated.value.revision,
   );
+  if (!record) {
+    // Another write landed since the client last read. Tell it where the
+    // document stands now so it can re-fetch, merge and try again.
+    res.status(409).json({
+      error: PREFERENCES_REVISION_STALE_ERROR,
+      currentRevision: uiPreferencesStore.getRevision(username),
+    });
+    return;
+  }
   broadcastPreferencesUpdated();
   res.status(200).json(buildEnvelope(username, record));
 }

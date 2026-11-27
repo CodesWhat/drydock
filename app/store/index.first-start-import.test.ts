@@ -150,6 +150,7 @@ describe('store first-start import from a v1.7 dd.json', () => {
         schemaVersion: 11,
         preferences: { theme: 'dark' },
         updatedAt: '2026-01-15T09:00:00.000Z',
+        revision: 1,
       });
 
       // agent-keys (roadmap 7-STORE slice 4): the imported key is returned by
