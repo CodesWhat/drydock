@@ -8,9 +8,10 @@
   <img src="docs/assets/whale-logo.png" alt="drydock" width="220">
 </picture>
 
+<a id="drydock"></a>
 <h1>drydock</h1>
 
-**Container image update watcher — 23 registries, 21 notification and action providers.**
+**Container image update watcher — 23 registries, 23 notification and action providers.**
 
 </div>
 
@@ -257,7 +258,7 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 
 Container images drift out of date silently. A base image patches a CVE, an app cuts a release, a tag moves. Unless you're watching every registry by hand, your running containers fall behind until something breaks or gets exploited.
 
-Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 21 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
+Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and restart with little visibility or control, and are now largely unmaintained. The dashboards (Portainer) manage containers but aren't built for update intelligence. Drydock is **monitor-first**: it watches 23 registries and tells you exactly what changed (major, minor, patch, or digest) before anything happens, then acts only when you let it. And it goes further than any of them. Trivy/Grype vulnerability scanning blocks unsafe updates, cosign verifies signatures, pre-update image backups roll back automatically on health-check failure, distributed agents cover remote hosts, and 23 notification and action integrations close the loop. The full update lifecycle, with a web UI and a REST API.
 
 <hr>
 
@@ -267,7 +268,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 |---|---|---|
 | 🔭 | **Monitor-First Detection** | Watches every running container and classifies each available update as major, minor, patch, or digest before anything happens. Nothing changes until you say so. |
 | 📦 | **23 Registry Providers** | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and 12 more. Public and private, cloud and self-hosted, with per-registry TLS and auth. |
-| 🔔 | **21 Triggers** | 17 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
+| 🔔 | **23 Triggers** | 19 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, GitHub Dispatch, GitLab Pipeline, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
 | 🥊 | **Update Bouncer** | Trivy/Grype vulnerability scanning blocks unsafe updates before they deploy, with cosign signature verification and SBOM generation (CycloneDX and SPDX). |
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
@@ -293,9 +294,9 @@ Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harb
 
 Docker · Docker Compose · Portainer · Command
 
-### Notifications (17)
+### Notifications (19)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram · GitHub Dispatch · GitLab Pipeline
 
 ### Authentication
 
@@ -343,7 +344,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">23</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
@@ -389,7 +390,7 @@ Trivy- or Grype-powered vulnerability scanning blocks unsafe updates before they
 <tr><td>Audit log</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / multi-user roles</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>OIDC / SSO authentication</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Trigger / notification channels</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Trigger / notification channels</td><td align="center">23</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Registry providers</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Prometheus metrics</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
@@ -436,8 +437,8 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 | **v1.6.0** ✅ | Notifications, Policy & Release Intel | Per-rule/per-trigger notification templates with live preview, notification-bell preferences, cross-device preference sync, zero-dependency custom dashboard grid ([#281](https://github.com/CodesWhat/drydock/issues/281)), declarative update policy ([#320](https://github.com/CodesWhat/drydock/issues/320)), maturity stabilization countdown + immediate candidate visibility + manual override ([#406](https://github.com/CodesWhat/drydock/discussions/406)), actionable Update Status panel and global `notify` / `manual` / `auto` update mode ([#325](https://github.com/CodesWhat/drydock/discussions/325)), watcher/imgset/container tag-policy inheritance plus stacked current → newer pinned-tag visibility ([#498](https://github.com/CodesWhat/drydock/issues/498)), standardized 44px Source / release notes / registry resource actions across table, cards, and details ([#295](https://github.com/CodesWhat/drydock/discussions/295)), health-status event notifications ([#198](https://github.com/CodesWhat/drydock/discussions/198)), bidirectional Home Assistant MQTT, responsive table/card list views, Trivy/Grype/both scanning across command or pinned Docker-worker backends, scanner asset pull/warm controls, off-heap deduplicated SBOM storage, Trivy long-scan correctness ([#490](https://github.com/CodesWhat/drydock/issues/490)), trigger-taxonomy migration warnings, v1.6 compatibility removals, docs/API hygiene, and `/api` → `/api/v1` migration completion with an opt-in wud-card/Homepage compatibility shim (`DD_COMPAT_WUDCARD`). |
 | **v1.7.0** ✅ | Smart Updates & UX | Dependency-aware update ordering ([#219](https://github.com/CodesWhat/drydock/discussions/219)), per-action update policy ([#511](https://github.com/CodesWhat/drydock/discussions/511)), unified maturity/update-age clock, clickable port links, keyboard shortcuts, PWA, dark-theme contrast pass (WCAG 2.2) ([#850](https://github.com/CodesWhat/drydock/issues/850), [#865](https://github.com/CodesWhat/drydock/discussions/865)), `DD_TRIGGER_*` removal (end of the v1.5.0 deprecation window), curl removed from the image |
 | **v1.8.0** | Fleet Management & Live Config | **Available for testing in v1.8.0-rc.16; GA pending:** SQLite storage, approval queue, YAML config, scoped watcher/notification/action policy editors and security digest templates, concurrent updates, selective bulk updates ([#232](https://github.com/CodesWhat/drydock/discussions/232)), dependency-ordering UI, images inventory/prune, fleet health and inventory refresh, shareable label grouping, notification-only exact group routing ([#1251](https://github.com/CodesWhat/drydock/pull/1251)), persistent group policies with restrict-only action rules, an effective-policy view and a Settings editor, Drydock-side overrides for label-owned container settings, TOTP two-factor sign-in with recovery codes, install-only maintenance windows ([#946](https://github.com/CodesWhat/drydock/discussions/946)), first-party auth, scoped API keys ([#469](https://github.com/CodesWhat/drydock/discussions/469)), and Home Assistant update progress/devices ([#210](https://github.com/CodesWhat/drydock/discussions/210)). **Remaining:** broader live configuration needs ownership decisions. |
-| **v1.9.0** | Policy depth & Ecosystem | **Available for testing in v1.9.0-rc.1; GA pending:** per-update-type candidates and running-version ceilings, watcher include/exclude filters, audit actor, filter, export and retention, OIDC sign-in allowlist, container state alerts (including agents and Portwing), rollback without a healthcheck, rejecting a whole minor or major line, scheduled and threshold cleanup policy, security fast lane, Home Assistant release summary and buttons, GitHub dispatch and GitLab pipeline rebuild triggers, file watcher provider, quiet hours and silences, locally built images watched against their upstream base. |
-| **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps sync, volume browser, health gates, canary deploys, web terminal, RBAC, LDAP/AD, basic Podman support over its Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
+| **v1.9.0** | Policy depth & Ecosystem | **Available for testing in v1.9.0-rc.1; GA pending:** per-update-type candidates and running-version ceilings, watcher include/exclude filters, audit actor, filter, export and retention, OIDC sign-in allowlist, container state alerts (including agents and Portwing), rollback without a healthcheck, rejecting a whole minor or major line, scheduled and threshold cleanup policy, security fast lane, Home Assistant release summary and buttons, GitHub dispatch and GitLab pipeline rebuild triggers, file watcher provider, quiet hours and silences, locally built images watched against their upstream base, required upgrade stops, RBAC with user management and OIDC group mapping. |
+| **v2.0+** | Platform Expansion & Beyond | Swarm watchers, GitOps sync, volume browser, health gates, canary deploys, web terminal, LDAP/AD, basic Podman support over its Docker-compatible API, CLI, Wolfi hardened image, socket proxy, Kubernetes (v3.x) |
 
 **Release and upgrade status:** v1.7.1 is the latest stable maintenance release (GA 2026-11-11, promoted from v1.7.1-rc.7). It includes container recreation fixes, environment-secret redaction and runtime security updates. Pin `codeswhat/drydock:1.7.1`, back up your store and upgrade traditional agents alongside the controller. The image retains its `1.7.1-rc.7` build identity because promotion reuses the tested bytes. v1.9.0-rc.1 is for opt-in testing, with the published 1.7 docs preserved separately from the active 1.9 docs.
 
@@ -473,7 +474,7 @@ High-level themes only; see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 [![Vue 3](https://img.shields.io/badge/Vue_3-42b883?logo=vuedotjs&logoColor=fff)](https://vuejs.org/)
 [![Express 5](https://img.shields.io/badge/Express_5-000?logo=express&logoColor=fff)](https://expressjs.com/)
 [![Vitest](https://img.shields.io/badge/Vitest_4-6E9F18?logo=vitest&logoColor=fff)](https://vitest.dev/)
-[![Biome](https://img.shields.io/badge/Biome_2.5-60a5fa?logo=biome&logoColor=fff)](https://biomejs.dev/)
+[![Biome](https://img.shields.io/badge/Biome_2.6-60a5fa?logo=biome&logoColor=fff)](https://biomejs.dev/)
 [![Node 24](https://img.shields.io/badge/Node_24_Alpine-339933?logo=nodedotjs&logoColor=fff)](https://nodejs.org/)
 [![Anthropic](https://img.shields.io/badge/Anthropic-CC785C?style=flat&logo=anthropic&logoColor=white)](https://claude.ai/)
 [![OpenAI](https://img.shields.io/badge/OpenAI-10A37F?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyByb2xlPSJpbWciIHZpZXdCb3g9IjAgMCAyNCAyNCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48dGl0bGU%2BT3BlbkFJPC90aXRsZT48cGF0aCBmaWxsPSIjZmZmZmZmIiBkPSJNMjIuMjgxOSA5LjgyMTFhNS45ODQ3IDUuOTg0NyAwIDAgMC0uNTE1Ny00LjkxMDggNi4wNDYyIDYuMDQ2MiAwIDAgMC02LjUwOTgtMi45QTYuMDY1MSA2LjA2NTEgMCAwIDAgNC45ODA3IDQuMTgxOGE1Ljk4NDcgNS45ODQ3IDAgMCAwLTMuOTk3NyAyLjkgNi4wNDYyIDYuMDQ2MiAwIDAgMCAuNzQyNyA3LjA5NjYgNS45OCA1Ljk4IDAgMCAwIC41MTEgNC45MTA3IDYuMDUxIDYuMDUxIDAgMCAwIDYuNTE0NiAyLjkwMDFBNS45ODQ3IDUuOTg0NyAwIDAgMCAxMy4yNTk5IDI0YTYuMDU1NyA2LjA1NTcgMCAwIDAgNS43NzE4LTQuMjA1OCA1Ljk4OTQgNS45ODk0IDAgMCAwIDMuOTk3Ny0yLjkwMDEgNi4wNTU3IDYuMDU1NyAwIDAgMC0uNzQ3NS03LjA3Mjl6bS05LjAyMiAxMi42MDgxYTQuNDc1NSA0LjQ3NTUgMCAwIDEtMi44NzY0LTEuMDQwOGwuMTQxOS0uMDgwNCA0Ljc3ODMtMi43NTgyYS43OTQ4Ljc5NDggMCAwIDAgLjM5MjctLjY4MTN2LTYuNzM2OWwyLjAyIDEuMTY4NmEuMDcxLjA3MSAwIDAgMSAuMDM4LjA1MnY1LjU4MjZhNC41MDQgNC41MDQgMCAwIDEtNC40OTQ1IDQuNDk0NHptLTkuNjYwNy00LjEyNTRhNC40NzA4IDQuNDcwOCAwIDAgMS0uNTM0Ni0zLjAxMzdsLjE0Mi4wODUyIDQuNzgzIDIuNzU4MmEuNzcxMi43NzEyIDAgMCAwIC43ODA2IDBsNS44NDI4LTMuMzY4NXYyLjMzMjRhLjA4MDQuMDgwNCAwIDAgMS0uMDMzMi4wNjE1TDkuNzQgMTkuOTUwMmE0LjQ5OTIgNC40OTkyIDAgMCAxLTYuMTQwOC0xLjY0NjR6TTIuMzQwOCA3Ljg5NTZhNC40ODUgNC40ODUgMCAwIDEgMi4zNjU1LTEuOTcyOFYxMS42YS43NjY0Ljc2NjQgMCAwIDAgLjM4NzkuNjc2NWw1LjgxNDQgMy4zNTQzLTIuMDIwMSAxLjE2ODVhLjA3NTcuMDc1NyAwIDAgMS0uMDcxIDBsLTQuODMwMy0yLjc4NjVBNC41MDQgNC41MDQgMCAwIDEgMi4zNDA4IDcuODcyem0xNi41OTYzIDMuODU1OEwxMy4xMDM4IDguMzY0IDE1LjExOTIgNy4yYS4wNzU3LjA3NTcgMCAwIDEgLjA3MSAwbDQuODMwMyAyLjc5MTNhNC40OTQ0IDQuNDk0NCAwIDAgMS0uNjc2NSA4LjEwNDJ2LTUuNjc3MmEuNzkuNzkgMCAwIDAtLjQwNy0uNjY3em0yLjAxMDctMy4wMjMxbC0uMTQyLS4wODUyLTQuNzczNS0yLjc4MThhLjc3NTkuNzc1OSAwIDAgMC0uNzg1NCAwTDkuNDA5IDkuMjI5N1Y2Ljg5NzRhLjA2NjIuMDY2MiAwIDAgMSAuMDI4NC0uMDYxNWw0LjgzMDMtMi43ODY2YTQuNDk5MiA0LjQ5OTIgMCAwIDEgNi42ODAyIDQuNjZ6TTguMzA2NSAxMi44NjNsLTIuMDItMS4xNjM4YS4wODA0LjA4MDQgMCAwIDEtLjAzOC0uMDU2N1Y2LjA3NDJhNC40OTkyIDQuNDk5MiAwIDAgMSA3LjM3NTctMy40NTM3bC0uMTQyLjA4MDVMOC43MDQgNS40NTlhLjc5NDguNzk0OCAwIDAgMC0uMzkyNy42ODEzem0xLjA5NzYtMi4zNjU0bDIuNjAyLTEuNDk5OCAyLjYwNjkgMS40OTk4djIuOTk5NGwtMi41OTc0IDEuNDk5Ny0yLjYwNjctMS40OTk3WiIvPjwvc3ZnPg%3D%3D)](https://openai.com)
