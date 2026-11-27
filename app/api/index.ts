@@ -21,6 +21,7 @@ import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
 import { isAuthenticationReady } from './auth-strategies.js';
+import { createBasePathMiddleware, stripBasePathFromUpgrade } from './base-path.js';
 import * as wudCardCompatRouter from './compat/wudcard.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
@@ -360,6 +361,13 @@ function createApp() {
   const app = express();
   app.disable('x-powered-by');
 
+  // Served under a sub-path (DD_SERVER_BASEPATH): strip the prefix first so
+  // every router below keeps matching root-relative paths. req.originalUrl
+  // still carries the prefix for the OIDC callback.
+  if (configuration.basepath) {
+    app.use(createBasePathMiddleware(configuration.basepath));
+  }
+
   // Trust proxy (helpful to resolve public facing hostname & protocol)
   if (isTrustProxyEnabled(configuration.trustproxy)) {
     if (configuration.trustproxy === true) {
@@ -430,6 +438,12 @@ export async function init() {
   log.debug(`API/UI enabled => Start Http listener on port ${configuration.port}`);
   const app = createApp();
   const server = startServer(app);
+  if (configuration.basepath) {
+    // WebSocket upgrades bypass Express, so strip the prefix before the gateways match on the URL.
+    server.prependListener('upgrade', (request) => {
+      stripBasePathFromUpgrade(request, configuration.basepath);
+    });
+  }
   const sharedLimiter = createFixedWindowRateLimiter({
     windowMs: 15 * 60 * 1000,
     max: 1000,

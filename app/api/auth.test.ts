@@ -1561,10 +1561,19 @@ describe('Auth Router', () => {
       expect(sessionConfig.cookie).toEqual(
         expect.objectContaining({
           httpOnly: true,
+          path: '/',
           sameSite: 'lax',
           secure: 'auto',
         }),
       );
+    });
+
+    test('should scope the session cookie to the configured base path', () => {
+      mockGetServerConfiguration.mockReturnValue({ cookie: {}, basepath: '/drydock' });
+      auth.init(createApp());
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.path).toBe('/drydock');
     });
 
     test('should allow overriding session cookie sameSite to strict', () => {

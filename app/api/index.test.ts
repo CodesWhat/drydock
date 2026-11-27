@@ -12,6 +12,7 @@ const {
 } = vi.hoisted(() => {
   const mockHttpServer = {
     on: vi.fn(),
+    prependListener: vi.fn(),
   };
   const mockHttpsServer = {
     on: vi.fn(),
@@ -291,6 +292,7 @@ describe('API Index', () => {
     mockRouter.use.mockClear();
     mockRouter.get.mockClear();
     mockHttpServer.on.mockClear();
+    mockHttpServer.prependListener.mockClear();
     mockHttpsServer.listen.mockClear();
     mockHttpsServer.on.mockClear();
     mockHelmet.mockClear();
@@ -322,6 +324,50 @@ describe('API Index', () => {
     // We need to check the freshly imported auth mock
     const freshAuth = await import('./auth.js');
     expect(freshAuth.init).not.toHaveBeenCalled();
+  });
+
+  test('should strip DD_SERVER_BASEPATH from requests and websocket upgrades', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      basepath: '/drydock',
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const stripMiddleware = mockApp.use.mock.calls
+      .map(([handler]) => handler)
+      .find((handler) => typeof handler === 'function' && handler.length === 3);
+    const req = { url: '/drydock/api/v1/app' };
+    const next = vi.fn();
+    stripMiddleware(req, {}, next);
+    expect(req.url).toBe('/api/v1/app');
+    expect(next).toHaveBeenCalled();
+
+    expect(mockHttpServer.prependListener).toHaveBeenCalledWith('upgrade', expect.any(Function));
+    const upgrade = { url: '/drydock/api/v1/log/stream' };
+    mockHttpServer.prependListener.mock.calls[0][1](upgrade);
+    expect(upgrade.url).toBe('/api/v1/log/stream');
+  });
+
+  test('should not register base path handling without DD_SERVER_BASEPATH', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      basepath: '',
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockHttpServer.prependListener).not.toHaveBeenCalled();
   });
 
   test('should start HTTP server when enabled', async () => {

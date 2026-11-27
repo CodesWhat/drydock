@@ -779,6 +779,25 @@ export function getStoreConfiguration() {
   return configuration;
 }
 
+const SERVER_BASE_PATH_PATTERN = /^\/[A-Za-z0-9._~-]+(?:\/[A-Za-z0-9._~-]+)*$/;
+
+/**
+ * Normalize DD_SERVER_BASEPATH: '' and '/' mean "served at the root", anything
+ * else gets one leading slash and no trailing slash. Returns undefined when the
+ * value is not a plain path made of URL-safe segments.
+ */
+export function normalizeServerBasePath(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed === '' || /^\/+$/.test(trimmed)) {
+    return '';
+  }
+  const normalized = `/${trimmed.replace(/^\/+/, '').replace(/\/+$/, '')}`;
+  if (!SERVER_BASE_PATH_PATTERN.test(normalized) || normalized.split('/').some((s) => s === '..')) {
+    return undefined;
+  }
+  return normalized;
+}
+
 /**
  * Get Server configurations.
  */
@@ -786,6 +805,18 @@ export function getServerConfiguration() {
   const configurationFromEnv = get('dd.server', ddEnvVars);
   const configurationSchema = joi.object().keys({
     enabled: joi.boolean().default(true),
+    basepath: joi
+      .string()
+      .trim()
+      .allow('')
+      .custom((value: string, helpers) => {
+        const normalized = normalizeServerBasePath(value);
+        if (normalized === undefined) {
+          return helpers.error('any.invalid');
+        }
+        return normalized;
+      }, 'base path normalization')
+      .default(''),
     port: joi.number().default(3000).integer().min(0).max(65535),
     tls: joi
       .object({
@@ -1577,11 +1608,12 @@ export function getConfiguredPublicUrl(): string | undefined {
 export function getPublicUrl(req: Request) {
   const publicUrl = ddEnvVars.DD_PUBLIC_URL;
   const configuredPublicUrl = parseSafePublicUrlCandidate(publicUrl);
+  const basePath = getServerConfiguration().basepath as string;
   if (configuredPublicUrl) {
-    return configuredPublicUrl.origin;
+    return `${configuredPublicUrl.origin}${basePath}`;
   }
   if (typeof publicUrl === 'string' && publicUrl.trim().length > 0) {
-    return '/';
+    return basePath || '/';
   }
 
   // Try to infer from request, with strict validation to prevent host/header injection.
@@ -1589,10 +1621,10 @@ export function getPublicUrl(req: Request) {
   const hostname = typeof req.hostname === 'string' ? req.hostname : '';
   const inferredPublicUrl = parseSafePublicUrlCandidate(`${protocol}://${hostname}`);
   if (!inferredPublicUrl) {
-    return '/';
+    return basePath || '/';
   }
   if (inferredPublicUrl.hostname !== hostname.toLowerCase()) {
-    return '/';
+    return basePath || '/';
   }
-  return inferredPublicUrl.origin;
+  return `${inferredPublicUrl.origin}${basePath}`;
 }

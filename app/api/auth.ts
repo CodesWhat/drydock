@@ -575,6 +575,9 @@ export function init(app: Application): void {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
+      // Scope the session cookie to the sub-path so it is not sent to (or
+      // clobbered by) other apps sharing the host behind the same proxy.
+      path: serverConfiguration.basepath || '/',
       sameSite: sessionCookieSameSite,
       secure: sessionCookieSecure,
       maxAge: getCookieMaxAge(DEFAULT_SESSION_DAYS),
