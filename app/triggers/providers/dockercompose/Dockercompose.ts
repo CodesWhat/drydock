@@ -33,6 +33,7 @@ import Docker, {
 import type { PostPullHookOptions } from '../docker/UpdateLifecycleExecutor.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
+import { copyComposeFileMetadata } from './ComposeFileMetadata.js';
 import ComposeFileParser, {
   COMPOSE_CACHE_MAX_ENTRIES,
   updateComposeServiceImageInText,
@@ -2005,6 +2006,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       `.${composeFileName}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     );
     await fs.writeFile(temporaryFilePath, data);
+    await copyComposeFileMetadata(filePath, temporaryFilePath, this.log);
     for (let attempt = 0; ; attempt++) {
       const renameError = await this.tryRenameComposeFile(temporaryFilePath, filePath);
       if (!renameError) {
@@ -4709,6 +4711,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     try {
       this.log.debug(`Backup ${file} as ${backupFile}`);
       await fs.copyFile(file, backupFile);
+      await copyComposeFileMetadata(file, backupFile, this.log);
     } catch (e: unknown) {
       this.log.warn(
         `Error when trying to backup file ${file} to ${backupFile} (${getErrorMessage(e)})`,

@@ -10,6 +10,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { getErrorMessage } from '../../../util/error.js';
+import { copyComposeFileMetadata } from '../dockercompose/ComposeFileMetadata.js';
 import { updateComposeServiceImageInText } from '../dockercompose/ComposeFileParser.js';
 import {
   type DockerApiBindMountInspector,
@@ -79,6 +80,7 @@ async function writeComposeFileAtomic(
   );
 
   await fs.writeFile(tmpPath, data);
+  await copyComposeFileMetadata(filePath, tmpPath, logContainer);
 
   try {
     await fs.rename(tmpPath, filePath);

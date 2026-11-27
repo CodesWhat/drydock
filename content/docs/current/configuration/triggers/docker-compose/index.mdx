@@ -165,6 +165,10 @@ Container lifecycle hooks (`dd.hook.pre`, `dd.hook.post`, `dd.hook.pre.abort`, `
 
 Auto-rollback labels (`dd.rollback.auto`, `dd.rollback.window`, `dd.rollback.interval`) are supported. When a container becomes unhealthy after a compose-based update, Drydock automatically rolls back to the previous image. See [Docker trigger — Auto-Rollback](/docs/configuration/triggers/docker#auto-rollback).
 
+### File mode and ownership
+
+When Drydock rewrites a compose file it keeps the file's permissions and owner, so a `0600` file stays `0600` and a file owned by another user stays theirs. The `.back` copy gets the same mode and owner. Restoring the owner needs root or `CAP_CHOWN`. If Drydock can't change it (for example when it runs as a non-root user), it logs a warning and carries on with the update. The new file is then owned by the Drydock process user.
+
 ### Image Backup & Rollback
 
 Image backups are retained per container (controlled by the `BACKUPCOUNT` variable). You can roll back to any retained backup via the API. See [Docker trigger — Image Backup & Rollback](/docs/configuration/triggers/docker#image-backup--rollback).
