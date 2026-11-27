@@ -1,4 +1,5 @@
 import { createWebSocketStreamConnection } from '@/services/websocket-stream-connection';
+import { getBasePath } from '@/utils/base-path';
 
 export interface SystemLogEntry {
   timestamp: number;
@@ -81,7 +82,7 @@ export function buildSystemLogStreamUrl(
   }
   params.set('tail', `${query.tail ?? 100}`);
 
-  return `${protocol}//${locationRef.host}/api/v1/log/stream?${params.toString()}`;
+  return `${protocol}//${locationRef.host}${getBasePath()}/api/v1/log/stream?${params.toString()}`;
 }
 
 export function createSystemLogStreamConnection(

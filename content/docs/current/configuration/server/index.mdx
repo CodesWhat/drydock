@@ -16,6 +16,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
 | `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode). When disabled, UI paths answer with a JSON 404 body instead of Express's default HTML 404; `/api/*`, `/health`, and `/metrics` are unaffected. | `true`, `false` | `true` |
 | `DD_SERVER_PORT` | ⚪ | Http listener port | from `0` to `65535` | `3000` |
+| `DD_SERVER_BASEPATH` | ⚪ | Serve the UI and API under a sub-path of the host (e.g. behind a reverse proxy at `/drydock`). See [Serving under a sub-path](#serving-under-a-sub-path). | Path made of letters, digits, `.`, `_`, `~`, `-` and `/` (e.g. `/drydock`); `/` or empty means the root | empty (served at `/`) |
 | `DD_SERVER_TRUSTPROXY` | ⚪ | Trust X-Forwarded-For headers when behind a reverse proxy | `true`, `false`, or hop count (`1`, `2`, etc.) | `false` |
 | `DD_SERVER_TLS_ENABLED` | ⚪ | Enable HTTPS+TLS | `true`, `false` | `false` |
 | `DD_SERVER_TLS_KEY` | ⚪ | TLS server key (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the key file | |
@@ -207,6 +208,57 @@ docker run \
 </Tabs>
 
 Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy, NGINX Proxy Manager) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
+
+### Serving under a sub-path
+
+To host drydock at `https://example.com/drydock/` instead of its own hostname, set `DD_SERVER_BASEPATH=/drydock`. The UI, the API, the live event stream and log WebSockets, the session cookie (scoped to the sub-path) and the OIDC callback all follow it. `/health` and `/metrics` move with it too (`/drydock/health`).
+
+Drydock accepts both proxy shapes. Forward the prefix untouched (recommended) or strip it before proxying, either works. Set `DD_PUBLIC_URL` to the origin (`https://example.com`) as usual; the sub-path is added for you, so the OIDC redirect URI to register with your identity provider is `https://example.com/drydock/auth/oidc/<name>/cb`.
+
+<Tabs items={["Nginx", "Traefik"]}>
+<Tab value="Nginx">
+
+```nginx
+location /drydock/ {
+    proxy_pass http://drydock:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # WebSocket log streams
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    # the live event stream (SSE) must not be buffered
+    proxy_buffering off;
+}
+```
+
+`proxy_pass` has no URI part, so Nginx forwards `/drydock/...` unchanged.
+
+</Tab>
+<Tab value="Traefik">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_SERVER_BASEPATH=/drydock
+      - DD_SERVER_TRUSTPROXY=1
+      - DD_PUBLIC_URL=https://example.com
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.drydock.rule=Host(`example.com`) && PathPrefix(`/drydock`)
+      - traefik.http.routers.drydock.entrypoints=websecure
+      - traefik.http.routers.drydock.tls=true
+      - traefik.http.services.drydock.loadbalancer.server.port=3000
+```
+
+Traefik forwards the full path by default and handles WebSockets and SSE without extra settings. Don't add a `stripprefix` middleware unless you want to, drydock handles both.
+
+</Tab>
+</Tabs>
+
+<Callout type="info">The offline app-shell fallback of the installed PWA only covers a drydock served from the root. Under a sub-path the app works as normal while online.</Callout>
 
 ### Reverse proxy caching (blank page after an update)
 

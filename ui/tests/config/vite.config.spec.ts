@@ -4,6 +4,7 @@ import viteConfig, {
   buildSpaNavigateFallbackPattern,
   isApiRequest,
   navigateFallbackAllowlist,
+  renderBuiltUrl,
 } from '../../vite.config';
 
 type CodeSplittingGroup = { name: string; test: RegExp };
@@ -152,5 +153,30 @@ describe('service-worker navigation-fallback allowlist (DR-102)', () => {
     expect(pattern.test('/')).toBe(true);
     expect(pattern.test('/?tab=overview')).toBe(true);
     expect(pattern.test('/containers')).toBe(false);
+  });
+});
+
+describe('renderBuiltUrl (DD_SERVER_BASEPATH)', () => {
+  it('resolves JS asset URLs at runtime from the base path meta tag', () => {
+    const result = renderBuiltUrl('assets/chunk-abc.js', { hostType: 'js' }) as { runtime: string };
+    expect(result.runtime).toContain('meta[name="dd-base-path"]');
+    expect(result.runtime).toContain('"assets/chunk-abc.js"');
+
+    const resolve = (content: string | null) => {
+      const document = {
+        querySelector: () => (content === null ? null : { getAttribute: () => content }),
+      };
+      return new Function('document', `return ${result.runtime}`)(document);
+    };
+    expect(resolve(null)).toBe('/assets/chunk-abc.js');
+    expect(resolve('/drydock')).toBe('/drydock/assets/chunk-abc.js');
+  });
+
+  it('keeps CSS asset URLs relative to the stylesheet', () => {
+    expect(renderBuiltUrl('assets/font.woff2', { hostType: 'css' })).toEqual({ relative: true });
+  });
+
+  it('leaves html URLs to the server-side rewrite', () => {
+    expect(renderBuiltUrl('assets/index.js', { hostType: 'html' })).toBeUndefined();
   });
 });

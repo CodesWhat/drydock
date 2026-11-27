@@ -1,4 +1,5 @@
 import { createWebSocketStreamConnection } from '@/services/websocket-stream-connection';
+import { getBasePath } from '@/utils/base-path';
 
 type LogStreamTail = number | 'all';
 
@@ -106,7 +107,7 @@ export function buildContainerLogStreamUrl(
   }
   params.set('follow', `${normalized.follow}`);
 
-  return `${protocol}//${locationRef.host}/api/v1/containers/${encodeURIComponent(containerId)}/logs/stream?${params.toString()}`;
+  return `${protocol}//${locationRef.host}${getBasePath()}/api/v1/containers/${encodeURIComponent(containerId)}/logs/stream?${params.toString()}`;
 }
 
 export function createContainerLogStreamConnection(
