@@ -811,7 +811,7 @@ describe('preference sync engine', () => {
       expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
     });
 
-    it('takes the server document when no base was ever recorded', async () => {
+    it('keeps the local edit and re-sends it when no base was ever recorded', async () => {
       const { sync, preferences } = await load();
       mocks.getPreferences.mockResolvedValue(response(null, 11, 0));
       await sync.hydrateFromServer('alice');
@@ -822,12 +822,51 @@ describe('preference sync engine', () => {
       mocks.getPreferences.mockResolvedValue(response(onServer, 11, 4));
 
       edit(preferences, (value) => {
-        value.layout.sidebarCollapsed = true;
+        value.layout.sidebarCollapsed = !onServer.layout.sidebarCollapsed;
       });
       await vi.advanceTimersByTimeAsync(3000);
 
-      expect(preferences.appearance.fontSize).toBe(1.3);
-      expect(preferences.layout.sidebarCollapsed).toBe(onServer.layout.sidebarCollapsed);
+      // Nothing ties a server section to this device, so the edit the user just
+      // made is the one thing known to be wanted: it must not be reverted.
+      expect(preferences.layout.sidebarCollapsed).toBe(!onServer.layout.sidebarCollapsed);
+      mocks.updatePreferences.mockResolvedValue({ revision: 5 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        4,
+      );
+    });
+
+    it('keeps an edit made while hydration was still in flight', async () => {
+      const { sync, preferences } = await load();
+      preferences.sync.enabled = true;
+      const onServer = structuredClone(preferences);
+      onServer.appearance.fontSize = 1.3;
+      let resolveHydration: (value: unknown) => void = () => undefined;
+      mocks.getPreferences.mockImplementationOnce(
+        () => new Promise((resolve) => (resolveHydration = resolve)),
+      );
+      const hydration = sync.hydrateFromServer('alice');
+      edit(preferences, (value) => {
+        value.layout.sidebarCollapsed = !onServer.layout.sidebarCollapsed;
+      });
+      resolveHydration(response(onServer, 11, 7));
+      await hydration;
+
+      mocks.updatePreferences.mockRejectedValueOnce(new mocks.ConflictError('stale'));
+      mocks.getPreferences.mockResolvedValue(response(onServer, 11, 7));
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(preferences.layout.sidebarCollapsed).toBe(!onServer.layout.sidebarCollapsed);
+
+      mocks.updatePreferences.mockResolvedValue({ revision: 8 });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mocks.updatePreferences).toHaveBeenLastCalledWith(
+        preferences.schemaVersion,
+        preferences,
+        7,
+      );
     });
 
     it('re-sends the local blob when the server holds nothing', async () => {

@@ -53,8 +53,10 @@ function sameValue(a: unknown, b: unknown): boolean {
 /**
  * Three-way merge by top-level section. A section edited only here keeps the
  * local value, a section edited on the server (or on both sides) takes the
- * server value. Without a base nothing can be attributed to this device, so the
- * server wins.
+ * server value. Without a base (an edit made before hydration finished, or
+ * after it failed) nothing can be attributed to either side, and the pending
+ * local edit is the one thing known to be wanted, so the local blob wins, as
+ * it did before writes carried a revision.
  */
 function mergeSections(
   base: PreferencesSchema | undefined,
@@ -62,7 +64,7 @@ function mergeSections(
   server: PreferencesSchema,
 ): PreferencesSchema {
   if (!base) {
-    return server;
+    return local;
   }
   const merged: Record<string, unknown> = { ...server };
   const baseRecord = base as unknown as Record<string, unknown>;
