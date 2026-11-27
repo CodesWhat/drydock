@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Preparazione dello scanner riuscita",
       "scanner-asset-warm-failed": "Preparazione dello scanner fallita",
       "container-unhealthy": "Container non integro",
+      "container-stopped": "Container arrestato",
+      "container-exited": "Container terminato",
+      "container-oom-killed": "Container terminato per memoria esaurita",
+      "container-restart-loop": "Container in ciclo di riavvio",
       "env-reveal": "Variabili d’ambiente mostrate",
       "debug-dump": "Dati di debug scaricati",
       "config-read": "Configurazione letta",
@@ -166,6 +170,22 @@
       "container-unhealthy": {
         "name": "Container non integro",
         "description": "Quando l'healthcheck Docker di un container entra nello stato \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Container arrestato",
+        "description": "Quando un container monitorato si arresta"
+      },
+      "container-exited": {
+        "name": "Container terminato",
+        "description": "Quando un container monitorato termina con un codice di uscita diverso da zero"
+      },
+      "container-oom-killed": {
+        "name": "Container terminato per memoria esaurita",
+        "description": "Quando il kernel termina un container monitorato per memoria esaurita"
+      },
+      "container-restart-loop": {
+        "name": "Container in ciclo di riavvio",
+        "description": "Quando un container monitorato va in crash e si riavvia ripetutamente"
       },
       "maturity-cleared": {
         "name": "Maturità sbloccata",

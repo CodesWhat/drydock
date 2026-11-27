@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "スキャナーの準備に成功",
       "scanner-asset-warm-failed": "スキャナーの準備に失敗",
       "container-unhealthy": "コンテナが異常",
+      "container-stopped": "コンテナ停止",
+      "container-exited": "コンテナ終了",
+      "container-oom-killed": "コンテナがメモリ不足で強制終了",
+      "container-restart-loop": "コンテナの再起動ループ",
       "env-reveal": "環境変数を表示",
       "debug-dump": "デバッグデータをダウンロード",
       "config-read": "設定を読み取り",
@@ -166,6 +170,22 @@
       "container-unhealthy": {
         "name": "コンテナ異常",
         "description": "コンテナの Docker ヘルスチェックが unhealthy 状態になったとき"
+      },
+      "container-stopped": {
+        "name": "コンテナ停止",
+        "description": "監視対象のコンテナが停止したとき"
+      },
+      "container-exited": {
+        "name": "コンテナ終了",
+        "description": "監視対象のコンテナが 0 以外の終了コードで終了したとき"
+      },
+      "container-oom-killed": {
+        "name": "コンテナがメモリ不足で強制終了",
+        "description": "メモリ不足により、カーネルが監視対象のコンテナを強制終了したとき"
+      },
+      "container-restart-loop": {
+        "name": "コンテナの再起動ループ",
+        "description": "監視対象のコンテナがクラッシュと再起動を繰り返しているとき"
       },
       "maturity-cleared": {
         "name": "成熟度クリア",

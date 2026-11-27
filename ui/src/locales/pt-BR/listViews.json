@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Preparação do scanner concluída",
       "scanner-asset-warm-failed": "Falha na preparação do scanner",
       "container-unhealthy": "Contêiner não saudável",
+      "container-stopped": "Contêiner parado",
+      "container-exited": "Contêiner encerrado",
+      "container-oom-killed": "Contêiner encerrado por falta de memória",
+      "container-restart-loop": "Contêiner em loop de reinicialização",
       "env-reveal": "Variáveis de ambiente exibidas",
       "debug-dump": "Dados de depuração baixados",
       "config-read": "Configuração lida",
@@ -166,6 +170,22 @@
       "container-unhealthy": {
         "name": "Contêiner com problema",
         "description": "Quando o health check do Docker de um contêiner entra no estado \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Contêiner parado",
+        "description": "Quando um contêiner monitorado para"
+      },
+      "container-exited": {
+        "name": "Contêiner encerrado",
+        "description": "Quando um contêiner monitorado encerra com um código de saída diferente de zero"
+      },
+      "container-oom-killed": {
+        "name": "Contêiner encerrado por falta de memória",
+        "description": "Quando o kernel encerra um contêiner monitorado por falta de memória"
+      },
+      "container-restart-loop": {
+        "name": "Contêiner em loop de reinicialização",
+        "description": "Quando um contêiner monitorado falha e reinicia repetidamente"
       },
       "maturity-cleared": {
         "name": "Maturidade liberada",
