@@ -82,6 +82,7 @@ describe('store/db/importers/audit', () => {
       status: 'success',
       details: 'plain details text',
       actor: null,
+      actor_role: null,
     });
   });
 
