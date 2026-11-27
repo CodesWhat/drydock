@@ -81,6 +81,33 @@ Use `INSECURE=true` only for self-hosted registries on private networks where a 
 
 Registry TLS settings apply end to end. `DD_REGISTRY_*_CAFILE`, `_CLIENTCERT`, `_CLIENTKEY`, and `_INSECURE` are used for credential/token requests, tag-list requests, manifest and blob lookups, and anonymous provider paths. A private CA, mTLS client key pair, or insecure override therefore affects the entire registry lookup flow rather than only the initial login/token exchange.
 
+## Outbound proxy
+
+Registry traffic can go through an HTTP or HTTPS forward proxy. This covers tag-list and manifest requests, Bearer token exchange, and the Docker Hub and GHCR publish-date lookups. HTTPS registries are reached through an HTTP `CONNECT` tunnel, so authenticating proxies work, and the registry's `CAFILE`, `CLIENTCERT`, `CLIENTKEY` and `INSECURE` settings still apply inside the tunnel.
+
+Set a proxy for one registry with `DD_REGISTRY_{type}_{name}_PROXY`, or for all registry traffic with environment variables:
+
+| Variable | Description |
+| --- | --- |
+| `DD_REGISTRY_{type}_{name}_PROXY` | Proxy URL for this registry only, for example `http://user:pass@proxy.internal:3128`. Wins over the global variables. Must be `http://` or `https://`. |
+| `DD_HTTPS_PROXY` | Proxy for `https://` registries. Falls back to `HTTPS_PROXY` / `https_proxy`. |
+| `DD_HTTP_PROXY` | Proxy for plain `http://` registries. Falls back to `HTTP_PROXY` / `http_proxy`. |
+| `DD_NO_PROXY` | Comma-separated hosts that bypass the proxy. Falls back to `NO_PROXY` / `no_proxy`. |
+
+`DD_NO_PROXY` entries match the host and its subdomains (`example.com` and `.example.com` both match `registry.example.com`), `host:port` pins a port, and `*` disables proxying. It applies to the per-registry `PROXY` too. CIDR ranges are not supported.
+
+```yaml
+services:
+  drydock:
+    environment:
+      - DD_HTTPS_PROXY=http://proxy.internal:3128
+      - DD_NO_PROXY=registry.lan,.corp.example.com
+      - DD_REGISTRY_CUSTOM_PRIVATE_URL=https://registry.corp.example.com
+      - DD_REGISTRY_CUSTOM_PRIVATE_PROXY=http://svc:${PROXY_PASSWORD}@proxy.internal:3128
+```
+
+Credentials in a proxy URL are masked as `[REDACTED]` in the registration log and in the API configuration output, and error messages never include them. URL-encode special characters in the username or password (`@` becomes `%40`). The proxy settings apply to registry traffic only. Amazon ECR's token request uses the AWS SDK and is not routed through the proxy.
+
 ## Automatic Bearer token exchange
 
 When a registry responds to a tag-list or manifest request with `401 Unauthorized` and a `WWW-Authenticate` header containing a `Bearer realm=…,service=…,scope=…` challenge, drydock automatically performs the standard Docker Registry v2 token-auth flow: it fetches a token from the realm endpoint (anonymously for public images, or with the configured credentials for private ones) and retries the request once. The Bearer challenge can appear alongside other schemes such as `Basic`, and token responses may use either `token` or `access_token`.

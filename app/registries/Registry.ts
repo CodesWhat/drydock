@@ -5,10 +5,12 @@ import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component, { type ComponentConfiguration } from '../registry/Component.js';
 import { isImmutableDigest } from '../security/digest.js';
+import { maskProxyUrl } from '../triggers/providers/ci-rebuild-shared.js';
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 import { withRetry } from './http-retry.js';
 import { buildImageReference } from './image-reference.js';
+import { assertValidProxyUrl, withOutboundProxy } from './proxy.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 type RegistryRequestOptions = AxiosRequestConfig;
@@ -281,6 +283,42 @@ class Registry<
   TConfiguration extends ComponentConfiguration = ComponentConfiguration,
 > extends Component<TConfiguration> {
   private readonly truncatedListings = new Map<string, { truncatedAt: number }>();
+
+  /**
+   * Accept the optional per-registry `proxy` URL on every provider without
+   * touching each provider's schema: it is validated here and kept out of the
+   * provider schema, then re-attached to the validated configuration.
+   */
+  validateConfiguration(configuration: TConfiguration): TConfiguration {
+    if (
+      configuration === null ||
+      typeof configuration !== 'object' ||
+      !Object.hasOwn(configuration, 'proxy')
+    ) {
+      return super.validateConfiguration(configuration);
+    }
+    const { proxy, ...rest } = configuration as Record<string, unknown>;
+    const proxyUrl = assertValidProxyUrl(proxy, `registry ${this.getId()}`);
+    const validated = super.validateConfiguration(rest as TConfiguration);
+    return { ...validated, proxy: proxyUrl };
+  }
+
+  /** Mask proxy userinfo wherever a provider exposes its configuration. */
+  maskFields(fields: string[]): TConfiguration {
+    const masked = super.maskFields(fields) as Record<string, unknown>;
+    if (typeof masked.proxy === 'string') {
+      masked.proxy = maskProxyUrl(masked.proxy);
+    }
+    return masked as TConfiguration;
+  }
+
+  /** Route a registry request through the configured or environment proxy. */
+  protected applyOutboundProxy(requestOptions: AxiosRequestConfig): AxiosRequestConfig {
+    return withOutboundProxy(
+      requestOptions,
+      (this.configuration as { proxy?: string } | undefined)?.proxy,
+    );
+  }
 
   /**
    * Encode Bse64(login:password)
@@ -889,11 +927,11 @@ class Registry<
     };
 
     const axiosOptionsWithAuth = await this.authenticate(image, axiosOptions);
-    const axiosOptionsWithConnectionReuse: AxiosRequestConfig = {
+    const axiosOptionsWithConnectionReuse: AxiosRequestConfig = this.applyOutboundProxy({
       ...axiosOptionsWithAuth,
       httpAgent: axiosOptionsWithAuth.httpAgent ?? DEFAULT_HTTP_KEEP_ALIVE_AGENT,
       httpsAgent: axiosOptionsWithAuth.httpsAgent ?? DEFAULT_HTTPS_KEEP_ALIVE_AGENT,
-    };
+    });
 
     /** Execute a single registry request and return the envelope. */
     const executeRequest = async (requestOptions: RegistryRequestOptions) => {

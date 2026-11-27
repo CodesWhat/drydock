@@ -150,7 +150,7 @@ class Hub extends Custom<HubRegistryConfiguration> {
     const response = await withRetry<HubTagMetadataResponse>(
       async () => {
         await acquireToken(getBucketForUrl(metadataUrl));
-        const result = await axios<HubTagMetadataResponse>(request);
+        const result = await axios<HubTagMetadataResponse>(this.applyOutboundProxy(request));
         return {
           status: result.status,
           headers: result.headers as Record<string, string | undefined>,
