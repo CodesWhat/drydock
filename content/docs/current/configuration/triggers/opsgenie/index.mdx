@@ -1,0 +1,48 @@
+---
+title: "Opsgenie"
+description: "The opsgenie trigger lets you send container update notifications via Opsgenie."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `opsgenie` trigger lets you send container update notifications via [Opsgenie](https://www.atlassian.com/software/opsgenie).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_OPSGENIE_{trigger_name}_APIKEY` | 🔴 | The API key of an Opsgenie API integration | A valid Opsgenie API key |  |
+| `DD_NOTIFICATION_OPSGENIE_{trigger_name}_REGION` | ⚪ | The Opsgenie region hosting your account | `us`, `eu` | `us` |
+| `DD_NOTIFICATION_OPSGENIE_{trigger_name}_PRIORITY` | ⚪ | Alert priority | `P1` to `P5` | `P5` |
+| `DD_NOTIFICATION_OPSGENIE_{trigger_name}_TAGS` | ⚪ | Comma-separated alert tags | Any comma-separated list | `drydock,docker` |
+| `DD_NOTIFICATION_OPSGENIE_{trigger_name}_DISABLETITLE` | ⚪ | Use a short fixed message instead of the rendered title | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+Single notifications also carry the container name, watcher, local tag and remote tag in the alert `details`.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_OPSGENIE_LOCAL_APIKEY=your-opsgenie-api-key
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_OPSGENIE_LOCAL_APIKEY="your-opsgenie-api-key" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

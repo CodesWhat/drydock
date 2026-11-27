@@ -1,0 +1,56 @@
+---
+title: "Zulip"
+description: "The zulip trigger lets you send container update notifications via Zulip."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `zulip` trigger lets you send container update notifications via [Zulip](https://zulip.com/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_URL` | 🔴 | The Zulip server URL | The `http` or `https` address |  |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_BOTEMAIL` | 🔴 | The bot account email | A Zulip bot email |  |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_APIKEY` | 🔴 | The bot API key | A valid bot API key |  |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_TO` | 🔴 | Stream name for `stream` messages, or comma-separated user emails for `direct` messages | Any string |  |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_TYPE` | ⚪ | Message type | `stream`, `direct` | `stream` |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_TOPIC` | ⚪ | Topic for `stream` messages | Any string | `Drydock Updates` |
+| `DD_NOTIFICATION_ZULIP_{trigger_name}_DISABLETITLE` | ⚪ | Send only the body, without a bold title line | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+The title is posted in bold Zulip markdown.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_ZULIP_LOCAL_URL=https://zulip.example.com
+      - DD_NOTIFICATION_ZULIP_LOCAL_BOTEMAIL=drydock-bot@zulip.example.com
+      - DD_NOTIFICATION_ZULIP_LOCAL_APIKEY=your-bot-api-key
+      - DD_NOTIFICATION_ZULIP_LOCAL_TO=general
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_ZULIP_LOCAL_URL="https://zulip.example.com" \
+  -e DD_NOTIFICATION_ZULIP_LOCAL_BOTEMAIL="drydock-bot@zulip.example.com" \
+  -e DD_NOTIFICATION_ZULIP_LOCAL_APIKEY="your-bot-api-key" \
+  -e DD_NOTIFICATION_ZULIP_LOCAL_TO="general" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

@@ -1,0 +1,47 @@
+---
+title: "Uptime Kuma"
+description: "The uptimekuma trigger lets you send container update notifications via Uptime Kuma."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `uptimekuma` trigger lets you send container update notifications via [Uptime Kuma](https://uptime.kuma.pet/) push monitors.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_UPTIMEKUMA_{trigger_name}_URL` | 🔴 | The push URL of an Uptime Kuma push monitor, including its push key | The `http` or `https` push address |  |
+| `DD_NOTIFICATION_UPTIMEKUMA_{trigger_name}_STATUS` | ⚪ | Status reported to the monitor | `up`, `down` | `up` |
+| `DD_NOTIFICATION_UPTIMEKUMA_{trigger_name}_MSG` | ⚪ | Fixed message that replaces the rendered one | Any string |  |
+| `DD_NOTIFICATION_UPTIMEKUMA_{trigger_name}_DISABLETITLE` | ⚪ | Send only the body, without a title | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+Uptime Kuma shows short status messages, so the message is cut at 200 characters. The push URL contains the monitor key and is masked in logs and API output.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_UPTIMEKUMA_LOCAL_URL=https://kuma.example.com/api/push/your-push-key
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_UPTIMEKUMA_LOCAL_URL="https://kuma.example.com/api/push/your-push-key" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
