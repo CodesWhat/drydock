@@ -4,6 +4,12 @@ import { buildGrypeInvocation, parseGrypeOutput } from './grype.js';
 const MIB = 1024 * 1024;
 
 describe('parseGrypeOutput', () => {
+  test('explains truncated JSON output', () => {
+    expect(() => parseGrypeOutput('{"matches":[{"vulnerability":"abc', MIB)).toThrow(
+      /Grype output was incomplete or not valid JSON \(\d+ bytes received\).*DD_SECURITY_GRYPE_MAXOUTPUTBYTES.*DD_SECURITY_AVAILABILITY_POLICY=warn/,
+    );
+  });
+
   test('normalizes representative Grype matches into the scanner vulnerability contract', () => {
     const result = parseGrypeOutput(
       JSON.stringify({

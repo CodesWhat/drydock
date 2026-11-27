@@ -9,13 +9,19 @@ type HarnessOptions = {
   inspect?: Record<string, unknown>;
   stdout?: string;
   stderr?: string;
+  logsStdout?: string;
+  logsStderr?: string;
+  logs?: () => Promise<unknown>;
+  streamEndsOnDemux?: boolean;
   wait?: () => Promise<{ StatusCode: number }>;
   containerInspect?: () => Promise<unknown>;
 };
 
 function createHarness(options: HarnessOptions = {}) {
   const stream = new EventEmitter();
+  const logsStream = new EventEmitter();
   const container = {
+    logs: vi.fn(options.logs || (async () => logsStream)),
     attach: vi.fn(async () => stream),
     start: vi.fn(async () => undefined),
     wait: vi.fn(options.wait || (async () => ({ StatusCode: options.exitCode ?? 0 }))),
@@ -37,10 +43,18 @@ function createHarness(options: HarnessOptions = {}) {
   const pullStream = {};
   const pull = vi.fn((_image, _pullOptions, callback) => callback(null, pullStream));
   const followProgress = vi.fn((_stream, callback) => callback(null, [{ status: 'done' }]));
-  const demuxStream = vi.fn((_stream, stdout, stderr) => {
-    if (options.stdout) stdout.write(Buffer.from(options.stdout));
-    if (options.stderr) stderr.write(Buffer.from(options.stderr));
-    queueMicrotask(() => stream.emit('end'));
+  const demuxStream = vi.fn((source, stdout, stderr) => {
+    if (source === stream) {
+      if (options.stdout) stdout.write(Buffer.from(options.stdout));
+      if (options.stderr) stderr.write(Buffer.from(options.stderr));
+      if (options.streamEndsOnDemux !== false) queueMicrotask(() => stream.emit('end'));
+      return;
+    }
+    const logsOut = options.logsStdout ?? options.stdout;
+    const logsErr = options.logsStderr ?? options.stderr;
+    if (logsOut) stdout.write(Buffer.from(logsOut));
+    if (logsErr) stderr.write(Buffer.from(logsErr));
+    queueMicrotask(() => source.emit?.('end'));
   });
   const client = {
     createContainer,
@@ -64,10 +78,215 @@ function createHarness(options: HarnessOptions = {}) {
     pull,
     pullStream,
     stream,
+    logsStream,
   };
 }
 
 describe('createDockerScannerBackend', () => {
+  describe('truncated attach stream', () => {
+    const runOptions = {
+      image: PINNED_IMAGE,
+      args: ['image', 'alpine:3.20'],
+      timeoutMs: 1_000,
+      maxOutputBytes: 8 * 1024 * 1024,
+    };
+
+    test('returns the full logs payload when the attach stream closed early with partial output', async () => {
+      const full = `{"matches":[${'"x",'.repeat(1_000_000)}"end"]}`;
+      const { backend, container } = createHarness({
+        stdout: '{"matches":["x","x',
+        logsStdout: full,
+        stderr: 'attach notice',
+        logsStderr: 'logs notice',
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      const result = await backend.run(runOptions);
+
+      expect(result.stdout).toBe(full);
+      expect(result.stderr).toBe('logs notice');
+      expect(container.logs).toHaveBeenCalledWith({ stdout: true, stderr: true, follow: false });
+      expect(container.logs.mock.invocationCallOrder[0]).toBeLessThan(
+        container.remove.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('demuxes a Buffer returned by non-follow logs', async () => {
+      const { backend } = createHarness({
+        stdout: 'partial',
+        logsStdout: '{"matches":[]}',
+        logs: async () => Buffer.from('framed'),
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+    });
+
+    test('ignores a late error on the logs stream once the output is read', async () => {
+      const logsSource = new EventEmitter();
+      const { backend } = createHarness({
+        stdout: 'partial',
+        logsStdout: '{"matches":[]}',
+        logs: async () => logsSource,
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+      logsSource.emit('error', new Error('late logs error'));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    test('applies the byte cap to logs output', async () => {
+      const { backend, container } = createHarness({
+        stdout: 'ok',
+        logsStdout: 'x'.repeat(64),
+      });
+
+      await expect(backend.run({ ...runOptions, maxOutputBytes: 10 })).rejects.toThrow(
+        'exceeded 10 bytes',
+      );
+      expect(container.remove).toHaveBeenCalled();
+    });
+
+    test('throws a truncated-stream error when logs fail and the stream closed before exit', async () => {
+      const { backend } = createHarness({
+        stdout: '{"matches":["x',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).rejects.toThrow(
+        /attach stream closed before the scanner exited/,
+      );
+    });
+
+    test('keeps complete attach output when logs fail and the stream closed before the wait response', async () => {
+      const { backend } = createHarness({
+        stdout: '{"matches":[]}',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+    });
+
+    test('treats empty attach output as truncated when logs fail and the stream closed early', async () => {
+      const { backend } = createHarness({
+        stdout: '',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).rejects.toThrow(/attach stream closed/);
+    });
+
+    test('accepts line-delimited JSON attach output when logs fail', async () => {
+      const { backend } = createHarness({
+        stdout: '{"a":1}\n{"b":2}\n',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ exitCode: 0 });
+    });
+
+    test('keeps the nonzero-exit diagnostics when logs fail and the stream closed early', async () => {
+      const { backend } = createHarness({
+        stdout: '{"matches":["x',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 2 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).rejects.not.toThrow(/attach stream closed/);
+    });
+
+    test('falls back to attach output when logs fail but the stream ended after exit', async () => {
+      const holder: { stream?: EventEmitter } = {};
+      const harness = createHarness({
+        stdout: '{"matches":[]}',
+        streamEndsOnDemux: false,
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          setTimeout(() => holder.stream?.emit('end'), 5);
+          return { StatusCode: 0 };
+        },
+      });
+      holder.stream = harness.stream;
+
+      await expect(harness.backend.run(runOptions)).resolves.toMatchObject({
+        stdout: '{"matches":[]}',
+      });
+    });
+
+    test('reports a timeout that happens while reading logs', async () => {
+      const { backend } = createHarness({
+        stdout: 'partial',
+        logs: () => new Promise(() => undefined),
+      });
+
+      await expect(backend.run({ ...runOptions, timeoutMs: 50 })).rejects.toThrow(
+        'timed out after 50ms',
+      );
+    });
+
+    test('reports an abort that happens while reading logs', async () => {
+      const controller = new AbortController();
+      const { backend } = createHarness({
+        stdout: 'partial',
+        logs: () => {
+          queueMicrotask(() => controller.abort(new Error('scan cancelled')));
+          return new Promise(() => undefined);
+        },
+      });
+
+      await expect(backend.run({ ...runOptions, signal: controller.signal })).rejects.toThrow(
+        'scan cancelled',
+      );
+    });
+
+    test('treats a stream without event hooks as ended after exit when logs fail', async () => {
+      const { backend, container, client } = createHarness({
+        stdout: '{"matches":[]}',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+      });
+      container.attach.mockResolvedValueOnce({} as never);
+      client.modem.demuxStream.mockImplementationOnce((_s, out) => {
+        out.write(Buffer.from('{"matches":[]}'));
+      });
+
+      await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
+    });
+  });
   test('requires a Docker client', () => {
     expect(() =>
       createDockerScannerBackend({

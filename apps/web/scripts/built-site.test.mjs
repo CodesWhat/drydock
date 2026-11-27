@@ -55,12 +55,12 @@ test("every sitemap URL maps to a prerendered route (no 404s)", opts, () => {
 
 test("sitemap lists only current docs, never an archived version", opts, () => {
   const body = read("server/app/sitemap.xml.body");
-  assert.match(body, /\/docs\/v1\.8/u);
-  assert.doesNotMatch(body, /\/docs\/v1\.[0-7]\b/u);
+  assert.match(body, /\/docs\/v1\.9/u);
+  assert.doesNotMatch(body, /\/docs\/v1\.[0-8]\b/u);
 });
 
 test("marketing pages and every docs version are prerendered, none is dynamic", opts, () => {
-  for (const path of ["/", "/compare", "/security", "/docs/v1.8", "/docs/v1.7", "/docs/v1.3"]) {
+  for (const path of ["/", "/compare", "/security", "/docs/v1.9", "/docs/v1.7", "/docs/v1.3"]) {
     assert.ok(prerendered.has(path), `${path} is not prerendered`);
   }
   assert.ok(!existsSync(new URL("server/middleware.js", next)), "a middleware/proxy bundle exists");
@@ -72,7 +72,7 @@ test("every internal link on / and the docs landing resolves", opts, () => {
   let checked = 0;
   for (const [page, file] of [
     ["/", "server/app/index.html"],
-    ["/docs/v1.8", "server/app/docs/v1.8.html"],
+    ["/docs/v1.9", "server/app/docs/v1.9.html"],
   ]) {
     for (const href of internalHrefs(read(file))) {
       checked += 1;
@@ -86,5 +86,5 @@ test("every internal link on / and the docs landing resolves", opts, () => {
 test("archived docs pages canonicalise to the current docs", opts, () => {
   const html = read("server/app/docs/v1.7.html");
   const canonical = html.match(/<link rel="canonical" href="([^"]+)"/u)?.[1];
-  assert.equal(canonical, "https://getdrydock.com/docs/v1.8");
+  assert.equal(canonical, "https://getdrydock.com/docs/v1.9");
 });

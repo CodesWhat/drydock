@@ -109,6 +109,8 @@ If Docker refuses to create or attach the worker (for example a socket proxy tha
 2. `DD_SECURITY_BACKEND=remote` with `DD_SECURITY_TRIVY_SERVER`.
 3. A Trivy binary you mount yourself, set with `DD_SECURITY_TRIVY_COMMAND`.
 
+A proxy in front of the Docker API must also allow long-lived attach connections. The worker stays attached for the whole scan, which can run several minutes with no traffic, and a proxy idle timeout (HAProxy `timeout client` and `timeout server`, for example) can cut it. Drydock reads the worker's output from the container logs after it exits, so a cut connection is normally harmless, but the proxy must also allow the logs endpoint. Raise the proxy timeouts if scans report incomplete scanner output or a closed attach stream.
+
 ### Mounted binary (local CLI)
 
 Use this when you supply a `trivy` binary inside the Drydock container.
