@@ -61,10 +61,13 @@ import { expect, test } from 'vitest';
 // satisfies the helper's watcher shape, so no adapter cast is needed here;
 // the detection and compatibility-warning logic itself lives in
 // podman-detection.ts.
-test('Docker watcher implementation should stay under 1837 lines', () => {
+// Bumped from 1837 for the ssh protocol (roadmap 15.3): the ssh* config
+// fields and their Joi rules. The option building lives in
+// docker-ssh-options.ts.
+test('Docker watcher implementation should stay under 1859 lines', () => {
   const currentFile = fileURLToPath(import.meta.url);
   const dockerPath = path.resolve(path.dirname(currentFile), 'Docker.ts');
   const lineCount = fs.readFileSync(dockerPath, 'utf8').split('\n').length;
 
-  expect(lineCount).toBeLessThanOrEqual(1837);
+  expect(lineCount).toBeLessThanOrEqual(1859);
 });
