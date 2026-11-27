@@ -26,6 +26,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_AUTH_OIDC_{auth_name}_ALLOWEDEMAILDOMAINS` | ⚪ | Only addresses at these domains may sign in | Comma-separated list, case-insensitive | empty (no restriction) |
 | `DD_AUTH_OIDC_{auth_name}_REQUIREDGROUP` | ⚪ | The user must belong to this group | Group name, exact match | empty (no restriction) |
 | `DD_AUTH_OIDC_{auth_name}_GROUPCLAIM` | ⚪ | Claim that carries the user's groups | Claim name | `groups` |
+| `DD_AUTH_OIDC_{auth_name}_IDTOKENSIGNEDALG` | ⚪ | Signing algorithm your IdP uses for ID tokens (`id_token_signed_response_alg`). Set it when the IdP signs with something other than RS256, for example ES256 | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`, `ES256`, `ES384`, `ES512`, `EdDSA`, `HS256`, `HS384`, `HS512` | `RS256` |
 | `DD_PUBLIC_URL` | 🔴 | Public URL of your drydock instance (used to build the OIDC callback URL) | URL | |
 
 The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oidc/${auth_name}/cb`.

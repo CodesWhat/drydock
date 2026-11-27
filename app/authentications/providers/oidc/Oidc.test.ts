@@ -4376,3 +4376,65 @@ describe('callback access policy', () => {
     expect(done).toHaveBeenCalledWith(null, false);
   });
 });
+
+describe('idtokensignedalg', () => {
+  const withPublicUrl = <T>(fn: () => T): T => {
+    const previous = configuration.ddEnvVars.DD_PUBLIC_URL;
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) {
+        delete configuration.ddEnvVars.DD_PUBLIC_URL;
+      } else {
+        configuration.ddEnvVars.DD_PUBLIC_URL = previous;
+      }
+    }
+  };
+
+  test('accepts ES256 and leaves it unset by default', () => {
+    withPublicUrl(() => {
+      expect(
+        oidc.validateConfiguration({ ...configurationValid, idtokensignedalg: 'ES256' } as any)
+          .idtokensignedalg,
+      ).toBe('ES256');
+      expect(oidc.validateConfiguration(configurationValid as any).idtokensignedalg).toBe(
+        undefined,
+      );
+    });
+  });
+
+  test('rejects unsupported algorithms', () => {
+    withPublicUrl(() => {
+      expect(() =>
+        oidc.validateConfiguration({ ...configurationValid, idtokensignedalg: 'none' } as any),
+      ).toThrow();
+    });
+  });
+
+  test('maskConfiguration exposes the configured algorithm', () => {
+    oidc.configuration = { ...configurationValid, idtokensignedalg: 'ES256' } as any;
+    expect(oidc.maskConfiguration().idtokensignedalg).toBe('ES256');
+  });
+
+  test('discovery passes id_token_signed_response_alg client metadata', async () => {
+    oidc.configuration = { ...configurationValid, idtokensignedalg: 'ES256' } as any;
+    openidClientMock.discovery = vi.fn().mockResolvedValue({});
+    openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+    oidc.client = undefined;
+    await oidc.initAuthentication();
+    expect(openidClientMock.discovery.mock.calls[0][2]).toEqual({
+      client_secret: 'secret',
+      id_token_signed_response_alg: 'ES256',
+    });
+  });
+
+  test('discovery keeps the plain client secret when unset', async () => {
+    oidc.configuration = { ...configurationValid } as any;
+    openidClientMock.discovery = vi.fn().mockResolvedValue({});
+    openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+    oidc.client = undefined;
+    await oidc.initAuthentication();
+    expect(openidClientMock.discovery.mock.calls[0][2]).toBe('secret');
+  });
+});
