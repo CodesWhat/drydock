@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Changed
+
+- Trimmed homepage filler: removed the long coverage-scope note under the hero stats and the "Probably not for you yet" and "Switching" blocks under the comparison table. The coverage badge now reads "100% backend coverage", and the WUD and Watchtower comparison pages carry the migration steps.
+
 ### Security
 
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.

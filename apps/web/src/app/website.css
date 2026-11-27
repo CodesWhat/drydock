@@ -373,17 +373,6 @@ html[data-product="drydock"] body {
   color: var(--tx-primary);
   padding-block: 3px;
 }
-.website-proof-note {
-  max-width: 62ch;
-  margin: -6px auto 18px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--tx-sec);
-}
-.website-proof-note b {
-  color: var(--dd-text);
-  font-weight: 600;
-}
 .website-proof-badges {
   list-style: none;
   display: flex;
