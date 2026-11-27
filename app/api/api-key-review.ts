@@ -16,6 +16,9 @@ import { isApiKeyExpired, listApiKeys } from '../store/api-key.js';
 import type { AuthRequest } from './auth-types.js';
 import { sendErrorResponse } from './error-response.js';
 import { getPrincipal } from './principal.js';
+import { type HumanPrincipal, resolveHumanRole } from './principal-role.js';
+import { hasRoleScope } from './roles.js';
+import { API_KEYS_MANAGE_SCOPE } from './route-scopes.js';
 
 /** Is there at least one key that still authenticates (not revoked, not expired)? */
 function hasActiveApiKey(now: Date = new Date()): boolean {
@@ -23,21 +26,36 @@ function hasActiveApiKey(now: Date = new Date()): boolean {
 }
 
 /**
- * Flag a freshly minted recovery-code session for key review, when there is
- * anything to review. Keys are instance-wide, so any active key counts.
+ * Can this person do the review at all? The key list and the acknowledge
+ * button sit behind `api-keys:manage`, so a role without it would be sent to a
+ * page it cannot open and held there.
  */
-export function flagApiKeyReviewIfNeeded(req: AuthRequest): void {
-  if (req.session && hasActiveApiKey()) {
+function canReviewApiKeys(principal: HumanPrincipal): boolean {
+  return hasRoleScope(resolveHumanRole(principal), API_KEYS_MANAGE_SCOPE);
+}
+
+/**
+ * Flag a freshly minted recovery-code session for key review, when there is
+ * anything to review and the signed-in role can manage keys. Keys are
+ * instance-wide, so any active key counts.
+ */
+export function flagApiKeyReviewIfNeeded(req: AuthRequest, principal: HumanPrincipal): void {
+  if (req.session && canReviewApiKeys(principal) && hasActiveApiKey()) {
     req.session.apiKeyReviewPending = true;
   }
 }
 
 /**
  * Does this request's session still owe the review? A key caller never does,
- * even when a session cookie rides along: its principal is the key.
+ * even when a session cookie rides along: its principal is the key. Nor does a
+ * role that cannot manage keys, which covers a flag set before a demotion.
  */
 export function isApiKeyReviewPending(req: AuthRequest): boolean {
-  return getPrincipal(req)?.kind !== 'api-key' && req.session?.apiKeyReviewPending === true;
+  const principal = getPrincipal(req);
+  if (principal === undefined || principal.kind === 'api-key') {
+    return false;
+  }
+  return req.session?.apiKeyReviewPending === true && canReviewApiKeys(principal);
 }
 
 /**

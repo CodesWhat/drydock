@@ -302,6 +302,30 @@ describe('router auth guard', () => {
       expect(await guard?.(config({ tab: 'appearance' }))).not.toEqual({ path: '/' });
     });
 
+    it('never holds a viewer or operator on an API key review they cannot open', async () => {
+      const guard = mocks.getGuard();
+      for (const role of [viewer, { username: 'o', role: 'operator', scopes: ['read'] }]) {
+        mocks.getUser.mockResolvedValue({ ...role, apiKeyReviewPending: true });
+        await expect(guard?.({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
+        await expect(guard?.(config({ tab: 'apiKeys' }))).resolves.toEqual({ path: '/' });
+        expect(useApiKeyReview().pending.value).toBe(false);
+      }
+    });
+
+    it('still holds an admin who can manage keys on the review', async () => {
+      const guard = mocks.getGuard();
+      mocks.getUser.mockResolvedValue({
+        username: 'a',
+        role: 'admin',
+        scopes: ['read', 'admin', 'api-keys:manage'],
+        apiKeyReviewPending: true,
+      });
+      await expect(guard?.({ name: 'dashboard', query: {}, path: '/' })).resolves.toEqual({
+        path: '/config',
+        query: { tab: 'apiKeys' },
+      });
+    });
+
     it('lets an admin, and a server that sends no role, into settings', async () => {
       const guard = mocks.getGuard();
       mocks.getUser.mockResolvedValue(admin);

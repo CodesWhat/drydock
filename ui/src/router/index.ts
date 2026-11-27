@@ -139,9 +139,12 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   const user = (await getUser()) as AuthenticatedUser | undefined;
 
   if (user !== undefined) {
-    const reviewPending = user.apiKeyReviewPending === true;
-    useApiKeyReview().setApiKeyReviewPending(reviewPending);
     setCurrentAuthority(user);
+    // The review lives on the API keys tab, which needs `api-keys:manage`. A
+    // role without it could never finish the review, and holding it there
+    // would bounce off the admin-only settings redirect below forever.
+    const reviewPending = user.apiKeyReviewPending === true && can('api-keys:manage');
+    useApiKeyReview().setApiKeyReviewPending(reviewPending);
     if (user.username) {
       syncAuthenticatedUser(user.username);
     }

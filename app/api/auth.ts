@@ -394,7 +394,7 @@ function establishLoginSession(
         req.session.rememberMe = rememberMe;
         applyRememberMe(req);
         if (principal.kind === 'basic' && principal.identity.assurance === 'recovery') {
-          flagApiKeyReviewIfNeeded(req);
+          flagApiKeyReviewIfNeeded(req, principal);
         }
 
         const proceed = async (): Promise<void> => {

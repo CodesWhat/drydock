@@ -1,4 +1,11 @@
-const { mockListApiKeys } = vi.hoisted(() => ({ mockListApiKeys: vi.fn() }));
+const { mockListApiKeys, mockResolveHumanRole } = vi.hoisted(() => ({
+  mockListApiKeys: vi.fn(),
+  mockResolveHumanRole: vi.fn(),
+}));
+
+vi.mock('./principal-role.js', () => ({
+  resolveHumanRole: mockResolveHumanRole,
+}));
 
 vi.mock('../store/api-key.js', () => ({
   listApiKeys: mockListApiKeys,
@@ -12,6 +19,12 @@ import {
   isApiKeyReviewPending,
 } from './api-key-review.js';
 import type { AuthRequest } from './auth-types.js';
+
+const BASIC_PRINCIPAL = {
+  kind: 'basic',
+  username: 'scott',
+  identity: { subjectId: 'subject-1', assurance: 'recovery' },
+} as never;
 
 const PAST = '2000-01-01T00:00:00.000Z';
 const FUTURE = '2999-01-01T00:00:00.000Z';
@@ -35,6 +48,7 @@ function response() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockListApiKeys.mockReturnValue([]);
+  mockResolveHumanRole.mockReturnValue('admin');
 });
 
 describe('flagApiKeyReviewIfNeeded', () => {
@@ -45,7 +59,7 @@ describe('flagApiKeyReviewIfNeeded', () => {
   ])('flags the session for %s', (_name, keys) => {
     mockListApiKeys.mockReturnValue(keys);
     const req = request();
-    flagApiKeyReviewIfNeeded(req);
+    flagApiKeyReviewIfNeeded(req, BASIC_PRINCIPAL);
     expect(req.session?.apiKeyReviewPending).toBe(true);
   });
 
@@ -56,13 +70,27 @@ describe('flagApiKeyReviewIfNeeded', () => {
   ])('leaves the session alone for %s', (_name, keys) => {
     mockListApiKeys.mockReturnValue(keys);
     const req = request();
-    flagApiKeyReviewIfNeeded(req);
+    flagApiKeyReviewIfNeeded(req, BASIC_PRINCIPAL);
     expect(req.session?.apiKeyReviewPending).toBeUndefined();
   });
 
+  test.each(['viewer', 'operator'])(
+    'leaves a %s session alone, since only API key managers can review keys',
+    (role) => {
+      mockListApiKeys.mockReturnValue([key()]);
+      mockResolveHumanRole.mockReturnValue(role);
+      const req = request();
+      flagApiKeyReviewIfNeeded(req, BASIC_PRINCIPAL);
+      expect(req.session?.apiKeyReviewPending).toBeUndefined();
+      expect(mockResolveHumanRole).toHaveBeenCalledWith(BASIC_PRINCIPAL);
+    },
+  );
+
   test('does nothing without a session', () => {
     mockListApiKeys.mockReturnValue([key()]);
-    expect(() => flagApiKeyReviewIfNeeded(request({ session: undefined }))).not.toThrow();
+    expect(() =>
+      flagApiKeyReviewIfNeeded(request({ session: undefined }), BASIC_PRINCIPAL),
+    ).not.toThrow();
   });
 });
 
@@ -74,6 +102,24 @@ describe('isApiKeyReviewPending', () => {
   test('is false for an unflagged session or no session', () => {
     expect(isApiKeyReviewPending(request())).toBe(false);
     expect(isApiKeyReviewPending(request({ session: undefined }))).toBe(false);
+  });
+
+  test.each(['viewer', 'operator'])(
+    'is false for a flagged %s session, which cannot open the key list',
+    (role) => {
+      mockResolveHumanRole.mockReturnValue(role);
+      expect(isApiKeyReviewPending(request({ session: { apiKeyReviewPending: true } }))).toBe(
+        false,
+      );
+    },
+  );
+
+  test('is false for a flagged session with no principal', () => {
+    expect(
+      isApiKeyReviewPending(
+        request({ principal: undefined, session: { apiKeyReviewPending: true } }),
+      ),
+    ).toBe(false);
   });
 
   test('is false for a key caller even with a flagged cookie riding along', () => {
