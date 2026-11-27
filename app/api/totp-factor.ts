@@ -561,16 +561,32 @@ export function init(): express.Router {
   router.get(
     '/totp-factor',
     ...gates,
-    scoped(SESSION_ONLY, guarded(createGetFactorStatus(allowPlainHttp))),
+    scoped(SESSION_ONLY, guarded(createGetFactorStatus(allowPlainHttp)), { role: 'viewer' }),
   );
-  router.delete('/totp-factor', ...gates, scoped(SESSION_ONLY, guarded(removeActiveFactor)));
-  router.post('/totp-enrollments', ...gates, scoped(SESSION_ONLY, guarded(startEnrollment)));
-  router.put('/totp-enrollments/:id', ...gates, scoped(SESSION_ONLY, guarded(confirmEnrollment)));
-  router.delete('/totp-enrollments/:id', ...gates, scoped(SESSION_ONLY, guarded(cancelEnrollment)));
+  router.delete(
+    '/totp-factor',
+    ...gates,
+    scoped(SESSION_ONLY, guarded(removeActiveFactor), { role: 'viewer' }),
+  );
+  router.post(
+    '/totp-enrollments',
+    ...gates,
+    scoped(SESSION_ONLY, guarded(startEnrollment), { role: 'viewer' }),
+  );
+  router.put(
+    '/totp-enrollments/:id',
+    ...gates,
+    scoped(SESSION_ONLY, guarded(confirmEnrollment), { role: 'viewer' }),
+  );
+  router.delete(
+    '/totp-enrollments/:id',
+    ...gates,
+    scoped(SESSION_ONLY, guarded(cancelEnrollment), { role: 'viewer' }),
+  );
   router.post(
     '/totp-recovery-code-sets',
     ...gates,
-    scoped(SESSION_ONLY, guarded(replaceRecoveryCodeSet)),
+    scoped(SESSION_ONLY, guarded(replaceRecoveryCodeSet), { role: 'viewer' }),
   );
   return router;
 }

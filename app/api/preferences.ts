@@ -124,6 +124,6 @@ function updatePreferences(req: AuthRequest, res: Response): void {
 export function init() {
   router.use(nocache());
   router.get('/', scoped('read', getPreferences));
-  router.patch('/', scoped('admin', updatePreferences));
+  router.patch('/', scoped('admin', updatePreferences, { role: 'viewer' }));
   return router;
 }

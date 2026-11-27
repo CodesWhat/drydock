@@ -16,7 +16,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { notifySelfUpdateHelperCompletion } from '../triggers/providers/docker/self-update-helper-completion.js';
 import { releaseRetainedSelfUpdateLifecycle } from '../updates/update-locks.js';
 import { sendErrorResponse } from './error-response.js';
-import { SESSION_ONLY, scoped } from './route-scopes.js';
+import { ROLE_FLOOR_EXEMPT, SESSION_ONLY, scoped } from './route-scopes.js';
 
 export const SELF_UPDATE_FINALIZE_SECRET_HEADER = 'x-dd-self-update-secret';
 
@@ -319,6 +319,9 @@ export function createFinalizeSelfUpdateHandler() {
 
 export function init(): express.Router {
   const router = express.Router();
-  router.post('/self-update/finalize', scoped(SESSION_ONLY, createFinalizeSelfUpdateHandler()));
+  router.post(
+    '/self-update/finalize',
+    scoped(SESSION_ONLY, createFinalizeSelfUpdateHandler(), { role: ROLE_FLOOR_EXEMPT }),
+  );
   return router;
 }

@@ -476,14 +476,34 @@ export function init() {
   });
 
   router.use(nocache());
-  router.get('/editor/watchers', configReadRateLimit, scoped(SESSION_ONLY, readWatcherEditor));
+  router.get(
+    '/editor/watchers',
+    configReadRateLimit,
+    scoped(SESSION_ONLY, readWatcherEditor, { role: 'admin' }),
+  );
   router.patch('/editor/watchers', configWriteRateLimit, scoped('admin', patchWatcherEditor));
-  router.get('/editor/triggers', configReadRateLimit, scoped(SESSION_ONLY, readTriggerEditor));
+  router.get(
+    '/editor/triggers',
+    configReadRateLimit,
+    scoped(SESSION_ONLY, readTriggerEditor, { role: 'admin' }),
+  );
   router.patch('/editor/triggers', configWriteRateLimit, scoped('admin', patchTriggerEditor));
-  router.get('/editor/actions', configReadRateLimit, scoped(SESSION_ONLY, readActionEditor));
+  router.get(
+    '/editor/actions',
+    configReadRateLimit,
+    scoped(SESSION_ONLY, readActionEditor, { role: 'admin' }),
+  );
   router.patch('/editor/actions', configWriteRateLimit, scoped('admin', patchActionEditor));
-  router.get('/', configReadRateLimit, scoped(SESSION_ONLY, getEffectiveConfiguration));
-  router.get('/:section', configReadRateLimit, scoped(SESSION_ONLY, getConfigurationSection));
+  router.get(
+    '/',
+    configReadRateLimit,
+    scoped(SESSION_ONLY, getEffectiveConfiguration, { role: 'admin' }),
+  );
+  router.get(
+    '/:section',
+    configReadRateLimit,
+    scoped(SESSION_ONLY, getConfigurationSection, { role: 'admin' }),
+  );
   // `admin`, not SESSION_ONLY: this route never returns a configuration
   // value, only paths/env-key names/error text, so an API key holding
   // `admin` is the right reach — see config-validate.ts's module doc

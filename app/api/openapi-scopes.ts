@@ -13,10 +13,22 @@
  * into every other consumer of it, including the response contract validator.
  */
 
-import { collectRouteScopes, type RouteScopeDeclaration, SESSION_ONLY } from './route-scopes.js';
+import {
+  collectRouteScopes,
+  getEffectiveRoleFloor,
+  type RoleFloor,
+  type RouteScopeDeclaration,
+  SESSION_ONLY,
+} from './route-scopes.js';
 
 /** Vendor extension carrying the declared scope for an operation. */
 export const SCOPE_EXTENSION = 'x-drydock-scope';
+
+/**
+ * Vendor extension carrying the least role a person needs for an operation.
+ * Absent on a dynamic operation, whose role follows the scope it resolves.
+ */
+export const MIN_ROLE_EXTENSION = 'x-drydock-min-role';
 
 const API_KEY_SECURITY = [{ apiKeyBearerAuth: [] }, { sessionAuth: [] }];
 const SESSION_ONLY_SECURITY = [{ sessionAuth: [] }];
@@ -58,8 +70,15 @@ export function securityForScope(scope: string): Array<Record<string, string[]>>
   return scope === SESSION_ONLY ? SESSION_ONLY_SECURITY : API_KEY_SECURITY;
 }
 
-function annotateOperation(operation: OperationObject, scope: string): void {
+function annotateOperation(
+  operation: OperationObject,
+  scope: string,
+  minRole: RoleFloor | undefined,
+): void {
   operation[SCOPE_EXTENSION] = scope;
+  if (minRole !== undefined) {
+    operation[MIN_ROLE_EXTENSION] = minRole;
+  }
   // An operation that already declares its own security keeps it: the webhook
   // and metrics paths authenticate with their own schemes and never reach the
   // authenticator chain, so overwriting them here would misdescribe them.
@@ -116,5 +135,9 @@ function applyDeclaration(
   if (operation === undefined || operation === null || typeof operation !== 'object') {
     return;
   }
-  annotateOperation(operation as OperationObject, declaration.scope);
+  annotateOperation(
+    operation as OperationObject,
+    declaration.scope,
+    getEffectiveRoleFloor(declaration),
+  );
 }

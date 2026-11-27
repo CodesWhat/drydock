@@ -12,7 +12,6 @@
  * is enrolled.
  */
 
-import { createHash } from 'node:crypto';
 import log from '../log/index.js';
 import {
   getFactorBySubject,
@@ -22,6 +21,7 @@ import {
 } from '../store/totp.js';
 import { getErrorMessage } from '../util/error.js';
 import type { SessionUser } from './auth-types.js';
+import { deriveSubjectId } from './local-subject.js';
 
 type LocalAssurance = 'password' | 'totp' | 'recovery';
 
@@ -36,10 +36,7 @@ export interface LocalIdentityFields {
 
 export type SessionIdentityCheck = 'valid' | 'stale' | 'unavailable';
 
-/** The opaque, immutable subject for one Basic provider and its exact username. */
-export function deriveSubjectId(providerId: string, username: string): string {
-  return createHash('sha256').update(`${providerId}\0${username}`, 'utf8').digest('hex');
-}
+export { deriveSubjectId };
 
 /**
  * The identity a verified Basic credential carries into a new session: password

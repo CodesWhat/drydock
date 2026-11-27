@@ -177,6 +177,69 @@ describe('Basic Authentication', () => {
     expect(masked.hash).toBe('[REDACTED]');
   });
 
+  describe('role (DD_AUTH_BASIC_<name>_ROLE)', () => {
+    test('is admin when not configured, so existing installs are unchanged', () => {
+      const validated = basic.validateConfiguration({
+        user: 'testuser',
+        hash: createArgon2Hash('password'),
+      });
+      basic.configuration = validated;
+
+      expect(validated.role).toBeUndefined();
+      expect(basic.getRole()).toBe('admin');
+      expect(basic.maskConfiguration().role).toBe('admin');
+    });
+
+    test.each([
+      ['viewer', 'viewer'],
+      [' Operator ', 'operator'],
+      ['ADMIN', 'admin'],
+    ])('accepts %j as %s', (raw, expected) => {
+      const validated = basic.validateConfiguration({
+        user: 'testuser',
+        hash: createArgon2Hash('password'),
+        role: raw,
+      });
+
+      expect(validated.role).toBe(expected);
+    });
+
+    test('rejects anything that is not a role, so a typo never guesses one', () => {
+      expect(() =>
+        basic.validateConfiguration({
+          user: 'testuser',
+          hash: createArgon2Hash('password'),
+          role: 'superuser',
+        }),
+      ).toThrow('"role" must be one of viewer, operator, admin');
+    });
+
+    test('the authenticator reports a configured role as explicit', async () => {
+      await basic.register('authentication', 'basic', 'alice', {
+        user: 'alice',
+        hash: createArgon2Hash('password'),
+        role: 'viewer',
+      });
+
+      expect(basic.getAuthenticator().grantedRole).toStrictEqual({
+        role: 'viewer',
+        explicit: true,
+      });
+    });
+
+    test('the authenticator reports a defaulted role as not explicit', async () => {
+      await basic.register('authentication', 'basic', 'bob', {
+        user: 'bob',
+        hash: createArgon2Hash('password'),
+      });
+
+      expect(basic.getAuthenticator().grantedRole).toStrictEqual({
+        role: 'admin',
+        explicit: false,
+      });
+    });
+  });
+
   test('should authenticate valid user with argon2id hash', async () => {
     basic.configuration = {
       user: 'testuser',

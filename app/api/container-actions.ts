@@ -106,10 +106,8 @@ function serializeRejectedUpdateRequest(
 /**
  * Execute a container action (start, stop, restart).
  *
- * Security note: these action endpoints are intentionally authentication-gated
- * only. In current single-operator deployments, all authenticated users can
- * start, stop, or restart containers. Fine-grained RBAC is planned for a
- * future enterprise access release.
+ * Security note: the routes are declared `containers:control`, so a key needs
+ * that scope (or `admin`) and a person needs at least the operator role.
  */
 async function executeAction(
   req: Request,
@@ -300,9 +298,9 @@ async function updateContainers(req: Request, res: Response) {
 export function init() {
   router.use(nocache());
   router.post('/update', scoped('containers:update', updateContainers));
-  router.post('/:id/start', scoped('admin', startContainer));
-  router.post('/:id/stop', scoped('admin', stopContainer));
-  router.post('/:id/restart', scoped('admin', restartContainer));
+  router.post('/:id/start', scoped('containers:control', startContainer));
+  router.post('/:id/stop', scoped('containers:control', stopContainer));
+  router.post('/:id/restart', scoped('containers:control', restartContainer));
   router.post('/:id/update', scoped('containers:update', updateContainer));
   return router;
 }

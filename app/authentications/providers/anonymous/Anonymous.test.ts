@@ -25,12 +25,14 @@ describe('Anonymous Authentication', () => {
   beforeEach(async () => {
     delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
     delete process.env.DD_AUTH_ANONYMOUS_CONFIRM;
+    delete process.env.DD_ANONYMOUS_AUTH_ROLE;
     mockIsUpgrade.mockReturnValue(false);
     vi.clearAllMocks();
     anonymous = new Anonymous();
   });
 
   afterAll(() => {
+    delete process.env.DD_ANONYMOUS_AUTH_ROLE;
     if (originalAnonymousConfirmation === undefined) {
       delete process.env.DD_ANONYMOUS_AUTH_CONFIRM;
     } else {
@@ -139,6 +141,7 @@ describe('Anonymous Authentication', () => {
       await expect(anonymous.getAuthenticator().authenticate({} as never)).resolves.toEqual({
         kind: 'anonymous',
         username: 'anonymous',
+        role: 'admin',
       });
     });
 
@@ -174,6 +177,58 @@ describe('Anonymous Authentication', () => {
       expect(() => anonymous.getAuthenticator()).toThrow(
         'Anonymous authentication cannot be enabled during an upgrade without DD_ANONYMOUS_AUTH_CONFIRM=true',
       );
+    });
+  });
+
+  describe('role (DD_ANONYMOUS_AUTH_ROLE)', () => {
+    beforeEach(() => {
+      process.env.DD_ANONYMOUS_AUTH_CONFIRM = 'true';
+    });
+
+    test('defaults to admin and says the role was not configured', async () => {
+      const authenticator = anonymous.getAuthenticator();
+
+      expect(authenticator.grantedRole).toStrictEqual({ role: 'admin', explicit: false });
+      await expect(authenticator.authenticate({} as never)).resolves.toMatchObject({
+        role: 'admin',
+      });
+    });
+
+    test.each([
+      ['viewer', 'viewer'],
+      [' Operator ', 'operator'],
+      ['ADMIN', 'admin'],
+    ])('reads %j as %s', async (raw, expected) => {
+      process.env.DD_ANONYMOUS_AUTH_ROLE = raw;
+      const authenticator = anonymous.getAuthenticator();
+
+      expect(authenticator.grantedRole).toStrictEqual({ role: expected, explicit: true });
+      await expect(authenticator.authenticate({} as never)).resolves.toMatchObject({
+        kind: 'anonymous',
+        role: expected,
+      });
+    });
+
+    test('treats a blank value as unset', () => {
+      process.env.DD_ANONYMOUS_AUTH_ROLE = '  ';
+      expect(anonymous.getAuthenticator().grantedRole).toStrictEqual({
+        role: 'admin',
+        explicit: false,
+      });
+    });
+
+    test('an invalid role fails registration, naming the variable', () => {
+      process.env.DD_ANONYMOUS_AUTH_ROLE = 'superuser';
+
+      expect(() => anonymous.initAuthentication()).toThrow(
+        'DD_ANONYMOUS_AUTH_ROLE must be one of viewer, operator, admin (got "superuser")',
+      );
+      expect(() => anonymous.getAuthenticator()).toThrow('DD_ANONYMOUS_AUTH_ROLE');
+    });
+
+    test('a valid role passes initialisation', () => {
+      process.env.DD_ANONYMOUS_AUTH_ROLE = 'viewer';
+      expect(() => anonymous.initAuthentication()).not.toThrow();
     });
   });
 });

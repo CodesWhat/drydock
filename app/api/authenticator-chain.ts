@@ -14,7 +14,9 @@
  */
 
 import type { AuthRequest } from './auth-types.js';
+import { getAuthenticators } from './authenticator-registry.js';
 import type { AuthenticatedPrincipal } from './principal.js';
+import type { Role } from './roles.js';
 import { writeSessionPrincipal } from './session-principal.js';
 
 const DEFAULT_AUTHENTICATION_FAILURE_STATUS = 401;
@@ -115,6 +117,15 @@ export interface Authenticator {
   readonly localSubjectId?: string;
 
   /**
+   * The role a principal from this authenticator holds, and whether it was
+   * configured or defaulted. Absent for the authenticators that only
+   * re-present an identity something else established (the session, an API
+   * key). Read by `resolvePrincipalRole()` and by the startup check that some
+   * authenticator still grants admin.
+   */
+  readonly grantedRole?: { readonly role: Role; readonly explicit: boolean };
+
+  /**
    * True for the authenticator that reads `Authorization: Basic` headers. A
    * Basic header only counts as a password guess when one is in the chain;
    * without it (OIDC-only, say) the header is just a header.
@@ -140,29 +151,12 @@ export interface Authenticator {
   getFailureStatus?(req: AuthRequest): number | undefined;
 }
 
-const chain: Authenticator[] = [];
-
-export function registerAuthenticator(authenticator: Authenticator): void {
-  chain.push(authenticator);
-}
-
-export function getAuthenticators(): readonly Authenticator[] {
-  return [...chain];
-}
-
-/** Whether a registered authenticator reads `Authorization: Basic` headers. */
-export function isBasicHeaderAuthenticationRegistered(): boolean {
-  return chain.some((authenticator) => authenticator.readsBasicHeader === true);
-}
-
-/**
- * Empty the chain. Called at the start of every registration pass so that
- * building the chain twice — which only happens in tests, but used to leave
- * passport's id list holding duplicates — yields the same chain both times.
- */
-export function clearAuthenticators(): void {
-  chain.length = 0;
-}
+export {
+  clearAuthenticators,
+  getAuthenticators,
+  isBasicHeaderAuthenticationRegistered,
+  registerAuthenticator,
+} from './authenticator-registry.js';
 
 /**
  * Run the chain. Sets `req.principal` and returns it when an authenticator
@@ -170,7 +164,7 @@ export function clearAuthenticators(): void {
  * otherwise returns undefined and leaves the request unauthenticated.
  */
 async function runChain(req: AuthRequest, forLogin: boolean): Promise<AuthenticationOutcome> {
-  for (const authenticator of chain) {
+  for (const authenticator of getAuthenticators()) {
     const outcome =
       forLogin && authenticator.authenticateForLogin
         ? await authenticator.authenticateForLogin(req)
@@ -212,7 +206,7 @@ export async function authenticateLoginRequest(req: AuthRequest): Promise<Authen
  * broken `Authorization` header, which is what passport-http did.
  */
 export function getAuthenticationFailureStatus(req: AuthRequest): number {
-  for (const authenticator of chain) {
+  for (const authenticator of getAuthenticators()) {
     const status = authenticator.getFailureStatus?.(req);
     if (status !== undefined) {
       return status;

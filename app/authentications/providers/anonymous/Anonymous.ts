@@ -1,5 +1,6 @@
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import { ANONYMOUS_USERNAME, type AuthenticatedPrincipal } from '../../../api/principal.js';
+import { DEFAULT_ROLE, parseRole, type Role } from '../../../api/roles.js';
 import { isUpgrade } from '../../../store/app.js';
 import Authentication from '../Authentication.js';
 
@@ -13,8 +14,20 @@ import Authentication from '../Authentication.js';
  * A fresh object per request, so nothing downstream can leak a mutation into
  * the next one.
  */
-function createAnonymousPrincipal(): AuthenticatedPrincipal {
-  return { kind: 'anonymous', username: ANONYMOUS_USERNAME };
+function createAnonymousPrincipal(role: Role): AuthenticatedPrincipal {
+  return { kind: 'anonymous', username: ANONYMOUS_USERNAME, role };
+}
+
+export const ANONYMOUS_ROLE_ENV = 'DD_ANONYMOUS_AUTH_ROLE';
+
+/**
+ * The role anonymous callers hold. Unset is admin, which is what anonymous
+ * access always granted; `viewer` makes a read-only public dashboard. An
+ * invalid value throws, so registration fails and the dashboard stays closed.
+ */
+function readAnonymousRole(): { role: Role; explicit: boolean } {
+  const role = parseRole(process.env[ANONYMOUS_ROLE_ENV], ANONYMOUS_ROLE_ENV);
+  return role === undefined ? { role: DEFAULT_ROLE, explicit: false } : { role, explicit: true };
 }
 
 /**
@@ -29,6 +42,7 @@ class Anonymous extends Authentication {
 
   initAuthentication(): void {
     if (this.isExplicitlyConfirmed()) {
+      readAnonymousRole();
       return;
     }
     if (isUpgrade()) {
@@ -51,10 +65,12 @@ class Anonymous extends Authentication {
    */
   getAuthenticator(_app?: unknown): Authenticator {
     this.assertAnonymousAccessConfirmed();
+    const grantedRole = readAnonymousRole();
     return {
       id: this.getId(),
       persistsSession: false,
-      authenticate: () => Promise.resolve(createAnonymousPrincipal()),
+      grantedRole,
+      authenticate: () => Promise.resolve(createAnonymousPrincipal(grantedRole.role)),
     };
   }
 

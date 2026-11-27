@@ -15,7 +15,7 @@ import { ddWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { resolveWatcherIdForContainer } from './container/handlers/common.js';
 import { sendErrorResponse } from './error-response.js';
-import { SESSION_ONLY, scoped } from './route-scopes.js';
+import { ROLE_FLOOR_EXEMPT, SESSION_ONLY, scoped } from './route-scopes.js';
 
 const log = logger.child({ component: 'webhook' });
 
@@ -408,8 +408,14 @@ export function init() {
   router.use(webhookLimiter);
   router.use(nocache());
   router.use(authenticateToken);
-  router.post('/watch', scoped(SESSION_ONLY, watchAll));
-  router.post('/watch/:containerName', scoped(SESSION_ONLY, watchContainer));
-  router.post('/update/:containerName', scoped(SESSION_ONLY, updateContainer));
+  router.post('/watch', scoped(SESSION_ONLY, watchAll, { role: ROLE_FLOOR_EXEMPT }));
+  router.post(
+    '/watch/:containerName',
+    scoped(SESSION_ONLY, watchContainer, { role: ROLE_FLOOR_EXEMPT }),
+  );
+  router.post(
+    '/update/:containerName',
+    scoped(SESSION_ONLY, updateContainer, { role: ROLE_FLOOR_EXEMPT }),
+  );
   return router;
 }

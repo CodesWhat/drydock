@@ -13,7 +13,7 @@ import * as storeContainer from '../../store/container.js';
 import { markContainerFreshForScheduledPollSkip } from '../../watchers/registry-webhook-fresh.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getFirstHeaderValue } from '../header-value.js';
-import { SESSION_ONLY, scoped } from '../route-scopes.js';
+import { ROLE_FLOOR_EXEMPT, SESSION_ONLY, scoped } from '../route-scopes.js';
 import { parseRegistryWebhookPayload } from './parsers/index.js';
 import { authenticateRegistryWebhook, redactRegistryWebhookPath } from './registry-auth.js';
 import { runRegistryWebhookDispatch } from './registry-dispatch.js';
@@ -182,8 +182,14 @@ export function init() {
   router.use(webhookLimiter);
   router.use(failedAuthLimiter);
   router.use(nocache());
-  router.post('/', scoped(SESSION_ONLY, handleRegistryWebhook));
-  router.post('/:provider', scoped(SESSION_ONLY, handleProviderRegistryWebhook));
-  router.post('/:provider/:secret', scoped(SESSION_ONLY, handleProviderRegistryWebhook));
+  router.post('/', scoped(SESSION_ONLY, handleRegistryWebhook, { role: ROLE_FLOOR_EXEMPT }));
+  router.post(
+    '/:provider',
+    scoped(SESSION_ONLY, handleProviderRegistryWebhook, { role: ROLE_FLOOR_EXEMPT }),
+  );
+  router.post(
+    '/:provider/:secret',
+    scoped(SESSION_ONLY, handleProviderRegistryWebhook, { role: ROLE_FLOOR_EXEMPT }),
+  );
   return router;
 }

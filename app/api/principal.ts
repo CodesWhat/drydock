@@ -9,10 +9,23 @@
  * so, and the two questions are asked with two different helpers.
  */
 
+import type { Role } from './roles.js';
 import type { LocalIdentityFields } from './totp-identity.js';
 
 interface PrincipalBase {
   readonly username: string;
+}
+
+/**
+ * Every principal that is a person rather than a key carries a role.
+ *
+ * Set on the principal only when the authenticator asserts it for the request
+ * (anonymous access does). Otherwise it is resolved per request from the
+ * account that signed the principal in, by `resolvePrincipalRole()`, which
+ * answers `admin` for anything that configured nothing.
+ */
+interface HumanPrincipalBase extends PrincipalBase {
+  readonly role?: Role;
 }
 
 /**
@@ -24,7 +37,7 @@ export type SessionIdentity =
   | ({ readonly type: 'local' } & LocalIdentityFields);
 
 /** Identity restored from an existing express-session cookie. */
-interface SessionPrincipal extends PrincipalBase {
+interface SessionPrincipal extends HumanPrincipalBase {
   readonly kind: 'session';
   readonly identity?: SessionIdentity;
 }
@@ -33,13 +46,13 @@ interface SessionPrincipal extends PrincipalBase {
  * Identity proven by an `Authorization: Basic` header on this request.
  * `identity` is the stable local subject the credential verified.
  */
-interface BasicPrincipal extends PrincipalBase {
+interface BasicPrincipal extends HumanPrincipalBase {
   readonly kind: 'basic';
   readonly identity: LocalIdentityFields;
 }
 
 /** Identity proven by an `Authorization: Bearer` OIDC access token. */
-interface OidcPrincipal extends PrincipalBase {
+interface OidcPrincipal extends HumanPrincipalBase {
   readonly kind: 'oidc';
 }
 
@@ -47,7 +60,7 @@ interface OidcPrincipal extends PrincipalBase {
  * Access granted without credentials because anonymous auth is configured and
  * explicitly confirmed. Carries no identity: see {@link isIdentityPrincipal}.
  */
-interface AnonymousPrincipal extends PrincipalBase {
+interface AnonymousPrincipal extends HumanPrincipalBase {
   readonly kind: 'anonymous';
 }
 

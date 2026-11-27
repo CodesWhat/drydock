@@ -5,14 +5,21 @@ import {
   API_SCOPES,
   collectRouteScopes,
   DYNAMIC_SCOPE,
+  enforceAccess,
   enforceApiKeyScope,
   findUndeclaredRoutes,
+  findUnflooredSessionOnlyRoutes,
   formatRouteScope,
+  getEffectiveRoleFloor,
+  getRouteRoleFloor,
   getRouteScope,
   hasApiKeyScope,
   MISSING_SCOPE_MESSAGE,
   mountRouter,
+  ROLE_DENIED_MESSAGE,
+  ROLE_FLOOR_EXEMPT,
   type RouteScopeDeclaration,
+  resolveRoleFloor,
   SESSION_ONLY,
   SESSION_ONLY_MESSAGE,
   scoped,
@@ -31,11 +38,12 @@ function fakeRouter(stack: unknown[]): unknown {
 }
 
 describe('scope vocabulary', () => {
-  test('ships the five scopes plus key management', () => {
+  test('ships the six scopes plus key management', () => {
     expect(API_SCOPES).toStrictEqual([
       'read',
       'containers:watch',
       'containers:update',
+      'containers:control',
       'triggers:test',
       'admin',
       'api-keys:manage',
@@ -498,5 +506,207 @@ describe('scoped() enforcement', () => {
     );
 
     expect(blocked).toBeUndefined();
+  });
+});
+
+describe('role floors', () => {
+  function createResponse() {
+    const json = vi.fn();
+    return { res: { status: vi.fn(() => ({ json })) }, json };
+  }
+
+  function person(role: 'viewer' | 'operator' | 'admin') {
+    return { principal: { kind: 'session' as const, username: role, role } };
+  }
+
+  describe('resolveRoleFloor', () => {
+    test('a declared floor wins over the one the scope implies', () => {
+      expect(resolveRoleFloor('admin', 'viewer')).toBe('viewer');
+      expect(resolveRoleFloor(SESSION_ONLY, ROLE_FLOOR_EXEMPT)).toBe(ROLE_FLOOR_EXEMPT);
+    });
+
+    test('a session-only route with no floor fails closed to admin', () => {
+      expect(resolveRoleFloor(SESSION_ONLY)).toBe('admin');
+    });
+
+    test('a dynamic route has no static floor; its handler decides', () => {
+      expect(resolveRoleFloor(DYNAMIC_SCOPE)).toBeUndefined();
+    });
+
+    test.each([
+      ['read', 'viewer'],
+      ['containers:watch', 'operator'],
+      ['containers:update', 'operator'],
+      ['containers:control', 'operator'],
+      ['triggers:test', 'operator'],
+      ['admin', 'admin'],
+      ['api-keys:manage', 'admin'],
+    ] as const)('%s defaults to %s', (scope, role) => {
+      expect(resolveRoleFloor(scope)).toBe(role);
+    });
+  });
+
+  describe('enforceAccess', () => {
+    test('waves an unauthenticated request through', () => {
+      expect(enforceAccess({}, createResponse().res, 'admin')).toBe(true);
+      expect(enforceAccess(undefined, createResponse().res, 'admin')).toBe(true);
+    });
+
+    test('holds an API key to its scopes, not to any role', () => {
+      const { res, json } = createResponse();
+      const key = {
+        principal: {
+          kind: 'api-key' as const,
+          username: 'ci',
+          keyId: 'k',
+          scopes: ['read'],
+          parentKeyId: null,
+        },
+      };
+
+      expect(enforceAccess(key, res, 'containers:update', 'viewer')).toBe(false);
+      expect(json).toHaveBeenCalledWith({
+        error: MISSING_SCOPE_MESSAGE,
+        details: { requiredScope: 'containers:update' },
+      });
+    });
+
+    test('lets a person whose role meets the floor through', () => {
+      const { res, json } = createResponse();
+      expect(enforceAccess(person('viewer'), res, 'read')).toBe(true);
+      expect(enforceAccess(person('operator'), res, 'containers:update')).toBe(true);
+      expect(enforceAccess(person('admin'), res, 'api-keys:manage')).toBe(true);
+      expect(json).not.toHaveBeenCalled();
+    });
+
+    test('denies a person below the floor, naming the scope and role', () => {
+      const { res, json } = createResponse();
+
+      expect(enforceAccess(person('viewer'), res, 'containers:update')).toBe(false);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(json).toHaveBeenCalledWith({
+        error: ROLE_DENIED_MESSAGE,
+        details: { requiredScope: 'containers:update', requiredRole: 'operator' },
+      });
+    });
+
+    test('names only the role on a session-only route, which has no scope', () => {
+      const { res, json } = createResponse();
+
+      expect(enforceAccess(person('operator'), res, SESSION_ONLY, 'admin')).toBe(false);
+      expect(json).toHaveBeenCalledWith({
+        error: ROLE_DENIED_MESSAGE,
+        details: { requiredRole: 'admin' },
+      });
+    });
+
+    test('a declared floor below the scope lets a lesser role through', () => {
+      expect(enforceAccess(person('viewer'), createResponse().res, 'admin', 'viewer')).toBe(true);
+    });
+
+    test('an exempt route ignores whoever rides along on the cookie', () => {
+      expect(
+        enforceAccess(person('viewer'), createResponse().res, SESSION_ONLY, ROLE_FLOOR_EXEMPT),
+      ).toBe(true);
+    });
+
+    test('a dynamic route defers to its handler', () => {
+      expect(enforceAccess(person('viewer'), createResponse().res, DYNAMIC_SCOPE)).toBe(true);
+    });
+
+    test('still denies without a response object to answer on', () => {
+      expect(enforceAccess(person('viewer'), undefined, 'admin')).toBe(false);
+    });
+  });
+
+  describe('scoped() with a floor', () => {
+    test('records the floor next to the scope', () => {
+      const declared = scoped(SESSION_ONLY, () => {}, { role: 'viewer' });
+
+      expect(getRouteScope(declared)).toBe(SESSION_ONLY);
+      expect(getRouteRoleFloor(declared)).toBe('viewer');
+    });
+
+    test('records no floor when none was declared', () => {
+      expect(getRouteRoleFloor(scoped('read', () => {}))).toBeUndefined();
+    });
+
+    test('getRouteRoleFloor ignores non-functions and non-string marks', () => {
+      expect(getRouteRoleFloor('nope')).toBeUndefined();
+      const handler = () => {};
+      Object.defineProperty(handler, Symbol.for('drydock.api.routeRole'), { value: 1 });
+      expect(getRouteRoleFloor(handler)).toBeUndefined();
+    });
+
+    test('enforces the floor on a person before running the handler', () => {
+      const handler = vi.fn();
+      const { res, json } = createResponse();
+
+      scoped(SESSION_ONLY, handler, { role: 'admin' })(person('operator') as never, res as never);
+
+      expect(handler).not.toHaveBeenCalled();
+      expect(json).toHaveBeenCalledWith({
+        error: ROLE_DENIED_MESSAGE,
+        details: { requiredRole: 'admin' },
+      });
+    });
+
+    test('runs the handler when the floor is met', () => {
+      const handler = vi.fn();
+      scoped(SESSION_ONLY, handler, { role: 'viewer' })(
+        person('viewer') as never,
+        createResponse().res as never,
+      );
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('walking floors off the router', () => {
+    test('collectRouteScopes reports the declared floor', () => {
+      const router = express.Router();
+      router.get(
+        '/a',
+        scoped(SESSION_ONLY, () => {}, { role: 'viewer' }),
+      );
+      router.get(
+        '/b',
+        scoped('read', () => {}),
+      );
+
+      expect(collectRouteScopes(router)).toStrictEqual([
+        { method: 'GET', path: '/a', scope: SESSION_ONLY, role: 'viewer' },
+        { method: 'GET', path: '/b', scope: 'read' },
+      ]);
+    });
+
+    test('findUnflooredSessionOnlyRoutes catches a session-only route with no floor', () => {
+      const router = express.Router();
+      router.get(
+        '/floored',
+        scoped(SESSION_ONLY, () => {}, { role: 'admin' }),
+      );
+      router.get(
+        '/unfloored',
+        scoped(SESSION_ONLY, () => {}),
+      );
+      router.get(
+        '/scoped',
+        scoped('read', () => {}),
+      );
+
+      expect(
+        findUnflooredSessionOnlyRoutes(collectRouteScopes(router)).map(formatRouteScope),
+      ).toStrictEqual(['GET /unfloored → session-only']);
+    });
+
+    test('getEffectiveRoleFloor resolves declared and derived floors', () => {
+      expect(getEffectiveRoleFloor({ method: 'GET', path: '/x' })).toBeUndefined();
+      expect(getEffectiveRoleFloor({ method: 'GET', path: '/x', scope: 'triggers:test' })).toBe(
+        'operator',
+      );
+      expect(
+        getEffectiveRoleFloor({ method: 'GET', path: '/x', scope: SESSION_ONLY, role: 'viewer' }),
+      ).toBe('viewer');
+    });
   });
 });

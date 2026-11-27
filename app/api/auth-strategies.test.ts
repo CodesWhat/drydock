@@ -9,11 +9,13 @@ const {
   mockGetAuthenticationRegistrationErrors,
   mockGetRegistrationWarnings,
   mockWarn,
+  mockInfo,
 } = vi.hoisted(() => ({
   mockGetState: vi.fn(),
   mockGetAuthenticationRegistrationErrors: vi.fn().mockReturnValue([]),
   mockGetRegistrationWarnings: vi.fn().mockReturnValue([]),
   mockWarn: vi.fn(),
+  mockInfo: vi.fn(),
 }));
 
 vi.mock('../registry/index.js', () => ({
@@ -26,6 +28,7 @@ vi.mock('../log/index.js', () => ({
   default: {
     child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
     warn: mockWarn,
+    info: mockInfo,
   },
 }));
 
@@ -196,6 +199,147 @@ describe('auth-strategies', () => {
       registerAuthenticators(app);
 
       expect(getAuthenticator).toHaveBeenCalledWith(app);
+    });
+  });
+
+  describe('roles at registration', () => {
+    function roleAuthentication(
+      id: string,
+      type: string,
+      grantedRole: Authenticator['grantedRole'],
+      extra: Partial<Authenticator> = {},
+    ): Authentication {
+      return {
+        getId: () => id,
+        getAuthenticator: () => ({ ...createAuthenticator(id), grantedRole, ...extra }),
+        getStrategyDescription: () => ({ type, name: id }),
+      } as unknown as Authentication;
+    }
+
+    test('logs nothing about roles when no authenticator grants one', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          local: createMockAuthentication({
+            id: 'basic.local',
+            description: { type: 'basic', name: 'Local' },
+          }),
+        },
+      });
+
+      registerAuthenticators({} as Application);
+
+      expect(mockInfo).not.toHaveBeenCalled();
+    });
+
+    test('logs the role each authenticator grants on one line', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          alice: roleAuthentication('basic.alice', 'basic', { role: 'admin', explicit: true }),
+          bob: roleAuthentication('basic.bob', 'basic', { role: 'viewer', explicit: true }),
+        },
+      });
+
+      registerAuthenticators({} as Application);
+
+      expect(mockInfo).toHaveBeenCalledTimes(1);
+      expect(mockInfo).toHaveBeenCalledWith(
+        'Authentication roles: basic.alice=admin, basic.bob=viewer',
+      );
+    });
+
+    test('hints when several Basic users exist and none has a role', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          alice: roleAuthentication(
+            'basic.alice',
+            'basic',
+            { role: 'admin', explicit: false },
+            { readsBasicHeader: true },
+          ),
+          bob: roleAuthentication(
+            'basic.bob',
+            'basic',
+            { role: 'admin', explicit: false },
+            { readsBasicHeader: true },
+          ),
+        },
+      });
+
+      registerAuthenticators({} as Application);
+
+      expect(mockInfo).toHaveBeenCalledWith(
+        'All 2 Basic users have the admin role. Set DD_AUTH_BASIC_<name>_ROLE=operator or viewer to limit one.',
+      );
+    });
+
+    test('gives no hint for a single Basic user', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          alice: roleAuthentication(
+            'basic.alice',
+            'basic',
+            { role: 'admin', explicit: false },
+            { readsBasicHeader: true },
+          ),
+        },
+      });
+
+      registerAuthenticators({} as Application);
+
+      expect(mockInfo).toHaveBeenCalledTimes(1);
+    });
+
+    test('gives no hint once any Basic user has a role', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          alice: roleAuthentication(
+            'basic.alice',
+            'basic',
+            { role: 'admin', explicit: true },
+            { readsBasicHeader: true },
+          ),
+          bob: roleAuthentication(
+            'basic.bob',
+            'basic',
+            { role: 'admin', explicit: false },
+            { readsBasicHeader: true },
+          ),
+        },
+      });
+
+      registerAuthenticators({} as Application);
+
+      expect(mockInfo).toHaveBeenCalledTimes(1);
+    });
+
+    test('refuses to start when no authenticator grants admin, naming the fix', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          bob: roleAuthentication('basic.bob', 'basic', { role: 'viewer', explicit: true }),
+          anonymous: roleAuthentication('anonymous', 'anonymous', {
+            role: 'operator',
+            explicit: true,
+          }),
+        },
+      });
+
+      expect(() => registerAuthenticators({} as Application)).toThrow(
+        'No authentication grants the admin role',
+      );
+      expect(() => registerAuthenticators({} as Application)).toThrow(
+        'DD_AUTH_BASIC_<name>_ROLE=admin',
+      );
+    });
+
+    test('starts when any one authenticator still grants admin', () => {
+      mockGetState.mockReturnValue({
+        authentication: {
+          bob: roleAuthentication('basic.bob', 'basic', { role: 'viewer', explicit: true }),
+          google: roleAuthentication('oidc.google', 'oidc', { role: 'admin', explicit: false }),
+        },
+      });
+
+      expect(() => registerAuthenticators({} as Application)).not.toThrow();
     });
   });
 

@@ -19,9 +19,11 @@
  * its own route matches, so the declaration and the check are the same object
  * and cannot disagree.
  *
- * Only API key principals are checked. Sessions, Basic, OIDC and anonymous
- * traverse `scoped()` untouched, so this is behaviour-preserving for every
- * caller that is not using a key.
+ * API keys are checked against the scopes they hold. Human principals
+ * (sessions, Basic, OIDC, anonymous) are checked against the route's role
+ * floor: the least role holding the declared scope unless the route names one
+ * (`roles.ts`). Every human resolves to `admin` until a role is configured, so
+ * an install that configures none behaves exactly as before.
  *
  * The mount path is recorded separately, by `mountRouter()`, because Express 5
  * drops it: `Layer.path` is set during matching and is undefined at rest, and
@@ -33,11 +35,14 @@
 import type { Response } from 'express';
 import { sendErrorResponse } from './error-response.js';
 import type { PrincipalCarrier } from './principal.js';
+import { resolveHumanRole } from './principal-role.js';
+import { minRoleForScope, type Role, roleAtLeast } from './roles.js';
 
 export const API_SCOPES = [
   'read',
   'containers:watch',
   'containers:update',
+  'containers:control',
   'triggers:test',
   'admin',
   'api-keys:manage',
@@ -73,6 +78,26 @@ export const DYNAMIC_SCOPE = 'dynamic';
 
 export type RouteScope = ApiScope | typeof SESSION_ONLY | typeof DYNAMIC_SCOPE;
 
+/**
+ * A route that authenticates its own callers ahead of the authenticator chain
+ * (the webhook bearer, the loopback self-update secret, the self-update
+ * operation id). Whoever's session cookie rides along is not the caller, so
+ * no human role applies.
+ */
+export const ROLE_FLOOR_EXEMPT = 'exempt';
+
+/** The least role a human principal needs to reach a route. */
+export type RoleFloor = Role | typeof ROLE_FLOOR_EXEMPT;
+
+export interface ScopedOptions {
+  /**
+   * The least role a human needs, when it differs from the one the scope
+   * implies. Required on every `SESSION_ONLY` route, which has no scope to
+   * derive one from; the completeness test fails on one without it.
+   */
+  role?: RoleFloor;
+}
+
 /** Any Express handler signature, without widening to `any`. */
 type RouteHandler = (...args: never[]) => unknown;
 
@@ -80,6 +105,34 @@ type RouteHandler = (...args: never[]) => unknown;
 export const MISSING_SCOPE_MESSAGE = 'API key is missing the required scope';
 /** The 403 an API key gets on a route only a session may reach. */
 export const SESSION_ONLY_MESSAGE = 'This route is not reachable with an API key';
+/** The 403 a person gets on a route their role does not reach. */
+export const ROLE_DENIED_MESSAGE = 'Role does not permit this action';
+
+function isApiScope(scope: RouteScope): scope is ApiScope {
+  return (API_SCOPES as readonly string[]).includes(scope);
+}
+
+/**
+ * The role floor a route enforces on human principals: the one it declared,
+ * otherwise the least role holding its scope. A session-only route that
+ * declared none is held to `admin` so a missing declaration fails closed. A
+ * dynamic route has no static floor; its handler calls {@link enforceAccess}
+ * with the scope it resolved.
+ * @param scope - the scope the route declared
+ * @param declared - the floor the route declared, if any
+ */
+export function resolveRoleFloor(scope: RouteScope, declared?: RoleFloor): RoleFloor | undefined {
+  if (declared !== undefined) {
+    return declared;
+  }
+  if (scope === SESSION_ONLY) {
+    return 'admin';
+  }
+  if (scope === DYNAMIC_SCOPE) {
+    return undefined;
+  }
+  return minRoleForScope(scope);
+}
 
 /**
  * Does this key hold the scope a route requires?
@@ -147,7 +200,52 @@ export function enforceApiKeyScope(
   return deny(MISSING_SCOPE_MESSAGE, { requiredScope: scope });
 }
 
+/**
+ * Check a request against a route's declared scope and role floor, answering
+ * 403 when it fails. The one access decision for every principal kind.
+ *
+ * Returns true when the handler should run. An API key is held to its scopes
+ * ({@link enforceApiKeyScope}); a person is held to the route's role floor
+ * ({@link resolveRoleFloor}). An unauthenticated request is waved through:
+ * the authentication guard, or the route's own credential check, owns that.
+ * @param req - the request, or anything carrying a principal
+ * @param res - the response to answer on
+ * @param scope - the scope the route declared, or the one a dynamic route resolved
+ * @param floor - the role floor the route declared, if any
+ */
+export function enforceAccess(
+  req: PrincipalCarrier | undefined,
+  res: Pick<Response, 'status'> | undefined,
+  scope: RouteScope,
+  floor?: RoleFloor,
+): boolean {
+  const principal = req?.principal;
+  if (principal === undefined) {
+    return true;
+  }
+  if (principal.kind === 'api-key') {
+    return enforceApiKeyScope(req, res, scope);
+  }
+
+  const requiredRole = resolveRoleFloor(scope, floor);
+  if (requiredRole === undefined || requiredRole === ROLE_FLOOR_EXEMPT) {
+    return true;
+  }
+  const role = resolveHumanRole(principal);
+  if (roleAtLeast(role, requiredRole)) {
+    return true;
+  }
+  if (res) {
+    sendErrorResponse(res as Response, 403, {
+      message: ROLE_DENIED_MESSAGE,
+      details: isApiScope(scope) ? { requiredScope: scope, requiredRole } : { requiredRole },
+    });
+  }
+  return false;
+}
+
 const ROUTE_SCOPE = Symbol.for('drydock.api.routeScope');
+const ROUTE_ROLE = Symbol.for('drydock.api.routeRole');
 const MOUNT_PATH = Symbol.for('drydock.api.mountPath');
 
 /** A mount reached through plain `router.use()`, so its prefix is unknown. */
@@ -158,6 +256,8 @@ export interface RouteScopeDeclaration {
   path: string;
   /** undefined means the route was registered without a declaration. */
   scope?: RouteScope;
+  /** The role floor the route declared explicitly, if it declared one. */
+  role?: RoleFloor;
 }
 
 interface ExpressRouteLike {
@@ -183,15 +283,21 @@ interface RouterLike {
  * be separated from the route it describes.
  * @param scope
  * @param handler
+ * @param options - `role` overrides the role floor the scope implies
  */
-export function scoped<H extends RouteHandler>(scope: RouteScope, handler: H): H {
+export function scoped<H extends RouteHandler>(
+  scope: RouteScope,
+  handler: H,
+  options: ScopedOptions = {},
+): H {
+  const floor = options.role;
   // A wrapper rather than a property on the handler itself, so registering one
   // shared handler on two routes with different scopes cannot make the second
   // silently overwrite the first. The name is copied across because Express
   // reads it into `Layer.name`, which is what a router-stack dump shows.
   const declared = ((...args: Parameters<H>) => {
     const [req, res] = args as unknown as [PrincipalCarrier | undefined, Response | undefined];
-    if (!enforceApiKeyScope(req, res, scope)) {
+    if (!enforceAccess(req, res, scope, floor)) {
       return undefined;
     }
     return handler(...args);
@@ -202,7 +308,26 @@ export function scoped<H extends RouteHandler>(scope: RouteScope, handler: H): H
     enumerable: false,
     configurable: true,
   });
+  if (floor !== undefined) {
+    Object.defineProperty(declared, ROUTE_ROLE, {
+      value: floor,
+      enumerable: false,
+      configurable: true,
+    });
+  }
   return declared;
+}
+
+/**
+ * Read an explicit role floor back off a handler.
+ * @param handler
+ */
+export function getRouteRoleFloor(handler: unknown): RoleFloor | undefined {
+  if (typeof handler !== 'function') {
+    return undefined;
+  }
+  const floor = (handler as unknown as Record<symbol, unknown>)[ROUTE_ROLE];
+  return typeof floor === 'string' ? (floor as RoleFloor) : undefined;
 }
 
 /**
@@ -274,14 +399,15 @@ function getRouteMethods(route: ExpressRouteLike): string[] {
     .map((method) => method.toUpperCase());
 }
 
-function getDeclaredScope(route: ExpressRouteLike): RouteScope | undefined {
+function getDeclaredAccess(route: ExpressRouteLike): { scope?: RouteScope; role?: RoleFloor } {
   for (const layer of route.stack) {
     const scope = getRouteScope(layer.handle);
     if (scope !== undefined) {
-      return scope;
+      const role = getRouteRoleFloor(layer.handle);
+      return role === undefined ? { scope } : { scope, role };
     }
   }
-  return undefined;
+  return {};
 }
 
 function walkRouter(
@@ -292,9 +418,9 @@ function walkRouter(
   for (const layer of router.stack) {
     if (layer.route) {
       const path = joinPath(basePath, layer.route.path);
-      const scope = getDeclaredScope(layer.route);
+      const access = getDeclaredAccess(layer.route);
       for (const method of getRouteMethods(layer.route)) {
-        declarations.push(scope === undefined ? { method, path } : { method, path, scope });
+        declarations.push({ method, path, ...access });
       }
       continue;
     }
@@ -329,6 +455,31 @@ export function findUndeclaredRoutes(
   declarations: RouteScopeDeclaration[],
 ): RouteScopeDeclaration[] {
   return declarations.filter((declaration) => declaration.scope === undefined);
+}
+
+/**
+ * The session-only routes that declared no role floor. A non-empty result is
+ * a completeness failure: such a route would hold every human to `admin`
+ * without anyone having decided that.
+ * @param declarations
+ */
+export function findUnflooredSessionOnlyRoutes(
+  declarations: RouteScopeDeclaration[],
+): RouteScopeDeclaration[] {
+  return declarations.filter(
+    (declaration) => declaration.scope === SESSION_ONLY && declaration.role === undefined,
+  );
+}
+
+/**
+ * The role floor a declared route enforces on human principals, or undefined
+ * for an undeclared route and for a dynamic one, whose handler decides.
+ * @param declaration
+ */
+export function getEffectiveRoleFloor(declaration: RouteScopeDeclaration): RoleFloor | undefined {
+  return declaration.scope === undefined
+    ? undefined
+    : resolveRoleFloor(declaration.scope, declaration.role);
 }
 
 /**
