@@ -2,11 +2,30 @@ import type { Container } from '../model/container.js';
 import {
   getContainerTriggerFiltersForCategory,
   getTriggerCategoryForType,
+  isStoreBoundTriggerType,
 } from './trigger-category.js';
 
 function buildContainer(overrides: Partial<Container> = {}): Container {
   return { id: 'container-id', name: 'container-name', ...overrides } as Container;
 }
+
+describe('isStoreBoundTriggerType', () => {
+  test.each([
+    'docker',
+    'dockercompose',
+    'portainer',
+    'command',
+    'githubdispatch',
+    'gitlabpipeline',
+    'GitHubDispatch',
+  ])('binds %s to the stored container', (type) => {
+    expect(isStoreBoundTriggerType(type)).toBe(true);
+  });
+
+  test.each(['slack', 'http', 'smtp', 'mqtt'])('lets %s simulate a payload', (type) => {
+    expect(isStoreBoundTriggerType(type)).toBe(false);
+  });
+});
 
 describe('getTriggerCategoryForType', () => {
   test.each(['docker', 'dockercompose', 'portainer', 'command'])(

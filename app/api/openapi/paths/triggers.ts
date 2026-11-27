@@ -52,7 +52,8 @@ export const triggerPaths = {
           'application/json': {
             schema: {
               type: 'object',
-              description: 'Container payload used by trigger implementation',
+              description:
+                'Actions and CI dispatch triggers read only id and operationId and run on the stored container. Notification triggers render a bounded simulated container; unknown keys such as labels are dropped.',
               additionalProperties: true,
             },
           },

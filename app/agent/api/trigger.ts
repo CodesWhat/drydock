@@ -8,7 +8,7 @@ import { sanitizeLogParam } from '../../log/sanitize.js';
 import type { Container } from '../../model/container.js';
 import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
-import { getTriggerCategoryForType } from '../../triggers/trigger-category.js';
+import { isStoreBoundTriggerType } from '../../triggers/trigger-category.js';
 import { getErrorMessageProperty } from '../../util/error.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
@@ -37,7 +37,7 @@ export async function runTrigger(req: TriggerRequest, res: Response) {
   if (req.body?.agent) {
     delete req.body.agent;
   }
-  return triggerApi.runTrigger(req, res);
+  return triggerApi.runTriggerFromController(req, res);
 }
 
 /**
@@ -65,8 +65,9 @@ export async function runTriggerBatch(req: TriggerRequest, res: Response) {
     // reach Object.prototype (CodeQL js/remote-property-injection).
     const operationIds = new Map<string, string>();
     let batchContainers: Container[];
-    if (getTriggerCategoryForType(type) === 'action') {
-      // Action triggers run hooks and commands from container labels, so the
+    if (isStoreBoundTriggerType(type)) {
+      // Action triggers run hooks and commands from container labels, and CI
+      // dispatch adapters build the image they are told about, so the
       // body only names which containers to run and which controller-issued
       // operationId goes with each (fixes #289). Each container is re-read from
       // the agent's own store, as the single trigger route does, so the labels
