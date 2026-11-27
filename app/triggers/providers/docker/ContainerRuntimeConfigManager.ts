@@ -2,6 +2,14 @@ import { isHookLabelKey } from '../../hooks/hook-labels.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 
 const RUNTIME_PROCESS_FIELDS = ['Entrypoint', 'Cmd'] as const;
+const HEALTHCHECK_FIELDS = [
+  'Test',
+  'Interval',
+  'Timeout',
+  'StartPeriod',
+  'StartInterval',
+  'Retries',
+] as const;
 const RUNTIME_ORIGIN_EXPLICIT = 'explicit';
 const RUNTIME_ORIGIN_INHERITED = 'inherited';
 const RUNTIME_ORIGIN_UNKNOWN = 'unknown';
@@ -23,6 +31,7 @@ type RuntimeConfigObject = {
   Entrypoint?: unknown;
   Cmd?: unknown;
   Env?: unknown;
+  Healthcheck?: unknown;
   Image?: string;
   Labels?: Record<string, string>;
   [key: string]: unknown;
@@ -472,6 +481,20 @@ class ContainerRuntimeConfigManager {
       );
     }
 
+    const sanitizedHealthcheck = this.reconcileHealthcheck(
+      sanitizedConfig.Healthcheck,
+      sourceImageConfig,
+      targetImageConfig,
+      logContainer,
+    );
+    if (sanitizedHealthcheck !== sanitizedConfig.Healthcheck) {
+      if (sanitizedHealthcheck === undefined) {
+        delete sanitizedConfig.Healthcheck;
+      } else {
+        sanitizedConfig.Healthcheck = sanitizedHealthcheck;
+      }
+    }
+
     const sanitizedEnv = this.sanitizeImageInheritedEnv(
       sanitizedConfig.Env,
       sourceImageConfig,
@@ -507,6 +530,83 @@ class ContainerRuntimeConfigManager {
     }
 
     return sanitizedConfig;
+  }
+
+  /**
+   * Reconcile the cloned Healthcheck against the new image, field by field.
+   * A field that matches the image the container was created from came from
+   * that image, so it follows the target image (and disappears when the target
+   * has no such field). A field that differs is an operator override and is
+   * kept, which includes an explicit `['NONE']` test. Needs both images; with
+   * either unknown the cloned value is preserved untouched.
+   *
+   * Approach adapted from WUD (https://github.com/getwud/wud, MIT, Copyright
+   * (c) 2019 Manfred Martin), commit fbeda4a0.
+   */
+  reconcileHealthcheck(
+    clonedHealthcheck: unknown,
+    sourceImageConfig: RuntimeConfigObject | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    if (!isRecord(clonedHealthcheck) || !sourceImageConfig || !targetImageConfig) {
+      return clonedHealthcheck;
+    }
+
+    const sourceHealthcheck = isRecord(sourceImageConfig.Healthcheck)
+      ? sourceImageConfig.Healthcheck
+      : {};
+    const targetHealthcheck = isRecord(targetImageConfig.Healthcheck)
+      ? targetImageConfig.Healthcheck
+      : {};
+    const reconciled: Record<string, unknown> = { ...clonedHealthcheck };
+    let changed = false;
+
+    for (const field of HEALTHCHECK_FIELDS) {
+      if (!this.areHealthcheckValuesEqual(clonedHealthcheck[field], sourceHealthcheck[field])) {
+        continue;
+      }
+      const targetValue = targetHealthcheck[field];
+      if (this.areHealthcheckValuesEqual(clonedHealthcheck[field], targetValue)) {
+        continue;
+      }
+      changed = true;
+      if (this.isUnsetHealthcheckValue(targetValue)) {
+        delete reconciled[field];
+      } else {
+        reconciled[field] = targetValue;
+      }
+    }
+
+    if (!changed) {
+      return clonedHealthcheck;
+    }
+
+    logContainer?.info?.(
+      'Reconciling stale image-inherited Healthcheck from cloned container spec so target image defaults can be used',
+    );
+    const hasRemainingField = HEALTHCHECK_FIELDS.some(
+      (field) => !this.isUnsetHealthcheckValue(reconciled[field]),
+    );
+    return hasRemainingField ? reconciled : undefined;
+  }
+
+  private isUnsetHealthcheckValue(value: unknown) {
+    return (
+      value === undefined ||
+      value === null ||
+      value === 0 ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  }
+
+  private areHealthcheckValuesEqual(left: unknown, right: unknown) {
+    if (this.isUnsetHealthcheckValue(left) || this.isUnsetHealthcheckValue(right)) {
+      return this.isUnsetHealthcheckValue(left) && this.isUnsetHealthcheckValue(right);
+    }
+    return Array.isArray(left) || Array.isArray(right)
+      ? this.areContainerProcessArgsEqual(left, right)
+      : left === right;
   }
 
   sanitizeImageInheritedEnv(
