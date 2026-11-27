@@ -74,7 +74,12 @@ import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
-import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import { isValidAgentId, loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
+import {
+  AudienceMismatchError,
+  getAudiencePinStore,
+  parsePortwingInfo,
+} from './portwing-audience.js';
 import { PORTWING_CONTAINER_EVENT, PortwingStateAlerts } from './portwing-container-events.js';
 import { StandardKeyRotation } from './standard-key-rotation.js';
 import { createRotationRequest } from './standard-key-rotation-client.js';
@@ -105,6 +110,9 @@ export interface AgentClientConfig {
   signingkeyid?: string;
   // Required when authmode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
   signingkey?: string;
+  // Optional with authmode 'ed25519': the Portwing agent ID to sign for
+  // (signature v3). Overrides discovery from /_portwing/info.
+  audience?: string;
   rotationdir?: string;
 }
 
@@ -408,6 +416,12 @@ export class AgentClient {
   // Parsed once at construction when authmode is 'ed25519'; undefined in token mode.
   private readonly ed25519PrivateKey?: KeyObject;
   private readonly keyRotation?: StandardKeyRotation;
+  // Portwing signature v3 audience: the pinned agent ID this client signs for.
+  // Once set it is never cleared, so a client never falls back to v2 for an
+  // agent that has accepted v3 (see portwing-audience.ts).
+  private audience?: string;
+  // Set when signing must stop (agent ID mismatch, unreadable pin file).
+  private audienceFailure?: Error;
   private rotationRecovery?: Promise<void>;
   public isConnected: boolean;
   /**
@@ -459,6 +473,7 @@ export class AgentClient {
     this.axiosOptions = this.buildAxiosOptions();
     if (this.config.authmode === 'ed25519') {
       this.ed25519PrivateKey = this.loadSigningKey();
+      this.audience = this.loadAudience();
     }
     if (this.config.rotationdir) {
       if (this.config.authmode !== 'ed25519') {
@@ -638,6 +653,113 @@ export class AgentClient {
   }
 
   /**
+   * The audience this client starts with: the operator override
+   * (`DD_AGENT_<NAME>_AUDIENCE`) when set, else the pin saved after a previous
+   * v3 request was accepted. An unreadable pin file stops signing rather than
+   * letting the client quietly sign v2 for an agent that may be locked to v3.
+   */
+  private loadAudience(): string | undefined {
+    if (this.config.audience !== undefined) {
+      if (!isValidAgentId(this.config.audience)) {
+        throw new Error(
+          `Agent ${this.name} has an invalid audience: it must match ^[a-z0-9-]{1,64}$`,
+        );
+      }
+      return this.config.audience;
+    }
+    try {
+      return getAudiencePinStore().get(this.name);
+    } catch (error) {
+      this.audienceFailure = new Error(
+        `Agent ${this.name} signing is stopped: the Portwing audience pin file is unreadable (${getErrorMessage(error)}). Fix or remove it and restart Drydock.`,
+      );
+      return undefined;
+    }
+  }
+
+  /** The audience to sign for, or the reason signing has stopped. */
+  private getSigningAudience(): string | undefined {
+    if (this.audienceFailure) {
+      throw this.audienceFailure;
+    }
+    return this.audience;
+  }
+
+  private shouldCheckAudience(): boolean {
+    return (
+      this.config.authmode === 'ed25519' && !this.edgeAdapter && this.audienceFailure === undefined
+    );
+  }
+
+  /**
+   * Reads `GET /_portwing/info`, signed for `audience` when given (v3) and v2
+   * otherwise. A 401 carrying `audience-mismatch` for a pinned agent means a
+   * different agent now answers at this address.
+   */
+  private async fetchAgentInfo(audience: string | undefined) {
+    const response = await axios.get(`${this.baseUrl}/_portwing/info`, {
+      ...this.buildAuthenticatedRequestConfig('GET', '/_portwing/info', undefined, audience),
+      timeout: AGENT_REQUEST_TIMEOUT_MS,
+      maxRedirects: 0,
+      validateStatus: () => true,
+    });
+    const reason = response.headers?.['x-portwing-reason'];
+    if (audience !== undefined && reason === 'audience-mismatch') {
+      throw new AudienceMismatchError(this.name, audience, undefined);
+    }
+    if (response.status < 200 || response.status >= 300) {
+      throw new Error(
+        `info request failed with status ${response.status}${reason ? ` (${reason})` : ''}`,
+      );
+    }
+    return parsePortwingInfo(response.data);
+  }
+
+  /**
+   * Establishes (or re-checks) the signature v3 audience. Never rejects: a
+   * transient failure leaves the current signing mode alone, and only a
+   * confirmed agent ID mismatch stops signing.
+   *
+   * - Pinned: sign v3, and stop signing if the agent reports another ID.
+   * - Unpinned: read the ID with a v2-signed request, confirm a v3 request for
+   *   that ID is accepted, then pin it. An agent without v3 stays on v2.
+   */
+  private async resolveAudience(): Promise<void> {
+    const pinned = this.audience;
+    try {
+      const info = await this.fetchAgentInfo(pinned);
+      if (pinned !== undefined) {
+        if (info.agentId !== undefined && info.agentId !== pinned) {
+          throw new AudienceMismatchError(this.name, pinned, info.agentId);
+        }
+        return;
+      }
+      if (!info.v3 || info.agentId === undefined) {
+        this.log.info(
+          `Agent ${this.name} does not offer signature v3${info.v3Reason ? ` (${info.v3Reason})` : ''}; signing with v2`,
+        );
+        return;
+      }
+      const confirmed = await this.fetchAgentInfo(info.agentId);
+      if (confirmed.agentId !== undefined && confirmed.agentId !== info.agentId) {
+        throw new AudienceMismatchError(this.name, info.agentId, confirmed.agentId);
+      }
+      getAudiencePinStore().set(this.name, info.agentId);
+      this.audience = info.agentId;
+      this.log.info(`Agent ${this.name} accepted signature v3; pinned agent ID ${info.agentId}`);
+    } catch (error) {
+      if (error instanceof AudienceMismatchError) {
+        this.audienceFailure = error;
+        this.log.error(error.message);
+      } else {
+        this.log.warn(
+          `Could not check the Portwing agent ID for ${this.name} (${getErrorMessage(error)})`,
+        );
+      }
+    }
+  }
+
+  /**
    * Serializes a request body exactly the way axios's default
    * transformRequest serializes a plain object (JSON.stringify), so the
    * Ed25519 body hash matches the bytes actually placed on the wire. Returns
@@ -684,6 +806,7 @@ export class AgentClient {
     method: string,
     path: string,
     data?: unknown,
+    audience: string | undefined = this.getSigningAudience(),
   ): AxiosRequestConfig {
     const privateKey = this.keyRotation?.identity.privateKey ?? this.ed25519PrivateKey;
     const keyId = this.keyRotation?.identity.keyId ?? this.config.signingkeyid;
@@ -696,6 +819,7 @@ export class AgentClient {
       body: this.serializeBodyForSigning(data),
       keyId,
       privateKey,
+      audience,
     });
     return {
       ...this.axiosOptions,
@@ -744,7 +868,9 @@ export class AgentClient {
     if (!this.keyRotation || this.stopped) {
       throw new Error('Managed key rotation is not enabled or the agent is stopped');
     }
-    const request = createRotationRequest(this.baseUrl, this.axiosOptions);
+    const request = createRotationRequest(this.baseUrl, this.axiosOptions, () =>
+      this.getSigningAudience(),
+    );
     return action === 'abort' ? this.keyRotation.abort(request) : this.keyRotation.rotate(request);
   }
 
@@ -1765,11 +1891,31 @@ export class AgentClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    if (this.shouldCheckAudience()) {
+      // resolveAudience() never rejects, so the stream always opens afterwards.
+      void this.resolveAudience().then(() => this.connectSse());
+      return;
+    }
+    this.connectSse();
+  }
+
+  private connectSse() {
+    if (this.stopped) {
+      return;
+    }
+    let authConfig: AxiosRequestConfig;
+    try {
+      authConfig = this.buildAuthenticatedRequestConfig('GET', '/api/events');
+    } catch (error: unknown) {
+      this.log.error(`SSE Connection not opened: ${getErrorMessage(error)}`);
+      this.scheduleReconnect();
+      return;
+    }
     axios({
       method: 'get',
       url: `${this.baseUrl}/api/events`,
       responseType: 'stream',
-      ...this.buildAuthenticatedRequestConfig('GET', '/api/events'),
+      ...authConfig,
     })
       .then((response) => {
         if (this.stopped) {

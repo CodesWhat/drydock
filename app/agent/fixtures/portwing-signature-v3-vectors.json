@@ -1,0 +1,684 @@
+{
+  "description": "Portwing request signature test vectors for the v3 (audience-bound) format. TEST ONLY: the key below is derived from a readable ASCII seed, authorizes nothing, and must never be used as a credential. Every vector is verified against an agent whose ID is presentedToAgent, with the clock pinned to nowUnix.",
+  "testOnly": true,
+  "format": {
+    "v3": "portwing-sig-v3\\n<agentId>\\nMETHOD\\nTARGET\\nBODY_SHA256\\nTIMESTAMP\\nNONCE",
+    "v2": "METHOD\\nTARGET\\nBODY_SHA256\\nTIMESTAMP\\nNONCE",
+    "legacy": "same as v2 with TARGET = path only; valid only for requests without a query",
+    "notes": "TARGET is the escaped path plus the raw query exactly as sent (for v2 and v3). BODY_SHA256 is lowercase hex of the body, e3b0c442... for an empty body. Signatures are Ed25519, base64url without padding. X-Portwing-Signature-Version selects the format. X-Portwing-Audience is optional; when present it must equal the agent ID or the request is rejected with audience-mismatch."
+  },
+  "key": {
+    "seedAscii": "portwing-test-vectors-only-00001",
+    "publicKeyBase64": "sQr4hVrAu76LgovXcuB2IG3dgIaHmgsiVPNWiFslxcg=",
+    "keyId": "93320ffe32b3b477"
+  },
+  "agentIdRule": {
+    "pattern": "^[a-z0-9-]{1,64}$",
+    "minLength": 1,
+    "maxLength": 64,
+    "generatedFormat": "32 lowercase hex characters (16 random bytes)",
+    "valid": [
+      "a",
+      "agent-1",
+      "0123456789abcdef0123456789abcdef",
+      "550e8400-e29b-41d4-a716-446655440000",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ],
+    "invalid": [
+      "",
+      "Agent",
+      "agent_1",
+      "agent.1",
+      "agent 1",
+      "agent/1",
+      "agent\n1",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ]
+  },
+  "agents": {
+    "A": "agent-a-0123456789abcdef0123456789abcdef",
+    "B": "agent-b-fedcba9876543210fedcba9876543210"
+  },
+  "infoEndpoint": {
+    "path": "GET /_portwing/info",
+    "exampleWhenV3Available": {
+      "agentId": "agent-a-0123456789abcdef0123456789abcdef",
+      "v3": true
+    },
+    "exampleWhenV3Unavailable": {
+      "agentId": "Agent_ID",
+      "v3": false,
+      "v3Reason": "agent-id-not-v3-compatible"
+    },
+    "v3Reasons": {
+      "agent-id-not-persistent": "No AGENT_ID and no persistent state directory, so the generated agent ID changes on restart. v3 requests answer 401 with this X-Portwing-Reason; v2 and legacy keep working.",
+      "agent-id-not-v3-compatible": "AGENT_ID is set to a value outside ^[a-z0-9-]{1,64}$. v3 requests answer 401 with this X-Portwing-Reason; v2 and legacy keep working.",
+      "state-not-writable": "AGENT_ID is set but the state directory cannot be written, so the downgrade locks could not survive a restart. v3 requests answer 401 with this X-Portwing-Reason; v2 and legacy keep working."
+    },
+    "notes": "A v3-specific refusal is only ever returned to a caller whose signature verified; a forged signature for a known key gets invalid-signature, while an unknown key ID gets unknown-key. The response carries more fields (version, mode, capabilities, ...). During initial negotiation, a controller can read agentId and v3 with a v2 signature while its key is unlocked and the minimum version permits v2. With SIGNATURE_MIN_VERSION=3 or a v3-locked key, it must already know the agent ID and sign the info request with v3. Start signing v3 only when v3 is true, and treat a missing v3 field as an older agent without v3. v3Reason is present only when v3 is false. Pin v3 per agent: once one v3 request to an agent has been accepted, never go back to v2 or legacy for it without operator action, not after an invalid-signature and not because a later info response says v3 is false, since the info body is unsigned and a 401 reason can be forged when TLS is terminated in between. The per-key lock is first-contact trust, and it needs a durable state volume to survive a replaced container. SIGNATURE_MIN_VERSION=3 is the recommended end state once every controller signs v3."
+  },
+  "nowUnix": 1793000000,
+  "vectors": [
+    {
+      "name": "v3-get-no-query",
+      "description": "GET without a query, signed for agent A and presented to agent A.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000001",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000001",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303031",
+      "signatureBase64url": "9iV0wlDqKJl2GglAKjopyEJ570-qgKq1O1zFSehPwmZuP6dsTQhbIIUAo8RU20xD9hXFvAE9rYBRvqq3BgHFDw",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v3-get-with-query",
+      "description": "GET with a percent-encoded query; the target covers the raw query exactly as sent.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000002",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000002",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303032",
+      "signatureBase64url": "ovuMOdeRICiQekt7L69p5GZR-qhfw6JF9NCM9IvqrOa3jsqYknJIyZhaHdJDdJuoCb_yxMWGBJp0j87WVSIrBQ",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v3-post-with-body",
+      "description": "POST with a JSON body; the body SHA-256 is part of the canonical bytes.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "POST",
+        "target": "/_portwing/compose",
+        "body": "{\"operation\":\"up\",\"stackName\":\"web\",\"composeFile\":\"services: {}\"}"
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000003",
+      "bodySha256": "d77e464c8e92a7009c7a1f8bfd7df43fdea123fec30be73b8cfaaba89a54d714",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nPOST\n/_portwing/compose\nd77e464c8e92a7009c7a1f8bfd7df43fdea123fec30be73b8cfaaba89a54d714\n1793000000\n00000000000000000000000000000003",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a504f53540a2f5f706f727477696e672f636f6d706f73650a643737653436346338653932613730303963376131663862666437646634336664656131323366656333306265373362386366616162613839613534643731340a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303033",
+      "signatureBase64url": "isJvuvTK2ZfuxpeRt18w0TSupXYlXFqPW-hcZlZZ8S5Hkfa2jS1uCR3T-5dvUMt_nSWPK0dyq8j6shusIoszAg",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v3-audience-header-matching",
+      "description": "Optional audience header naming this agent is accepted.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000004",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000004",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303034",
+      "signatureBase64url": "4TjSqNQSIZ3Kx7eZZbL6CgCS_4TjrYlvAH2IhSd9-UILgOoMk2RCyY7dSwuASNlqnM29O0DtZQHfrqmnkSOkDw",
+      "headers": {
+        "X-Portwing-Audience": "agent-a-0123456789abcdef0123456789abcdef",
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v3-cross-agent-without-audience-header",
+      "description": "Signed for agent A, replayed to agent B holding the same key: the bytes differ, so the signature fails.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-b-fedcba9876543210fedcba9876543210",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000005",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000005",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303035",
+      "signatureBase64url": "1ZyJ2bgL2lcS3y7IFkX7K4ONnVkWxHUuE0zUL5zK6EWajj2micxvz0R4f6iOfmpOCTjJZgQYcXS3g9E5KRP5AA",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "invalid-signature"
+      }
+    },
+    {
+      "name": "v3-cross-agent-with-audience-header",
+      "description": "Same replay, but the request names agent A as its audience: rejected with a distinct reason once the signature verifies under the named audience.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-b-fedcba9876543210fedcba9876543210",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000006",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000006",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303036",
+      "signatureBase64url": "FbICGh1UokNcHRNQz2yQogTmvxfb7CF0_dVwE5D28GJsf3R0zMFT3m1YrogMIJaXHV61VJrueGDIcg_WEPNPAA",
+      "headers": {
+        "X-Portwing-Audience": "agent-a-0123456789abcdef0123456789abcdef",
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "audience-mismatch"
+      }
+    },
+    {
+      "name": "v3-signature-sent-as-v2",
+      "description": "A valid v3 signature presented with version header 2 never verifies.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000007",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000007",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303037",
+      "signatureBase64url": "GxvpIS-fDnbzeYJgCg_9rGad4aTJopLS_Fw-tyuAUtiInIF5hQBnT5UPcUOanLwCy1dtsuDODykJHnP8CCKHDw",
+      "headers": {
+        "X-Portwing-Signature-Version": "2"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "invalid-signature"
+      }
+    },
+    {
+      "name": "v3-signature-sent-as-legacy",
+      "description": "A valid v3 signature presented with no version header never verifies.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000008",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000008",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303038",
+      "signatureBase64url": "Y2iQxBbKz3ojWVsQAwp7cPzdeNVJGi-GxJ-lffyGL9DCub1IoEjcnAR2Kx42RlsADzfEkkocvQaCVo59Ci0tBg",
+      "headers": null,
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "invalid-signature"
+      }
+    },
+    {
+      "name": "v2-signature-sent-as-v3",
+      "description": "A valid v2 signature presented with version header 3 never verifies.",
+      "signedVersion": "2",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000009",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000009",
+      "canonicalHex": "4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303039",
+      "signatureBase64url": "HhI-j6gP8ZzRkAs3O21UojM4teuqNeekTvbuem4FNNn8RpxUy9JfOyqqb-6aE7wx7KsFhoMHqF3PugTr_smEAQ",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "invalid-signature"
+      }
+    },
+    {
+      "name": "legacy-signature-sent-as-v3",
+      "description": "A valid legacy signature presented with version header 3 never verifies.",
+      "signedVersion": "1",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000a",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000a",
+      "canonicalHex": "4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303061",
+      "signatureBase64url": "FW1B5vaUEakIirwEF8wi1YgqNYGdukK1xkhO5par44nkQ5mbK7xKbap2KhdHqTzIAwCQ0SMyRQxjSjFct9F5Dg",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "invalid-signature"
+      }
+    },
+    {
+      "name": "v2-accepted-before-lock",
+      "description": "A v2 signature is still accepted while the key has not signed v3 and no minimum is set.",
+      "signedVersion": "2",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000b",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000b",
+      "canonicalHex": "4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303062",
+      "signatureBase64url": "S8PkBqEmNSJplXLb0b3M8E1zSvdOfjeVjxN3a08Tii4_a1pxm1GzdfoCa-mUXLI3ipnjssCnVIHl8NqOQNKRAA",
+      "headers": {
+        "X-Portwing-Signature-Version": "2"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "legacy-accepted-before-lock",
+      "description": "A legacy query-free signature is still accepted under the same conditions.",
+      "signedVersion": "1",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000c",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000c",
+      "canonicalHex": "4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303063",
+      "signatureBase64url": "ndTjMbx2GXzQ_3UVhvhU1sFbyKLmSYLU9xBGPy8UNqwFlfHZ5O_2XGK9RJn8cR_p_Dkm90AprtBU3aYHXekdDQ",
+      "headers": null,
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v2-refused-after-lock",
+      "description": "After the key has verified a v3 request, its valid v2 signature is refused.",
+      "signedVersion": "2",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000d",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000d",
+      "canonicalHex": "4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303064",
+      "signatureBase64url": "90f_H_0oqeIQweSedY3Oi1IakjNwp98OzZ-z_tgeAXL-c7jDJSjS70pcVucdpN8xYiGR55NoX6LmuaZH7YpJDg",
+      "headers": {
+        "X-Portwing-Signature-Version": "2"
+      },
+      "agentState": {
+        "keyLockedToV3": true,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "signature-locked"
+      }
+    },
+    {
+      "name": "legacy-refused-after-lock",
+      "description": "After the key has verified a v3 request, its valid legacy signature is refused.",
+      "signedVersion": "1",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000e",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000e",
+      "canonicalHex": "4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303065",
+      "signatureBase64url": "VYaEg04WLZuQsi4W6szFyo2oYghKKbtBLRisbvw2u-bENq21fpOwsj6_fAtS7GS-KBOCEgY78oFB3KOnx5wRCA",
+      "headers": null,
+      "agentState": {
+        "keyLockedToV3": true,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "signature-locked"
+      }
+    },
+    {
+      "name": "v3-accepted-after-lock",
+      "description": "A locked key keeps working with v3.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "0000000000000000000000000000000f",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n0000000000000000000000000000000f",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303066",
+      "signatureBase64url": "r2Fn1R9s75gQ_HJ75f5iGQrsvjlOzZyZsbujbyQjNhuV-Ex_NF_BbLC0-CMMKS1a8h8DX783dGqSTDFCa-BnCA",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": true,
+        "minVersion": 0
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v3-refused-agent-id-not-v3-compatible",
+      "description": "AGENT_ID outside ^[a-z0-9-]{1,64}$: v3 is refused with a specific reason (only to a caller whose signature verifies; a forged one gets invalid-signature).",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000012",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000012",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303132",
+      "signatureBase64url": "744zWBrbV_BGnFXs-DS9pi4KivWe-jTLpBgI-o5AkkdWvo63tDDy_dW9KGTVmlGlG-uKg2r6iF-GPVsCP9YDBA",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0,
+        "v3Unavailable": "agent-id-not-v3-compatible"
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "agent-id-not-v3-compatible"
+      }
+    },
+    {
+      "name": "v3-refused-agent-id-not-persistent",
+      "description": "No AGENT_ID and no persistent state directory: v3 is refused with a specific reason.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000013",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000013",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303133",
+      "signatureBase64url": "axInFBTahO_2eb3ahtDOnfC7ME9kuMT4o3wN_YUaNpQsvztdGzXhKVyNu3gx_a4lT_453O9YpL3Oz0X0A2PrAA",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0,
+        "v3Unavailable": "agent-id-not-persistent"
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "agent-id-not-persistent"
+      }
+    },
+    {
+      "name": "v3-refused-state-not-writable",
+      "description": "AGENT_ID set but the state directory is not writable, so downgrade locks could not be durable: v3 is refused.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000015",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000015",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303135",
+      "signatureBase64url": "0NjlyUi6MRxsEN8koCM8A81lzAeunCiZFPF80_w-WD2rpn-Zvz98X21VEqJg5NrOzcAkULcsb8SjZO06CNm-BQ",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0,
+        "v3Unavailable": "state-not-writable"
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "state-not-writable"
+      }
+    },
+    {
+      "name": "v2-accepted-when-v3-unavailable",
+      "description": "v2 keeps working while v3 is unavailable.",
+      "signedVersion": "2",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000014",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000014",
+      "canonicalHex": "4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303134",
+      "signatureBase64url": "55jx0cSOTHnng1QF_JQhQsh-n7kf0jBXhwJZikivBj-A25R-4PDsIWuLQ1chKYiC-MqOS5gHQooMm8QvW46SCA",
+      "headers": {
+        "X-Portwing-Signature-Version": "2"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 0,
+        "v3Unavailable": "agent-id-not-persistent"
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    },
+    {
+      "name": "v2-refused-by-min-version-3",
+      "description": "SIGNATURE_MIN_VERSION=3 refuses a valid v2 signature for every key.",
+      "signedVersion": "2",
+      "signedForAgent": "",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000010",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "GET\n/v1.44/containers/json?all=1&filters=%7B%22status%22%3A%5B%22running%22%5D%7D\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000010",
+      "canonicalHex": "4745540a2f76312e34342f636f6e7461696e6572732f6a736f6e3f616c6c3d312666696c746572733d25374225323273746174757325323225334125354225323272756e6e696e672532322535442537440a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303130",
+      "signatureBase64url": "314Zge9Pnq8NDqrSnKwgC_MFGcj1QkQEh3Lq0NJLRMIdYR-a1lKzW4CfTukAir_XaxDeVhBwAt80DcFnBfcfBA",
+      "headers": {
+        "X-Portwing-Signature-Version": "2"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 3
+      },
+      "expect": {
+        "accept": false,
+        "status": 401,
+        "reason": "signature-version-too-low"
+      }
+    },
+    {
+      "name": "v3-accepted-with-min-version-3",
+      "description": "SIGNATURE_MIN_VERSION=3 accepts v3.",
+      "signedVersion": "3",
+      "signedForAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "presentedToAgent": "agent-a-0123456789abcdef0123456789abcdef",
+      "request": {
+        "method": "GET",
+        "target": "/_portwing/info",
+        "body": ""
+      },
+      "timestamp": 1793000000,
+      "nonce": "00000000000000000000000000000011",
+      "bodySha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "canonicalString": "portwing-sig-v3\nagent-a-0123456789abcdef0123456789abcdef\nGET\n/_portwing/info\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n1793000000\n00000000000000000000000000000011",
+      "canonicalHex": "706f727477696e672d7369672d76330a6167656e742d612d30313233343536373839616263646566303132333435363738396162636465660a4745540a2f5f706f727477696e672f696e666f0a653362306334343239386663316331343961666266346338393936666239323432376165343165343634396239333463613439353939316237383532623835350a313739333030303030300a3030303030303030303030303030303030303030303030303030303030303131",
+      "signatureBase64url": "r_To80vh40udXfugMRnlgwiJH1CJ5EaQooCfo_k5iQhuMUJhUmA-4jO8WGmf9WQdKquDbYWsyF8gPd244nS9BA",
+      "headers": {
+        "X-Portwing-Signature-Version": "3"
+      },
+      "agentState": {
+        "keyLockedToV3": false,
+        "minVersion": 3
+      },
+      "expect": {
+        "accept": true,
+        "status": 200
+      }
+    }
+  ]
+}

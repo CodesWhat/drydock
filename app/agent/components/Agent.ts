@@ -26,6 +26,9 @@ export interface AgentConfiguration {
   // env var convention (see app/configuration/index.ts replaceSecrets) to load
   // it from a file instead of inlining it.
   signingkey?: string;
+  // Optional with authmode 'ed25519': the Portwing agent ID to sign for
+  // (signature v3). Overrides discovery from GET /_portwing/info.
+  audience?: string;
   rotationdir?: string;
 }
 
@@ -56,6 +59,14 @@ export default class Agent extends Component<AgentConfiguration> {
         then: this.joi.string().required(),
         otherwise: this.joi.string().optional(),
       }),
+      audience: this.joi
+        .string()
+        .pattern(/^[a-z0-9-]{1,64}$/)
+        .when('authmode', {
+          is: 'ed25519',
+          then: this.joi.optional(),
+          otherwise: this.joi.forbidden(),
+        }),
       cafile: this.joi.string().optional(),
       rotationdir: this.joi.string().when('authmode', {
         is: 'ed25519',

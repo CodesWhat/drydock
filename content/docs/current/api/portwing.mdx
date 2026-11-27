@@ -26,7 +26,8 @@ send the shared secret:
 | `X-Portwing-Timestamp` | Unix timestamp in seconds |
 | `X-Portwing-Nonce` | Fresh request nonce |
 | `X-Portwing-Signature` | Base64url Ed25519 signature |
-| `X-Portwing-Signature-Version` | `2` |
+| `X-Portwing-Signature-Version` | `3` for an agent whose ID Drydock has pinned, `2` otherwise |
+| `X-Portwing-Audience` | Version 3 only: the agent ID the signature is bound to |
 
 Signature version 2 signs the following UTF-8 bytes with no trailing newline:
 
@@ -45,6 +46,24 @@ Percent escapes, query parameter order, repeated parameters, and raw query
 bytes must not be decoded, normalized, or reordered. This differs from the
 Edge hello signature below, whose canonical WebSocket path remains fixed by
 the `portwing/1.0` protocol.
+
+Signature version 3 binds the signature to one agent. It signs the same bytes
+with a fixed `portwing-sig-v3` line and the agent ID in front:
+
+```text
+portwing-sig-v3
+AGENT-ID
+METHOD
+REQUEST-TARGET
+<SHA-256 hex of the exact request body bytes>
+<unix-timestamp-seconds>
+<nonce>
+```
+
+Drydock reads the agent ID from `GET /_portwing/info`, confirms the agent
+accepts version 3, pins the ID, and stops signing if the agent later reports a
+different one. See [Signature version 3](/docs/configuration/agents#signature-version-3-audience-bound)
+for the upgrade, rollback lock and agent replacement steps.
 
 ---
 
