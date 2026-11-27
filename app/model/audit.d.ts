@@ -68,7 +68,12 @@ export interface AuditEntry {
     | 'image-prune'
     | 'cleanup'
     | 'notification-silence-set'
-    | 'notification-silence-cleared';
+    | 'notification-silence-cleared'
+    | 'settings-updated'
+    | 'notification-rule-updated'
+    | 'notification-outbox-updated'
+    | 'operation-cancelled'
+    | 'agent-key-changed';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;

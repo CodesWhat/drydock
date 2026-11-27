@@ -122,7 +122,12 @@
       "image-prune": "镜像清理",
       "cleanup": "清理",
       "notification-silence-set": "已设置通知静音",
-      "notification-silence-cleared": "已取消通知静音"
+      "notification-silence-cleared": "已取消通知静音",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "容器",

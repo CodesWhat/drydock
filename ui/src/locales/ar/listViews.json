@@ -122,7 +122,12 @@
       "image-prune": "تنظيف الصورة",
       "cleanup": "التنظيف",
       "notification-silence-set": "تم كتم الإشعارات",
-      "notification-silence-cleared": "أُلغي كتم الإشعارات"
+      "notification-silence-cleared": "أُلغي كتم الإشعارات",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "الحاوية",

@@ -5,33 +5,39 @@ import { generateKeyPairSync } from 'node:crypto';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
 // Route handlers and mocks all hoisted so they are available before imports
-const { capturedHandlers, mockAgentKeys, mockSendErrorResponse, mockDisconnectByKeyId } =
-  vi.hoisted(() => {
-    const handlers: {
-      getKeys?: (req: unknown, res: unknown) => void;
-      postKeys?: (req: unknown, res: unknown) => void;
-      deleteKey?: (req: unknown, res: unknown) => void;
-    } = {};
+const {
+  capturedHandlers,
+  mockAgentKeys,
+  mockSendErrorResponse,
+  mockDisconnectByKeyId,
+  mockRecordAuditEvent,
+} = vi.hoisted(() => {
+  const handlers: {
+    getKeys?: (req: unknown, res: unknown) => void;
+    postKeys?: (req: unknown, res: unknown) => void;
+    deleteKey?: (req: unknown, res: unknown) => void;
+  } = {};
 
-    class AgentKeyConflictError extends Error {
-      constructor(message: string) {
-        super(message);
-        this.name = 'AgentKeyConflictError';
-      }
+  class AgentKeyConflictError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'AgentKeyConflictError';
     }
+  }
 
-    return {
-      capturedHandlers: handlers,
-      mockAgentKeys: {
-        listKeys: vi.fn(() => []),
-        addKey: vi.fn(),
-        revokeKey: vi.fn(() => false),
-        AgentKeyConflictError,
-      },
-      mockSendErrorResponse: vi.fn(),
-      mockDisconnectByKeyId: vi.fn(() => 0),
-    };
-  });
+  return {
+    capturedHandlers: handlers,
+    mockAgentKeys: {
+      listKeys: vi.fn(() => []),
+      addKey: vi.fn(),
+      revokeKey: vi.fn(() => false),
+      AgentKeyConflictError,
+    },
+    mockSendErrorResponse: vi.fn(),
+    mockDisconnectByKeyId: vi.fn(() => 0),
+    mockRecordAuditEvent: vi.fn(),
+  };
+});
 
 vi.mock('express', () => ({
   default: {
@@ -50,6 +56,7 @@ vi.mock('express', () => ({
 }));
 
 vi.mock('../store/agent-keys.js', () => mockAgentKeys);
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 vi.mock('./error-response.js', () => ({ sendErrorResponse: mockSendErrorResponse }));
 vi.mock('./portwing-ws.js', () => ({ disconnectByKeyId: mockDisconnectByKeyId }));
 vi.mock('../log/index.js', () => ({
@@ -187,6 +194,12 @@ describe('POST /keys', () => {
       keyId: record.keyId,
       label: record.label,
       createdAt: record.createdAt,
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+      action: 'agent-key-changed',
+      status: 'success',
+      containerName: 'agents',
+      details: 'added key=aabbccddeeff0011; label=agent',
     });
   });
 
@@ -359,6 +372,12 @@ describe('DELETE /keys/:keyId', () => {
     capturedHandlers.deleteKey!(req, res);
     expect(res.status).toHaveBeenCalledWith(204);
     expect(res.send).toHaveBeenCalled();
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+      action: 'agent-key-changed',
+      status: 'success',
+      containerName: 'agents',
+      details: 'revoked key=aabbccddeeff0011',
+    });
   });
 
   test('returns 404 when key is not found', () => {

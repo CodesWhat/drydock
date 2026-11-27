@@ -1,6 +1,7 @@
 import { createMockResponse } from '../test/helpers.js';
 
 const {
+  mockRecordAuditEvent,
   mockRouter,
   mockFindAllOutboxEntries,
   mockFindOutboxEntriesByStatus,
@@ -8,6 +9,7 @@ const {
   mockRequeueDeadLetterEntry,
   mockRemoveOutboxEntry,
 } = vi.hoisted(() => ({
+  mockRecordAuditEvent: vi.fn(),
   mockRouter: {
     use: vi.fn(),
     get: vi.fn(),
@@ -112,6 +114,8 @@ const {
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
 }));
+
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
@@ -477,6 +481,12 @@ describe('Notification Outbox Router', () => {
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(body.id).toBe('entry-1');
       expect(body.status).toBe('pending');
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'notification-outbox-updated',
+        status: 'success',
+        containerName: 'notifications',
+        details: 'retried entry=entry-1',
+      });
     });
 
     test('returns 404 when entry not found or not dead-letter', () => {
@@ -519,6 +529,12 @@ describe('Notification Outbox Router', () => {
       expect(mockGetOutboxEntry).toHaveBeenCalledWith('entry-1');
       expect(mockRemoveOutboxEntry).toHaveBeenCalledWith('entry-1');
       expect(res.status).toHaveBeenCalledWith(204);
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'notification-outbox-updated',
+        status: 'success',
+        containerName: 'notifications',
+        details: 'deleted entry=entry-1',
+      });
     });
 
     test('returns 404 when entry does not exist', () => {

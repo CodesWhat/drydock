@@ -4,16 +4,20 @@ import { validateOpenApiJsonResponse } from './openapi-contract.js';
 const deprecatedPutDeprecation = '@1772236800';
 const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 
-const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
-  mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
-  mockGetSettings: vi.fn(() => ({ internetlessMode: false, updateMode: 'manual' })),
-  mockUpdateSettings: vi.fn((settings) => ({
-    internetlessMode: false,
-    updateMode: 'manual',
-    ...settings,
-  })),
-  mockLogWarn: vi.fn(),
-}));
+const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn, mockRecordAuditEvent } =
+  vi.hoisted(() => ({
+    mockRecordAuditEvent: vi.fn(),
+    mockRouter: { use: vi.fn(), get: vi.fn(), put: vi.fn(), patch: vi.fn() },
+    mockGetSettings: vi.fn(() => ({ internetlessMode: false, updateMode: 'manual' })),
+    mockUpdateSettings: vi.fn((settings) => ({
+      internetlessMode: false,
+      updateMode: 'manual',
+      ...settings,
+    })),
+    mockLogWarn: vi.fn(),
+  }));
+
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -93,6 +97,12 @@ describe('Settings Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       internetlessMode: true,
       updateMode: 'manual',
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+      action: 'settings-updated',
+      status: 'success',
+      containerName: 'settings',
+      details: 'fields=internetlessMode',
     });
     const contractValidation = validateOpenApiJsonResponse({
       path: '/api/v1/settings',
@@ -187,6 +197,9 @@ describe('Settings Router', () => {
       internetlessMode: true,
       updateMode: 'manual',
     });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'settings-updated', status: 'success' }),
+    );
     expect(res.setHeader).toHaveBeenCalledWith('Deprecation', deprecatedPutDeprecation);
     expect(res.setHeader).toHaveBeenCalledWith('Sunset', deprecatedPutSunset);
     // Pinned to the versioned path. `/api/settings` returns 410 since v1.6.0

@@ -3,6 +3,7 @@ import joi from 'joi';
 import nocache from 'nocache';
 import logger from '../log/index.js';
 import * as settingsStore from '../store/settings.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { scoped } from './route-scopes.js';
@@ -54,6 +55,12 @@ function updateSettings(req: Request, res: Response): void {
   }
 
   const settingsUpdated = settingsStore.updateSettings(settingsToUpdate.value);
+  recordAuditEvent({
+    action: 'settings-updated',
+    status: 'success',
+    containerName: 'settings',
+    details: `fields=${Object.keys(settingsToUpdate.value).join(',')}`,
+  });
   res.status(200).json(settingsUpdated);
 }
 

@@ -122,7 +122,12 @@
       "image-prune": "Depuración de imagen",
       "cleanup": "Limpieza",
       "notification-silence-set": "Silencio de notificaciones activado",
-      "notification-silence-cleared": "Silencio de notificaciones eliminado"
+      "notification-silence-cleared": "Silencio de notificaciones eliminado",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Contenedor",
