@@ -287,6 +287,7 @@ export interface Container {
   tagFamily?: string;
   tagPinInfo?: boolean;
   tagCeiling?: string;
+  tagStops?: string;
   linkTemplate?: string;
   portLabel?: string;
   link?: string;
@@ -502,6 +503,7 @@ const schema = joi.object({
   tagFamily: joi.string(),
   tagPinInfo: joi.boolean(),
   tagCeiling: joi.string(),
+  tagStops: joi.string(),
   linkTemplate: joi.string(),
   portLabel: joi.string(),
   link: joi.string(),

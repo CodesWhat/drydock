@@ -157,6 +157,7 @@ import {
   ddTagFamily,
   ddTagInclude,
   ddTagPinInfo,
+  ddTagStops,
   ddTagTransform,
   ddWatch,
 } from './label.js';
@@ -1541,6 +1542,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         tagFamily: getLabel(container.Labels, ddTagFamily),
         tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
         tagCeiling: getLabel(container.Labels, ddTagCeiling),
+        tagStops: getLabel(container.Labels, ddTagStops),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate),
         portLabel: getLabel(container.Labels, ddPortLabel),
         displayName: getLabel(container.Labels, ddDisplayName),
@@ -1711,8 +1713,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
     // The watcher enumerates containers fresh from Docker, so a rejected major/minor line
     // lives only in the stored policy; fold it in so candidate selection can skip the line.
+    const { tagFamily, tagCeiling, tagStops } = tagPolicy;
     const watchedContainer = withStoredSkipTags(
-      { ...container, tagFamily: tagPolicy.tagFamily, tagCeiling: tagPolicy.tagCeiling },
+      { ...container, tagFamily, tagCeiling, tagStops },
       storeContainer.getContainer(container.id)?.updatePolicy?.skipTags,
     );
     return findNewVersionState(watchedContainer, logContainer, {

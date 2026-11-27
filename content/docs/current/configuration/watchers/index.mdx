@@ -885,6 +885,7 @@ Looking for ready-to-copy presets for common containers? See [Popular IMGSET Pre
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TRIGGER_INCLUDE`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_FAMILY`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_CEILING`
+- `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_STOPS`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_TAG_PIN_INFO`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_WATCH_DIGEST`
 - `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_INSPECT_TAG_PATH`
@@ -939,6 +940,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` — see the [tag transform grammar](#transform-the-tags-before-performing-the-analysis) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. Suffix variants must still match exactly, digit runs excepted. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.ceiling` | ⚪ | Never offer a tag outside the running major (`major`) or running major.minor (`minor`). Overrides matching imgset and watcher defaults. An invalid value logs a warning and is ignored. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | Matching imgset → watcher default → none |
+| `dd.tag.stops` | ⚪ | Required upgrade stops: a comma-separated list of versions the update path must pass through one at a time. Never offer a tag beyond the next stop the running version hasn't reached. Overrides the matching imgset. Invalid entries log a warning and are skipped. See [Required upgrade stops](#required-upgrade-stops) | Dotted versions, for example `27,28,29` or `13.8.8,13.12.15` | Matching imgset → none |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
 | `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
 | `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
@@ -1275,7 +1277,26 @@ A ceiling only narrows candidates. It doesn't make a fully-pinned tag climb: a s
 
 The ceiling applies to semver tags only. If the running tag isn't semver, or has too few numeric segments (a `minor` ceiling needs `major.minor`), the ceiling can't apply and is ignored, with one debug log line per container. A value other than `major` or `minor` logs a warning and is ignored. At the watcher level, an invalid `DD_WATCHER_{watcher_name}_TAG_CEILING` (or imgset `TAG_CEILING`) stops startup with a configuration error.
 
-This is not a required-upgrade stop. A ceiling never suggests an intermediate version to visit first.
+A ceiling never suggests an intermediate version to visit first. For software that has to be upgraded through specific versions, use [required upgrade stops](#required-upgrade-stops).
+
+### Required upgrade stops {#required-upgrade-stops}
+
+Some software can't jump straight to the latest release. Nextcloud upgrades one major at a time, and GitLab has required stops you have to install on the way. `dd.tag.stops` lists those versions. Drydock offers nothing beyond the next stop the running version hasn't reached, and once you're on that stop it opens up the range up to the one after.
+
+A stop only compares to the depth it names. `27` is reached by any `27.x.y` and allows every `27.x.y` tag. `13.8.8` is only reached by `13.8.8` or later and caps candidates at exactly `13.8.8`. Stops are sorted for you, so the order in the label doesn't matter, and a leading `v` is ignored.
+
+```yaml
+services:
+  nextcloud:
+    image: nextcloud:26.0.5
+    labels:
+      - dd.tag.family=loose
+      - dd.tag.stops=27,28,29
+```
+
+With that label, `26.0.5` is offered the newest `26.x` or `27.x` tag (never `28`). Once the container runs `27.1.11`, the next update is the newest `27.x` or `28.x` tag, and so on. After `29`, nothing is held back. For GitLab, `dd.tag.stops=13.8.8,13.12.15` takes `13.5.0` up to `13.8.8`, then to `13.12.15`.
+
+Stops and `dd.tag.ceiling` compose: a tag has to satisfy both. Stops only narrow candidates, like the ceiling, so a fully-pinned tag still needs `dd.tag.family=loose` or `dd.tag.include` to climb. Stops are read from the transformed tag, and they apply to semver tags only: if the running tag isn't semver, they're ignored with one debug log line per container. Entries that aren't dotted numbers (such as `latest` or `1.x`) log a warning and are skipped. Stops aren't regexes, and there's no watcher-level default; set them per container with the label or per image with an imgset.
 
 ### Running-version variables in include and exclude {#running-version-variables-in-include-and-exclude}
 

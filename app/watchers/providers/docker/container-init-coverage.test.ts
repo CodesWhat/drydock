@@ -644,6 +644,16 @@ describe('container-init coverage', () => {
       expect(container.tagCeiling).toBeUndefined();
     });
 
+    test('derives tagStops from dd.tag.stops label and restores the fallback when removed', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.stops': '27,28' });
+      expect(container.tagStops).toBe('27,28');
+      applyDerivedLabelFieldsToContainer(container, {}, { tagStops: '29' });
+      expect(container.tagStops).toBe('29');
+      applyDerivedLabelFieldsToContainer(container, {});
+      expect(container.tagStops).toBeUndefined();
+    });
+
     test('restores supplied imgset/watcher tag-policy fallbacks when labels are removed', () => {
       const container = makeContainer({ tagFamily: 'loose', tagPinInfo: false });
       applyDerivedLabelFieldsToContainer(container, {}, { tagFamily: 'strict', tagPinInfo: true });
@@ -835,6 +845,16 @@ describe('container-init coverage', () => {
           tagPinInfo: true,
         }),
       );
+    });
+
+    test('resolves the stops from label, then imgset, else unset', () => {
+      expect(
+        mergeConfigWithImgset({ tagStops: '27' }, { name: 'service', tagStops: '28' }, {}).tagStops,
+      ).toBe('27');
+      expect(mergeConfigWithImgset({}, { name: 'service', tagStops: '28' }, {}).tagStops).toBe(
+        '28',
+      );
+      expect(mergeConfigWithImgset({}, undefined, {}).tagStops).toBeUndefined();
     });
 
     test('resolves the ceiling from label, then imgset, then watcher default, else unset', () => {

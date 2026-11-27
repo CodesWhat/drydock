@@ -20,6 +20,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Six new native notification providers: Bark, Prowl, WhatsApp (Cloud API), XMPP, AMQP (RabbitMQ) and NATS, configured with `DD_NOTIFICATION_<TYPE>_<NAME>_*`. Each has outbound timeouts where HTTP is used, batch and single templates, secret masking in config output and debug dumps, and a docs page under Actions & Notifications.
 - Registries: outbound HTTP(S) proxy support. Set `DD_REGISTRY_{type}_{name}_PROXY` per registry, or `DD_HTTPS_PROXY` / `DD_HTTP_PROXY` / `DD_NO_PROXY` globally (falling back to the standard `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`). HTTPS registries go through an HTTP CONNECT tunnel, so authenticating proxies work with the registry's CA, mTLS and insecure settings intact. Proxy credentials are masked in the registration log and API config output.
 - **Sub-path hosting (`DD_SERVER_BASEPATH`)** — set `DD_SERVER_BASEPATH=/drydock` to serve the UI, API, SSE/WebSocket streams, session cookie and OIDC callback under a sub-path behind a reverse proxy; works whether the proxy forwards or strips the prefix. Nginx and Traefik examples are in the server configuration docs. ([Discussion #1524](https://github.com/CodesWhat/drydock/discussions/1524))
+- Required upgrade stops: `dd.tag.stops=27,28,29` (or an imgset `TAG_STOPS`) keeps updates from jumping past the next stop the running version hasn't reached, so Nextcloud can go one major at a time and GitLab through its required versions. Composes with `dd.tag.ceiling` (#1496)
 
 ### Security
 

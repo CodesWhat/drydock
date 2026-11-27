@@ -1127,6 +1127,7 @@ function containerToRow(c: container.Container, securityHash: string): Container
     tagFamily: c.tagFamily,
     tagPinInfo: c.tagPinInfo,
     tagCeiling: c.tagCeiling,
+    tagStops: c.tagStops,
   };
   const triggerConfig = {
     actionTriggerInclude: c.actionTriggerInclude,
@@ -1275,6 +1276,7 @@ function rowToContainer(row: Row): container.Container {
       tagFamily?: string;
       tagPinInfo?: boolean;
       tagCeiling?: string;
+      tagStops?: string;
     }>(typedRow.tag_config) ?? {};
   const triggerConfig =
     fromStoredJson<{
@@ -1355,6 +1357,7 @@ function rowToContainer(row: Row): container.Container {
     tagFamily: tagConfig.tagFamily,
     tagPinInfo: tagConfig.tagPinInfo,
     tagCeiling: tagConfig.tagCeiling,
+    tagStops: tagConfig.tagStops,
     actionTriggerInclude: triggerConfig.actionTriggerInclude,
     actionTriggerExclude: triggerConfig.actionTriggerExclude,
     notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
