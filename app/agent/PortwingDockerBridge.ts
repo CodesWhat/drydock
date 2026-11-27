@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { Socket } from 'node:net';
 import type { DockerApiProxyResponse } from './AgentClient.js';
+import { AgentRequestTimeoutError } from './AgentRequestTimeoutError.js';
 
 const DEFAULT_MAX_REQUEST_BODY_BYTES = 10 * 1024 * 1024;
 
@@ -66,6 +67,7 @@ function copyResponseHeaders(res: ServerResponse, headers: Record<string, string
 
 type PortwingTransportFailureReason =
   | 'timeout'
+  | 'request-timeout'
   | 'agent-unreachable'
   | 'bad-upstream-response'
   | 'transport-failed';
@@ -100,6 +102,9 @@ function errorCodes(error: unknown): string[] {
 }
 
 function classifyTransportError(error: unknown): PortwingTransportFailureReason {
+  if (error instanceof AgentRequestTimeoutError) {
+    return 'request-timeout';
+  }
   const message = error instanceof Error ? error.message : '';
   const codes = errorCodes(error);
   if (
@@ -253,7 +258,7 @@ export class PortwingDockerBridge {
       // (`error.json.reason`) so callers can tell a slow daemon from a dead agent.
       const reason = classifyTransportError(error);
       const payload = JSON.stringify({ message: 'Portwing Docker transport failed', reason });
-      res.writeHead(reason === 'timeout' ? 504 : 502, {
+      res.writeHead(reason === 'timeout' || reason === 'request-timeout' ? 504 : 502, {
         'content-type': 'application/json; charset=utf-8',
         'content-length': String(Buffer.byteLength(payload)),
       });
