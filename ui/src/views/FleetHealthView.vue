@@ -27,13 +27,22 @@ async function loadContainers() {
 
 const health = useFleetHealth({ containers, inventoryAvailable, busy, loadContainers });
 
+const fleet = {
+  ...health,
+  load: () =>
+    Promise.all([
+      health.load(),
+      inventoryAvailable.value || busy.value ? undefined : loadContainers().catch(() => undefined),
+    ]).then(() => undefined),
+};
+
 onMounted(() => {
   void loadContainers().catch(() => undefined);
 });
 </script>
 
 <template>
-  <div class="min-w-0 w-full">
-    <FleetHealthBar :health="health" />
+  <div class="min-w-0 w-full flex-1 min-h-0 overflow-y-auto">
+    <FleetHealthBar :health="fleet" />
   </div>
 </template>

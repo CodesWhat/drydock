@@ -74,4 +74,14 @@ describe('FleetHealthView', () => {
     expect(refreshWatcherInventory).toHaveBeenCalledTimes(1);
     expect(vi.mocked(getAllContainers).mock.calls.length).toBe(calls + 1);
   });
+
+  it('retries the container list from the reload button after a failed load', async () => {
+    vi.mocked(getAllContainers).mockRejectedValueOnce(new Error('list unavailable'));
+    const wrapper = mountWithPlugins(FleetHealthView);
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('Unavailable');
+    await wrapper.get('[data-test="fleet-health-reload"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.get('[data-test="fleet-health-row"]').text()).toContain('1 container');
+  });
 });
