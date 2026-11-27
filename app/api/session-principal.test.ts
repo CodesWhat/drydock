@@ -111,6 +111,20 @@ describe('session-principal', () => {
       });
     });
 
+    test('restores the role a mapped OIDC session carries', () => {
+      const req = createRequest({
+        [SESSION_USER_KEY]: {
+          user: '{"v":2,"kind":"oidc","username":"admin","role":"operator"}',
+        },
+      });
+
+      expect(readSessionPrincipal(req)).toEqual({
+        kind: 'session',
+        username: 'admin',
+        identity: { type: 'oidc', role: 'operator' },
+      });
+    });
+
     test('drops a stale session so it can never come back', () => {
       mockCheckSessionIdentity.mockReturnValue('stale');
       const session = { [SESSION_USER_KEY]: { user: V2_LOCAL } };
@@ -227,6 +241,20 @@ describe('session-principal', () => {
       writeSessionPrincipal(createRequest(session), { kind: 'oidc', username: 'admin' });
 
       expect(session[SESSION_USER_KEY]).toEqual({ user: V2_OIDC });
+    });
+
+    test('persists the mapped role of an OIDC principal', () => {
+      const session: Record<string, unknown> = {};
+
+      writeSessionPrincipal(createRequest(session), {
+        kind: 'oidc',
+        username: 'admin',
+        role: 'viewer',
+      });
+
+      expect(session[SESSION_USER_KEY]).toEqual({
+        user: '{"v":2,"kind":"oidc","username":"admin","role":"viewer"}',
+      });
     });
 
     test('rewrites a restored v2 session identically, so the session stays clean', () => {

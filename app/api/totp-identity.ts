@@ -22,6 +22,7 @@ import {
 import { getErrorMessage } from '../util/error.js';
 import type { SessionUser } from './auth-types.js';
 import { deriveSubjectId } from './local-subject.js';
+import { isOidcRoleMappingActive } from './principal-role.js';
 
 type LocalAssurance = 'password' | 'totp' | 'recovery';
 
@@ -108,7 +109,9 @@ function checkLocalIdentity(
 export function checkSessionIdentity(user: SessionUser): SessionIdentityCheck {
   const { identity } = user;
   if (identity?.type === 'oidc') {
-    return 'valid';
+    // A role-less OIDC session predates group mapping. Once a mapping exists
+    // it must not keep the admin it was minted with, so the user signs in again.
+    return identity.role === undefined && isOidcRoleMappingActive() ? 'stale' : 'valid';
   }
 
   try {

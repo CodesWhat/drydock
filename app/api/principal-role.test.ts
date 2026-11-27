@@ -12,7 +12,11 @@ vi.mock('./local-subject.js', () => ({
   deriveSubjectId: (providerId: string, username: string) => `${providerId}|${username}`,
 }));
 
-import { resolveHumanRole, resolvePrincipalRole } from './principal-role.js';
+import {
+  isOidcRoleMappingActive,
+  resolveHumanRole,
+  resolvePrincipalRole,
+} from './principal-role.js';
 
 function basicAuthenticator(
   id: string,
@@ -68,6 +72,33 @@ describe('resolvePrincipalRole', () => {
 
   test('anonymous without a role is admin', () => {
     expect(resolveHumanRole({ kind: 'anonymous', username: 'anonymous' })).toBe('admin');
+  });
+
+  test('an OIDC bearer carries the role its groups mapped to', () => {
+    expect(resolveHumanRole({ kind: 'oidc', username: 'carol', role: 'viewer' })).toBe('viewer');
+  });
+
+  test('an OIDC session carries the role its groups mapped to', () => {
+    expect(
+      resolveHumanRole({
+        kind: 'session',
+        username: 'carol',
+        identity: { type: 'oidc', role: 'operator' },
+      }),
+    ).toBe('operator');
+  });
+
+  test('role mapping is active only when an authenticator maps roles from claims', () => {
+    expect(isOidcRoleMappingActive()).toBe(false);
+    mockGetAuthenticators.mockReturnValue([
+      {
+        id: 'oidc.sso',
+        persistsSession: false,
+        mapsRolesFromClaims: true,
+        authenticate: () => Promise.resolve(undefined),
+      },
+    ]);
+    expect(isOidcRoleMappingActive()).toBe(true);
   });
 
   test('an OIDC bearer is admin until group mapping exists', () => {

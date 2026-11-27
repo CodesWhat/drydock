@@ -63,7 +63,9 @@ function sessionIdentityOf(principal: AuthenticatedPrincipal): SessionIdentity |
       }
       break;
     case 'oidc':
-      return { type: 'oidc' };
+      return principal.role === undefined
+        ? { type: 'oidc' }
+        : { type: 'oidc', role: principal.role };
     case 'session':
       return principal.identity;
     default:

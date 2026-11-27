@@ -28,6 +28,14 @@ function unknownSubjectRole(authenticators: readonly Authenticator[]): Role {
   return isRoleConfigurationActive(authenticators) ? 'viewer' : DEFAULT_ROLE;
 }
 
+/**
+ * An OIDC provider derives roles from group claims, so a session of its that
+ * carries no role predates the mapping and must sign in again.
+ */
+export function isOidcRoleMappingActive(): boolean {
+  return getAuthenticators().some((authenticator) => authenticator.mapsRolesFromClaims === true);
+}
+
 function roleOf(authenticator: Authenticator): Role {
   return authenticator.grantedRole?.role ?? DEFAULT_ROLE;
 }
@@ -75,8 +83,9 @@ export function resolvePrincipalRole(principal: AuthenticatedPrincipal): Role | 
  * The role a person holds on this request.
  *
  * An explicit `role` on the principal wins (anonymous access sets it). OIDC
- * principals are admin until group mapping lands; every Basic and local
- * session principal resolves through the account that signed it in.
+ * principals carry the role their group claims mapped to, and are admin when
+ * no mapping is configured; every Basic and local session principal resolves
+ * through the account that signed it in.
  * @param principal
  */
 export function resolveHumanRole(principal: HumanPrincipal): Role {
@@ -93,7 +102,7 @@ export function resolveHumanRole(principal: HumanPrincipal): Role {
       if (principal.identity.type === 'local') {
         return localSubjectRole(principal.identity.subjectId);
       }
-      return DEFAULT_ROLE;
+      return principal.identity.role ?? DEFAULT_ROLE;
     default:
       return DEFAULT_ROLE;
   }

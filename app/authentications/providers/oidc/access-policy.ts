@@ -6,7 +6,7 @@ export interface OidcAccessPolicyConfiguration {
   groupclaim?: string;
 }
 
-const DEFAULT_OIDC_GROUP_CLAIM = 'groups';
+export const DEFAULT_OIDC_GROUP_CLAIM = 'groups';
 
 /**
  * Thrown when a user authenticated at the IdP but is not allowed in by the
@@ -26,7 +26,7 @@ function splitList(value: string | undefined): string[] {
     .filter((entry) => entry !== '');
 }
 
-function extractGroups(claim: unknown): string[] {
+export function extractGroups(claim: unknown): string[] {
   if (Array.isArray(claim)) {
     return claim.filter((entry): entry is string => typeof entry === 'string');
   }
