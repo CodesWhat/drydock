@@ -1,0 +1,57 @@
+---
+title: "XMPP"
+description: "The xmpp trigger lets you send container update notifications as XMPP chat messages."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `xmpp` trigger lets you send container update notifications as chat messages over [XMPP](https://xmpp.org/). Drydock opens a session for each notification, sends one message and closes the session.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_SERVICE` | 🔴 | The XMPP service endpoint | `xmpp://`, `xmpps://`, `ws://` or `wss://` url |  |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_DOMAIN` | ⚪ | The XMPP domain, when it differs from the service host | Any string |  |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_USER` | 🔴 | The account user name | The local part of the account JID |  |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_PASSWORD` | 🔴 | The account password |  |  |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_TO` | 🔴 | The recipient JID | A JID such as `ops@example.com` |  |
+| `DD_NOTIFICATION_XMPP_{trigger_name}_TIMEOUT` | ⚪ | Milliseconds to wait for the whole session before failing | Number greater than `0` | `10000` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configure the trigger
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_XMPP_OPS_SERVICE=xmpp://xmpp.example.com:5222
+      - DD_NOTIFICATION_XMPP_OPS_DOMAIN=example.com
+      - DD_NOTIFICATION_XMPP_OPS_USER=drydock
+      - DD_NOTIFICATION_XMPP_OPS_PASSWORD=your-password
+      - DD_NOTIFICATION_XMPP_OPS_TO=ops@example.com
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_XMPP_OPS_SERVICE="xmpp://xmpp.example.com:5222" \
+  -e DD_NOTIFICATION_XMPP_OPS_DOMAIN="example.com" \
+  -e DD_NOTIFICATION_XMPP_OPS_USER="drydock" \
+  -e DD_NOTIFICATION_XMPP_OPS_PASSWORD="your-password" \
+  -e DD_NOTIFICATION_XMPP_OPS_TO="ops@example.com" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

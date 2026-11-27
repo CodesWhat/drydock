@@ -1,0 +1,62 @@
+---
+title: "NATS"
+description: "The nats trigger lets you publish container update events to a NATS subject."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `nats` trigger publishes container update events as JSON messages to a [NATS](https://nats.io/) subject. Drydock keeps one connection open, reconnects when it is closed and drains it on shutdown.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_NATS_{trigger_name}_SERVERS` | 🔴 | Comma-separated server urls | `nats://host:4222,nats://host2:4222` |  |
+| `DD_NOTIFICATION_NATS_{trigger_name}_SUBJECT` | ⚪ | Subject to publish to | Any valid NATS subject | `drydock.container` |
+| `DD_NOTIFICATION_NATS_{trigger_name}_USER` | ⚪ | User name. Used together with `PASSWORD` |  |  |
+| `DD_NOTIFICATION_NATS_{trigger_name}_PASSWORD` | ⚪ | Password. Used together with `USER` |  |  |
+| `DD_NOTIFICATION_NATS_{trigger_name}_TOKEN` | ⚪ | Authentication token. Used when no user and password pair is set |  |  |
+| `DD_NOTIFICATION_NATS_{trigger_name}_NKEY` | ⚪ | NKey seed. Used when no user, password or token is set | A seed starting with `SU` |  |
+| `DD_NOTIFICATION_NATS_{trigger_name}_DISABLETITLE` | ⚪ | Send an empty `title` field | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Message format
+
+Each message is a JSON object. A single update carries `title`, `message`, `mode` set to `simple`, and the full `container`. A batch carries `title`, `message`, `mode` set to `batch`, `eventKind`, `count` and the `containers` array.
+
+Credentials are tried in this order: user and password, then token, then NKey. Only the first complete set is used.
+
+## Examples
+
+### Publish with user and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_NATS_BUS_SERVERS=nats://nats.local:4222
+      - DD_NOTIFICATION_NATS_BUS_SUBJECT=drydock.updates
+      - DD_NOTIFICATION_NATS_BUS_USER=drydock
+      - DD_NOTIFICATION_NATS_BUS_PASSWORD=your-password
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_NATS_BUS_SERVERS="nats://nats.local:4222" \
+  -e DD_NOTIFICATION_NATS_BUS_SUBJECT="drydock.updates" \
+  -e DD_NOTIFICATION_NATS_BUS_USER="drydock" \
+  -e DD_NOTIFICATION_NATS_BUS_PASSWORD="your-password" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

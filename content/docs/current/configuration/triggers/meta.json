@@ -2,7 +2,9 @@
   "title": "Actions & Notifications",
   "pages": [
     "index",
+    "amqp",
     "apprise",
+    "bark",
     "command",
     "discord",
     "docker",
@@ -18,9 +20,11 @@
     "matrix",
     "mattermost",
     "mqtt",
+    "nats",
     "ntfy",
     "opsgenie",
     "pagerduty",
+    "prowl",
     "pushover",
     "rocketchat",
     "signal",
@@ -29,6 +33,8 @@
     "teams",
     "telegram",
     "uptimekuma",
-    "zulip"
+    "zulip",
+    "whatsapp",
+    "xmpp"
   ]
 }

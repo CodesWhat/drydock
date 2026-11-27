@@ -1,0 +1,54 @@
+---
+title: "WhatsApp"
+description: "The whatsapp trigger lets you send container update notifications via the WhatsApp Cloud API."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `whatsapp` trigger lets you send container update notifications as WhatsApp messages through the [WhatsApp Business Cloud API](https://developers.facebook.com/docs/whatsapp/cloud-api). You need a Meta app with a WhatsApp phone number and an access token that is allowed to message the recipient.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_WHATSAPP_{trigger_name}_PHONENUMBERID` | 🔴 | The WhatsApp Business phone number id that sends the message | The numeric id from the Meta app dashboard |  |
+| `DD_NOTIFICATION_WHATSAPP_{trigger_name}_TOKEN` | 🔴 | The Cloud API access token | A Meta access token |  |
+| `DD_NOTIFICATION_WHATSAPP_{trigger_name}_RECIPIENT` | 🔴 | The recipient phone number | Digits only, including country code |  |
+| `DD_NOTIFICATION_WHATSAPP_{trigger_name}_URL` | ⚪ | The Graph API base url | An `http` or `https` url | `https://graph.facebook.com/v19.0` |
+| `DD_NOTIFICATION_WHATSAPP_{trigger_name}_DISABLETITLE` | ⚪ | Send the body only, without the bold title line | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+<Callout type="warn">WhatsApp only delivers free-form text to recipients who messaged your business number in the last 24 hours. Outside that window Meta rejects the message and the trigger reports the API error.</Callout>
+
+## Examples
+
+### Configure the trigger
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_WHATSAPP_ME_PHONENUMBERID=1234567890
+      - DD_NOTIFICATION_WHATSAPP_ME_TOKEN=your-access-token
+      - DD_NOTIFICATION_WHATSAPP_ME_RECIPIENT=15550001111
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_WHATSAPP_ME_PHONENUMBERID="1234567890" \
+  -e DD_NOTIFICATION_WHATSAPP_ME_TOKEN="your-access-token" \
+  -e DD_NOTIFICATION_WHATSAPP_ME_RECIPIENT="15550001111" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

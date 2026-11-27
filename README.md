@@ -267,7 +267,7 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 |---|---|---|
 | 🔭 | **Monitor-First Detection** | Watches every running container and classifies each available update as major, minor, patch, or digest before anything happens. Nothing changes until you say so. |
 | 📦 | **27 Registry Providers** | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and 16 more. Public and private, cloud and self-hosted, with per-registry TLS and auth. |
-| 🔔 | **26 Triggers** | 22 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
+| 🔔 | **32 Triggers** | 28 notification channels (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy, NATS, AMQP, and more) plus Docker, Docker Compose, Portainer, and Command actions, with per-event/provider templates, live preview, threshold filtering, and batch mode. |
 | 🥊 | **Update Bouncer** | Trivy/Grype vulnerability scanning blocks unsafe updates before they deploy, with cosign signature verification and SBOM generation (CycloneDX and SPDX). |
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
@@ -293,9 +293,9 @@ Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harb
 
 Docker · Docker Compose · Portainer · Command
 
-### Notifications (22)
+### Notifications (28)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
+AMQP · Apprise · Bark · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NATS · NTFY · Opsgenie · PagerDuty · Prowl · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · WhatsApp · XMPP · Zulip
 
 ### Authentication
 
