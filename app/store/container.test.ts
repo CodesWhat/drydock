@@ -7417,7 +7417,7 @@ describe('dependency field persistence (spec 7.5 slice 1)', () => {
         )
         .run(...columns.map((column) => row[column] as string | number | null));
 
-      expect(migrate(legacyDb)).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16]);
+      expect(migrate(legacyDb)).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
       container.createCollections(legacyDb);
 
       const stored = container.getContainer('deps-pre-migration');
