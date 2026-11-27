@@ -1,7 +1,7 @@
 import { daysToMs } from '../model/maturity-policy.js';
 import { createMigratedMemoryDatabase } from '../test/sqlite-db.js';
 import * as audit from './audit.js';
-import { runWithAuditActor } from './audit-actor.js';
+import { getAuditActorRole, runWithAuditActor } from './audit-actor.js';
 import type { Database } from './db/driver.js';
 
 const { logMock } = vi.hoisted(() => ({
@@ -532,6 +532,28 @@ describe('actor attribution', () => {
   test('an explicit actor wins over the request context', () => {
     runWithAuditActor('bob', () => insert('web', { actor: 'alice' }));
     expect(audit.getAuditEntries().entries[0].actor).toBe('alice');
+  });
+
+  test('takes the actor role from the request context and reads it back', () => {
+    runWithAuditActor('bob', () => insert('web'), 'operator');
+    expect(audit.getAuditEntries().entries[0].actorRole).toBe('operator');
+    expect(db.prepare('SELECT actor_role FROM audit').get()).toEqual({ actor_role: 'operator' });
+  });
+
+  test('an explicit actor role wins over the request context', () => {
+    runWithAuditActor('bob', () => insert('web', { actorRole: 'viewer' }), 'admin');
+    expect(audit.getAuditEntries().entries[0].actorRole).toBe('viewer');
+  });
+
+  test('an entry naming its own actor does not inherit the request role', () => {
+    runWithAuditActor('bob', () => insert('web', { actor: 'alice' }), 'admin');
+    expect(audit.getAuditEntries().entries[0].actorRole).toBeUndefined();
+  });
+
+  test('stores no role for a bound actor without one (an API key)', () => {
+    runWithAuditActor('api-key:ci', () => insert('web'));
+    expect(db.prepare('SELECT actor_role FROM audit').get()).toEqual({ actor_role: null });
+    expect(runWithAuditActor('x', () => getAuditActorRole())).toBeUndefined();
   });
 
   test('stores null and omits the actor outside a request', () => {

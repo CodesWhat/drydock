@@ -64,6 +64,12 @@ API keys don't have a role. A key's [scopes](/docs/configuration/authentications
 
 The OpenAPI document (`GET /api/v1/openapi.json`) marks every operation with `x-drydock-min-role`, the least role it needs, next to `x-drydock-scope`.
 
+## Audit trail
+
+- **Every audit row records the role.** When a person causes an entry, `actorRole` is stored next to the actor, so the log still says what authority acted after you change someone's role. API keys have no role and leave it empty. The audit export includes an `actorRole` column.
+- **A refusal is audited.** A request refused for lack of a role or scope writes an `auth-denied` entry naming the actor, their role, the route, the scope and the role it needed. The same actor refused on the same route again within a minute doesn't write a second row, so someone probing every admin route can't fill the log.
+- **A refusal is counted.** `drydock_authz_denied_total{scope,role}` goes up on every refusal, throttled or not. See [monitoring](/docs/monitoring).
+
 ## Route matrix
 
 A route's role comes from the scope it declares: `read` needs `viewer`, `containers:watch`, `containers:update`, `containers:control` and `triggers:test` need `operator`, and `admin` and `api-keys:manage` need `admin`. A few routes set their own, and those are noted below. The test suite checks this table against every registered route.

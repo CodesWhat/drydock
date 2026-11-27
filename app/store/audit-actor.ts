@@ -11,16 +11,26 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-const actorStorage = new AsyncLocalStorage<{ actor: string }>();
+const actorStorage = new AsyncLocalStorage<{ actor: string; role?: string }>();
 
-/** Run `fn` with `actor` attributed to every audit row it writes. */
-export function runWithAuditActor<T>(actor: string, fn: () => T): T {
-  return actorStorage.run({ actor }, fn);
+/**
+ * Run `fn` with `actor` attributed to every audit row it writes. `role` is the
+ * role that actor held on this request, recorded beside it so the log keeps
+ * what authority acted after a later role change. API keys and the system have
+ * none.
+ */
+export function runWithAuditActor<T>(actor: string, fn: () => T, role?: string): T {
+  return actorStorage.run(role === undefined ? { actor } : { actor, role }, fn);
 }
 
 /** The actor bound to the current async context, if any. */
 export function getAuditActor(): string | undefined {
   return actorStorage.getStore()?.actor;
+}
+
+/** The role the bound actor held, if it had one. */
+export function getAuditActorRole(): string | undefined {
+  return actorStorage.getStore()?.role;
 }
 
 /**

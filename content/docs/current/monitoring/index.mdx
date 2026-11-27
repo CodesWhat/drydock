@@ -196,6 +196,7 @@ Use the auth metrics below to detect brute-force and username-enumeration activi
 - `drydock_auth_api_key_failure_total` counter, every rejected API key authentication attempt, including those the audit-entry throttle (at most one entry per source key per minute) suppresses from the audit trail
 - `drydock_auth_account_lockout_total{provider}` counter, incremented once each time an account lockout starts
 - `drydock_auth_ip_lockout_total{provider}` counter, incremented once each time an IP lockout starts
+- `drydock_authz_denied_total{scope,role}` counter, every request refused for lack of a role or scope. `scope` is the scope the route declared (or `session-only`) and `role` is `viewer`, `operator` or `admin` for a person and `api-key` for a key. Every refusal counts, including the ones the audit throttle doesn't write a row for
 
 The `_locked_total` gauges show how many lockouts are active right now. The `_lockout_total` counters count lockout events over time, so you can alert on a burst that started and expired between scrapes. Neither carries a username or IP label.
 

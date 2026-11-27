@@ -36,6 +36,27 @@ test('auth prometheus metrics should be properly configured', () => {
   expect(auth.getAuthAccountLockoutCounter()?.labelNames).toEqual(['provider']);
   expect(auth.getAuthIpLockoutCounter()?.name).toBe('drydock_auth_ip_lockout_total');
   expect(auth.getAuthIpLockoutCounter()?.labelNames).toEqual(['provider']);
+  expect(auth.getAuthzDeniedCounter()?.name).toBe('drydock_authz_denied_total');
+  expect(auth.getAuthzDeniedCounter()?.labelNames).toEqual(['scope', 'role']);
+});
+
+test('recordAuthzDenied counts per scope and role', async () => {
+  auth.init();
+  auth.recordAuthzDenied('admin', 'viewer');
+  auth.recordAuthzDenied('admin', 'viewer');
+  auth.recordAuthzDenied('containers:update', 'api-key');
+  const values = (await auth.getAuthzDeniedCounter()?.get())?.values;
+  expect(values).toEqual([
+    expect.objectContaining({ labels: { scope: 'admin', role: 'viewer' }, value: 2 }),
+    expect.objectContaining({ labels: { scope: 'containers:update', role: 'api-key' }, value: 1 }),
+  ]);
+});
+
+test('re-initialising replaces the denial counter', () => {
+  auth.init();
+  auth.recordAuthzDenied('admin', 'viewer');
+  auth.init();
+  expect(() => auth.recordAuthzDenied('admin', 'viewer')).not.toThrow();
 });
 
 test('helpers should no-op before metrics initialization', () => {
@@ -47,6 +68,7 @@ test('helpers should no-op before metrics initialization', () => {
   expect(() => auth.setAuthIpLockedTotal(2)).not.toThrow();
   expect(() => auth.recordAuthAccountLockout('basic')).not.toThrow();
   expect(() => auth.recordAuthIpLockout('basic')).not.toThrow();
+  expect(() => auth.recordAuthzDenied('admin', 'viewer')).not.toThrow();
 });
 
 test('lockout helpers should increment the labelled counters', () => {

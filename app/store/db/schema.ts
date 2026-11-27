@@ -548,3 +548,13 @@ export const AUDIT_ACTOR_SQL = `
 ALTER TABLE audit ADD COLUMN actor TEXT;
 CREATE INDEX audit_actor_timestamp ON audit(actor, timestamp_ms DESC);
 `;
+
+/**
+ * Migration 18: the role the actor held when the row was written, so the audit
+ * log can still say what authority acted after a later role change. NULL means
+ * no role applied (the system, an API key, whose scopes are its authority) and
+ * every row written before this column existed.
+ */
+export const AUDIT_ACTOR_ROLE_SQL = `
+ALTER TABLE audit ADD COLUMN actor_role TEXT;
+`;

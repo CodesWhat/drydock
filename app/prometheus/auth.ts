@@ -15,6 +15,10 @@ const METRIC_IP_LOCKED = 'drydock_auth_ip_locked_total';
 const METRIC_API_KEY_FAILURE = 'drydock_auth_api_key_failure_total';
 const METRIC_ACCOUNT_LOCKOUT = 'drydock_auth_account_lockout_total';
 const METRIC_IP_LOCKOUT = 'drydock_auth_ip_lockout_total';
+// Requests refused for lack of a role or scope. `role` is viewer, operator or
+// admin for a person and `api-key` for a key; `scope` is the scope the route
+// declared, so both labels stay in small fixed sets.
+const METRIC_AUTHZ_DENIED = 'drydock_authz_denied_total';
 
 let authLoginCounter: Counter<string> | undefined;
 let authLoginDurationHistogram: Histogram<string> | undefined;
@@ -24,6 +28,7 @@ let authIpLockedGauge: Gauge<string> | undefined;
 let authApiKeyFailureCounter: Counter<string> | undefined;
 let authAccountLockoutCounter: Counter<string> | undefined;
 let authIpLockoutCounter: Counter<string> | undefined;
+let authzDeniedCounter: Counter<string> | undefined;
 
 export function init() {
   if (authLoginCounter) {
@@ -94,6 +99,15 @@ export function init() {
     help: 'IP lockouts started, by authentication provider',
     labelNames: ['provider'],
   });
+
+  if (authzDeniedCounter) {
+    register.removeSingleMetric(METRIC_AUTHZ_DENIED);
+  }
+  authzDeniedCounter = new Counter({
+    name: METRIC_AUTHZ_DENIED,
+    help: 'Requests refused because the caller lacked the required role or scope',
+    labelNames: ['scope', 'role'],
+  });
 }
 
 export function getAuthLoginCounter() {
@@ -160,6 +174,14 @@ export function recordAuthAccountLockout(provider: AuthProvider): void {
   authAccountLockoutCounter?.inc({ provider });
 }
 
+export function getAuthzDeniedCounter() {
+  return authzDeniedCounter;
+}
+
+export function recordAuthzDenied(scope: string, role: string): void {
+  authzDeniedCounter?.inc({ scope, role });
+}
+
 export function recordAuthIpLockout(provider: AuthProvider): void {
   authIpLockoutCounter?.inc({ provider });
 }
@@ -190,6 +212,10 @@ export function _resetAuthPrometheusStateForTests(): void {
     register.removeSingleMetric(METRIC_IP_LOCKOUT);
   }
 
+  if (authzDeniedCounter) {
+    register.removeSingleMetric(METRIC_AUTHZ_DENIED);
+  }
+
   authLoginCounter = undefined;
   authLoginDurationHistogram = undefined;
   authUsernameMismatchCounter = undefined;
@@ -198,4 +224,5 @@ export function _resetAuthPrometheusStateForTests(): void {
   authApiKeyFailureCounter = undefined;
   authAccountLockoutCounter = undefined;
   authIpLockoutCounter = undefined;
+  authzDeniedCounter = undefined;
 }

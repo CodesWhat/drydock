@@ -131,7 +131,8 @@
       "notification-rule-updated": "Notification Rule Updated",
       "notification-outbox-updated": "Notification Outbox Updated",
       "operation-cancelled": "Update Operation Cancelled",
-      "agent-key-changed": "Agent Key Changed"
+      "agent-key-changed": "Agent Key Changed",
+      "auth-denied": "Access Denied"
     },
     "target": {
       "container": "Контейнер",

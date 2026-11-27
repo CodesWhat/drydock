@@ -77,7 +77,8 @@ export interface AuditEntry {
     | 'notification-rule-updated'
     | 'notification-outbox-updated'
     | 'operation-cancelled'
-    | 'agent-key-changed';
+    | 'agent-key-changed'
+    | 'auth-denied';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;
@@ -90,4 +91,6 @@ export interface AuditEntry {
   details?: string;
   /** Who caused the event. Absent for the system (schedulers, auto-updates, agents). */
   actor?: string;
+  /** The role the actor held at the time. Absent for the system, API keys and rows written before roles. */
+  actorRole?: string;
 }

@@ -45,6 +45,7 @@ const AUDIT_EXPORT_CSV_COLUMNS = [
   'id',
   'timestamp',
   'actor',
+  'actorRole',
   'action',
   'containerName',
   'containerIdentityKey',

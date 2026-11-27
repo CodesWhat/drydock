@@ -4,6 +4,7 @@ import { StoreConstraintError } from './driver.js';
 import {
   AGENT_KEY_ROTATION_MIGRATION_VERSION,
   AUDIT_ACTOR_MIGRATION_VERSION,
+  AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
   assertSchemaSupported,
   GROUP_POLICIES_MIGRATION_VERSION,
   getAppliedSchemaVersions,
@@ -66,6 +67,7 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
     expect(db.prepare('SELECT * FROM agent_keys ORDER BY key_id').all()).toEqual([
       {
@@ -125,6 +127,7 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
   });
 
@@ -159,6 +162,7 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
 
     const rows = db
@@ -192,6 +196,7 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
 
     expect(
@@ -233,12 +238,13 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
 
     expect(db.prepare('SELECT enrollment_id, failed_attempts FROM totp_enrollments').all()).toEqual(
       [{ enrollment_id: 'pending', failed_attempts: 0 }],
     );
-    expect(MIGRATIONS.at(-1)?.version).toBe(UI_PREFERENCES_REVISION_MIGRATION_VERSION);
+    expect(MIGRATIONS.at(-1)?.version).toBe(AUDIT_ACTOR_ROLE_MIGRATION_VERSION);
   });
 
   test('migration 16 indexes update_operations.new_container_id', () => {
@@ -254,6 +260,7 @@ describe('store/db/migrations', () => {
     expect(migrate(db)).toEqual([
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
 
     expect(
@@ -282,6 +289,7 @@ describe('store/db/migrations', () => {
       AUDIT_ACTOR_MIGRATION_VERSION,
       UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
       UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
     ]);
 
     expect(db.prepare('SELECT id, actor FROM audit').all()).toEqual([{ id: 'old', actor: null }]);
@@ -303,10 +311,31 @@ describe('store/db/migrations', () => {
        VALUES ('alice', 11, '{}', '2026-07-11T12:00:00.000Z')`,
     ).run();
 
-    expect(migrate(db)).toEqual([UI_PREFERENCES_REVISION_MIGRATION_VERSION]);
+    expect(migrate(db)).toEqual([
+      UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+      AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
+    ]);
 
     expect(db.prepare('SELECT username, revision FROM ui_preferences').all()).toEqual([
       { username: 'alice', revision: 1 },
+    ]);
+  });
+
+  test('migration 18 adds a nullable audit.actor_role and leaves existing rows null', () => {
+    expect(AUDIT_ACTOR_ROLE_MIGRATION_VERSION).toBe(18);
+    migrate(
+      db,
+      MIGRATIONS.filter((migration) => migration.version < AUDIT_ACTOR_ROLE_MIGRATION_VERSION),
+    );
+    db.prepare(
+      `INSERT INTO audit (id, timestamp, timestamp_ms, action, container_name, status, actor)
+       VALUES ('old', '2026-01-01T00:00:00.000Z', 1, 'update-applied', 'web', 'success', 'alice')`,
+    ).run();
+
+    expect(migrate(db)).toEqual([AUDIT_ACTOR_ROLE_MIGRATION_VERSION]);
+
+    expect(db.prepare('SELECT id, actor, actor_role FROM audit').all()).toEqual([
+      { id: 'old', actor: 'alice', actor_role: null },
     ]);
   });
 
@@ -378,6 +407,7 @@ describe('store/db/migrations', () => {
         AUDIT_ACTOR_MIGRATION_VERSION,
         UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
         UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+        AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
       ]);
       expect(migrate(db)).toContain(GROUP_POLICIES_MIGRATION_VERSION);
       expect(migrate(db)).toEqual([]);
@@ -444,6 +474,7 @@ describe('store/db/migrations', () => {
         AUDIT_ACTOR_MIGRATION_VERSION,
         UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
         UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+        AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT group_policy FROM containers WHERE id = 'existing'").get()).toEqual(
         { group_policy: null },
@@ -522,6 +553,7 @@ describe('store/db/migrations', () => {
         AUDIT_ACTOR_MIGRATION_VERSION,
         UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
         UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+        AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
       ]);
       expect(db.prepare("SELECT label_owned FROM containers WHERE id = 'existing'").get()).toEqual({
         label_owned: null,
