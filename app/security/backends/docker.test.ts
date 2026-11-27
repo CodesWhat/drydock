@@ -181,6 +181,21 @@ describe('createDockerScannerBackend', () => {
       await expect(backend.run(runOptions)).resolves.toMatchObject({ stdout: '{"matches":[]}' });
     });
 
+    test('treats empty attach output as truncated when logs fail and the stream closed early', async () => {
+      const { backend } = createHarness({
+        stdout: '',
+        logs: async () => {
+          throw new Error('logs unavailable');
+        },
+        wait: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          return { StatusCode: 0 };
+        },
+      });
+
+      await expect(backend.run(runOptions)).rejects.toThrow(/attach stream closed/);
+    });
+
     test('accepts line-delimited JSON attach output when logs fail', async () => {
       const { backend } = createHarness({
         stdout: '{"a":1}\n{"b":2}\n',
