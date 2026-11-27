@@ -253,6 +253,34 @@ describe('HealthMonitor', () => {
     expect(inspect).toHaveBeenCalledTimes(3);
   });
 
+  test('should treat a non-string health status as not unhealthy and keep polling', async () => {
+    var log = createMockLog();
+    var triggerInstance = createMockTriggerInstance();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 42 } },
+    });
+
+    startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 30000,
+      interval: 10000,
+      triggerInstance,
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    const inspect = dockerApi.getContainer.mock.results[0].value.inspect;
+    expect(inspect).toHaveBeenCalledTimes(3);
+    expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
+    expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
+  });
+
   test('should poll through the whole window when every inspect fails, then close it without a rollback', async () => {
     var log = createMockLog();
     var triggerInstance = createMockTriggerInstance();
