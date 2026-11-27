@@ -695,13 +695,13 @@ onUnmounted(() => {
                    @click="clearSelection">
           {{ t('approvalsView.bulk.clear') }}
         </AppButton>
-        <AppButton size="sm" variant="danger-subtle" weight="bold" data-testid="approval-bulk-reject"
+        <AppButton v-can="'containers:update'" size="sm" variant="danger-subtle" weight="bold" data-testid="approval-bulk-reject"
                    :disabled="bulkActing || actingId !== null"
                    @click="confirmBulkReject">
           <AppIcon name="xmark" :size="12" class="mr-1" />
           {{ t('approvalsView.bulk.rejectSelected') }}
         </AppButton>
-        <AppButton size="sm" variant="success-subtle" weight="bold" data-testid="approval-bulk-approve"
+        <AppButton v-can="'containers:update'" size="sm" variant="success-subtle" weight="bold" data-testid="approval-bulk-approve"
                    :disabled="bulkActing || actingId !== null || isNotifyMode"
                    :title="isNotifyMode ? t('approvalsView.actions.approveDisabledNotify') : undefined"
                    @click="confirmBulkApprove">
@@ -815,7 +815,7 @@ onUnmounted(() => {
             data-testid="approval-expand-toggle"
             @click.stop="toggleExpanded(row)"
           />
-          <AppButton
+          <AppButton v-can="'containers:update'"
             size="sm"
             variant="success-subtle"
             weight="bold"
@@ -830,6 +830,7 @@ onUnmounted(() => {
           </AppButton>
           <select
             v-if="row.updateKind === 'tag'"
+            v-can="'containers:update'"
             class="px-1 py-0.5 dd-rounded text-2xs-plus dd-text"
             :style="{ backgroundColor: 'var(--dd-bg)', border: '1px solid var(--dd-border)' }"
             :value="rejectScopeFor(row)"
@@ -843,7 +844,7 @@ onUnmounted(() => {
             <option value="minor">{{ t('approvalsView.rejectScope.minor') }}</option>
             <option value="major">{{ t('approvalsView.rejectScope.major') }}</option>
           </select>
-          <AppButton
+          <AppButton v-can="'containers:update'"
             size="sm"
             variant="danger-subtle"
             weight="bold"
@@ -855,7 +856,7 @@ onUnmounted(() => {
             <AppIcon name="xmark" :size="12" />
             {{ t('approvalsView.actions.reject') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:update'"
             size="sm"
             variant="text-muted"
             weight="bold"

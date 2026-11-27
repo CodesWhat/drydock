@@ -98,7 +98,10 @@
         "userMenu": "ユーザーメニュー",
         "profile": "プロフィール",
         "signOut": "サインアウト",
-        "userFallback": "ユーザー"
+        "userFallback": "ユーザー",
+        "roleViewer": "閲覧者",
+        "roleOperator": "オペレーター",
+        "roleAdmin": "管理者"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "検索またはダイアログを閉じる",
         "showHelp": "このヘルプを表示",
         "toggleSearch": "検索の切り替え"
+      },
+      "permissionDenied": {
+        "title": "許可されていません",
+        "body": "あなたのロールではこの操作はできません。"
       }
     },
     "announcementBanner": {

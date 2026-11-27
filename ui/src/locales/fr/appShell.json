@@ -98,7 +98,10 @@
         "userMenu": "Menu utilisateur",
         "profile": "Profil",
         "signOut": "Se déconnecter",
-        "userFallback": "Utilisateur"
+        "userFallback": "Utilisateur",
+        "roleViewer": "Lecteur",
+        "roleOperator": "Opérateur",
+        "roleAdmin": "Administrateur"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Fermer la recherche ou les boîtes de dialogue",
         "showHelp": "Afficher cette aide",
         "toggleSearch": "Afficher/masquer la recherche"
+      },
+      "permissionDenied": {
+        "title": "Non autorisé",
+        "body": "Votre rôle n'autorise pas cette action."
       }
     },
     "announcementBanner": {

@@ -98,7 +98,10 @@
         "userMenu": "用户菜单",
         "profile": "个人资料",
         "signOut": "退出登录",
-        "userFallback": "用户"
+        "userFallback": "用户",
+        "roleViewer": "查看者",
+        "roleOperator": "操作员",
+        "roleAdmin": "管理员"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "关闭搜索或关闭对话框",
         "showHelp": "显示此帮助",
         "toggleSearch": "切换搜索"
+      },
+      "permissionDenied": {
+        "title": "不允许",
+        "body": "你的角色无权执行此操作。"
       }
     },
     "announcementBanner": {

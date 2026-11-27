@@ -98,7 +98,10 @@
         "userMenu": "User menu",
         "profile": "Profile",
         "signOut": "Sign out",
-        "userFallback": "User"
+        "userFallback": "User",
+        "roleViewer": "Viewer",
+        "roleOperator": "Operator",
+        "roleAdmin": "Admin"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Close search or dismiss dialogs",
         "showHelp": "Show this help",
         "toggleSearch": "Toggle search"
+      },
+      "permissionDenied": {
+        "title": "Not allowed",
+        "body": "Your role doesn't permit that action."
       }
     },
     "announcementBanner": {

@@ -80,6 +80,7 @@ onUnmounted(clear);
           {{ t('containerComponents.selection.clear') }}
         </AppButton>
         <AppButton
+          v-can="'containers:update'"
           size="sm"
           variant="elevated"
           :disabled="plan.dispatch.length === 0"

@@ -98,7 +98,10 @@
         "userMenu": "قائمة المستخدم",
         "profile": "الملف الشخصي",
         "signOut": "تسجيل الخروج",
-        "userFallback": "مستخدم"
+        "userFallback": "مستخدم",
+        "roleViewer": "مشاهد",
+        "roleOperator": "مشغّل",
+        "roleAdmin": "مسؤول"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "إغلاق البحث أو إغلاق مربعات الحوار",
         "showHelp": "إظهار هذه المساعدة",
         "toggleSearch": "تبديل البحث"
+      },
+      "permissionDenied": {
+        "title": "غير مسموح",
+        "body": "دورك لا يسمح بهذا الإجراء."
       }
     },
     "announcementBanner": {

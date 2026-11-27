@@ -59,11 +59,13 @@ import {
   isAuthenticated,
   isLoginSessionEligible,
 } from './principal.js';
+import { resolveHumanRole } from './principal-role.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
   isIdentityAwareRateLimitKeyingEnabled,
   isRequestAuthenticated,
 } from './rate-limit-key.js';
+import { ROLE_SCOPES, type Role } from './roles.js';
 import { SESSION_COOKIE_NAME } from './session-cookie.js';
 import {
   clearSessionPrincipal,
@@ -216,9 +218,21 @@ function getAuthStrategiesTombstone(_req: Request, res: Response): void {
  * @param res
  */
 function getUser(req: AuthRequest, res: Response): void {
-  const user: { username: string; apiKeyReviewPending?: true } = {
-    username: getPrincipal(req)?.username ?? ANONYMOUS_USERNAME,
+  const principal = getPrincipal(req);
+  const user: {
+    username: string;
+    role?: Role;
+    scopes?: readonly string[];
+    apiKeyReviewPending?: true;
+  } = {
+    username: principal?.username ?? ANONYMOUS_USERNAME,
   };
+  if (principal?.kind === 'api-key') {
+    user.scopes = principal.scopes;
+  } else if (principal) {
+    user.role = resolveHumanRole(principal);
+    user.scopes = ROLE_SCOPES[user.role];
+  }
   if (isApiKeyReviewPending(req)) {
     user.apiKeyReviewPending = true;
   }

@@ -99,20 +99,20 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
           <div>
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.actionsGroup') }}</div>
             <div class="flex flex-wrap gap-2">
-              <AppButton size="md" variant="outlined" :disabled="previewLoading"
+              <AppButton v-can="'containers:watch'" size="md" variant="outlined" :disabled="previewLoading"
                       @click="runContainerPreview">
                 {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
               </AppButton>
-	              <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="md" variant="danger"
+	              <AppButton v-can="'containers:update'" v-if="isUpdateHardBlocked(selectedContainer)" size="md" variant="danger"
 	                      :disabled="true">
 	                <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	              </AppButton>
-	              <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="md" variant="danger"
+	              <AppButton v-can="'containers:update'" v-else-if="selectedContainer.bouncer === 'blocked'" size="md" variant="danger"
 	                      :disabled="isActionInProgress(selectedContainer)"
 	                      @click="confirmForceUpdate(selectedContainer)">
 	                <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
               </AppButton>
-              <AppButton v-else
+              <AppButton v-can="'containers:update'" v-else
                       size="md" variant="outlined"
                       :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
                       :title="dryRunTrigger ? t('containerComponents.fullPageActions.dryRunUpdateTooltip') : undefined"
@@ -120,7 +120,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       @click="confirmUpdate(selectedContainer)">
                 {{ dryRunTrigger ? t('containerComponents.fullPageActions.previewOnly') : t('containerComponents.fullPageActions.updateNow') }}
               </AppButton>
-              <AppButton size="md" variant="outlined" :disabled="isActionInProgress(selectedContainer)"
+              <AppButton v-can="'containers:watch'" size="md" variant="outlined" :disabled="isActionInProgress(selectedContainer)"
                       @click="scanContainer(selectedContainer)">
                 {{ t('containerComponents.fullPageActions.scanNow') }}
               </AppButton>
@@ -135,7 +135,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
             </div>
           </div>
           <!-- Skip & Snooze group -->
-          <div>
+          <div v-can="'containers:update'">
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.skipSnoozeGroup') }}</div>
             <div class="flex flex-wrap gap-2">
               <AppButton size="md" variant="outlined" :disabled="!selectedContainer.newTag || policyInProgress !== null"
@@ -166,7 +166,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
             </div>
           </div>
           <!-- Maturity group -->
-          <div>
+          <div v-can="'containers:update'">
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.maturityGroup') }}</div>
             <div class="flex flex-wrap gap-2 items-center">
               <select
@@ -196,7 +196,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
             </div>
           </div>
           <!-- Reset group -->
-          <div>
+          <div v-can="'containers:update'">
             <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.resetGroup') }}</div>
             <div class="flex flex-wrap gap-2">
               <AppButton size="md" variant="outlined" :disabled="(selectedSkipTags.length === 0 && selectedSkipDigests.length === 0) || policyInProgress !== null"
@@ -228,6 +228,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ tag }}</span>
                   <AppIconButton
+                    v-can="'containers:update'"
                     icon="xmark"
                     size="toolbar"
                     variant="muted"
@@ -246,6 +247,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ digest }}</span>
                   <AppIconButton
+                    v-can="'containers:update'"
                     icon="xmark"
                     size="toolbar"
                     variant="muted"
@@ -353,7 +355,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                   {{ t('containerComponents.triggers.autoBadge') }}
                 </AppBadge>
               </div>
-              <AppButton size="md" variant="outlined" :disabled="triggerRunInProgress !== null"
+              <AppButton v-can="'containers:update'" size="md" variant="outlined" :disabled="triggerRunInProgress !== null"
                       @click="runAssociatedTrigger(trigger)">
                 {{ triggerRunInProgress === getTriggerKey(trigger) ? t('containerComponents.fullPageActions.runningButton') : t('containerComponents.fullPageActions.runButton') }}
               </AppButton>
@@ -373,7 +375,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
         </div>
         <div class="p-4 space-y-2">
           <div>
-            <AppButton size="md" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+            <AppButton v-can="'containers:update'" size="md" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                     @click="confirmRollback()">
               {{ rollbackInProgress === 'latest' ? t('containerComponents.fullPageActions.rollingBack') : t('containerComponents.fullPageActions.rollbackLatest') }}
             </AppButton>
@@ -387,7 +389,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                 <div class="text-xs font-semibold dd-text font-mono truncate">{{ backup.imageName }}:{{ backup.imageTag }}</div>
                 <div class="text-2xs-plus dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
               </div>
-              <AppButton size="md" variant="outlined" :disabled="rollbackInProgress !== null"
+              <AppButton v-can="'containers:update'" size="md" variant="outlined" :disabled="rollbackInProgress !== null"
                       @click="confirmRollback(backup.id)">
                 {{ rollbackInProgress === backup.id ? t('containerComponents.fullPageActions.rollingButton') : t('containerComponents.fullPageActions.useButton') }}
               </AppButton>

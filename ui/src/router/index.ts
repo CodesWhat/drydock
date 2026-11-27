@@ -9,6 +9,7 @@ import {
   requestStaleChunkReload,
 } from '@/bootstrap/stale-chunk-recovery';
 import { useApiKeyReview } from '@/composables/useApiKeyReview';
+import { can, setCurrentAuthority } from '@/composables/useCan';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { hydrateFromServer, syncAuthenticatedUser } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
@@ -106,6 +107,8 @@ function createLoginRedirect(to: RouteLocationNormalized) {
 
 interface AuthenticatedUser {
   username?: string;
+  role?: unknown;
+  scopes?: unknown;
   apiKeyReviewPending?: boolean;
 }
 
@@ -113,6 +116,16 @@ const API_KEY_REVIEW_LOCATION = { path: ROUTES.CONFIG, query: { tab: 'apiKeys' }
 
 function isApiKeyReviewRoute(to: RouteLocationNormalized): boolean {
   return to.path === ROUTES.CONFIG && to.query.tab === 'apiKeys';
+}
+
+const SELF_SERVICE_CONFIG_TABS = new Set(['appearance', 'profile']);
+
+function isAdminOnlyConfigRoute(to: RouteLocationNormalized): boolean {
+  if (to.path !== ROUTES.CONFIG) {
+    return false;
+  }
+  const tab = Array.isArray(to.query.tab) ? to.query.tab[0] : to.query.tab;
+  return !(typeof tab === 'string' && SELF_SERVICE_CONFIG_TABS.has(tab));
 }
 
 /**
@@ -128,6 +141,7 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
   if (user !== undefined) {
     const reviewPending = user.apiKeyReviewPending === true;
     useApiKeyReview().setApiKeyReviewPending(reviewPending);
+    setCurrentAuthority(user);
     if (user.username) {
       syncAuthenticatedUser(user.username);
     }
@@ -140,6 +154,11 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
       // Fire-and-forget — the preference fetch has no timeout, and navigation
       // must never block on it; hydrateFromServer swallows its own errors.
       void hydrateFromServer(user.username);
+    }
+    // Only an admin has settings to open. Profile and appearance are the
+    // user's own, so those stay reachable for every role.
+    if (isAdminOnlyConfigRoute(to) && !can('admin')) {
+      return { path: ROUTES.DASHBOARD };
     }
     // A `next` target would only bounce straight back to the review.
     return reviewPending ? true : validateAndGetNextRoute(to);
