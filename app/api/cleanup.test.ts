@@ -12,6 +12,10 @@ const { mockRouter, mockServerConfig, mockPolicies, mockResolve, mockRun, mockLa
 
 vi.mock('express', () => ({ default: { Router: vi.fn(() => mockRouter) } }));
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
+
 vi.mock('../configuration/index.js', () => ({ getServerConfiguration: mockServerConfig }));
 vi.mock('../cleanup/scheduler.js', () => ({ getCleanupPolicyList: mockPolicies }));
 vi.mock('../cleanup/run.js', () => ({

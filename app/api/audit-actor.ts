@@ -16,7 +16,7 @@ export function getAuditActorForRequest(req: PrincipalCarrier): string | undefin
   if (!principal) {
     return undefined;
   }
-  const username = principal.username.trim().slice(0, MAX_ACTOR_LENGTH);
+  const username = (principal.username ?? '').trim().slice(0, MAX_ACTOR_LENGTH);
   if (principal.kind === 'api-key') {
     return `api-key:${username || principal.keyId}`;
   }

@@ -15,6 +15,10 @@ vi.mock('express', () => ({
 
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
+
 vi.mock('../configuration', () => ({
   getLogLevel: mockGetLogLevel,
   getLogBufferEnabled: mockGetLogBufferEnabled,

@@ -20,6 +20,10 @@ vi.mock('./audit-events.js', () => ({
 }));
 
 const mockGetServerConfiguration = vi.fn(() => ({}) as Record<string, unknown>);
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
+
 vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: () => mockGetServerConfiguration(),
 }));
