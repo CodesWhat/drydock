@@ -12,31 +12,72 @@ interface FeatureRow {
   label: string;
   drydock: FeatureValue;
   wud: FeatureValue;
-  diun: FeatureValue;
-  watchtower: FeatureValue;
+  arcane: FeatureValue;
+  portainer: FeatureValue;
 }
 
-// Cells are copied from the README feature comparison matrix (update managers).
+// Cells come from the cited competitor docs and Drydock code (compared 2026-11-27).
 const featureRows: FeatureRow[] = [
-  { label: "Web UI / dashboard", drydock: "yes", wud: "yes", diun: "no", watchtower: "no" },
-  { label: "Semver-aware updates", drydock: "yes", wud: "yes", diun: "partial", watchtower: "no" },
+  { label: "Web UI / dashboard", drydock: "yes", wud: "yes", arcane: "yes", portainer: "yes" },
+  {
+    label: "Semver-aware updates",
+    drydock: "yes",
+    wud: "yes",
+    arcane: "partial",
+    portainer: "no",
+  },
   {
     label: "Image backup & rollback",
     drydock: "yes",
     wud: "partial",
-    diun: "no",
-    watchtower: "no",
+    arcane: "no",
+    portainer: "partial",
   },
-  { label: "Vulnerability scanning", drydock: "yes", wud: "no", diun: "no", watchtower: "no" },
+  {
+    label: "Vulnerability scanning",
+    drydock: "yes",
+    wud: "no",
+    arcane: "yes",
+    portainer: "partial",
+  },
   {
     label: "Distributed agents",
     drydock: "yes",
     wud: "partial",
-    diun: "no",
-    watchtower: "partial",
+    arcane: "yes",
+    portainer: "yes",
   },
+  {
+    label: "Pending-approval queue",
+    drydock: "yes",
+    wud: "no",
+    arcane: "no",
+    portainer: "no",
+  },
+  {
+    label: "Maintenance windows",
+    drydock: "yes",
+    wud: "no",
+    arcane: "no",
+    portainer: "no",
+  },
+  { label: "Audit log", drydock: "yes", wud: "no", arcane: "yes", portainer: "partial" },
   // Where others win. Drydock has no RBAC yet (README matrix).
-  { label: "RBAC / multi-user roles", drydock: "no", wud: "yes", diun: "no", watchtower: "no" },
+  {
+    label: "RBAC / multi-user roles",
+    drydock: "no",
+    wud: "yes",
+    arcane: "yes",
+    portainer: "partial",
+  },
+  {
+    label: "Swarm / Kubernetes / Nomad",
+    drydock: "no",
+    wud: "partial",
+    arcane: "yes",
+    portainer: "yes",
+  },
+  { label: "One-shot CI mode", drydock: "yes", wud: "yes", arcane: "no", portainer: "no" },
 ];
 
 function ViewAllLink() {
@@ -51,15 +92,15 @@ function ViewAllLink() {
   );
 }
 
-const tools = [SITE_CONFIG.name, "WUD", "Diun", "Watchtower"] as const;
+const tools = [SITE_CONFIG.name, "WUD", "Arcane", "Portainer"] as const;
 type Tool = (typeof tools)[number];
 
 function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
   const map: Record<Tool, FeatureValue> = {
     [SITE_CONFIG.name]: row.drydock,
     WUD: row.wud,
-    Diun: row.diun,
-    Watchtower: row.watchtower,
+    Arcane: row.arcane,
+    Portainer: row.portainer,
   };
   return map[tool];
 }
@@ -71,7 +112,7 @@ export function CompareSection() {
         <SectionHeading
           eyebrow={`Why ${SITE_CONFIG.name}`}
           title="How we compare"
-          subtitle="How Drydock stacks up against WUD, Diun and Watchtower (archived December 2025). Rows come from the README matrix, including one where WUD wins."
+          subtitle="How Drydock stacks up against WUD, Arcane and Portainer. Every cell is sourced from each project's docs or code, and the rows where others win stay in."
           align="right"
         />
 
@@ -99,11 +140,6 @@ export function CompareSection() {
                       ].join(" ")}
                     >
                       {tool}
-                      {tool === "Watchtower" && (
-                        <span className="mt-0.5 block text-xs font-normal uppercase tracking-wide text-[var(--tx-sec)] dark:text-[var(--tx-sec)]">
-                          Archived
-                        </span>
-                      )}
                     </th>
                   ))}
                 </tr>
