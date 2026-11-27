@@ -80,7 +80,7 @@ jobs:
     # .github/tests/reusable-ci-config.test.ts. Re-check the org's .github
     # commit history periodically and bump this pin if the reusable
     # workflow's inputs change.
-    uses: CodesWhat/.github/.github/workflows/go-ci.yml@47820bd85d49eb6cd0a935c31789c7d7ce037401  # main, 2026-08-16
+    uses: CodesWhat/.github/.github/workflows/go-ci.yml@684a6b931e7802f1985e2cb4f6ea0c95861988e3  # main, 2026-11-27
     with:
       run-workflow-security: true
       workflow-security-egress-policy: block

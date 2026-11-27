@@ -28,6 +28,6 @@ jobs:
   released:
     permissions:
       contents: read
-    uses: CodesWhat/.github/.github/workflows/main-is-released.yml@11004e42d7d19e86eb3b7777c467ec9522b784e1  # main 2026-08-21
+    uses: CodesWhat/.github/.github/workflows/main-is-released.yml@684a6b931e7802f1985e2cb4f6ea0c95861988e3  # main, 2026-11-27
     with:
       allow-prerelease: true

@@ -21,13 +21,13 @@ interface WorkflowWithReusableJobs {
 // must be pinned to, one per reusable workflow. Bumping a reusable workflow
 // means bumping its constant here and re-verifying every caller of it in
 // the same change.
-const frozenGoCiSha = '47820bd85d49eb6cd0a935c31789c7d7ce037401';
+const frozenGoCiSha = '684a6b931e7802f1985e2cb4f6ea0c95861988e3';
 const goCiUses = `CodesWhat/.github/.github/workflows/go-ci.yml@${frozenGoCiSha}`;
 
-const frozenGreptileSummonSha = 'bbc181dc4d462f673dac2dff5f88a8408dd9c763';
+const frozenGreptileSummonSha = '684a6b931e7802f1985e2cb4f6ea0c95861988e3';
 const greptileSummonUses = `CodesWhat/.github/.github/workflows/greptile-summon.yml@${frozenGreptileSummonSha}`;
 
-const frozenMainIsReleasedSha = '11004e42d7d19e86eb3b7777c467ec9522b784e1';
+const frozenMainIsReleasedSha = '684a6b931e7802f1985e2cb4f6ea0c95861988e3';
 const mainIsReleasedUses = `CodesWhat/.github/.github/workflows/main-is-released.yml@${frozenMainIsReleasedSha}`;
 
 const frozenReusableWorkflowUses = [goCiUses, greptileSummonUses, mainIsReleasedUses];

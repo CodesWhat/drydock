@@ -153,7 +153,7 @@ test('security-actions calls the reusable go-ci workflow-security gate', () => {
 
   expect(job?.name).toBe('Security: Actions');
   expect(job?.uses).toBe(
-    'CodesWhat/.github/.github/workflows/go-ci.yml@47820bd85d49eb6cd0a935c31789c7d7ce037401',
+    'CodesWhat/.github/.github/workflows/go-ci.yml@684a6b931e7802f1985e2cb4f6ea0c95861988e3',
   );
   expect(job?.with?.['run-workflow-security']).toBe(true);
   expect(job?.with?.['workflow-security-egress-policy']).toBe('block');
