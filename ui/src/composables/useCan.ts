@@ -9,7 +9,7 @@ import { computed, readonly, ref } from 'vue';
  * known and every control stays visible, which is also what a server from
  * before roles looks like (it sends neither field and everyone was admin).
  */
-export type UiRole = 'viewer' | 'operator' | 'admin';
+type UiRole = 'viewer' | 'operator' | 'admin';
 
 const ROLES: readonly string[] = ['viewer', 'operator', 'admin'];
 
