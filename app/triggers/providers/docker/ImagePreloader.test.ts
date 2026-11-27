@@ -270,6 +270,7 @@ describe('candidate change', () => {
     await preloader.handleReport(container);
     await preloader.idle();
     await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
     expect(peekImagePreload(container)).toBeUndefined();
   });
 
@@ -650,6 +651,40 @@ describe('retained image accounting', () => {
       host.log,
     );
     expect(countRetainedImagePreloads('local.local')).toBe(0);
+  });
+
+  test('a withdrawn candidate whose removal failed is retried on the next report', async () => {
+    const { preloader, host } = arrange();
+    await preloader.handleReport(makeContainer());
+    await preloader.idle();
+    host.removeImage.mockRejectedValueOnce(new Error('daemon down'));
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(peekImagePreload(makeContainer())).toBeDefined();
+    expect(countRetainedImagePreloads('local.local')).toBe(1);
+
+    await preloader.handleReport(makeContainer({ result: { tag: '1.0.0' } }));
+    await preloader.idle();
+    expect(host.removeImage).toHaveBeenCalledTimes(2);
+    expect(peekImagePreload(makeContainer())).toBeUndefined();
+    expect(countRetainedImagePreloads('local.local')).toBe(0);
+  });
+
+  test('a replacement waiting on cleanup holds the host concurrency slot', async () => {
+    const { preloader, host } = arrange({ preload: true, preloadconcurrency: 1 });
+    await preloader.handleReport(withDigest('sha256:aaa'));
+    await preloader.idle();
+    let finishRemoval: () => void = () => undefined;
+    host.removeImage.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finishRemoval = resolve)),
+    );
+    const other = makeContainer({ name: 'other', id: 'other-id' });
+    await preloader.handleReport(withDigest('sha256:bbb'));
+    await preloader.handleReport(other);
+    await Promise.resolve();
+    finishRemoval();
+    await preloader.idle();
+    expect(host.pullImage).toHaveBeenCalledTimes(2);
   });
 
   test('cleanup of a container that never preloaded does nothing', async () => {

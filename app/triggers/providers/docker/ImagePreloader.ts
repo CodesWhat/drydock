@@ -250,8 +250,10 @@ export default class ImagePreloader {
     if (!existing) {
       return;
     }
-    clearImagePreload(container);
-    await this.releaseImage(container, existing);
+    // Keep the record when the removal failed, so the next report retries it.
+    if (await this.releaseImage(container, existing)) {
+      clearImagePreload(container);
+    }
   }
 
   /**
@@ -309,7 +311,10 @@ export default class ImagePreloader {
       );
       return;
     }
+    // Take the slot before awaiting cleanup so a concurrent preload can't pass the check above.
+    this.inFlight.set(host, (this.inFlight.get(host) ?? 0) + 1);
     if (existing && !sameCandidate && !(await this.releaseImage(container, existing))) {
+      this.releaseSlot(host);
       this.host.log.warn(
         `Preload deferred for ${fullName(container)}: the superseded image ${existing.image} is still on ${host}`,
       );
@@ -318,7 +323,6 @@ export default class ImagePreloader {
 
     const digest = container.result?.digest;
     let record = { image: candidate, digest, candidate, host };
-    this.inFlight.set(host, (this.inFlight.get(host) ?? 0) + 1);
     if (sameCandidate?.status !== 'done') {
       setImagePreload(container, { ...record, status: 'pending' });
     }
@@ -367,12 +371,16 @@ export default class ImagePreloader {
       });
       throw error;
     } finally {
-      const remaining = (this.inFlight.get(host) as number) - 1;
-      if (remaining <= 0) {
-        this.inFlight.delete(host);
-      } else {
-        this.inFlight.set(host, remaining);
-      }
+      this.releaseSlot(host);
+    }
+  }
+
+  private releaseSlot(host: string): void {
+    const remaining = (this.inFlight.get(host) as number) - 1;
+    if (remaining <= 0) {
+      this.inFlight.delete(host);
+    } else {
+      this.inFlight.set(host, remaining);
     }
   }
 
