@@ -42,6 +42,7 @@ import {
   ddTagFamily,
   ddTagInclude,
   ddTagPinInfo,
+  ddTagStops,
   ddTagTransform,
   ddTriggerExclude,
   ddTriggerInclude,
@@ -82,6 +83,7 @@ interface ResolvedContainerLabelOverrides {
   tagFamily?: string;
   tagPinInfo?: string;
   tagCeiling?: string;
+  tagStops?: string;
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
@@ -154,6 +156,7 @@ interface DockerWatcherSourceLike {
 interface WatcherTagDefaults {
   family?: string;
   ceiling?: string;
+  stops?: string;
   pin?: { info?: boolean };
 }
 
@@ -189,6 +192,11 @@ const containerLabelOverrideMappings = [
     key: 'tagCeiling',
     ddKey: ddTagCeiling,
     overrideKey: 'tagCeiling',
+  },
+  {
+    key: 'tagStops',
+    ddKey: ddTagStops,
+    overrideKey: 'tagStops',
   },
   {
     key: 'inspectTagPath',
@@ -1083,7 +1091,12 @@ export function resolveLabelsFromContainer(
 export function applyDerivedLabelFieldsToContainer(
   container: Container,
   labels: Record<string, string>,
-  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean; tagCeiling?: string } = {},
+  tagPolicyFallbacks: {
+    tagFamily?: string;
+    tagPinInfo?: boolean;
+    tagCeiling?: string;
+    tagStops?: string;
+  } = {},
 ): void {
   const resolved = resolveLabelsFromContainer(labels);
   container.includeTags = resolved.includeTags;
@@ -1093,6 +1106,7 @@ export function applyDerivedLabelFieldsToContainer(
   const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
   container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
   container.tagCeiling = resolved.tagCeiling ?? tagPolicyFallbacks.tagCeiling;
+  container.tagStops = resolved.tagStops ?? tagPolicyFallbacks.tagStops;
   container.linkTemplate = resolved.linkTemplate;
   container.portLabel = resolved.portLabel;
   container.actionTriggerInclude = resolved.actionTriggerInclude;
@@ -1147,6 +1161,7 @@ export function resolveEffectiveContainerTagPolicy(
   const persistedFallbacks = {
     family: (usePersistedFallbacks ? container.tagFamily : undefined) ?? watcherDefaults.family,
     ceiling: (usePersistedFallbacks ? container.tagCeiling : undefined) ?? watcherDefaults.ceiling,
+    stops: usePersistedFallbacks ? container.tagStops : undefined,
     pin: {
       info: (usePersistedFallbacks ? container.tagPinInfo : undefined) ?? watcherDefaults.pin?.info,
     },
@@ -1177,6 +1192,7 @@ function applyEffectiveTagPolicyFromLabels(
     tagFamily: tagPolicy.tagFamily,
     tagPinInfo: tagPolicy.tagPinInfo,
     tagCeiling: tagPolicy.tagCeiling,
+    tagStops: tagPolicy.tagStops,
   });
 }
 
@@ -1393,6 +1409,10 @@ export function mergeConfigWithImgset(
     tagCeiling:
       getContainerConfigValue(labelOverrides.tagCeiling, matchingImgset?.tagCeiling) ||
       getContainerConfigValue(undefined, watcherTagDefaults.ceiling) ||
+      undefined,
+    tagStops:
+      getContainerConfigValue(labelOverrides.tagStops, matchingImgset?.tagStops) ||
+      getContainerConfigValue(undefined, watcherTagDefaults.stops) ||
       undefined,
     tagPinInfo:
       getContainerConfigBooleanValue(

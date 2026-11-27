@@ -35,6 +35,12 @@ export const ddTagPinInfo = 'dd.tag.pin.info';
  */
 export const ddTagCeiling = 'dd.tag.ceiling';
 
+/**
+ * Required upgrade stops: comma-separated versions the update path must pass
+ * through one at a time (for example "27,28,29" for Nextcloud).
+ */
+export const ddTagStops = 'dd.tag.stops';
+
 export const ddUpdatePolicyMaturityMode = 'dd.updatePolicy.maturityMode';
 export const ddUpdatePolicyMaturityMinAgeDays = 'dd.updatePolicy.maturityMinAgeDays';
 export const ddUpdatePolicyMaturitySkipReleases = 'dd.updatePolicy.maturitySkipReleases';

@@ -16,6 +16,7 @@ export interface ResolvedImgset {
   tagFamily?: string;
   tagPinInfo?: boolean;
   tagCeiling?: string;
+  tagStops?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -378,6 +379,7 @@ export function getResolvedImgsetConfiguration(
     tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family']),
     tagPinInfo: getFirstConfigBoolean(imgsetConfiguration, ['tag.pin.info']),
     tagCeiling: getFirstConfigString(imgsetConfiguration, ['tag.ceiling']),
+    tagStops: getFirstConfigString(imgsetConfiguration, ['tag.stops']),
     linkTemplate: getFirstConfigString(imgsetConfiguration, ['link.template', 'linkTemplate']),
     displayName: getFirstConfigString(imgsetConfiguration, ['display.name', 'displayName']),
     displayIcon: getFirstConfigString(imgsetConfiguration, ['display.icon', 'displayIcon']),

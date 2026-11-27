@@ -26,6 +26,12 @@ import {
   type TagCeiling,
 } from '../../../tag/running-version.js';
 import {
+  getActiveUpgradeStop,
+  isWithinUpgradeStop,
+  parseUpgradeStops,
+  type UpgradeStop,
+} from '../../../tag/upgrade-stops.js';
+import {
   getReleaseMaturityEvidence,
   type ReleaseMaturityEvidence,
   selectVersionPopulation,
@@ -515,15 +521,17 @@ function trackCrossFamilyGreaterDrop(
 }
 
 interface CeilingState {
-  ceiling: TagCeiling;
+  ceiling?: TagCeiling;
   running: RunningVersion;
+  /** The next required upgrade stop (dd.tag.stops) the running version has not reached. */
+  stop?: UpgradeStop;
 }
 
 const MAX_CEILING_IGNORED_KEYS = 1000;
 const ceilingIgnoredLogged = new Set<string>();
 
 function logCeilingIgnoredOnce(container: Container, logContainer: TagCandidatesLogger): void {
-  const key = `${container.image.name}:${container.image.tag.value}:${container.tagCeiling}`;
+  const key = `${container.image.name}:${container.image.tag.value}:${container.tagCeiling}:${container.tagStops}`;
   if (ceilingIgnoredLogged.has(key)) {
     return;
   }
@@ -532,37 +540,75 @@ function logCeilingIgnoredOnce(container: Container, logContainer: TagCandidates
   }
   ceilingIgnoredLogged.add(key);
   logContainer.debug?.(
-    `dd.tag.ceiling=${container.tagCeiling} ignored: running tag "${container.image.tag.value}" is not a semver version with enough segments`,
+    `${[
+      container.tagCeiling ? `dd.tag.ceiling=${container.tagCeiling}` : undefined,
+      container.tagStops ? `dd.tag.stops=${container.tagStops}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(
+        ' and ',
+      )} ignored: running tag "${container.image.tag.value}" is not a semver version with enough segments`,
   );
 }
 
-/**
- * Resolve the running-version ceiling (dd.tag.ceiling). An invalid value warns
- * and is ignored; a running tag that is not semver (or has too few segments for
- * the ceiling) leaves the ceiling unable to apply, which is logged once at debug.
- */
-function getCeilingState(
+function resolveCeiling(
   container: Container,
   logContainer: TagCandidatesLogger,
-): CeilingState | undefined {
+): TagCeiling | undefined {
   const ceiling = normalizeTagCeiling(container.tagCeiling);
-  if (ceiling === undefined) {
-    return undefined;
-  }
   if (ceiling === 'invalid') {
     logContainer.warn(
       `Invalid tag ceiling "${container.tagCeiling}", ignoring it (use "major" or "minor")`,
     );
     return undefined;
   }
+  return ceiling;
+}
+
+function resolveUpgradeStops(
+  container: Container,
+  logContainer: TagCandidatesLogger,
+): UpgradeStop[] {
+  const { stops, invalid } = parseUpgradeStops(container.tagStops);
+  if (invalid.length > 0) {
+    logContainer.warn(
+      `Ignoring invalid dd.tag.stops entries ${invalid.map((entry) => `"${entry}"`).join(', ')} (use dotted versions such as "27,28" or "13.8.8")`,
+    );
+  }
+  return stops;
+}
+
+/**
+ * Resolve the running-version constraints: the ceiling (dd.tag.ceiling) and the
+ * next required upgrade stop (dd.tag.stops). An invalid value warns and is
+ * ignored; a running tag that is not semver (or has too few segments for the
+ * ceiling) leaves the ceiling unable to apply, which is logged once at debug.
+ */
+function getCeilingState(
+  container: Container,
+  logContainer: TagCandidatesLogger,
+): CeilingState | undefined {
+  const ceiling = resolveCeiling(container, logContainer);
+  const stops = resolveUpgradeStops(container, logContainer);
+  if (ceiling === undefined && stops.length === 0) {
+    return undefined;
+  }
   const running = getRunningVersion(
     transformTag(container.transformTags, container.image.tag.value),
   );
-  if (!running || !canApplyCeiling(ceiling, running)) {
+  if (!running) {
     logCeilingIgnoredOnce(container, logContainer);
     return undefined;
   }
-  return { ceiling, running };
+  const applicableCeiling = ceiling && canApplyCeiling(ceiling, running) ? ceiling : undefined;
+  if (ceiling && !applicableCeiling) {
+    logCeilingIgnoredOnce(container, logContainer);
+  }
+  const stop = getActiveUpgradeStop(stops, running);
+  if (!applicableCeiling && !stop) {
+    return undefined;
+  }
+  return { ceiling: applicableCeiling, running, stop };
 }
 
 interface SemverCandidateFilterContext {
@@ -594,10 +640,14 @@ function shouldIncludeSemverCandidate(
   if (parseSemver(transformedTag) === null) {
     return false;
   }
+  const { ceilingState } = context;
   if (
-    context.ceilingState &&
-    !isWithinCeiling(context.ceilingState.ceiling, context.ceilingState.running, transformedTag)
+    ceilingState?.ceiling &&
+    !isWithinCeiling(ceilingState.ceiling, ceilingState.running, transformedTag)
   ) {
+    return false;
+  }
+  if (ceilingState?.stop && !isWithinUpgradeStop(ceilingState.stop, transformedTag)) {
     return false;
   }
   stats.afterSemver += 1;

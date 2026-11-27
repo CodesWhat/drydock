@@ -2567,6 +2567,118 @@ describe('running-version ceilings (dd.tag.ceiling)', () => {
   });
 });
 
+describe('required upgrade stops (dd.tag.stops)', () => {
+  const makeLog = () => ({ warn: vi.fn(), debug: vi.fn() });
+  const nextcloudTags = ['26.0.13', '27.0.2', '27.1.11', '28.0.0', '28.0.14', '29.0.0', '30.0.4'];
+
+  function stopsContainer(overrides: Record<string, unknown> = {}) {
+    return createContainer({
+      image: { name: 'stops/nextcloud', tag: { value: '26.0.5', semver: true } },
+      tagFamily: 'loose',
+      ...overrides,
+    });
+  }
+
+  test('never jumps past the next stop (Nextcloud one major at a time)', () => {
+    const result = getTagCandidates(
+      stopsContainer({ tagStops: '27,28,29,30' }),
+      nextcloudTags,
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['27.1.11', '27.0.2', '26.0.13']);
+  });
+
+  test('advances to the following stop once the running version reaches one', () => {
+    const result = getTagCandidates(
+      stopsContainer({
+        image: { name: 'stops/nextcloud', tag: { value: '27.0.2', semver: true } },
+        tagStops: '27,28,29,30',
+      }),
+      nextcloudTags,
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['28.0.14', '28.0.0', '27.1.11']);
+  });
+
+  test('offers everything once past the last stop', () => {
+    const result = getTagCandidates(
+      stopsContainer({
+        image: { name: 'stops/nextcloud', tag: { value: '29.0.0', semver: true } },
+        tagStops: '27,28,29',
+      }),
+      nextcloudTags,
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['30.0.4']);
+  });
+
+  test('full-version stops cap at that exact version', () => {
+    const gitlabTags = ['13.5.1', '13.8.7', '13.8.8', '13.8.9', '13.9.0', '13.12.15'];
+    const result = getTagCandidates(
+      stopsContainer({
+        image: { name: 'stops/gitlab', tag: { value: '13.5.0', semver: true } },
+        tagStops: '13.8.8,13.12.15',
+      }),
+      gitlabTags,
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['13.8.8', '13.8.7', '13.5.1']);
+  });
+
+  test('combines with a ceiling: both constraints apply', () => {
+    const result = getTagCandidates(
+      stopsContainer({ tagStops: '27,28', tagCeiling: 'minor' }),
+      ['26.0.9', '26.1.0', '27.0.2'],
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['26.0.9']);
+  });
+
+  test('a ceiling that cannot apply does not drop the stop', () => {
+    const result = getTagCandidates(
+      stopsContainer({
+        image: { name: 'stops/short', tag: { value: '26', semver: true } },
+        tagStops: '27,28',
+        tagCeiling: 'minor',
+      }),
+      ['26', '27', '28'],
+      makeLog(),
+    );
+    expect(result.tags).toEqual(['27']);
+  });
+
+  test('invalid entries warn and valid ones still apply', () => {
+    const log = makeLog();
+    const result = getTagCandidates(stopsContainer({ tagStops: '27,latest' }), nextcloudTags, log);
+    expect(result.tags).toEqual(['27.1.11', '27.0.2', '26.0.13']);
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('"latest"'));
+  });
+
+  test('only invalid entries leave candidates unchanged', () => {
+    const log = makeLog();
+    const result = getTagCandidates(stopsContainer({ tagStops: 'latest' }), nextcloudTags, log);
+    expect(result.tags).toContain('30.0.4');
+    expect(log.warn).toHaveBeenCalledTimes(1);
+  });
+
+  test('a non-semver running tag cannot apply stops: ignored and logged once at debug', () => {
+    const container = createContainer({
+      image: { name: 'stops/nonsemver', tag: { value: 'latest', semver: false } },
+      includeTags: '^\\d+\\.\\d+\\.\\d+$',
+      tagStops: '2',
+    });
+    const log = makeLog();
+    const first = getTagCandidates(container, ['1.0.0', '3.0.0'], log);
+    getTagCandidates(container, ['1.0.0', '3.0.0'], log);
+    expect(first.tags).toEqual(['3.0.0', '1.0.0']);
+    const ignored = log.debug.mock.calls.filter(([message]) =>
+      String(message).includes('dd.tag.stops=2 ignored'),
+    );
+    expect(ignored).toHaveLength(1);
+    expect(String(ignored[0][0])).not.toContain('dd.tag.ceiling');
+  });
+});
+
 describe('running-version variables in include/exclude', () => {
   const makeLog = () => ({ warn: vi.fn(), debug: vi.fn() });
   const tags = ['1.2.3', '1.2.4', '1.3.0', '2.0.0', '1.2.5-alpine', '1.2.6-alpine', '1.2.7-slim'];
