@@ -6,7 +6,9 @@
  * manage which Ed25519 public keys are authorized for edge agent connections.
  */
 import express, { type Request, type Response } from 'express';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import * as agentKeys from '../store/agent-keys.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { disconnectByKeyId } from './portwing-ws.js';
@@ -93,6 +95,12 @@ router.post(
       return;
     }
 
+    recordAuditEvent({
+      action: 'agent-key-changed',
+      status: 'success',
+      containerName: 'agents',
+      details: `added key=${record.keyId}; label=${sanitizeLogParam(record.label)}`,
+    });
     res.status(201).json({
       keyId: record.keyId,
       label: record.label,
@@ -119,6 +127,12 @@ router.delete(
       return;
     }
     disconnectByKeyId(keyId);
+    recordAuditEvent({
+      action: 'agent-key-changed',
+      status: 'success',
+      containerName: 'agents',
+      details: `revoked key=${keyId}`,
+    });
     res.status(204).send();
   }),
 );

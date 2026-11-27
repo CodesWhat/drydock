@@ -122,7 +122,12 @@
       "image-prune": "이미지 정리",
       "cleanup": "정리",
       "notification-silence-set": "알림 음소거 설정됨",
-      "notification-silence-cleared": "알림 음소거 해제됨"
+      "notification-silence-cleared": "알림 음소거 해제됨",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "컨테이너",

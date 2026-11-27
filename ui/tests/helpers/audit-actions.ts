@@ -68,6 +68,11 @@ const backendAuditActions = {
   cleanup: true,
   'notification-silence-set': true,
   'notification-silence-cleared': true,
+  'settings-updated': true,
+  'notification-rule-updated': true,
+  'notification-outbox-updated': true,
+  'operation-cancelled': true,
+  'agent-key-changed': true,
 } satisfies Record<AuditEntry['action'], true>;
 
 export const BACKEND_AUDIT_ACTIONS = Object.keys(backendAuditActions);

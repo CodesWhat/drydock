@@ -3,10 +3,13 @@ import path from 'node:path';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import * as containerSummary from '../util/container-summary.js';
 
-const { mockRouter, mockGetAgent } = vi.hoisted(() => ({
+const { mockRouter, mockGetAgent, mockRecordAuditEvent } = vi.hoisted(() => ({
+  mockRecordAuditEvent: vi.fn(),
   mockRouter: { get: vi.fn(), post: vi.fn() },
   mockGetAgent: vi.fn(),
 }));
+
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -52,7 +55,9 @@ describe('Agent Router', () => {
     'allows a normal authenticated session to %s a managed key',
     async (action) => {
       const rotateSigningKey = vi.fn().mockResolvedValue({ current_key_id: '0123456789abcdef' });
+      mockRecordAuditEvent.mockClear();
       mockGetAgent.mockReturnValue({
+        name: 'remote',
         rotateSigningKey,
         getSigningKeyRotationStatus: () => ({ enabled: true }),
       });
@@ -72,6 +77,12 @@ describe('Agent Router', () => {
       );
       expect(rotateSigningKey).toHaveBeenCalledWith(action);
       expect(response.json).toHaveBeenCalledWith({ current_key_id: '0123456789abcdef' });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'agent-key-changed',
+        status: 'success',
+        containerName: 'remote',
+        details: `signing key ${action}`,
+      });
     },
   );
 

@@ -90,6 +90,11 @@ const actionTypes = [
   'cleanup',
   'notification-silence-set',
   'notification-silence-cleared',
+  'settings-updated',
+  'notification-rule-updated',
+  'notification-outbox-updated',
+  'operation-cancelled',
+  'agent-key-changed',
 ];
 
 const route = useRoute();

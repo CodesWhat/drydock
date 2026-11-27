@@ -1,10 +1,12 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   getOperationById,
   requestOperationCancellation,
   toApiUpdateOperation,
 } from '../store/update-operation.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { scoped } from './route-scopes.js';
@@ -28,6 +30,12 @@ function cancelOperation(req: Request<{ id: string }>, res: Response) {
       sendErrorResponse(res, 404, 'Operation not found');
       return;
     }
+    recordAuditEvent({
+      action: 'operation-cancelled',
+      status: 'success',
+      containerName: existing.containerName,
+      details: `operation=${sanitizeLogParam(id)}; outcome=${result.outcome}`,
+    });
     if (result.outcome === 'cancelled') {
       res.status(200).json({ data: toApiUpdateOperation(result.operation) });
       return;

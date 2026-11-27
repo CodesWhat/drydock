@@ -1,6 +1,7 @@
 import express from 'express';
 import joi from 'joi';
 import nocache from 'nocache';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   getNotificationTriggerIdsFromState,
   normalizeNotificationTriggerIds,
@@ -8,6 +9,7 @@ import {
 } from '../notifications/trigger-policy.js';
 import * as registry from '../registry/index.js';
 import * as notificationStore from '../store/notification.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { scoped } from './route-scopes.js';
@@ -143,6 +145,12 @@ function updateNotificationRule(req, res) {
       return;
     }
 
+    recordAuditEvent({
+      action: 'notification-rule-updated',
+      status: 'success',
+      containerName: 'notifications',
+      details: `rule=${sanitizeLogParam(id)}; fields=${Object.keys(notificationRuleToUpdate.value).join(',')}`,
+    });
     res.status(200).json(sanitizeRuleForResponse(notificationRuleUpdated, allowedTriggerIds));
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));
