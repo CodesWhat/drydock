@@ -169,12 +169,14 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
 
     while (url && pagesFetched < GHCR_VERSIONS_MAX_PAGES) {
       await acquireToken(getBucketForUrl(url));
-      const response = await axios({
-        method: 'GET',
-        url,
-        headers,
-        timeout: getRegistryRequestTimeoutMs(),
-      });
+      const response = await axios(
+        this.applyOutboundProxy({
+          method: 'GET',
+          url,
+          headers,
+          timeout: getRegistryRequestTimeoutMs(),
+        }),
+      );
       pagesFetched += 1;
 
       const result = this.getVersionUpdatedAt(response?.data, tagToLookup);

@@ -625,7 +625,7 @@ class BaseRegistry<
       await acquireToken(getBucketForUrl(authUrl));
       const envelope = await withRetry<Record<string, unknown>>(
         async () => {
-          const r = await axios<Record<string, unknown>>(request);
+          const r = await axios<Record<string, unknown>>(this.applyOutboundProxy(request));
           return {
             status: r.status,
             headers: r.headers as Record<string, string | undefined>,
