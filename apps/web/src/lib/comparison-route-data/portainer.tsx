@@ -14,8 +14,8 @@ Maintenance windows|No|Yes|self
 Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
 Image backup & dry-run|No|Pre-update backup + dry-run preview|self
 Security scanning|No|Trivy + SBOM + cosign (free)|self
-Registry providers|Major registries|23 dedicated integrations|self
-Trigger integrations|Slack, Teams (BE only)|26 native trigger integrations|self
+Registry providers|Major registries|27 dedicated integrations|self
+Trigger integrations|Slack, Teams (BE only)|34 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Grafana dashboard|No|Yes, importable template|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
@@ -32,8 +32,8 @@ License|Zlib (CE) / Proprietary (BE)|MIT|self
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. We built these into Drydock because Portainer doesn't offer automatic rollback or these safety primitives.
 shield|Free Security Scanning|Drydock bundles Trivy scanning, SBOM generation, and cosign verification at no cost. Portainer has no built-in image or vulnerability scanning in any edition.
 lock|No Paywall|Every Drydock feature is free and open source. Portainer gates audit logs, RBAC, and notification integrations behind the paid Business Edition. Portainer has no built-in vulnerability scanning in any edition.
-bell|26 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more, all free. Portainer CE has no alerting integrations, Slack, Teams, email, and webhook notifications all require the paid Business Edition.
-radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more with per-registry configuration.
+bell|34 Trigger Integrations|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more, all free. Portainer CE has no alerting integrations, Slack, Teams, email, and webhook notifications all require the paid Business Edition.
+radio|27 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more with per-registry configuration.
 eye|Lightweight & Focused|We keep Drydock under 80MB RAM with a single focused purpose. Portainer is a full management platform that typically uses 100–200MB RAM or more.
 `,
   highlightIconMap: {
@@ -46,7 +46,7 @@ eye|Lightweight & Focused|We keep Drydock under 80MB RAM with a single focused p
   },
   metadataTitle: "Portainer vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Portainer manages whole stacks. Drydock focuses on update monitoring with rollback, security scanning and 23 registries.",
+    "Portainer manages whole stacks. Drydock focuses on update monitoring with rollback, security scanning and 27 registries.",
   metadataKeywords: [
     "portainer vs drydock",
     "portainer alternative",

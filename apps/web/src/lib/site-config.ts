@@ -24,9 +24,9 @@ export const SITE_CONFIG = {
   tagline: "Container Update Monitoring",
   /** Default page title: carries the search-intent phrase ("Docker", "self-hosted"). */
   title: "Drydock: Self-Hosted Docker Container Update Monitor",
-  /** Default meta / OpenGraph / Twitter / JSON-LD description. Counts match the README (23 registries, 26 triggers). */
+  /** Default meta / OpenGraph / Twitter / JSON-LD description. Counts match the README (27 registries, 34 triggers). */
   description:
-    "Open source Docker container update manager. Checks 23 registries for newer image versions, then notifies you or applies updates through 26 triggers.",
+    "Open source Docker container update manager. Checks 27 registries for newer image versions, then notifies you or applies updates through 34 triggers.",
   /** Production domain (no protocol, no trailing slash). */
   domain: "getdrydock.com",
   /** GitHub owner/org. */

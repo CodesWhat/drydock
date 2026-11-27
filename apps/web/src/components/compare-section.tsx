@@ -186,35 +186,6 @@ export function CompareSection() {
           </div>
         </div>
 
-        <div className="mt-6 space-y-3 text-sm text-[var(--tx-sec)]">
-          <p>
-            <b className="text-[var(--dd-text)]">Probably not for you yet:</b> Swarm, Kubernetes and
-            Nomad watchers, RBAC and multi-user roles, and a one-shot CI mode. Swarm, Kubernetes and
-            RBAC are planned for v2.0 and later. If you need any of them today, WUD is the closer
-            fit.
-          </p>
-          <p>
-            <b className="text-[var(--dd-text)]">Switching:</b> coming from WUD? The{" "}
-            <code>config migrate --dry-run --file compose.yml</code> command previews the rewrite of
-            your <code>WUD_*</code> variables and <code>wud.*</code> labels to <code>DD_*</code> and{" "}
-            <code>dd.*</code>, but it only sees files inside the container, so mount your Compose
-            folder first. The{" "}
-            <Link href="/compare/wud" className="underline underline-offset-4">
-              WUD comparison
-            </Link>{" "}
-            has the full command. Coming from Watchtower, which was archived in December 2025? Read
-            the{" "}
-            <Link href="/compare/watchtower" className="underline underline-offset-4">
-              Watchtower comparison
-            </Link>{" "}
-            or the{" "}
-            <Link href="/compare/wud" className="underline underline-offset-4">
-              WUD comparison
-            </Link>
-            .
-          </p>
-        </div>
-
         <div className="mt-8 text-center">
           <ViewAllLink />
         </div>

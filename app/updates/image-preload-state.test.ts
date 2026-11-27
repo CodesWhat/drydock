@@ -1,12 +1,15 @@
 import type { Container } from '../model/container.js';
 import {
   clearImagePreload,
-  countImagePreloads,
+  countRetainedImagePreloads,
   getImagePreload,
   getImagePreloadView,
   getPreloadCandidate,
+  hasRetainedImagePreload,
   peekImagePreload,
+  releaseImagePreload,
   resetImagePreloads,
+  retainImagePreload,
   setImagePreload,
 } from './image-preload-state.js';
 
@@ -70,16 +73,44 @@ test('clear removes the entry', () => {
   expect(peekImagePreload(container)).toBeUndefined();
 });
 
-test('count covers pending and done on one host, skipping failed and the excluded container', () => {
+test('retained references are counted per host, once per distinct image', () => {
   const a = makeContainer({ identityKey: 'a' });
   const b = makeContainer({ identityKey: 'b' });
-  const c = makeContainer({ identityKey: 'c' });
-  const d = makeContainer({ identityKey: 'd' });
-  setImagePreload(a, { ...base, candidate: 'x', status: 'pending' });
-  setImagePreload(b, { ...base, candidate: 'x' });
-  setImagePreload(c, { ...base, candidate: 'x', status: 'failed' });
-  setImagePreload(d, { ...base, candidate: 'x', host: 'other' });
-  expect(countImagePreloads('local.local')).toBe(2);
-  expect(countImagePreloads('local.local', a)).toBe(1);
-  expect(countImagePreloads('other')).toBe(1);
+  retainImagePreload('h1', 'img:1', a);
+  retainImagePreload('h1', 'img:1', b);
+  retainImagePreload('h1', 'img:2', a);
+  retainImagePreload('h2', 'img:1', a);
+  expect(countRetainedImagePreloads('h1')).toBe(2);
+  expect(countRetainedImagePreloads('h2')).toBe(1);
+  expect(countRetainedImagePreloads('none')).toBe(0);
+  expect(hasRetainedImagePreload('h1', 'img:1')).toBe(true);
+  expect(hasRetainedImagePreload('h1', 'img:3')).toBe(false);
+  expect(hasRetainedImagePreload('none', 'img:1')).toBe(false);
+});
+
+test('release reports the last owner only', () => {
+  const a = makeContainer({ identityKey: 'a' });
+  const b = makeContainer({ identityKey: 'b' });
+  retainImagePreload('h1', 'img:1', a);
+  retainImagePreload('h1', 'img:1', b);
+  expect(releaseImagePreload('h1', 'img:1', a)).toBe(false);
+  expect(releaseImagePreload('h1', 'img:1', a)).toBe(false);
+  expect(hasRetainedImagePreload('h1', 'img:1')).toBe(true);
+  expect(releaseImagePreload('h1', 'img:1', b)).toBe(true);
+  expect(countRetainedImagePreloads('h1')).toBe(0);
+  expect(releaseImagePreload('h1', 'img:1', b)).toBe(false);
+});
+
+test('release keeps the host entry while other references remain', () => {
+  const a = makeContainer({ identityKey: 'a' });
+  retainImagePreload('h1', 'img:1', a);
+  retainImagePreload('h1', 'img:2', a);
+  expect(releaseImagePreload('h1', 'img:1', a)).toBe(true);
+  expect(countRetainedImagePreloads('h1')).toBe(1);
+});
+
+test('reset forgets retained references', () => {
+  retainImagePreload('h1', 'img:1', makeContainer());
+  resetImagePreloads();
+  expect(countRetainedImagePreloads('h1')).toBe(0);
 });

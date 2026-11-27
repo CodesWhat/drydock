@@ -548,9 +548,7 @@ class Docker<
     return this.updateSemaphore;
   }
 
-  protected readonly imagePreloader: ImagePreloader = new ImagePreloader(
-    this as unknown as ConstructorParameters<typeof ImagePreloader>[0],
-  );
+  protected readonly imagePreloader: ImagePreloader = new ImagePreloader(this);
 
   async init() {
     await super.init();
@@ -1203,6 +1201,13 @@ class Docker<
     } catch {
       return false;
     }
+  }
+
+  /** Is `tag` one of this container's retained rollback backups? */
+  isRollbackTag(container, tag): boolean {
+    const backups =
+      backupStore.getBackupsForContainer(this.resolveContainerBackupScope(container)) || [];
+    return backups.some((backup) => backup.imageTag === tag);
   }
 
   /**

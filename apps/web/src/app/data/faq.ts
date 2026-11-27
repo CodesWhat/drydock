@@ -12,7 +12,7 @@ export const faqItems: Array<{ question: string; answer: string }> = [
   {
     question: "Which container registries does Drydock support?",
     answer:
-      "Drydock ships with 23 registry providers: Docker Hub, GitHub Container Registry (GHCR), Amazon ECR, Google Container Registry (GCR), Google Artifact Registry (GAR), GitLab Registry, Red Hat Quay, LinuxServer Container Registry (LSCR), Azure Container Registry (ACR), Harbor, JFrog Artifactory, Sonatype Nexus, Gitea, Forgejo, Codeberg, and more — plus a generic private-registry provider for anything that speaks HTTP Basic or bearer token auth. TLS customization (CA file, insecure skip-verify) is available on every provider.",
+      "Drydock ships with 27 registry providers: Docker Hub, GitHub Container Registry (GHCR), Amazon ECR, Google Container Registry (GCR), Google Artifact Registry (GAR), GitLab Registry, Red Hat Quay, LinuxServer Container Registry (LSCR), Azure Container Registry (ACR), Harbor, JFrog Artifactory, Sonatype Nexus, Gitea, Forgejo, Codeberg, and more — plus a generic private-registry provider for anything that speaks HTTP Basic or bearer token auth. TLS customization (CA file, insecure skip-verify) is available on every provider.",
   },
   {
     question: "What is the difference between a notification and an action trigger?",

@@ -70,7 +70,7 @@ export const features: Feature[] = [
   },
   {
     icon: Radio,
-    title: "23 Registries",
+    title: "27 Registries",
     color: "text-purple-500 dark:text-purple-400",
     bg: "bg-purple-100 dark:bg-purple-900/50",
     description:
@@ -79,7 +79,7 @@ export const features: Feature[] = [
   },
   {
     icon: Bell,
-    title: "26 Triggers",
+    title: "34 Triggers",
     color: "text-amber-500 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/50",
     description:

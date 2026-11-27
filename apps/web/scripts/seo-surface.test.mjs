@@ -53,8 +53,8 @@ test("site title and description carry the search phrase and the README counts",
   assert.match(siteConfig.SITE_CONFIG.title, /Docker/);
   assert.match(siteConfig.SITE_CONFIG.title, /Self-Hosted/);
   assert.match(siteConfig.SITE_CONFIG.description, /Docker/);
-  assert.match(siteConfig.SITE_CONFIG.description, /23 registries/);
-  assert.match(siteConfig.SITE_CONFIG.description, /26 triggers/);
+  assert.match(siteConfig.SITE_CONFIG.description, /27 registries/);
+  assert.match(siteConfig.SITE_CONFIG.description, /34 triggers/);
   assert.ok(siteConfig.SITE_CONFIG.description.length <= 160);
   const structured = read("../src/lib/structured-data.ts");
   assert.match(structured, /description: SITE_CONFIG\.description/);
@@ -134,16 +134,10 @@ test("homepage comparison is Drydock, WUD, Arcane and Portainer with sourced cel
   }
 });
 
-test("homepage comparison says what Drydock doesn't do and points WUD and Watchtower users somewhere", () => {
+test("homepage comparison leaves migration and not-yet-supported detail to the comparison pages", () => {
   const source = read("../src/components/compare-section.tsx");
-  assert.match(source, /Probably not for you yet/);
-  assert.match(
-    source,
-    /Swarm, Kubernetes and\s+Nomad watchers, RBAC and multi-user roles, and a one-shot CI mode/,
-  );
-  assert.match(source, /config migrate --dry-run/);
-  assert.match(source, /href="\/compare\/watchtower"/);
-  assert.match(source, /href="\/compare\/wud"/);
+  assert.doesNotMatch(source, /Probably not for you yet|config migrate --dry-run/);
+  assert.match(read("../src/lib/comparison-route-data/wud.tsx"), /config migrate --dry-run/);
 });
 
 test("comparison page metadata stays inside SERP length and uses the alternative pattern for dead tools", () => {
@@ -210,8 +204,8 @@ test("WUD appears only as a competitor: no fork or derived-from wording in the s
 
 test("competitor pages don't contradict the README matrix", () => {
   const wud = read("../src/lib/comparison-route-data/wud.tsx");
-  assert.match(wud, /Registry providers\|25\|23\|competitor/);
-  assert.match(wud, /Trigger integrations\|33 triggers\|[^|]*\|competitor/);
+  assert.match(wud, /Registry providers\|25\|27\|self/);
+  assert.match(wud, /Trigger integrations\|33 triggers\|[^|]*\|self/);
   assert.match(wud, /Lifecycle hooks\|Yes[^|]*\|[^|]*\|tie/);
   assert.match(wud, /RBAC \/ multi-user roles\|Yes[^|]*\|[^|]*\|competitor/);
   assert.doesNotMatch(wud, /11 more registries|None of these exist in WUD|Lifecycle hooks\|None/);

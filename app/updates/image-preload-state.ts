@@ -58,9 +58,9 @@ export function getImagePreload(container: Container): ImagePreloadState | undef
 }
 
 /** Public shape of {@link getImagePreload}: the internal host and candidate keys are not exposed. */
-export function getImagePreloadView(
-  container: Container,
-): Omit<ImagePreloadState, 'host' | 'candidate'> | undefined {
+export type ImagePreloadView = Omit<ImagePreloadState, 'host' | 'candidate'>;
+
+export function getImagePreloadView(container: Container): ImagePreloadView | undefined {
   const state = getImagePreload(container);
   if (!state) {
     return undefined;
@@ -69,18 +69,57 @@ export function getImagePreloadView(
   return view;
 }
 
-/** Recorded preloads (pending or done) on a host, excluding the given container's own. */
-export function countImagePreloads(host: string, except?: Container): number {
-  const exceptKey = except ? keyOf(except) : undefined;
-  let count = 0;
-  for (const [key, state] of states) {
-    if (key !== exceptKey && state.host === host && state.status !== 'failed') {
-      count++;
-    }
+/**
+ * Image references a host holds because of a preload, with the containers that own each. A
+ * reference outlives its owner's status entry when the candidate moves on and the image could
+ * not be removed yet, so the per-host cap counts these distinct references, not entries.
+ */
+const retained = new Map<string, Map<string, Set<string>>>();
+
+export function retainImagePreload(host: string, image: string, container: Container): void {
+  let refs = retained.get(host);
+  if (!refs) {
+    refs = new Map();
+    retained.set(host, refs);
   }
-  return count;
+  let owners = refs.get(image);
+  if (!owners) {
+    owners = new Set();
+    refs.set(image, owners);
+  }
+  owners.add(keyOf(container));
+}
+
+/**
+ * Drop a container's claim on a retained reference. Returns true only when that was the last
+ * claim, meaning the image is now unowned and the caller may remove it from the host.
+ */
+export function releaseImagePreload(host: string, image: string, container: Container): boolean {
+  const refs = retained.get(host);
+  const owners = refs?.get(image);
+  if (!refs || !owners?.delete(keyOf(container))) {
+    return false;
+  }
+  if (owners.size > 0) {
+    return false;
+  }
+  refs.delete(image);
+  if (refs.size === 0) {
+    retained.delete(host);
+  }
+  return true;
+}
+
+export function hasRetainedImagePreload(host: string, image: string): boolean {
+  return retained.get(host)?.has(image) === true;
+}
+
+/** Distinct preload image references held on a host. */
+export function countRetainedImagePreloads(host: string): number {
+  return retained.get(host)?.size ?? 0;
 }
 
 export function resetImagePreloads(): void {
   states.clear();
+  retained.clear();
 }

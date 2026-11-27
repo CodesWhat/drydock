@@ -10,8 +10,8 @@ Web UI|None (CLI only)|Full dashboard|self
 Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|self
 Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|self
 Dry-run preview|No|Yes|self
-Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Trigger integrations|Via Shoutrrr (~20 services)|26 native trigger integrations|tie
+Registry support|Docker Hub + private via Docker config|27 dedicated registry integrations|self
+Trigger integrations|Via Shoutrrr (~20 services)|34 native trigger integrations|tie
 Security scanning|None|Trivy + SBOM + cosign verification|self
 Per-container scheduling|No|Yes (per-watcher CRON)|self
 Include/exclude patterns|Labels only|Labels, regex, image sets|self
@@ -32,7 +32,7 @@ monitor|Full Web Dashboard|Watchtower is CLI-only with no built-in UI. Drydock s
 eye|Monitor-First Design|Watchtower's default behavior auto-pulls and restarts containers without confirmation. Drydock is monitor-first by design — it detects updates and notifies you, with optional dry-run preview before any changes are applied.
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification. Watchtower has no security scanning capabilities.
 network|Distributed Architecture|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard. Watchtower is limited to the local Docker socket or basic remote connections.
-radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more — each with provider-specific auth handling rather than a shared Docker credential file.
+radio|27 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more — each with provider-specific auth handling rather than a shared Docker credential file.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Watchtower has no rollback or backup mechanism.
 `,
   highlightIconMap: {
@@ -45,7 +45,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   },
   metadataTitle: "Watchtower Alternative: Drydock vs Watchtower",
   metadataDescription:
-    "Watchtower was archived in December 2025. Drydock is maintained, with a web UI, 23 registries, vulnerability scanning and rollback.",
+    "Watchtower was archived in December 2025. Drydock is maintained, with a web UI, 27 registries, vulnerability scanning and rollback.",
   metadataKeywords: [
     "watchtower vs drydock",
     "watchtower alternative",
@@ -72,7 +72,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
         . Its last release was v1.7.1 in November 2023, and an unofficial community fork,
         nicholas-fedor/watchtower, is still released. Drydock is an actively maintained,
         MIT-licensed alternative with a web dashboard, dry-run preview, image backup and automatic
-        rollback on health-check failure, and it checks 23 registries.
+        rollback on health-check failure, and it checks 27 registries.
       </p>
       <p>
         Still running Watchtower? This page doubles as a migration guide. Drydock watches the same

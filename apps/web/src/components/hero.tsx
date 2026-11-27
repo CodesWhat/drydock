@@ -26,7 +26,7 @@ export function Hero() {
               Know what changed <span>before anything updates</span>
             </h1>
             <p className="website-lede">
-              Drydock watches your Docker containers and 23 registries, tells you what&apos;s
+              Drydock watches your Docker containers and 27 registries, tells you what&apos;s
               outdated and whether it&apos;s major, minor, patch or digest, and updates only when
               you say so. Scans, backups and rollback are built in. Self-hosted, MIT licensed.
             </p>

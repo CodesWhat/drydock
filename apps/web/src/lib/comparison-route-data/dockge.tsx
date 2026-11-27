@@ -8,9 +8,9 @@ Project status|Stable releases stalled since March 2025 (master still active)|Ac
 Language|TypeScript|TypeScript|tie
 Web UI|Yes|Yes|tie
 Primary focus|Compose stack management|Container update monitoring|tie
-Image update detection|No|Yes, across 23 registries|self
+Image update detection|No|Yes, across 27 registries|self
 Auto-update containers|No|Yes (optional, monitor-first)|self
-Trigger integrations|No|26 native trigger integrations|self
+Trigger integrations|No|34 native trigger integrations|self
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|No|Yes, on health check failure|self
 Image backup|No|Pre-update backup with retention|self
@@ -27,12 +27,12 @@ Dark/light theme|Yes|Yes|tie
 License|MIT|MIT|tie
 `,
   highlightsTable: `
-eye|Image Update Detection|Dockge manages compose stacks but doesn't check for image updates. Drydock continuously monitors 23 registries and notifies you when new versions are available.
+eye|Image Update Detection|Dockge manages compose stacks but doesn't check for image updates. Drydock continuously monitors 27 registries and notifies you when new versions are available.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before any update is applied. Dockge has no security scanning.
 rotate|Safe Update Pipeline|Dry-run preview, pre-update backup, automatic rollback on health check failure, and maintenance windows. Dockge lets you manually update stacks but has no safety controls.
-bell|26 Trigger Integrations|Get notified about available updates via Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Dockge has no notification system.
+bell|34 Trigger Integrations|Get notified about available updates via Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Dockge has no notification system.
 network|Distributed Monitoring|Drydock's lightweight agents connect to remote hosts without requiring a full web service on each machine. Dockge supports managing remote hosts by running a full Dockge instance on each host as a proxy node — no lightweight agent binary, just another full Dockge service.
-radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Dockge doesn't query registries at all.
+radio|27 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Dockge doesn't query registries at all.
 `,
   highlightIconMap: {
     eye: Eye,

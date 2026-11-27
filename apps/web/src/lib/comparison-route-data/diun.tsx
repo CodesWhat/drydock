@@ -9,8 +9,8 @@ Language|Go|TypeScript|tie
 Web UI|None (CLI / daemon)|Full dashboard|self
 Auto-update containers|No (notify only)|Yes (optional)|self
 Docker Compose updates|No|Yes, pull & recreate|self
-Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Trigger integrations|17 services|26 native trigger integrations|self
+Registry support|Docker Hub + private via Docker config|27 dedicated registry integrations|self
+Trigger integrations|17 services|34 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
 REST API|Partial (gRPC CLI)|Full REST API|self
@@ -31,7 +31,7 @@ License|MIT|MIT|tie
 monitor|Full Web Dashboard|Diun is a CLI daemon with no built-in UI. Drydock provides a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs — all from the browser.
 layers|Auto-Update Containers|Diun is notification-only — it tells you about updates but can't apply them. Drydock can monitor and notify, but also optionally pull images and recreate containers via Docker Compose.
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign signature verification. Diun has no security scanning capabilities.
-radio|23 Registry Integrations|Drydock has dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Diun relies on Docker credential configuration.
+radio|27 Registry Integrations|Drydock has dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Diun relies on Docker credential configuration.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Diun can't update containers, so rollback isn't applicable.
 bell|Audit Trail & Observability|Drydock ships a full audit log with REST API and a Prometheus /metrics endpoint with Grafana dashboard template. Diun added a basic /metrics endpoint in v4.32.0 but has no audit trail or Grafana integration.
 `,
@@ -45,7 +45,7 @@ bell|Audit Trail & Observability|Drydock ships a full audit log with REST API an
   },
   metadataTitle: "Diun vs Drydock: Container Update Comparison",
   metadataDescription:
-    "Diun only notifies. Drydock adds a web UI, auto-updates, vulnerability scanning and 23 registries.",
+    "Diun only notifies. Drydock adds a web UI, auto-updates, vulnerability scanning and 27 registries.",
   metadataKeywords: [
     "diun vs drydock",
     "diun alternative",

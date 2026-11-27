@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## What is Drydock?
 
-Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 26 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
+Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 27 registry providers, 34 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
 
 ## Repository structure
 
@@ -69,7 +69,7 @@ Each component type (watcher, registry, trigger, authentication) extends a base 
 ### Subsystems
 
 - **Watchers** (`app/watchers/`) — monitor containers via the Docker socket, reading `dd.watch`/`dd.tag.*` labels.
-- **Registries** (`app/registries/`) — query image registries for available tags; 23 providers share auth patterns via `BaseRegistry`.
+- **Registries** (`app/registries/`) — query image registries for available tags; 27 providers share auth patterns via `BaseRegistry`.
 - **Triggers** (`app/triggers/`) — send notifications or execute actions on update; category-scoped `DD_ACTION_*`/`DD_NOTIFICATION_*`. The legacy `DD_TRIGGER_*` env vars and `dd.trigger.*` labels are removed as of v1.7.0 — a leftover `DD_TRIGGER_*` variable now fails startup; see `DEPRECATIONS.md`.
 - **Store** (`app/store/`) — SQLite persisted to `/store/dd.sqlite` on v1.8, with a one-time import of the legacy `/store/dd.json` used by v1.7 and earlier.
 - **Agents** (`app/agent/`) — controller-agent distributed architecture; agents run remote watchers/triggers, including Portwing edge/standard agents.

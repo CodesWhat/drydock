@@ -38,7 +38,7 @@ const quality: Badge[] = [
   {
     href: `https://codecov.io/gh/${REPO_SLUG}`,
     src: `https://codecov.io/gh/${REPO_SLUG}/graph/badge.svg`,
-    alt: "Coverage",
+    alt: "100% backend coverage",
   },
   {
     href: "https://github.com/veggiemonk/awesome-docker#container-management",
@@ -46,9 +46,6 @@ const quality: Badge[] = [
     alt: "Mentioned in Awesome Docker",
   },
 ];
-
-const COVERAGE_SCOPE =
-  "CI enforces 100% line, branch, function and statement coverage on the backend sources and UI TypeScript files. Vue components have separate aggregate floors, and vue-tsc typechecks scripts and templates without establishing runtime coverage.";
 
 export async function GitHubBadges() {
   // GITHUB_STATS_AUTH is optional and server-only (no NEXT_PUBLIC_ prefix).
@@ -89,9 +86,6 @@ export async function GitHubBadges() {
           </a>
         </li>
       </ul>
-      <p className="website-proof-note">
-        <b>Coverage scope:</b> {COVERAGE_SCOPE}
-      </p>
       <ul className="website-proof-badges" aria-label="Project badges">
         {quality.map((badge) => (
           <li key={badge.alt}>
