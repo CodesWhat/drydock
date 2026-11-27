@@ -20,21 +20,6 @@ describe('Dockerfile release defaults', () => {
     );
   });
 
-  test('ui-build stage runs on the build platform with the same pinned index digest as base', () => {
-    // The UI output is static assets, so arm64 images must not compile it under
-    // QEMU (v1.9.0-rc.1 release-cut timed out with vite hung at rendering chunks).
-    const dockerfile = fs.readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
-    const baseDigest = /^FROM (node:24-alpine@sha256:[0-9a-f]{64}) AS base$/mu.exec(
-      dockerfile,
-    )?.[1];
-    const uiFrom = /^FROM --platform=\$BUILDPLATFORM (\S+) AS ui-build$/mu.exec(dockerfile);
-
-    expect(baseDigest).toBeDefined();
-    expect(uiFrom?.[1]).toBe(baseDigest);
-    expect(dockerfile).toMatch(/COPY --from=ui-build \/home\/node\/ui\/dist\/ \.\/ui/u);
-    expect(dockerfile).toMatch(/FROM base AS app-build/u);
-  });
-
   test('base image pins are image index digests, not per-platform manifests', () => {
     // #1021: rc.4 through rc.10 pinned amd64-only manifest digests, so the
     // arm64 stage built on an amd64 rootfs and shipped x86-64 binaries under
@@ -166,23 +151,6 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
     expect(result.status).toBe(0);
     expect(calls).toEqual([expect.stringMatching(/^su-exec node /u)]);
     expect(result.stdout).not.toContain('Preserving');
-    expect(result.stderr).not.toContain('Preserving');
-  });
-
-  test('writes the insecure root warning to stderr so scan output stays clean', () => {
-    writeStub('node', 'echo "node $*"');
-    const result = spawnSync('bash', [entrypointPath, 'node', 'dist/index.js', 'scan'], {
-      encoding: 'utf8',
-      env: {
-        PATH: `${path.join(dir, 'bin')}:${process.env.PATH}`,
-        DD_RUN_AS_ROOT: 'true',
-        DD_ALLOW_INSECURE_ROOT: 'true',
-      },
-    });
-
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe('node dist/index.js scan\n');
-    expect(result.stderr).toContain('WARNING: insecure root mode enabled');
   });
 
   test('skips node primary GID', () => {
@@ -196,15 +164,13 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
 
     expect(calls).toEqual([expect.stringMatching(/^su-exec node /u)]);
     expect(result.stdout).not.toContain('Preserving');
-    expect(result.stderr).not.toContain('Preserving');
   });
 
   test('adds node to the root group for a group_add of 0', () => {
     const { result, calls } = run({ groups: '0 0' });
 
     expect(calls).toEqual(['addgroup node root', expect.stringMatching(/^su-exec node /u)]);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toContain('Preserving group_add supplementary GIDs for node: 0');
+    expect(result.stdout).toContain('Preserving group_add supplementary GIDs for node: 0');
   });
 
   test('creates a named group for a group_add GID with no entry', () => {
@@ -216,8 +182,7 @@ describe('Docker.entrypoint.sh group_add preservation', () => {
       'addgroup node dd-gid-4242',
       expect.stringMatching(/^su-exec node /u),
     ]);
-    expect(result.stdout).toBe('');
-    expect(result.stderr).toContain('node: 0 4242');
+    expect(result.stdout).toContain('node: 0 4242');
   });
 
   test('keeps the docker socket group alongside group_add GIDs', async () => {

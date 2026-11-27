@@ -347,7 +347,7 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.8.0-rc.16",
+    version: "v1.8.0-rc.17",
     title: "Fleet Management & SQLite (RC, testing only)",
     emoji: "\u{2699}️",
     status: "next",
@@ -362,18 +362,17 @@ export const roadmap: Milestone[] = [
     ],
   },
   {
-    version: "v1.9.0-rc.1",
-    title: "Policy depth & Ecosystem (RC, testing only)",
+    version: "v1.9.0",
+    title: "Policy depth & Ecosystem",
     emoji: "\u{1F9ED}",
-    status: "next",
+    status: "planned",
     dotColor:
-      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+      "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
     items: [
-      "Landed: per-update-type candidates and running-version ceilings",
-      "Landed: watcher include/exclude filters and a file watcher provider",
-      "Landed: container state alerts, quiet hours and silences",
-      "Landed: audit actor, OIDC sign-in allowlist and security fast lane",
-      "Landed: GitHub dispatch and GitLab pipeline rebuild triggers",
+      "Per-update-type candidates and running-version ceilings",
+      "Watcher include/exclude filters",
+      "Audit actor and export",
+      "Home Assistant and Homepage integrations",
     ],
   },
   {

@@ -41,8 +41,6 @@ export interface ApiAgent {
   pollInterval?: string;
   /** `hook-labels-trusted`: agent predates 1.7.0 and still trusts image-baked hook labels. */
   warnings?: string[];
-  /** True for a Portwing agent, which has no Drydock env reveal or agent log routes. */
-  portwing?: boolean;
   containers: { total: number; running: number; stopped: number };
   images?: number;
 }

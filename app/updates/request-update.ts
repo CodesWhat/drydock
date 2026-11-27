@@ -21,13 +21,7 @@ import {
   resolveForTrigger,
   selectActionTrigger,
 } from '../model/action-policy.js';
-import {
-  type Container,
-  fullName,
-  hasRawUpdate,
-  isLocalBuildContainer,
-  LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE,
-} from '../model/container.js';
+import { type Container, hasRawUpdate } from '../model/container.js';
 import {
   groupTriggerExcludedMessage,
   groupUpdateModeRejectionMessage,
@@ -39,11 +33,8 @@ import {
   getPrimaryHardBlocker,
   type UpdateBlocker,
   type UpdateBlockerReason,
-  type UpdateEligibility,
 } from '../model/update-eligibility.js';
-import { getContainerMaintenanceWindowOpen } from '../model/watcher-maintenance-window.js';
 import * as registry from '../registry/index.js';
-import * as auditStore from '../store/audit.js';
 import { withCurrentGroupPolicy } from '../store/group-policy.js';
 import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
@@ -135,14 +126,11 @@ const ACTION_POLICY_NOT_AUTO_REJECTION_MESSAGE =
 
 export class UpdateRequestError extends Error {
   statusCode: number;
-  /** Set when the container was refused only because there is nothing to apply. */
-  noWork: boolean;
 
-  constructor(statusCode: number, message: string, noWork = false) {
+  constructor(statusCode: number, message: string) {
     super(message);
     this.name = 'UpdateRequestError';
     this.statusCode = statusCode;
-    this.noWork = noWork;
   }
 }
 
@@ -340,7 +328,6 @@ function formatAcceptedDispatchContext(accepted: AcceptedContainerUpdateRequest[
 function prepareContainerUpdateRequest(
   requested: Container,
   options: EnqueueContainerUpdateOptions = {},
-  allowDependencyRestart = false,
 ): PreparedContainerUpdateRequest {
   // The lower-level enqueue path is used by watcher-driven action triggers.
   // Manual/API callers go through requestContainerUpdate(s), which explicitly
@@ -384,13 +371,6 @@ function prepareContainerUpdateRequest(
     );
   }
 
-  // A locally built image has no registry copy to pull. Its candidate is the declared
-  // upstream base (dd.registry.lookup.image), so an update action would replace the user's
-  // build with stock upstream. Restart-kind dependents never pull and stay admitted.
-  if (isLocalBuildContainer(container) && container.dependsOnAction !== 'restart') {
-    throw new UpdateRequestError(409, LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
-  }
-
   // A user-initiated request may intentionally override a soft policy gate. Those
   // gates suppress the public updateAvailable getter, but the raw candidate is
   // still present in image/result and remains safe to pass through hard-blocker
@@ -401,19 +381,16 @@ function prepareContainerUpdateRequest(
   // admitted here so it gets a real operation record and passes through the
   // same dedup/mode/hard-blocker gates as any other request. Admission alone
   // does not decide restart-vs-update dispatch: if this container turns out
-  // to have its own update anyway, the wave dispatcher's
-  // resolveDependencyActionKind (dependency-graph.ts) routes it through the
-  // normal trigger instead of restartDependentContainer() (PR #681 review #2/#3).
-  // The exemption only applies when the caller resolved the dependency edge
-  // inside the requested batch (allowDependencyRestart). Otherwise the
-  // dispatcher would see no edge and run a full pull-and-recreate for a
-  // container that has no update.
+  // to have its own update anyway, or never resolved a dependsOn edge at
+  // all, the wave dispatcher's resolveDependencyActionKind (dependency-graph.ts)
+  // routes it through the normal trigger instead of
+  // restartDependentContainer() (PR #681 review #2/#3).
   if (
     !container.updateAvailable &&
     !(options.allowSoftPolicyOverride === true && hasRawUpdate(container)) &&
-    !(allowDependencyRestart && container.dependsOnAction === 'restart')
+    container.dependsOnAction !== 'restart'
   ) {
-    throw new UpdateRequestError(400, 'No update available for this container', true);
+    throw new UpdateRequestError(400, 'No update available for this container');
   }
 
   // Reject on any hard eligibility blocker. `trigger-not-included`/`trigger-excluded`
@@ -457,52 +434,10 @@ function prepareContainerUpdateRequest(
     }
   }
 
-  if (source === 'automatic') {
-    recordSecurityFastLaneAudit(container, eligibility, trigger);
-  }
-
   return {
     container,
     trigger,
   };
-}
-
-/**
- * One audit entry per automatic admission that only got through because the security fast
- * lane lifted a hold. The maintenance window is read live here: eligibility never carries it
- * for admission, and the trigger's own deferral gate already stood down for this container.
- */
-function recordSecurityFastLaneAudit(
-  container: Container,
-  eligibility: UpdateEligibility,
-  trigger: ResolvedUpdateTrigger,
-): void {
-  const fastLane = eligibility.securityFastLane;
-  if (!fastLane) {
-    return;
-  }
-  const bypassed = [...fastLane.bypassedHolds];
-  if (getContainerMaintenanceWindowOpen(container, registry.getState().watcher) === false) {
-    bypassed.push('maintenance-window-closed');
-  }
-  if (bypassed.length === 0) {
-    return;
-  }
-  const more = fastLane.fixedCount - fastLane.fixedIds.length;
-  auditStore.insertAudit({
-    id: '',
-    timestamp: new Date().toISOString(),
-    action: 'security-fast-lane',
-    containerName: fullName(container),
-    containerImage: container.image?.name,
-    fromVersion: container.updateKind?.localValue,
-    toVersion: container.updateKind?.remoteValue,
-    updateKind: container.updateKind?.kind,
-    semverDiff: container.updateKind?.semverDiff,
-    triggerName: trigger.getId(),
-    status: 'info',
-    details: `Security fast lane: fixes ${fastLane.fixedCritical} critical and ${fastLane.fixedHigh} high (${fastLane.fixedIds.join(', ')}${more > 0 ? `, +${more} more` : ''}); lifted ${bypassed.join(', ')}`,
-  });
 }
 
 function createAcceptedContainerUpdateRequest(
@@ -581,34 +516,21 @@ export async function enqueueContainerUpdates(
 ): Promise<ContainerUpdateRequestBatchResult> {
   let preparedAccepted: PreparedContainerUpdateRequest[] = [];
   const rejected: RejectedContainerUpdateRequest[] = [];
-  // Rejections that only mean "nothing to apply" must not block dependents.
-  const noWorkRejections = new Set<RejectedContainerUpdateRequest>();
-
-  const { edges } = buildDependencyGraph(containers);
-  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
 
   for (const container of containers) {
     try {
-      preparedAccepted.push(
-        prepareContainerUpdateRequest(
-          container,
-          options,
-          resolveDependencyActionKind(container, containerIdsWithResolvedDependsOn) === 'restart',
-        ),
-      );
+      preparedAccepted.push(prepareContainerUpdateRequest(container, options));
     } catch (error: unknown) {
       if (error instanceof UpdateRequestError) {
-        const rejection = toRejectedContainerUpdateRequest(container, error);
-        rejected.push(rejection);
-        if (error.noWork) {
-          noWorkRejections.add(rejection);
-        }
+        rejected.push(toRejectedContainerUpdateRequest(container, error));
         continue;
       }
       throw error;
     }
   }
 
+  const { edges } = buildDependencyGraph(containers);
+  const containerIdsWithResolvedDependsOn = collectContainerIdsWithResolvedDependsOn(edges);
   const lifecycleSupported: PreparedContainerUpdateRequest[] = [];
   for (const prepared of preparedAccepted) {
     const actionKind = resolveDependencyActionKind(
@@ -632,9 +554,6 @@ export async function enqueueContainerUpdates(
     const blockingRejectionByContainerId = new Map<string, RejectedContainerUpdateRequest>();
 
     for (const blockingRejection of rejected) {
-      if (noWorkRejections.has(blockingRejection)) {
-        continue;
-      }
       for (const dependentId of collectTransitiveDependents(
         blockingRejection.container.id,
         dependentsByDependency,
@@ -658,44 +577,6 @@ export async function enqueueContainerUpdates(
     }
     preparedAccepted = stillAccepted;
   }
-
-  // A restart-only dependent has no work of its own: keep it only when an
-  // upstream in this batch will actually run (an update, or a restart that is
-  // itself activated). A current upstream alone is not a reason to restart it.
-  const actionKindOf = (prepared: PreparedContainerUpdateRequest) =>
-    resolveDependencyActionKind(prepared.container, containerIdsWithResolvedDependsOn);
-  const activeIds = new Set(
-    preparedAccepted
-      .filter((prepared) => actionKindOf(prepared) === 'update')
-      .map((prepared) => prepared.container.id),
-  );
-  const pendingRestarts = preparedAccepted.filter(
-    (prepared) => actionKindOf(prepared) === 'restart',
-  );
-  let activated = true;
-  while (activated) {
-    activated = false;
-    for (const prepared of pendingRestarts) {
-      if (
-        !activeIds.has(prepared.container.id) &&
-        edges.some((edge) => edge.from === prepared.container.id && activeIds.has(edge.to))
-      ) {
-        activeIds.add(prepared.container.id);
-        activated = true;
-      }
-    }
-  }
-  preparedAccepted = preparedAccepted.filter((prepared) => {
-    if (activeIds.has(prepared.container.id)) {
-      return true;
-    }
-    rejected.push({
-      container: prepared.container,
-      message: 'No upstream dependency update to restart this container for',
-      statusCode: 409,
-    });
-    return false;
-  });
 
   const queueTotal = preparedAccepted.length;
   const batchId = queueTotal > 1 ? crypto.randomUUID() : undefined;
@@ -822,12 +703,6 @@ export async function runAcceptedContainerUpdates(
       while (nextIndex < waveEntries.length) {
         const entry = waveEntries[nextIndex];
         nextIndex++;
-        const queuedOperation = updateOperationStore.getOperationById(entry.operationId);
-        if (queuedOperation?.cancelRequested) {
-          // Cancelled by the operator while queued: do not start it, and do
-          // not treat it as an upstream failure for dependents.
-          continue;
-        }
         const actionKind = resolveDependencyActionKind(
           entry.container,
           containerIdsWithResolvedDependsOn,

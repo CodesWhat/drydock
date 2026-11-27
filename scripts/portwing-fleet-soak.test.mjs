@@ -69,15 +69,30 @@ test('spawned agents opt into the plaintext loopback controller URL', async () =
   );
 });
 
-test('slow-consumer phases use named backpressure and eviction budgets', async () => {
+test('slow-consumer phases use backpressure and observed eviction budgets', async () => {
   // Portwing v1.4.0 (#503): short pauses backpressure, only a stall past
-  // writeWait (10 s) evicts. The eviction pause must stay above it.
+  // writeWait (10 s) evicts. Observe the actual write-timeout reconnect.
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('./portwing-fleet-soak.mjs', import.meta.url), 'utf8');
   assert.match(source, /BACKPRESSURE_PAUSE_MS = 3500/);
-  assert.match(source, /EVICTION_PAUSE_MS = 15_000/);
+  assert.doesNotMatch(source, /EVICTION_PAUSE_MS/);
+  assert.match(source, /await observeSlowConsumerReconnect\(/);
+  assert.match(source, /hasWriteTimeout:/);
   assert.match(source, /EVICTION_RECONNECT_WAIT_MS = 45_000/);
   assert.match(source, /backpressurePauses: 0/);
   assert.match(source, /backpressureResumed: 0/);
   assert.match(source, /'short pause backpressured without reconnect'/);
+});
+
+test('slow consumer pauses through the websocket, not the raw socket', async () => {
+  // ws 8.x receiverOnDrain resumes the raw socket unless ws.pause() set
+  // isPaused, so a raw _socket.pause() gets undone under heavy inbound traffic
+  // and the agent never hits its write timeout.
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./portwing-fleet-soak.mjs', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /_socket/);
+  assert.match(source, /slowAdapter\?\.ws\?\.pause/);
+  assert.match(source, /slowAdapter\?\.ws\?\.resume/);
+  assert.match(source, /pause: \(\) => slowAdapter\.ws\.pause\(\)/);
+  assert.match(source, /resume: \(\) => slowAdapter\.ws\.resume\(\)/);
 });

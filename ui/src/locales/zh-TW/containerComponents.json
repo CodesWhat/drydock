@@ -457,9 +457,6 @@
     "updateInsight": {
       "tooltip": "有更新版本可用：{tag}。此 Tag 已固定，drydock 不會自動更新。"
     },
-    "updateCandidates": {
-      "title": "依更新類型列出的候選版本"
-    },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",
       "rolledBack": "已回滾",
@@ -484,7 +481,6 @@
       "maturityClockPublished": "候選版本於 {date} 發布 — 距達到 {minDays} 天最低要求還有 {count} 天",
       "maturityClockDetected": "候選版本於 {date} 被偵測到 — 距達到 {minDays} 天最低要求還有 {count} 天",
       "groupManualOnly": "群組政策「{group}」僅允許手動更新。Drydock 不會自動套用此更新。",
-      "securityFastLane": "修復執行中映像的 {count} 個嚴重或高風險漏洞（{ids}）。延後、成熟期和維護時段的限制不適用。",
       "updateAvailableRuleDisabled": "Update Available 通知規則已關閉，它同時控制自動更新。請在 Settings > Notifications > Update Available 中開啟，Drydock 才會自動套用此更新。",
       "updateButton": "立即更新",
       "blockedButton": "更新已阻止",
@@ -531,7 +527,6 @@
         "update-available-rule-disabled": "Update Available 規則已關閉",
         "group-notify-only": "群組僅允許通知",
         "group-manual-only": "群組要求手動更新",
-        "security-fast-lane": "安全快速通道",
         "dry-run-trigger": "觸發器設定處於 dry-run 模式",
         "maturity-releases-not-reached": "成熟度策略等待中"
       },

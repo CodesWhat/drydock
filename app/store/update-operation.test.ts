@@ -297,32 +297,6 @@ describe('Update Operation Store', () => {
     );
   });
 
-  test('getActiveOperationByContainerIdentity never hydrates terminal operations', async () => {
-    vi.resetModules();
-    const fresh = await import('./update-operation.js');
-    const database = createDb();
-    fresh.createCollections(database as any);
-    for (let index = 0; index < 5; index += 1) {
-      insertOp(fresh, {
-        id: `old-${index}`,
-        containerId: 'c-old',
-        containerName: 'old-web',
-        status: 'succeeded',
-        phase: 'succeeded',
-        createdAt: '2026-02-23T00:00:00.000Z',
-        updatedAt: '2026-02-23T00:00:00.000Z',
-      } as any);
-    }
-
-    const parse = vi.spyOn(JSON, 'parse');
-    try {
-      expect(fresh.getActiveOperationByContainerIdentity(identity('old-web'))).toBeUndefined();
-      expect(parse).not.toHaveBeenCalled();
-    } finally {
-      parse.mockRestore();
-    }
-  });
-
   test('createCollections should reset in-progress pulling-phase operations to queued for recovery', async () => {
     vi.useFakeTimers();
     try {
@@ -1107,42 +1081,6 @@ describe('Update Operation Store', () => {
       unsubscribe();
     }
   });
-
-  test.each([
-    ['rolled-back', 'rolled-back'],
-    ['failed', 'rollback-failed'],
-  ] as const)(
-    'a rollback operation closed as %s emits no update lifecycle event',
-    async (status, phase) => {
-      const inserted = insertOp(updateOperation, {
-        kind: 'rollback',
-        containerName: 'myapp',
-        containerId: 'ctr-rb',
-        status: 'in-progress',
-        phase: 'rollback-started',
-      });
-      const applied: unknown[] = [];
-      const failed: unknown[] = [];
-      const unsubscribeApplied = registerContainerUpdateApplied((payload) => {
-        applied.push(payload);
-      });
-      const unsubscribeFailed = registerContainerUpdateFailed((payload) => {
-        failed.push(payload);
-      });
-
-      try {
-        updateOperation.markOperationTerminal(inserted.id, { status, phase } as never);
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(applied).toEqual([]);
-        expect(failed).toEqual([]);
-      } finally {
-        unsubscribeApplied();
-        unsubscribeFailed();
-      }
-    },
-  );
 
   test('markOperationTerminal emits update-failed with stored container snapshot (issue #385)', async () => {
     const containerSnapshot = {
@@ -2553,7 +2491,6 @@ describe('Update Operation Store', () => {
       expect(result!.operation.id).toBe(op.id);
       expect(result!.operation.status).toBe('failed');
       expect(result!.operation.lastError).toBe('Cancelled by operator');
-      expect(result!.operation.cancelRequested).toBe(true);
     });
 
     test('flags an in-progress operation with cancelRequested', () => {

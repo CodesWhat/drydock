@@ -457,9 +457,6 @@
     "updateInsight": {
       "tooltip": "Nova versão disponível: {tag}. Esta Tag está fixada, o drydock não vai atualizá-la automaticamente."
     },
-    "updateCandidates": {
-      "title": "Candidatos por tipo de atualização"
-    },
     "eligibilityBadges": {
       "securityBlocked": "Bloqueado por segurança",
       "rolledBack": "Rollback feito",
@@ -484,7 +481,6 @@
       "maturityClockPublished": "Candidato publicado em {date} — falta {count} dia para o mínimo de {minDays} dias | Candidato publicado em {date} — faltam {count} dias para o mínimo de {minDays} dias",
       "maturityClockDetected": "Candidato detectado em {date} — falta {count} dia para o mínimo de {minDays} dias | Candidato detectado em {date} — faltam {count} dias para o mínimo de {minDays} dias",
       "groupManualOnly": "A política do grupo '{group}' permite apenas atualizações manuais. O Drydock não vai aplicar esta automaticamente.",
-      "securityFastLane": "Corrige {count} vulnerabilidades críticas ou altas da imagem em execução ({ids}). Adiamento, maturidade e janela de manutenção não se aplicam.",
       "updateAvailableRuleDisabled": "A regra de notificação Update Available está desativada e também controla as atualizações automáticas. Ative-a em Settings > Notifications > Update Available para o Drydock aplicar esta atualização sozinho.",
       "updateButton": "Atualizar agora",
       "blockedButton": "Atualização bloqueada",
@@ -531,7 +527,6 @@
         "update-available-rule-disabled": "A regra Update Available está desativada",
         "group-notify-only": "O grupo permite apenas notificações",
         "group-manual-only": "O grupo exige atualizações manuais",
-        "security-fast-lane": "Via rápida de segurança",
         "dry-run-trigger": "Configuração do trigger em modo dry-run",
         "maturity-releases-not-reached": "Política de maturidade aguardando"
       },

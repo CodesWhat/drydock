@@ -149,7 +149,6 @@ function getAgentsList(req: Request, res: Response) {
       logLevel: agent.info?.logLevel,
       pollInterval: agent.info?.pollInterval,
       warnings: agent.warnings,
-      portwing: agent.isPortwing === true,
       ...projectStatsBucket(bucket),
     };
   });
@@ -166,10 +165,6 @@ async function getAgentLogEntries(
   const agent = getAgent(req.params.name);
   if (!agent) {
     sendErrorResponse(res, 404, 'Agent not found');
-    return;
-  }
-  if (agent.isPortwing) {
-    sendErrorResponse(res, 501, 'Agent log entries are not supported for Portwing agents');
     return;
   }
   if (!agent.isConnected) {

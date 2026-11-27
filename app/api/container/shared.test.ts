@@ -1,8 +1,4 @@
-import { afterEach, describe, expect, test } from 'vitest';
-import {
-  _resetContainerScanStateForTesting,
-  beginContainerScan,
-} from '../../security/scan-state.js';
+import { describe, expect, test } from 'vitest';
 import { getErrorMessage } from '../../util/error.js';
 import * as sharedModule from './shared.js';
 import {
@@ -58,28 +54,6 @@ describe('api/container/shared', () => {
       expect(list.map((entry) => entry.id)).toEqual(['c1', 'c2']);
       expect(list[0].labelOwnedSources).toEqual(sources);
       expect(toApiContainers('nope' as never)).toBe('nope');
-    });
-  });
-
-  describe('transient scanning state', () => {
-    afterEach(() => {
-      _resetContainerScanStateForTesting();
-    });
-
-    test('toApiContainer and toApiContainers overlay scanning only while a scan runs', () => {
-      const release = beginContainerScan('c1');
-      const api = toApiContainer({ id: 'c1' } as never) as unknown as Record<string, unknown>;
-      expect(api.securityScanState).toBe('scanning');
-      const list = toApiContainers([{ id: 'c1' }, { id: 'c2' }] as never) as unknown as Record<
-        string,
-        unknown
-      >[];
-      expect(list[0].securityScanState).toBe('scanning');
-      expect('securityScanState' in list[1]).toBe(false);
-
-      release();
-      const after = toApiContainer({ id: 'c1' } as never) as unknown as Record<string, unknown>;
-      expect('securityScanState' in after).toBe(false);
     });
   });
 

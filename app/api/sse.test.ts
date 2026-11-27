@@ -155,13 +155,6 @@ vi.mock('./sse-container-enrichment.js', () => ({
   enrichContainerLifecyclePayloadWithEligibility: (payload) => payload,
 }));
 
-const mockGetContainerRaw = vi.hoisted(() => vi.fn());
-
-vi.mock('../store/container.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../store/container.js')>()),
-  getContainerRaw: mockGetContainerRaw,
-}));
-
 vi.mock('../store/api-key.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../store/api-key.js')>()),
   findApiKeyById: mockFindApiKeyById,
@@ -185,7 +178,6 @@ vi.mock('../log', () => ({
   },
 }));
 
-import { _resetContainerScanStateForTesting, beginContainerScan } from '../security/scan-state.js';
 import {
   closeStreamsForLocalSubjects,
   closeStreamsForRevokedSessions,
@@ -2029,74 +2021,6 @@ describe('SSE Router', () => {
           'event: dd:container-updated\ndata: {"id":"container-1","name":"nginx"}',
         ),
       );
-    });
-
-    describe('transient scanning state', () => {
-      beforeEach(() => {
-        _resetContainerScanStateForTesting();
-        mockGetContainerRaw.mockReset();
-      });
-
-      function containerUpdatedFrames(res: { write: { mock: { calls: unknown[][] } } }) {
-        return res.write.mock.calls
-          .map((call) => String(call[0]))
-          .filter((frame) => frame.includes('event: dd:container-updated'));
-      }
-
-      test('announces scanning on dd:container-updated when a scan starts and clears it when it ends', () => {
-        mockGetContainerRaw.mockReturnValue({ id: 'container-1', name: 'nginx' });
-        const handler = getHandler();
-        const { res } = connectSseClient(handler);
-
-        const release = beginContainerScan('container-1');
-        let frames = containerUpdatedFrames(res);
-        expect(frames).toHaveLength(1);
-        expect(frames[0]).toContain('"securityScanState":"scanning"');
-        expect(frames[0]).toContain('"id":"container-1"');
-
-        release();
-        frames = containerUpdatedFrames(res);
-        expect(frames).toHaveLength(2);
-        expect(frames[1]).not.toContain('securityScanState');
-      });
-
-      test('announces only the first start and last finish of overlapping scans', () => {
-        mockGetContainerRaw.mockReturnValue({ id: 'container-1', name: 'nginx' });
-        const handler = getHandler();
-        const { res } = connectSseClient(handler);
-
-        const releaseFirst = beginContainerScan('container-1');
-        const releaseSecond = beginContainerScan('container-1');
-        releaseFirst();
-        expect(containerUpdatedFrames(res)).toHaveLength(1);
-        releaseSecond();
-        expect(containerUpdatedFrames(res)).toHaveLength(2);
-      });
-
-      test('skips the broadcast when the container is no longer in the store', () => {
-        mockGetContainerRaw.mockReturnValue(undefined);
-        const handler = getHandler();
-        const { res } = connectSseClient(handler);
-
-        beginContainerScan('gone')();
-
-        expect(containerUpdatedFrames(res)).toHaveLength(0);
-      });
-
-      test('keeps the scanning state on a regular container-updated event mid-scan', () => {
-        const handler = getHandler();
-        const { res } = connectSseClient(handler);
-        const onContainerUpdated = mockRegisterContainerUpdated.mock.calls.at(-1)[0];
-        mockGetContainerRaw.mockReturnValue(undefined);
-
-        const release = beginContainerScan('container-1');
-        onContainerUpdated({ id: 'container-1', name: 'nginx' });
-        release();
-
-        const frames = containerUpdatedFrames(res);
-        expect(frames).toHaveLength(1);
-        expect(frames[0]).toContain('"securityScanState":"scanning"');
-      });
     });
 
     test('serves label-owned sources on a container event and never the declared layer', () => {

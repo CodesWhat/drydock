@@ -27,7 +27,6 @@ import {
   type ApprovalRecord,
   type ApprovalStatusFilter,
   type ApprovalSummary,
-  type RejectScope,
 } from '@/services/approval';
 import type { ContainerReleaseNotes } from '@/types/container';
 import { timeAgo } from '@/utils/audit-helpers';
@@ -71,7 +70,6 @@ const holdReasonsById = ref<Record<string, ApprovalHoldReason[]>>({});
 const hardBlockersById = ref<Record<string, ApprovalHoldReason[]>>({});
 const detailLoadingId = ref<string | null>(null);
 const selectedIds = ref<Set<string>>(new Set());
-const rejectScopes = ref<Record<string, RejectScope>>({});
 const bulkActing = ref(false);
 const selectAllRef = ref<HTMLInputElement | null>(null);
 let loadRequestId = 0;
@@ -364,13 +362,8 @@ async function approveRow(approval: ApprovalRecord) {
 async function rejectRow(approval: ApprovalRecord) {
   if (actingId.value) return;
   actingId.value = approval.id;
-  const scope = rejectScopeFor(approval);
   try {
-    if (scope === 'tag') {
-      await rejectApproval(approval.id);
-    } else {
-      await rejectApproval(approval.id, { scope });
-    }
+    await rejectApproval(approval.id);
     toast.success(t('approvalsView.toast.rejected', { name: approval.containerName }));
     expandedId.value = null;
     await refresh();
@@ -514,41 +507,13 @@ async function confirmApprove(approval: ApprovalRecord) {
   });
 }
 
-function rejectScopeFor(approval: ApprovalRecord): RejectScope {
-  return approval.updateKind === 'tag' ? (rejectScopes.value[approval.id] ?? 'tag') : 'tag';
-}
-
-function setRejectScope(approval: ApprovalRecord, event: Event) {
-  const value = (event.target as HTMLSelectElement).value;
-  if (value === 'tag' || value === 'minor' || value === 'major') {
-    rejectScopes.value = { ...rejectScopes.value, [approval.id]: value };
-  }
-}
-
-// "3" for a major scope, "3.4" for minor, read off the tag the row shows. A tag that does not
-// start with a version falls back to the whole tag; the server still decides what it accepts.
-function rejectLine(approval: ApprovalRecord, scope: 'minor' | 'major'): string {
-  const tag = refTag(approval.toRef);
-  const match = /^v?(\d+)\.(\d+)/.exec(tag);
-  if (!match) return tag;
-  return scope === 'major' ? match[1] : `${match[1]}.${match[2]}`;
-}
-
 function confirmReject(approval: ApprovalRecord) {
-  const scope = rejectScopeFor(approval);
   confirm.require({
     header: t('approvalsView.confirm.reject.header'),
-    message:
-      scope === 'tag'
-        ? t('approvalsView.confirm.reject.message', {
-            name: approval.containerName,
-            toRef: approval.toRef,
-          })
-        : t('approvalsView.confirm.reject.messageLine', {
-            name: approval.containerName,
-            toRef: approval.toRef,
-            line: rejectLine(approval, scope),
-          }),
+    message: t('approvalsView.confirm.reject.message', {
+      name: approval.containerName,
+      toRef: approval.toRef,
+    }),
     rejectLabel: t('approvalsView.confirm.cancel'),
     acceptLabel: t('approvalsView.confirm.reject.acceptLabel'),
     severity: 'warn',
@@ -778,16 +743,6 @@ onUnmounted(() => {
           <AppBadge :tone="semverTone(row.semverDiff)" size="xs" class="shrink-0">
             {{ t(`approvalsView.semver.${row.semverDiff}`) }}
           </AppBadge>
-          <AppBadge
-            v-if="row.securityFastLane"
-            tone="info"
-            size="xs"
-            class="shrink-0"
-            data-testid="approval-security-fast-lane"
-            :title="t('approvalsView.securityFastLane.tooltip')"
-          >
-            {{ t('approvalsView.securityFastLane.badge') }}
-          </AppBadge>
         </div>
       </template>
       <template #cell-scan="{ row }">
@@ -828,21 +783,6 @@ onUnmounted(() => {
             <AppIcon name="check" :size="12" />
             {{ t('approvalsView.actions.approve') }}
           </AppButton>
-          <select
-            v-if="row.updateKind === 'tag'"
-            class="px-1 py-0.5 dd-rounded text-2xs-plus dd-text"
-            :style="{ backgroundColor: 'var(--dd-bg)', border: '1px solid var(--dd-border)' }"
-            :value="rejectScopeFor(row)"
-            :disabled="actingId === row.id || bulkActing"
-            :aria-label="t('approvalsView.actions.rejectScopeAriaLabel')"
-            data-testid="approval-reject-scope"
-            @click.stop
-            @change="setRejectScope(row, $event)"
-          >
-            <option value="tag">{{ t('approvalsView.rejectScope.tag') }}</option>
-            <option value="minor">{{ t('approvalsView.rejectScope.minor') }}</option>
-            <option value="major">{{ t('approvalsView.rejectScope.major') }}</option>
-          </select>
           <AppButton
             size="sm"
             variant="danger-subtle"

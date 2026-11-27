@@ -31,8 +31,6 @@
       "challengeExpired": "Phiên xác minh đã hết hạn. Hãy đăng nhập lại.",
       "challengeLocked": "Quá nhiều lần thử. Hãy thử lại sau {time}.",
       "challengeLockedLater": "Quá nhiều lần thử. Hãy thử lại sau.",
-      "rateLimited": "Quá nhiều lần thử. Hãy thử lại sau {time}.",
-      "rateLimitedLater": "Quá nhiều lần thử. Hãy thử lại sau.",
       "challengeUnavailable": "Hiện không thể xác minh. Hãy thử lại sau ít phút."
     },
     "connectionLost": {

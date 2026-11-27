@@ -9,9 +9,8 @@ import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { useViewMode } from '../preferences/useViewMode';
-import { exportAuditLog, getAuditLog } from '../services/audit';
+import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
-import { downloadTextFile } from '../utils/download-text';
 import {
   actionIcon,
   actionLabel,
@@ -79,7 +78,6 @@ const actionTypes = [
   'config-reloaded',
   'config-written',
   'auto-update-blocked',
-  'security-fast-lane',
   'update-approved',
   'update-rejected',
   'update-deferred',
@@ -87,9 +85,6 @@ const actionTypes = [
   'api-key-revoked',
   'api-key-auth-failed',
   'image-prune',
-  'cleanup',
-  'notification-silence-set',
-  'notification-silence-cleared',
 ];
 
 const route = useRoute();
@@ -134,11 +129,6 @@ function parseContainerQuery(value: unknown): string {
   return raw?.trim() ?? '';
 }
 
-function parseActorQuery(value: unknown): string {
-  const raw = firstQueryValue(value);
-  return raw?.trim() ?? '';
-}
-
 function parseDateQuery(value: unknown): string {
   const raw = firstQueryValue(value);
   if (!raw) return '';
@@ -168,7 +158,6 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.valu
 const searchQuery = ref(firstQueryValue(route.query.q) ?? '');
 const actionFilter = ref<string[]>(parseActionsQuery(route.query.actions, route.query.action));
 const containerFilter = ref(parseContainerQuery(route.query.container));
-const actorFilter = ref(parseActorQuery(route.query.actor));
 const fromDateFilter = ref(parseDateQuery(route.query.from));
 const toDateFilter = ref(parseDateQuery(route.query.to));
 const showFilters = ref(false);
@@ -187,7 +176,6 @@ const activeFilterCount = computed(() => {
   if (normalizedSearchQuery.value) count++;
   if (actionFilter.value.length > 0) count++;
   if (containerFilter.value) count++;
-  if (actorFilter.value.trim()) count++;
   if (fromDateFilter.value) count++;
   if (toDateFilter.value) count++;
   return count;
@@ -216,7 +204,6 @@ function clearFilters() {
   searchQuery.value = '';
   actionFilter.value = [];
   containerFilter.value = '';
-  actorFilter.value = '';
   fromDateFilter.value = '';
   toDateFilter.value = '';
   page.value = 1;
@@ -285,14 +272,6 @@ const tableColumns = computed(() => [
     cardPriority: 1,
   },
   {
-    key: 'actor',
-    label: t('auditView.columns.actor'),
-    size: 150,
-    minSize: 110,
-    maxSize: 240,
-    sortable: false,
-  },
-  {
     key: 'containerName',
     label: t('auditView.columns.target'),
     size: 260,
@@ -336,45 +315,16 @@ const { hiddenColumnKeys, toggleColumn, resetColumns } = useViewColumnVisibility
   pickerColumns,
 );
 
-function buildServerFilters(): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
-  if (actionFilter.value.length === 1) params.action = actionFilter.value[0];
-  else if (actionFilter.value.length > 1) params.actions = [...actionFilter.value];
-  if (containerFilter.value) params.container = containerFilter.value;
-  const actor = actorFilter.value.trim();
-  if (actor) params.actor = actor;
-  if (fromDateFilter.value) params.from = fromDateFilter.value;
-  if (toDateFilter.value) params.to = toDateFilter.value;
-  return params;
-}
-
-const exporting = ref(false);
-
-async function exportEntries(format: 'csv' | 'json') {
-  if (exporting.value) return;
-  exporting.value = true;
-  error.value = '';
-  try {
-    const file = await exportAuditLog(format, buildServerFilters());
-    if (!downloadTextFile(file.filename, file.text)) {
-      error.value = t('auditView.exportError');
-    }
-  } catch {
-    error.value = t('auditView.exportError');
-  } finally {
-    exporting.value = false;
-  }
-}
-
 async function fetchAudit() {
   loading.value = true;
   error.value = '';
   try {
-    const params: Record<string, unknown> = {
-      page: page.value,
-      limit: limit.value,
-      ...buildServerFilters(),
-    };
+    const params: Record<string, unknown> = { page: page.value, limit: limit.value };
+    if (actionFilter.value.length === 1) params.action = actionFilter.value[0];
+    else if (actionFilter.value.length > 1) params.actions = [...actionFilter.value];
+    if (containerFilter.value) params.container = containerFilter.value;
+    if (fromDateFilter.value) params.from = fromDateFilter.value;
+    if (toDateFilter.value) params.to = toDateFilter.value;
     const data = await getAuditLog(params);
     entries.value = data.entries ?? [];
     total.value = data.total ?? 0;
@@ -385,11 +335,9 @@ async function fetchAudit() {
   }
 }
 
-watch(
-  [page, actionFilter, containerFilter, actorFilter, fromDateFilter, toDateFilter],
-  () => fetchAudit(),
-  { deep: true },
-);
+watch([page, actionFilter, containerFilter, fromDateFilter, toDateFilter], () => fetchAudit(), {
+  deep: true,
+});
 watch(
   () => [
     route.query.page,
@@ -397,16 +345,14 @@ watch(
     route.query.actions,
     route.query.q,
     route.query.container,
-    route.query.actor,
     route.query.from,
     route.query.to,
   ],
-  ([nextPage, nextAction, nextActions, nextSearch, nextContainer, nextActor, nextFrom, nextTo]) => {
+  ([nextPage, nextAction, nextActions, nextSearch, nextContainer, nextFrom, nextTo]) => {
     page.value = parsePageQuery(nextPage);
     actionFilter.value = parseActionsQuery(nextActions, nextAction);
     searchQuery.value = firstQueryValue(nextSearch) ?? '';
     containerFilter.value = parseContainerQuery(nextContainer);
-    actorFilter.value = parseActorQuery(nextActor);
     fromDateFilter.value = parseDateQuery(nextFrom);
     toDateFilter.value = parseDateQuery(nextTo);
   },
@@ -462,12 +408,6 @@ onUnmounted(() => {
                type="text"
                :placeholder="t('auditView.containerFilterPlaceholder')"
                class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <input v-model="actorFilter"
-               name="actor"
-               type="text"
-               :placeholder="t('auditView.actorFilterPlaceholder')"
-               :aria-label="t('auditView.actorFilterLabel')"
-               class="min-w-[120px] max-w-[180px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
         <div class="relative">
           <AppButton size="none" variant="plain" weight="none"
                   type="button"
@@ -533,22 +473,6 @@ onUnmounted(() => {
         </AppButton>
       </template>
       <template #extra-buttons>
-        <AppButton size="none" variant="plain" weight="none"
-                type="button"
-                data-test="audit-export-csv"
-                :disabled="exporting"
-                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium dd-bg dd-text hover:dd-bg-elevated"
-                @click="exportEntries('csv')">
-          {{ t('auditView.export.csv') }}
-        </AppButton>
-        <AppButton size="none" variant="plain" weight="none"
-                type="button"
-                data-test="audit-export-json"
-                :disabled="exporting"
-                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium dd-bg dd-text hover:dd-bg-elevated"
-                @click="exportEntries('json')">
-          {{ t('auditView.export.json') }}
-        </AppButton>
         <DataTableColumnPicker
           :columns="pickerColumns"
           :hidden-keys="hiddenColumnKeys"
@@ -600,11 +524,6 @@ onUnmounted(() => {
           <AppIcon :name="actionIcon(row.action)" :size="12" class="dd-text-secondary shrink-0" />
           <span class="font-medium text-2xs-plus dd-text">{{ actionLabel(row.action, { t, te }) }}</span>
         </div>
-      </template>
-      <template #cell-actor="{ row }">
-        <span class="block max-w-[200px] truncate text-2xs-plus dd-text" :class="row.actor ? '' : 'dd-text-muted'" v-tooltip.top="row.actor || t('auditView.systemActor')">
-          {{ row.actor || t('auditView.systemActor') }}
-        </span>
       </template>
       <template #cell-containerName="{ row }">
         <span class="block max-w-[220px] truncate font-mono text-2xs-plus dd-text" v-tooltip.top="row.containerName">
@@ -728,9 +647,6 @@ onUnmounted(() => {
             <DetailField :label="t('auditView.detail.timestamp')" mono>{{ formatTimestamp(selectedEntry.timestamp) }}</DetailField>
             <DetailField :label="t('auditView.detail.event')">
               <span class="font-medium">{{ actionLabel(selectedEntry.action, { t, te }) }}</span>
-            </DetailField>
-            <DetailField :label="t('auditView.detail.actor')">
-              <span class="break-all">{{ selectedEntry.actor || t('auditView.systemActor') }}</span>
             </DetailField>
             <DetailField :label="targetLabel(selectedEntry.action, { t, te })" mono>
               <span class="break-all">{{ selectedEntry.containerName }}</span>

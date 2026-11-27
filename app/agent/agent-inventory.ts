@@ -47,7 +47,6 @@ const PATCH_FIELDS = [
   'transformTags',
   'tagFamily',
   'tagPinInfo',
-  'tagCeiling',
   'linkTemplate',
   'portLabel',
   'actionTriggerInclude',

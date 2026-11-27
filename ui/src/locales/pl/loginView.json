@@ -31,8 +31,6 @@
       "challengeExpired": "Weryfikacja wygasła. Zaloguj się ponownie.",
       "challengeLocked": "Zbyt wiele prób. Spróbuj ponownie za {time}.",
       "challengeLockedLater": "Zbyt wiele prób. Spróbuj ponownie później.",
-      "rateLimited": "Zbyt wiele prób. Spróbuj ponownie za {time}.",
-      "rateLimitedLater": "Zbyt wiele prób. Spróbuj ponownie później.",
       "challengeUnavailable": "Weryfikacja jest teraz niedostępna. Spróbuj ponownie za chwilę."
     },
     "connectionLost": {

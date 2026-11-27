@@ -12,7 +12,6 @@ const DOCKER_CONTAINER_EVENT_TYPES = [
   'pause',
   'unpause',
   'die',
-  'oom',
   'update',
   'rename',
   'health_status',

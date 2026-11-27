@@ -5,7 +5,6 @@ import { vi } from 'vitest';
 import { createScannerAssetManager } from './assets.js';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
-const mockLogInfo = vi.hoisted(() => vi.fn());
 
 const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
 const mockNoteBundledTrivyRemoval = vi.hoisted(() => vi.fn());
@@ -44,14 +43,7 @@ vi.mock('../configuration/index.js', async () => {
 });
 
 vi.mock('../log/index.js', () => ({
-  default: {
-    child: () => ({
-      info: (...args: unknown[]) => mockLogInfo(...args),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    }),
-  },
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
 }));
 
 vi.mock('./backend-resolution.js', async () => {
@@ -471,46 +463,6 @@ test('both provider mode preserves known blocking findings when the other provid
   expect(result.status).toBe('blocked');
   expect(result.blockingCount).toBe(1);
   expect(result.error).toContain('Grype');
-  // A blocked scan can still be a partial one: the error stays on the record for consumers.
-  expect(result.severityIds).toStrictEqual({ critical: ['CVE-BLOCK'], high: [] });
-});
-
-test('scan results record every critical and high ID even when the stored list is cut off', async () => {
-  mockGetSecurityConfiguration.mockReturnValue({
-    ...createEnabledConfiguration(),
-    scanner: 'trivy',
-  });
-  const medium = Array.from({ length: 600 }, (_, i) => ({
-    VulnerabilityID: `CVE-M-${i}`,
-    PkgName: 'pkg',
-    Severity: 'MEDIUM',
-  }));
-  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
-    callback(
-      null,
-      JSON.stringify({
-        Results: [
-          {
-            Vulnerabilities: [
-              ...medium,
-              { VulnerabilityID: 'CVE-LATE-C', PkgName: 'a', Severity: 'CRITICAL' },
-              { VulnerabilityID: 'CVE-LATE-H', PkgName: 'b', Severity: 'HIGH' },
-              { VulnerabilityID: 'CVE-LATE-H', PkgName: 'c', Severity: 'HIGH' },
-              { VulnerabilityID: 'CVE-LOW', PkgName: 'd', Severity: 'LOW' },
-            ],
-          },
-        ],
-      }),
-      '',
-    );
-    return { exitCode: 0 };
-  };
-
-  const result = await scanImageForVulnerabilities({ image: 'registry.example/app:1' });
-
-  expect(result.vulnerabilities).toHaveLength(500);
-  expect(result.vulnerabilities.some((v) => v.id === 'CVE-LATE-C')).toBe(false);
-  expect(result.severityIds).toStrictEqual({ critical: ['CVE-LATE-C'], high: ['CVE-LATE-H'] });
 });
 
 test('Docker backend executes Trivy through the worker runtime without a local command', async () => {
@@ -2747,60 +2699,6 @@ describe('scanImageWithDedup', () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
-  describe('with an immutable digest', () => {
-    const digest = `sha256:${'a'.repeat(64)}`;
-    const options = {
-      image: `registry.example.com/app@${digest}`,
-      digest,
-      trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
-    };
-
-    test('does not serve a cached scan of the mutable tag, stamped or not', async () => {
-      updateDigestScanCache(
-        digest,
-        { ...createMockScanResult(), scannedRef: 'registry.example.com/app:1.2.3' },
-        '2025-01-01T00:00:00Z',
-      );
-      const execFileMock = vi.fn((_command, _args, _options, callback) => {
-        callback(null, JSON.stringify({ Results: [] }), '');
-        return { exitCode: 0 };
-      });
-      childProcessControl.execFileImpl = execFileMock;
-
-      const { scanResult, fromCache } = await scanImageWithDedup(options, 3_600_000);
-
-      expect(fromCache).toBe(false);
-      expect(execFileMock).toHaveBeenCalled();
-      expect(scanResult.scannedRef).toBe(options.image);
-      expect(scanResult.imageDigest).toBe(digest);
-    });
-
-    test('does not serve a cached scan that recorded no reference at all', async () => {
-      updateDigestScanCache(digest, createMockScanResult(), '2025-01-01T00:00:00Z');
-      childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
-        callback(null, JSON.stringify({ Results: [] }), '');
-        return { exitCode: 0 };
-      };
-
-      expect((await scanImageWithDedup(options, 3_600_000)).fromCache).toBe(false);
-    });
-
-    test('still serves a cached scan that was taken by that digest', async () => {
-      updateDigestScanCache(
-        digest,
-        { ...createMockScanResult(options.image), scannedRef: options.image },
-        '2025-01-01T00:00:00Z',
-      );
-      const execFileMock = vi.fn();
-      childProcessControl.execFileImpl = execFileMock;
-
-      const { fromCache } = await scanImageWithDedup(options, 3_600_000);
-
-      expect(fromCache).toBe(true);
-      expect(execFileMock).not.toHaveBeenCalled();
-    });
-  });
-
   test('should run fresh scan when DB has been updated since cache', async () => {
     const cachedResult = createMockScanResult();
     updateDigestScanCache('sha256:abc123', cachedResult, '2025-01-01T00:00:00Z');
@@ -3539,147 +3437,5 @@ describe('Docker denial through the real asset manager', () => {
     } finally {
       mockDockerRuntime.assets = originalAssets;
     }
-  });
-});
-
-describe('runCommand heartbeat', () => {
-  type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
-
-  function heartbeatLines(): string[] {
-    return mockLogInfo.mock.calls
-      .map((call) => String(call[0]))
-      .filter((line) => line.includes('still scanning'));
-  }
-
-  function captureExecCallback() {
-    const captured: { callback?: ExecCallback; kill: ReturnType<typeof vi.fn> } = {
-      kill: vi.fn(() => true),
-    };
-    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
-      captured.callback = callback as ExecCallback;
-      return { exitCode: null, kill: captured.kill };
-    };
-    return captured;
-  }
-
-  beforeEach(() => {
-    mockLogInfo.mockReset();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  test('logs every 30 seconds with elapsed time and stops once the scan succeeds', async () => {
-    const captured = captureExecCallback();
-    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:slow' });
-    await vi.advanceTimersByTimeAsync(0);
-    expect(captured.callback).toBeDefined();
-
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(heartbeatLines()).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(heartbeatLines()).toEqual(['Trivy: still scanning registry.example.com/app:slow (30s)']);
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toHaveLength(2);
-    expect(heartbeatLines()[1]).toContain('(60s)');
-
-    captured.callback?.(null, JSON.stringify({ Results: [] }), '');
-    await scan;
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(120_000);
-    expect(heartbeatLines()).toHaveLength(2);
-  });
-
-  test('stops after a command failure', async () => {
-    const captured = captureExecCallback();
-    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:fails' });
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toHaveLength(1);
-
-    captured.callback?.(new Error('boom'), '', 'scanner exploded');
-    const result = await scan;
-    expect(result.status).toBe('error');
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(90_000);
-    expect(heartbeatLines()).toHaveLength(1);
-  });
-
-  test('stops after a process timeout', async () => {
-    const captured = captureExecCallback();
-    const scan = scanImageForVulnerabilities({ image: 'registry.example.com/app:timeout' });
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toHaveLength(1);
-
-    captured.callback?.(
-      Object.assign(new Error('timed out'), { code: 'ETIMEDOUT', killed: true, signal: 'SIGTERM' }),
-      '',
-      '',
-    );
-    const result = await scan;
-    expect(result.status).toBe('error');
-    expect(result.error).toContain('timed out');
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(90_000);
-    expect(heartbeatLines()).toHaveLength(1);
-  });
-
-  test('stops when the scan is aborted', async () => {
-    const captured = captureExecCallback();
-    const controller = new AbortController();
-    const scan = scanImageForVulnerabilities({
-      image: 'registry.example.com/app:abort',
-      signal: controller.signal,
-    });
-    const outcome = scan.then(
-      () => 'resolved',
-      () => 'rejected',
-    );
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toHaveLength(1);
-
-    controller.abort(Object.assign(new Error('cancelled'), { name: 'AbortError' }));
-    await expect(outcome).resolves.toBe('rejected');
-    expect(captured.kill).toHaveBeenCalledWith('SIGTERM');
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(90_000);
-    expect(heartbeatLines()).toHaveLength(1);
-  });
-
-  test('covers cosign verification as well', async () => {
-    mockGetSecurityConfiguration.mockReturnValue({
-      ...createEnabledConfiguration(),
-      signature: {
-        verify: true,
-        cosign: { command: 'cosign', timeout: 600000, key: '', identity: '', issuer: '' },
-      },
-    });
-    const captured = captureExecCallback();
-    const verification = verifyImageSignature({ image: 'registry.example.com/app:signed' });
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toEqual([
-      'Cosign: still scanning registry.example.com/app:signed (30s)',
-    ]);
-
-    captured.callback?.(null, '{}', '');
-    await verification;
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  test('names the command when no image is given', async () => {
-    const captured = captureExecCallback();
-    const run = warmupFactoryControl.options?.run({
-      command: 'trivy',
-      args: ['image', '--download-db-only'],
-      timeoutMs: 60_000,
-    });
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(heartbeatLines()).toEqual([
-      'Trivy database warm-up: still scanning Trivy database warm-up (30s)',
-    ]);
-    captured.callback?.(null, '', '');
-    await run;
-    expect(vi.getTimerCount()).toBe(0);
   });
 });

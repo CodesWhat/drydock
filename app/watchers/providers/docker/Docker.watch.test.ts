@@ -766,24 +766,6 @@ describe('Docker Watcher', () => {
       expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
     });
 
-    test('flags the scan as incomplete when container enumeration fails or drops containers', async () => {
-      docker.log = createMockLog(['warn']);
-      docker.getContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
-      await docker.watch();
-      expect(docker.lastScanIncomplete).toBe(true);
-
-      docker.getContainers = vi.fn().mockImplementation(async (diagnostics) => {
-        diagnostics.enrichmentErrors = 1;
-        return [];
-      });
-      await docker.watch();
-      expect(docker.lastScanIncomplete).toBe(true);
-
-      docker.getContainers = vi.fn().mockResolvedValue([]);
-      await docker.watch();
-      expect(docker.lastScanIncomplete).toBe(false);
-    });
-
     test('should NOT emit watcher snapshot when per-container enrichment drops containers (issue #386)', async () => {
       docker.log = createMockLog(['warn']);
       docker.getContainers = vi.fn().mockImplementation(async (diagnostics) => {

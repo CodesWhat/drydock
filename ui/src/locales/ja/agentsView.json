@@ -87,60 +87,6 @@
         "lastSeen": "最終確認",
         "never": "なし"
       }
-    },
-    "edgeKeys": {
-      "toggle": "エッジエージェントキー",
-      "hide": "エッジエージェントキーを隠す",
-      "title": "エッジエージェントキー",
-      "description": "Portwing エッジエージェントの公開鍵を登録すると、このコントローラーに接続できるようになります。保存されるのは公開鍵だけなので、ここに秘密情報は表示されません。",
-      "registerButton": "キーを登録",
-      "loading": "キーを読み込み中...",
-      "empty": "登録済みのエッジエージェントキーはありません",
-      "loadError": "エッジエージェントキーの読み込みに失敗しました",
-      "forbidden": "エッジエージェントキーの管理には、ログイン済みの管理者セッションが必要です。API キーやリカバリーログインでは操作できません。",
-      "registered": "{label} をキー {keyId} として登録しました。",
-      "revokeButton": "失効",
-      "errors": {
-        "register": "キーの登録に失敗しました",
-        "revoke": "キーの失効に失敗しました"
-      },
-      "columns": {
-        "label": "ラベル",
-        "keyId": "キー ID",
-        "created": "作成日時",
-        "status": "ステータス"
-      },
-      "status": {
-        "active": "有効",
-        "revoked": "失効済み"
-      },
-      "form": {
-        "title": "エッジエージェントキーを登録",
-        "label": "ラベル",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "公開鍵",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "44 文字の base64 キー、または portwing keygen -pub-from が出力する行全体を貼り付けてください。",
-        "submit": "登録",
-        "invalidKey": "公開鍵は base64 で、デコード後にちょうど 32 バイトである必要があります。"
-      },
-      "revoke": {
-        "header": "キーを失効",
-        "message": "{label} を失効しますか？ そのエージェントは今すぐ切断され、再接続できなくなります。",
-        "accept": "失効"
-      },
-      "snippet": {
-        "show": "エージェントのスニペットを表示",
-        "hide": "エージェントのスニペットを隠す",
-        "title": "エージェントのセットアップ",
-        "description": "エージェントのホストで portwing keygen を使ってキーペアを生成し、公開鍵をここに登録してから、次のいずれかでエージェントを起動してください。",
-        "controllerUrl": "コントローラー URL",
-        "agentName": "エージェント名",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "コピー",
-        "copied": "コピーしました"
-      }
     }
   }
 }

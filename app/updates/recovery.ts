@@ -125,14 +125,9 @@ function resolvePersistedOperationContainer(
 
 /** Reconcile Docker-mutating operations only after registry and watcher startup. */
 export async function recoverInProgressOperationsOnStartup(): Promise<InProgressRecoveryResult> {
-  const inProgress = updateOperationStore.listActiveOperations().filter(
-    (operation) =>
-      operation.status === 'in-progress' &&
-      operation.kind !== 'self-update' &&
-      // A rollback has no update to finish. One interrupted by a restart is
-      // left to the active-operation TTL sweep, which expires it quietly.
-      operation.kind !== 'rollback',
-  );
+  const inProgress = updateOperationStore
+    .listActiveOperations()
+    .filter((operation) => operation.status === 'in-progress' && operation.kind !== 'self-update');
   if (inProgress.length === 0) {
     return { reconciled: 0, abandoned: 0 };
   }

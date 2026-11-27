@@ -137,9 +137,7 @@ const selectedPolicyGroupName = ref<string | undefined>(undefined);
 const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const triggersLoading = ref(false);
-const detailTriggers = ref<
-  Array<{ type: string; name: string; agent?: string; configuration?: Record<string, unknown> }>
->([]);
+const detailTriggers = ref<Array<{ type: string; name: string; agent?: string }>>([]);
 const unassociatedTriggers = ref<
   Array<{ id: string; type: string; name: string; agent?: string; reason: string }>
 >([]);
@@ -566,49 +564,6 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(actionLabels).not.toContain('Update Now');
     expect(actionLabels).not.toContain('Force Update');
     expect(actionLabels).not.toContain('Blocked');
-  });
-
-  it('disables portainer trigger runs in notify mode and keeps notification runs enabled', () => {
-    activeDetailTab.value = 'actions';
-    updateMode.value = 'notify';
-    detailTriggers.value = [
-      { type: 'portainer', name: 'prod' },
-      { type: 'slack', name: 'ops' },
-    ];
-
-    const wrapper = mountComponent();
-
-    expect(
-      wrapper.get('[data-trigger-key="portainer.prod"] button').attributes('disabled'),
-    ).toBeDefined();
-    expect(
-      wrapper.get('[data-trigger-key="slack.ops"] button').attributes('disabled'),
-    ).toBeUndefined();
-  });
-
-  it('marks a portainer dry-run action as preview-only', () => {
-    activeDetailTab.value = 'actions';
-    updateMode.value = 'manual';
-    selectedContainer.value = { ...createSelectedContainer(), newTag: '1.2.3' };
-    detailTriggers.value = [{ type: 'portainer', name: 'prod', configuration: { dryrun: true } }];
-
-    const wrapper = mountComponent();
-    expect(wrapper.get('[data-test="dry-run-update-action"]').text()).toContain('Preview only');
-    expect(wrapper.get('[data-test="dry-run-trigger-condition"]').text()).toContain(
-      'portainer.prod',
-    );
-  });
-
-  it('does not treat false or string dry-run values as preview-only', () => {
-    activeDetailTab.value = 'actions';
-    updateMode.value = 'manual';
-    selectedContainer.value = { ...createSelectedContainer(), newTag: '1.2.3' };
-    detailTriggers.value = [
-      { type: 'portainer', name: 'a', configuration: { dryrun: false } },
-      { type: 'docker', name: 'b', configuration: { dryrun: 'true' } },
-    ];
-
-    expect(mountComponent().find('[data-test="dry-run-update-action"]').exists()).toBe(false);
   });
 
   it('disables docker trigger runs but keeps notification trigger runs enabled in notify mode', () => {
@@ -1365,23 +1320,6 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     const wrapper = mountComponent();
 
     expect(wrapper.text()).toContain('Pinned image digest has no newer tag');
-  });
-
-  it('lists the per-type update candidates under the version row', () => {
-    activeDetailTab.value = 'overview';
-    selectedContainer.value = {
-      ...createSelectedContainer(),
-      newTag: '3.0.0',
-      updateCandidates: [
-        { kind: 'patch', tag: '1.2.9' },
-        { kind: 'major', tag: '3.0.0' },
-      ],
-    };
-
-    const wrapper = mountComponent();
-
-    expect(wrapper.get('[data-test="update-candidate-patch"]').text()).toContain('1.2.9');
-    expect(wrapper.get('[data-test="update-candidate-major"]').text()).toContain('3.0.0');
   });
 
   it('shows pinned-tag insight as a current-to-newer version row and kind pill (#498)', () => {

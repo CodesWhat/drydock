@@ -8,10 +8,7 @@ import * as registryPrometheus from '../prometheus/registry.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { getErrorMessage } from '../util/error.js';
-import {
-  getRegistryRequestTimeoutMs,
-  REGISTRY_BEARER_TOKEN_CACHE_TTL_MS,
-} from './configuration.js';
+import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import { withRetry } from './http-retry.js';
 import Registry, { type RegistryLookupOptions } from './Registry.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
@@ -36,7 +33,6 @@ type DigestCacheEntry = {
   digest: string;
   created?: string;
   version?: number;
-  indexDigest?: string;
   fetchedAt: number;
 };
 type BearerChallengeAuthOptions = {
@@ -72,7 +68,6 @@ class BaseRegistry<
   private digestManifestCacheInFlight = new Map<string, Promise<RegistryManifestLookupResult>>();
   private tagListCache = new Map<string, string[]>();
   private tagListCacheInFlight = new Map<string, Promise<string[]>>();
-  private publishedAtCache = new Map<string, Promise<string | undefined>>();
   private digestCachePollCycleActive = false;
   private digestCachePollCycleGeneration = 0;
   private digestCacheHits = 0;
@@ -196,39 +191,9 @@ class BaseRegistry<
     this.digestManifestCacheInFlight.clear();
     this.tagListCache.clear();
     this.tagListCacheInFlight.clear();
-    this.publishedAtCache.clear();
     this.digestCacheHits = 0;
     this.digestCacheMisses = 0;
     return this.digestCachePollCycleGeneration;
-  }
-
-  /**
-   * Share one publish-date lookup per image and tag for the active poll cycle,
-   * including lookups still in flight. Outside a cycle, or when the caller opts
-   * out, every call goes straight to the loader. A failed lookup is not cached.
-   */
-  protected memoizePublishedAt(
-    image: Pick<ContainerImage, 'name' | 'registry'>,
-    tag: string,
-    options: RegistryLookupOptions | undefined,
-    loader: () => Promise<string | undefined>,
-  ): Promise<string | undefined> {
-    if (!this.digestCachePollCycleActive || options?.usePollCycleCache === false) {
-      return loader();
-    }
-    const cacheKey = `${image.registry?.url ?? ''}|${image.name}|${tag}`;
-    const cached = this.publishedAtCache.get(cacheKey);
-    if (cached) {
-      return cached;
-    }
-    const lookup = loader();
-    this.publishedAtCache.set(cacheKey, lookup);
-    lookup.catch(() => {
-      if (Object.is(this.publishedAtCache.get(cacheKey), lookup)) {
-        this.publishedAtCache.delete(cacheKey);
-      }
-    });
-    return lookup;
   }
 
   override async getTags(
@@ -296,7 +261,6 @@ class BaseRegistry<
     this.digestManifestCacheInFlight.clear();
     this.tagListCache.clear();
     this.tagListCacheInFlight.clear();
-    this.publishedAtCache.clear();
     return stats;
   }
 
@@ -521,7 +485,6 @@ class BaseRegistry<
         digest: cachedEntry.digest,
         created: cachedEntry.created,
         version: cachedEntry.version,
-        ...(cachedEntry.indexDigest ? { indexDigest: cachedEntry.indexDigest } : {}),
       };
     }
 
@@ -545,7 +508,6 @@ class BaseRegistry<
           digest: manifest.digest,
           created: manifest.created,
           version: manifest.version,
-          indexDigest: manifest.indexDigest,
           fetchedAt: Date.now(),
         });
       }
@@ -608,7 +570,6 @@ class BaseRegistry<
       method: 'GET',
       url: authUrl,
       maxRedirects: 0,
-      timeout: getRegistryRequestTimeoutMs(),
       headers: {
         Accept: 'application/json',
       },

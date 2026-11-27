@@ -7,11 +7,9 @@ import * as apiKeysRouter from './api-keys.js';
 import * as appRouter from './app.js';
 import * as approvalsRouter from './approvals.js';
 import * as auditRouter from './audit.js';
-import { bindAuditActor } from './audit-actor.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
 import * as backupRouter from './backup.js';
-import * as cleanupRouter from './cleanup.js';
 import * as configRouter from './config.js';
 import * as containerRouter from './container.js';
 import * as containerActionsRouter from './container-actions.js';
@@ -31,7 +29,6 @@ import * as labelOverrideRouter from './label-override.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
-import * as notificationSilenceRouter from './notification-silence.js';
 import { withRouteScopes } from './openapi-scopes.js';
 import * as operationRouter from './operation.js';
 import { createOuterApiRateLimitKeyGenerator } from './outer-api-rate-limit-key.js';
@@ -181,7 +178,6 @@ export function init(): express.Router {
   router.use(requireAuthentication);
   router.use(apiKeyLimiter);
   router.use(requireSameOriginForMutations);
-  router.use(bindAuditActor);
 
   // Mount app router (authenticated — exposes version info)
   mountRouter(router, '/app', appRouter.init());
@@ -233,9 +229,6 @@ export function init(): express.Router {
   // Mount images router (image inventory and prune, sibling of /containers)
   mountRouter(router, '/images', imagesRouter.init());
 
-  // Mount cleanup policy router (scheduled and threshold cleanup, manual run)
-  mountRouter(router, '/cleanup', cleanupRouter.init());
-
   // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
   mountRouter(router, '/stats', statsRouter.init());
 
@@ -264,9 +257,6 @@ export function init(): express.Router {
 
   // Mount notification outbox (DLQ) router
   mountRouter(router, '/notifications/outbox', notificationOutboxRouter.init());
-
-  // Mount notification silences (ad-hoc mutes with an expiry)
-  mountRouter(router, '/notifications/silences', notificationSilenceRouter.init());
 
   // Mount operations router (cancel queued operations)
   mountRouter(router, '/operations', operationRouter.init());

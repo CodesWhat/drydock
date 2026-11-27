@@ -11,7 +11,6 @@ export const configurationValid = {
   order: 100,
   autoremovetimeout: 10000,
   pulltimeout: 600000,
-  pullconcurrency: 2,
   helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:

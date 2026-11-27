@@ -94,15 +94,3 @@ export function getContainerStateTopic({
     agentTopicSegment,
   });
 }
-
-export const HASS_AVAILABILITY_ONLINE = 'online';
-export const HASS_AVAILABILITY_OFFLINE = 'offline';
-
-/**
- * The retained bridge-status topic: the MQTT client's birth message publishes
- * `online` here, its Last Will publishes `offline`, and every Home Assistant
- * discovery config names it as `availability_topic`.
- */
-export function getAvailabilityTopic(baseTopic: string): string {
-  return `${baseTopic}/status`;
-}

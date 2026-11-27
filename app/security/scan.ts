@@ -19,7 +19,6 @@ import {
   noteBundledTrivyRemoval,
   resolveProviderExecution,
 } from './backend-resolution.js';
-import { isImmutableDigest, isScannedRefPinnedTo } from './digest.js';
 import {
   buildGrypeInvocation,
   buildGrypeOutputLimitMessage,
@@ -60,23 +59,12 @@ export interface ContainerSecurityScan {
   scanner: SecurityScanner;
   image: string;
   imageDigest?: string;
-  /**
-   * The reference that was actually handed to the scanner. Fast lane evidence requires it to be
-   * a digest reference (`@sha256:...`), so a scan of a mutable tag, or a copy of one that the
-   * digest cache stamped with a digest, never counts.
-   */
-  scannedRef?: string;
   scannedAt: string;
   status: SecurityScanStatus;
   blockSeverities: SecuritySeverity[];
   blockingCount: number;
   summary: ContainerVulnerabilitySummary;
   vulnerabilities: ContainerVulnerability[];
-  /**
-   * Every critical and high vulnerability ID of the scan, recorded before `vulnerabilities`
-   * is cut off at the storage limit, so comparisons never rest on a truncated list.
-   */
-  severityIds?: { critical: string[]; high: string[] };
   relativeGate?: {
     decision: 'passed' | 'blocked';
     reason: 'no-worse-than-current' | 'candidate-worse' | 'current-scan-unavailable';
@@ -219,19 +207,6 @@ function normalizeSeverity(severity: string | undefined): SecuritySeverity {
   return 'UNKNOWN';
 }
 
-function collectSeverityIds(vulnerabilities: ContainerVulnerability[]) {
-  const critical = new Set<string>();
-  const high = new Set<string>();
-  for (const vulnerability of vulnerabilities) {
-    if (vulnerability.severity === 'CRITICAL') {
-      critical.add(vulnerability.id);
-    } else if (vulnerability.severity === 'HIGH') {
-      high.add(vulnerability.id);
-    }
-  }
-  return { critical: [...critical].sort(), high: [...high].sort() };
-}
-
 function buildSummary(vulnerabilities: ContainerVulnerability[]): ContainerVulnerabilitySummary {
   const summary = createEmptySummary();
   vulnerabilities.forEach((vulnerability) => {
@@ -292,11 +267,6 @@ function toTrivyTimeout(durationMs: number) {
   return `${timeoutSeconds}s`;
 }
 
-/** How often a long-running scanner or verifier command logs that it is still going. */
-const SCAN_HEARTBEAT_INTERVAL_MS = 30_000;
-
-const logScanHeartbeat = log.child({ component: 'security.scan' });
-
 function runCommand(options: {
   command: string;
   args: string[];
@@ -306,8 +276,6 @@ function runCommand(options: {
   maxBufferExceededMessage?: string;
   env: NodeJS.ProcessEnv;
   commandName: string;
-  /** Image (or other subject) named in the heartbeat line; falls back to the command name. */
-  image?: string;
   signal?: AbortSignal;
 }): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -318,22 +286,14 @@ function runCommand(options: {
 
     let settled = false;
     let child: ReturnType<typeof execFile> | undefined;
-    let heartbeat: ReturnType<typeof setInterval> | undefined;
     const cleanupAbortListener = () => {
       options.signal?.removeEventListener('abort', handleAbort);
-    };
-    const stopHeartbeat = () => {
-      if (heartbeat !== undefined) {
-        clearInterval(heartbeat);
-        heartbeat = undefined;
-      }
     };
     const settle = (operation: () => void) => {
       if (settled) {
         return;
       }
       settled = true;
-      stopHeartbeat();
       cleanupAbortListener();
       operation();
     };
@@ -417,18 +377,6 @@ function runCommand(options: {
         settle(() => resolve(`${stdout || ''}`));
       },
     );
-
-    if (!settled) {
-      const startedAt = Date.now();
-      const subject = sanitizeLogParam(options.image ?? options.commandName);
-      heartbeat = setInterval(() => {
-        const elapsedSeconds = Math.round((Date.now() - startedAt) / 1000);
-        logScanHeartbeat.info(
-          `${options.commandName}: still scanning ${subject} (${elapsedSeconds}s)`,
-        );
-      }, SCAN_HEARTBEAT_INTERVAL_MS);
-      heartbeat.unref?.();
-    }
 
     if (!settled && options.signal) {
       options.signal.addEventListener('abort', handleAbort, { once: true });
@@ -632,7 +580,6 @@ function runTrivyVulnerabilityCommand(
       maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
-      image: options.image,
     };
     if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
@@ -673,7 +620,6 @@ function runTrivySbomCommand(
       maxBufferExceededMessage: buildTrivyOutputLimitMessage(configuration.trivy.maxOutputBytes),
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
-      image: options.image,
     };
     if (usesLocalCommand('trivy', configuration)) {
       return runCommand({ ...invocation, signal: options.signal });
@@ -711,7 +657,7 @@ function runGrypeVulnerabilityCommand(
 ): Promise<string> {
   const invocation = buildGrypeInvocation(options, configuration.grype);
   if (usesLocalCommand('grype', configuration)) {
-    return runCommand({ ...invocation, image: options.image, signal: options.signal });
+    return runCommand({ ...invocation, signal: options.signal });
   }
   return getDefaultScannerRuntime()
     .run({
@@ -790,7 +736,6 @@ function runSyftSbomCommand(
       maxBuffer: MAX_SYFT_OUTPUT_BYTES,
       env,
       commandName: 'Syft',
-      image: options.image,
       signal: options.signal,
     });
   }
@@ -895,7 +840,6 @@ async function runCosignVerifyCommand(
     maxBuffer: MAX_COSIGN_OUTPUT_BYTES,
     env,
     commandName: 'Cosign',
-    image: options.image,
     signal: options.signal,
   });
 }
@@ -1199,14 +1143,12 @@ export async function scanImageForVulnerabilities(
   return {
     scanner,
     image: options.image,
-    scannedRef: options.image,
     scannedAt: new Date().toISOString(),
     status,
     blockSeverities,
     blockingCount,
     summary: buildSummary(vulnerabilities),
     vulnerabilities: vulnerabilities.slice(0, MAX_STORED_VULNERABILITIES),
-    severityIds: collectSeverityIds(vulnerabilities),
     ...(error ? { error } : {}),
   };
 }
@@ -1453,15 +1395,8 @@ export async function scanImageWithDedup(
   const dbUpdatedAt = options.trivyDbUpdatedAt;
   const scannerFingerprint = getScannerFingerprint(dbUpdatedAt || '');
 
-  // A real digest only serves a scan that was taken by that digest. A tag scan cached under
-  // it (a bulk or on-demand scan of the mutable tag) would otherwise come back stamped as the
-  // digest's scan, so it is skipped and the digest is scanned properly instead.
-  const cacheEntryDescribesDigest =
-    !isImmutableDigest(options.digest) ||
-    isScannedRefPinnedTo(cached?.scanResult.scannedRef, options.digest);
   if (
     cached &&
-    cacheEntryDescribesDigest &&
     cached.scannerFingerprint === scannerFingerprint &&
     Date.now() - cached.cachedAt < scanIntervalMs
   ) {

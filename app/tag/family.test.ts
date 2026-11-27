@@ -1,4 +1,4 @@
-import { isLocalBaseLookup, isPinGateGoverned, normalizeTagFamilyPolicy } from './family.js';
+import { isPinGateGoverned, normalizeTagFamilyPolicy } from './family.js';
 
 describe('tag/family', () => {
   describe('normalizeTagFamilyPolicy', () => {
@@ -74,32 +74,6 @@ describe('tag/family', () => {
           image: { tag: { tagPrecision: 'specific' } },
         }),
       ).toBe(true);
-    });
-  });
-
-  describe('isLocalBaseLookup', () => {
-    const local = (lookupImage?: string, isLocalImage = true) => ({
-      image: {
-        isLocalImage,
-        registry: { lookupImage },
-        tag: { tagPrecision: 'specific' as const },
-      },
-    });
-
-    test('is true for a local image with an explicit lookup image', () => {
-      expect(isLocalBaseLookup(local('library/nginx'))).toBe(true);
-    });
-
-    test('is false without a lookup image, with a blank one, or for a registry image', () => {
-      expect(isLocalBaseLookup(local(undefined))).toBe(false);
-      expect(isLocalBaseLookup(local('  '))).toBe(false);
-      expect(isLocalBaseLookup(local('library/nginx', false))).toBe(false);
-      expect(isLocalBaseLookup({ image: { tag: {} } })).toBe(false);
-    });
-
-    test('lifts the pin gate for a local image with a lookup image only', () => {
-      expect(isPinGateGoverned(local('library/nginx'))).toBe(false);
-      expect(isPinGateGoverned(local(undefined))).toBe(true);
     });
   });
 });

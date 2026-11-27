@@ -523,18 +523,6 @@ test('removes explicit watch exclusions and does not discover unwatched containe
   expect(imageInspect).not.toHaveBeenCalled();
 });
 
-test('applies the watcher container filters to inventory refresh', async () => {
-  seed('known');
-  docker.configuration = {
-    ...docker.configuration,
-    containers: { exclude: '^service$' },
-  } as typeof docker.configuration;
-  list.mockResolvedValue([summary('known'), summary('new')]);
-  const result = await docker.refreshInventory();
-  expect(result).toMatchObject({ containers: [], removedIds: ['known'], errors: [] });
-  expect(imageInspect).not.toHaveBeenCalled();
-});
-
 test('refreshes effective Swarm labels without overwriting operator policy overrides', async () => {
   seed('new', { updatePolicyOverrides: { snoozeUntil: '2027-01-01T00:00:00.000Z' } });
   inspect.mockResolvedValue({

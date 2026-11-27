@@ -54,29 +54,8 @@ describe('Logger format selection', () => {
     });
   });
 
-  test('should send text logs to stderr in observation mode', async () => {
-    const { enableObservationMode } = await import('../runtime/observation-mode.js');
-    enableObservationMode();
-
-    await import('./index.js');
-
-    expect(mockPinoPretty).toHaveBeenCalledWith(
-      expect.objectContaining({ destination: process.stderr.fd }),
-    );
-  });
-
   test('should bypass pino-pretty when json logs are requested', async () => {
     mockGetLogFormat.mockReturnValue('json');
-
-    await import('./index.js');
-
-    expect(mockPinoPretty).not.toHaveBeenCalled();
-  });
-
-  test('should write json logs to stderr in observation mode', async () => {
-    mockGetLogFormat.mockReturnValue('json');
-    const { enableObservationMode } = await import('../runtime/observation-mode.js');
-    enableObservationMode();
 
     await import('./index.js');
 

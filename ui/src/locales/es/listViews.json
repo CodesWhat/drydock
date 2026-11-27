@@ -5,8 +5,6 @@
     "filterPlaceholder": "Filtrar por destino o evento...",
     "onThisPage": "en esta página",
     "containerFilterPlaceholder": "Nombre del contenedor...",
-    "actorFilterPlaceholder": "Usuario...",
-    "actorFilterLabel": "Filtrar por usuario",
     "allEvents": "Todos los eventos",
     "eventsSelected": "{count} eventos seleccionados",
     "clear": "Limpiar",
@@ -18,19 +16,12 @@
       "nextPage": "Página siguiente"
     },
     "emptyFiltered": "Ninguna entrada de auditoría coincide con tus filtros",
-    "systemActor": "Sistema",
-    "exportError": "No se pudo exportar el registro de auditoría",
-    "export": {
-      "csv": "Exportar CSV",
-      "json": "Exportar JSON"
-    },
     "columns": {
       "time": "Hora",
       "event": "Evento",
       "target": "Destino",
       "status": "Estado",
-      "details": "Detalles",
-      "actor": "Actor"
+      "details": "Detalles"
     },
     "card": {
       "time": "Hora",
@@ -43,8 +34,7 @@
       "fromVersion": "Desde versión",
       "toVersion": "A versión",
       "trigger": "Trigger",
-      "details": "Detalles",
-      "actor": "Actor"
+      "details": "Detalles"
     },
     "status": {
       "success": "Éxito",
@@ -105,7 +95,6 @@
       "update-applied-dryrun": "Actualización previsualizada (Dry Run)",
       "update-failed": "Actualización fallida",
       "auto-update-blocked": "Actualización automática bloqueada",
-      "security-fast-lane": "Vía rápida de seguridad",
       "update-policy-override-set": "Anulación de política de actualización establecida",
       "update-policy-override-cleared": "Anulación de política de actualización eliminada",
       "group-policy-set": "Política de grupo establecida",
@@ -119,10 +108,7 @@
       "notification-delivery-failed": "Fallo al entregar notificación",
       "security-alert": "Alerta de seguridad",
       "maturity-cleared": "Periodo de maduración completado",
-      "image-prune": "Depuración de imagen",
-      "cleanup": "Limpieza",
-      "notification-silence-set": "Silencio de notificaciones activado",
-      "notification-silence-cleared": "Silencio de notificaciones eliminado"
+      "image-prune": "Depuración de imagen"
     },
     "target": {
       "container": "Contenedor",

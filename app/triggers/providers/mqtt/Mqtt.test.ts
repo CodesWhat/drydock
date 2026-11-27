@@ -37,7 +37,6 @@ const configurationValid = {
     discovery: false,
     agenttopicsegment: true,
     commands: false,
-    buttons: false,
     devicepercontainer: true,
     enabled: false,
     prefix: 'homeassistant',
@@ -59,10 +58,10 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + updateKindLabel + " found for container " + container.name + container.notificationWatcherSuffix}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
 
   simplebody:
-    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue + updateKindNote}${container.securityFastLane ? " (security fast lane: fixes " + container.securityFastLane.fixedCount + " critical or high vulnerabilities)" : ""}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
 
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
@@ -130,7 +129,6 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     discovery: true,
     agenttopicsegment: true,
     commands: false,
-    buttons: false,
     devicepercontainer: true,
     attributes: 'short',
     filter: {
@@ -239,20 +237,13 @@ test('initTrigger should init Mqtt client', async () => {
       },
     },
   };
-  const brokerClient = { publish: vi.fn(), on: vi.fn(), removeListener: vi.fn() };
-  const spy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(brokerClient as never);
+  const spy = vi.spyOn(mqttClient, 'connectAsync');
   await mqtt.initTrigger();
   expect(spy).toHaveBeenCalledWith('mqtt://host:1883', {
     clientId: 'dd',
     username: 'user',
     password: 'password',
     rejectUnauthorized: true,
-    will: {
-      topic: 'dd/container/status',
-      payload: Buffer.from('offline'),
-      qos: 1,
-      retain: true,
-    },
   });
 });
 
@@ -602,7 +593,6 @@ describe('agent state topic parity with hass discovery', () => {
         prefix: 'homeassistant',
         agenttopicsegment,
         commands: false,
-        buttons: false,
         attributes: 'full',
         filter: {
           include: '',
@@ -739,7 +729,6 @@ describe('plain MQTT topic scoped per agent (DR-130)', () => {
         prefix: 'homeassistant',
         agenttopicsegment: false,
         commands: false,
-        buttons: false,
         attributes: 'full',
         filter: {
           include: '',
@@ -931,85 +920,6 @@ test('deregister then initTrigger should not duplicate container event callbacks
   await Promise.resolve();
 
   expect(triggerSpy).toHaveBeenCalledTimes(1);
-});
-
-describe('broker replacement', () => {
-  const hassConfiguration = {
-    ...configurationValid,
-    clientid: 'dd',
-    hass: {
-      enabled: true,
-      discovery: true,
-      prefix: 'homeassistant',
-      attributes: 'short',
-      filter: { include: '', exclude: '' },
-    },
-  };
-
-  function fakeBrokerClient() {
-    return {
-      publish: vi.fn().mockResolvedValue(undefined),
-      endAsync: vi.fn().mockResolvedValue(undefined),
-    };
-  }
-
-  test('re-init against a new broker force-closes the old connection and republishes discovery on the new one', async () => {
-    mqtt.configuration = { ...hassConfiguration, url: 'mqtt://old-broker:1883' };
-    const oldBroker = fakeBrokerClient();
-    const newBroker = fakeBrokerClient();
-    const connectSpy = vi
-      .spyOn(mqttClient, 'connectAsync')
-      .mockResolvedValueOnce(oldBroker)
-      .mockResolvedValueOnce(newBroker);
-    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
-    const resyncSpy = vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
-
-    await mqtt.initTrigger();
-    expect(oldBroker.endAsync).not.toHaveBeenCalled();
-
-    mqtt.configuration = { ...hassConfiguration, url: 'mqtt://new-broker:1883' };
-    await mqtt.initTrigger();
-
-    expect(connectSpy).toHaveBeenLastCalledWith('mqtt://new-broker:1883', expect.any(Object));
-    expect(oldBroker.endAsync).toHaveBeenCalledWith(true);
-    expect(newBroker.endAsync).not.toHaveBeenCalled();
-    // Discovery is retained state on the broker, so the replacement broker
-    // starts empty and must be repopulated by the second init.
-    expect(resyncSpy).toHaveBeenCalledTimes(2);
-  });
-
-  test('an old broker that fails to close does not block connecting to the new one', async () => {
-    mqtt.configuration = hassConfiguration;
-    const oldBroker = fakeBrokerClient();
-    oldBroker.endAsync.mockRejectedValue(new Error('broker is gone'));
-    const newBroker = fakeBrokerClient();
-    vi.spyOn(mqttClient, 'connectAsync')
-      .mockResolvedValueOnce(oldBroker)
-      .mockResolvedValueOnce(newBroker);
-    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
-    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
-    const warnSpy = vi.spyOn(mqtt.log, 'warn');
-
-    await mqtt.initTrigger();
-    await mqtt.initTrigger();
-
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('broker is gone'));
-    expect(mqtt.client).toBe(newBroker);
-  });
-
-  test('deregisterComponent force-closes the broker connection', async () => {
-    mqtt.configuration = hassConfiguration;
-    const broker = fakeBrokerClient();
-    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker);
-    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
-    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
-    vi.spyOn(Trigger.prototype, 'deregisterComponent').mockResolvedValue(undefined);
-
-    await mqtt.initTrigger();
-    await mqtt.deregisterComponent();
-
-    expect(broker.endAsync).toHaveBeenCalledWith(true);
-  });
 });
 
 describe('hass.attributes validation', () => {
@@ -1611,7 +1521,6 @@ describe('hass update progress (#210)', () => {
       discovery: true,
       agenttopicsegment: true,
       commands: false,
-      buttons: false,
       devicepercontainer: true,
       prefix: 'homeassistant',
       attributes: 'full',
@@ -1634,7 +1543,6 @@ describe('hass update progress (#210)', () => {
     vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
     vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
     await mqtt.initTrigger();
-    publish.mockClear(); // drop the birth message
     return publish;
   }
 
@@ -1937,134 +1845,5 @@ describe('hass update progress (#210)', () => {
 
     expect(getContainer).not.toHaveBeenCalled();
     expect(triggerSpy).not.toHaveBeenCalled();
-  });
-});
-
-describe('hass availability (LWT and birth)', () => {
-  const hassConfiguration = {
-    ...configurationValid,
-    clientid: 'dd',
-    hass: {
-      enabled: true,
-      discovery: true,
-      commands: false,
-      buttons: true,
-      prefix: 'homeassistant',
-      attributes: 'short',
-      filter: { include: '', exclude: '' },
-    },
-  };
-
-  function fakeBroker() {
-    return {
-      publish: vi.fn().mockResolvedValue(undefined),
-      endAsync: vi.fn().mockResolvedValue(undefined),
-      on: vi.fn(),
-      removeListener: vi.fn(),
-    };
-  }
-
-  beforeEach(() => {
-    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
-    vi.spyOn(Hass.prototype, 'resyncDiscovery').mockResolvedValue(undefined);
-  });
-
-  afterEach(async () => {
-    await mqtt.deregister();
-    vi.restoreAllMocks();
-  });
-
-  test('connects with an offline Last Will and publishes a retained online birth message', async () => {
-    mqtt.configuration = hassConfiguration;
-    const broker = fakeBroker();
-    const connectSpy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
-
-    await mqtt.initTrigger();
-
-    expect(connectSpy.mock.calls[0][1]).toMatchObject({
-      will: {
-        topic: 'dd/container/status',
-        payload: Buffer.from('offline'),
-        qos: 1,
-        retain: true,
-      },
-    });
-    expect(broker.publish).toHaveBeenCalledWith('dd/container/status', 'online', {
-      retain: true,
-      qos: 1,
-    });
-  });
-
-  test('without Home Assistant there is no Will and no birth message', async () => {
-    mqtt.configuration = {
-      ...hassConfiguration,
-      hass: { ...hassConfiguration.hass, enabled: false },
-    };
-    const broker = fakeBroker();
-    const connectSpy = vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
-
-    await mqtt.initTrigger();
-
-    expect(connectSpy.mock.calls[0][1]).not.toHaveProperty('will');
-    expect(broker.publish).not.toHaveBeenCalled();
-    expect(broker.on).not.toHaveBeenCalled();
-  });
-
-  test('a reconnect republishes the birth message', async () => {
-    mqtt.configuration = hassConfiguration;
-    const broker = fakeBroker();
-    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
-    await mqtt.initTrigger();
-    broker.publish.mockClear();
-
-    const [event, listener] = broker.on.mock.calls[0];
-    expect(event).toBe('connect');
-    listener();
-    await Promise.resolve();
-
-    expect(broker.publish).toHaveBeenCalledWith('dd/container/status', 'online', {
-      retain: true,
-      qos: 1,
-    });
-  });
-
-  test('re-init drops the connect listener from the old client so births are not duplicated', async () => {
-    mqtt.configuration = hassConfiguration;
-    const oldBroker = fakeBroker();
-    const newBroker = fakeBroker();
-    vi.spyOn(mqttClient, 'connectAsync')
-      .mockResolvedValueOnce(oldBroker as never)
-      .mockResolvedValueOnce(newBroker as never);
-
-    await mqtt.initTrigger();
-    const [, oldListener] = oldBroker.on.mock.calls[0];
-    await mqtt.initTrigger();
-
-    expect(oldBroker.removeListener).toHaveBeenCalledWith('connect', oldListener);
-    expect(newBroker.on).toHaveBeenCalledTimes(1);
-  });
-
-  test('a failed birth publish is logged and does not fail init', async () => {
-    mqtt.configuration = hassConfiguration;
-    const broker = fakeBroker();
-    broker.publish.mockRejectedValue(new Error('broker refused'));
-    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue(broker as never);
-    const warnSpy = vi.spyOn(mqtt.log, 'warn').mockImplementation(() => {});
-
-    await mqtt.initTrigger();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(warnSpy).toHaveBeenCalledWith('Failed to publish MQTT birth message (broker refused)');
-  });
-
-  test('hass.buttons defaults to false and accepts true', () => {
-    expect(mqtt.validateConfiguration({ ...configurationValid }).hass.buttons).toBe(false);
-    expect(
-      mqtt.validateConfiguration({
-        ...configurationValid,
-        hass: { ...configurationValid.hass, buttons: true },
-      }).hass.buttons,
-    ).toBe(true);
   });
 });

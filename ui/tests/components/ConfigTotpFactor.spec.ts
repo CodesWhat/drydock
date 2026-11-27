@@ -40,16 +40,11 @@ vi.mock('@/utils/download-text', () => ({ downloadTextFile: download }));
 
 const mocked = vi.mocked(service);
 
-const UNENROLLED = {
-  status: 'unenrolled',
-  recoveryCodesRemaining: 0,
-  managementAllowed: true,
-} as const;
+const UNENROLLED = { status: 'unenrolled', recoveryCodesRemaining: 0 } as const;
 const ACTIVE = {
   status: 'active',
   activatedAt: '2026-10-01T12:00:00.000Z',
   recoveryCodesRemaining: 10,
-  managementAllowed: true,
 } as const;
 const REVEAL = {
   id: 'enr-1',
@@ -229,21 +224,6 @@ describe('ConfigTotpFactor', () => {
       );
       expect(wrapper.find(byId('totp-enable')).exists()).toBe(false);
       expect(wrapper.find(byId('totp-status')).exists()).toBe(false);
-      wrapper.unmount();
-    });
-
-    it('shows the HTTPS hint and no Enable button before any password step', async () => {
-      const wrapper = await mountSection({
-        ...UNENROLLED,
-        managementAllowed: false,
-        reason: 'https-required',
-      });
-
-      const message = wrapper.get(byId('totp-unavailable')).text();
-      expect(message).toContain('needs HTTPS');
-      expect(message).toContain('DD_AUTH_TOTP_ALLOWHTTP');
-      expect(wrapper.find(byId('totp-enable')).exists()).toBe(false);
-      expect(wrapper.find(byId('totp-reauth-form')).exists()).toBe(false);
       wrapper.unmount();
     });
 

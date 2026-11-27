@@ -358,12 +358,6 @@ export function renderSimple(template: string, container: Container): string {
     suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     currentTag: container.image?.tag?.value ?? '',
     isDigestUpdate: isDigest,
-    updateKindLabel: container.updateKind?.baseImage
-      ? 'base image update'
-      : (container.updateKind?.kind ?? ''),
-    updateKindNote: container.updateKind?.baseImage
-      ? ' (base image of a locally built image, notification only)'
-      : '',
   };
   return safeInterpolate(template, vars);
 }

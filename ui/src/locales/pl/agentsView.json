@@ -87,60 +87,6 @@
         "lastSeen": "Ostatnio widziany",
         "never": "nigdy"
       }
-    },
-    "edgeKeys": {
-      "toggle": "Klucze agentów edge",
-      "hide": "Ukryj klucze agentów edge",
-      "title": "Klucze agentów edge",
-      "description": "Zarejestruj klucz publiczny agenta edge Portwing, aby mógł łączyć się z tym kontrolerem. Przechowywane są tylko klucze publiczne, więc nic tajnego nie jest tu wyświetlane.",
-      "registerButton": "Zarejestruj klucz",
-      "loading": "Ładowanie kluczy...",
-      "empty": "Brak zarejestrowanych kluczy agentów edge",
-      "loadError": "Nie udało się wczytać kluczy agentów edge",
-      "forbidden": "Zarządzanie kluczami agentów edge wymaga zalogowanej sesji administratora. Klucze API i logowania awaryjne tego nie umożliwiają.",
-      "registered": "Zarejestrowano {label} jako klucz {keyId}.",
-      "revokeButton": "Unieważnij",
-      "errors": {
-        "register": "Nie udało się zarejestrować klucza",
-        "revoke": "Nie udało się unieważnić klucza"
-      },
-      "columns": {
-        "label": "Etykieta",
-        "keyId": "ID klucza",
-        "created": "Utworzono",
-        "status": "Status"
-      },
-      "status": {
-        "active": "Aktywny",
-        "revoked": "Unieważniony"
-      },
-      "form": {
-        "title": "Zarejestruj klucz agenta edge",
-        "label": "Etykieta",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "Klucz publiczny",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "Wklej 44-znakowy klucz base64 lub całą linię wypisaną przez portwing keygen -pub-from.",
-        "submit": "Zarejestruj",
-        "invalidKey": "Klucz publiczny musi być w base64 i po zdekodowaniu mieć dokładnie 32 bajty."
-      },
-      "revoke": {
-        "header": "Unieważnij klucz",
-        "message": "Unieważnić {label}? Jego agent zostanie od razu rozłączony i nie będzie mógł się ponownie połączyć.",
-        "accept": "Unieważnij"
-      },
-      "snippet": {
-        "show": "Pokaż fragment dla agenta",
-        "hide": "Ukryj fragment dla agenta",
-        "title": "Konfiguracja agenta",
-        "description": "Wygeneruj parę kluczy na hoście agenta poleceniem portwing keygen, zarejestruj tu klucz publiczny, a potem uruchom agenta jednym z tych fragmentów.",
-        "controllerUrl": "Adres URL kontrolera",
-        "agentName": "Nazwa agenta",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "Kopiuj",
-        "copied": "Skopiowano"
-      }
     }
   }
 }

@@ -153,9 +153,6 @@ test('publishDiscoveryMessage must publish a discovery message expected by HA', 
       entity_picture:
         'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'my/state',
-      availability_topic: 'topic/status',
-      payload_available: 'online',
-      payload_not_available: 'offline',
       myOption: true,
     }),
     { retain: true },
@@ -282,9 +279,6 @@ test('addContainerSensor must publish sensor discovery message expected by HA', 
       entity_picture:
         'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/container-name',
-      availability_topic: 'topic/status',
-      payload_available: 'online',
-      payload_not_available: 'offline',
       force_update: true,
       value_template:
         '{% if value_json.update_state is defined %}{{ value_json.update_state | to_json }}{% else %}{{ value_json.image_tag_value }}{% endif %}',
@@ -641,9 +635,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/total_count',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
       }),
       { retain: true },
     );
@@ -666,9 +657,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/update_count',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
       }),
       { retain: true },
     );
@@ -691,9 +679,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/update_status',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
         payload_on: 'true',
         payload_off: 'false',
       }),
@@ -718,9 +703,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/watcher-name/total_count',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
       }),
       { retain: true },
     );
@@ -743,9 +725,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/watcher-name/update_count',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
       }),
       { retain: true },
     );
@@ -768,9 +747,6 @@ test.each(containerData)(
         entity_picture:
           'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
         state_topic: 'topic/watcher-name/update_status',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
         payload_on: 'true',
         payload_off: 'false',
       }),
@@ -960,9 +936,6 @@ test('updateWatcherSensors must publish all watcher sensor messages expected by 
       entity_picture:
         'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png',
       state_topic: 'topic/watcher-name/running',
-      availability_topic: 'topic/status',
-      payload_available: 'online',
-      payload_not_available: 'offline',
       payload_on: 'true',
       payload_off: 'false',
     }),
@@ -2504,7 +2477,7 @@ describe('agenttopicsegment flag', () => {
       ).toBe(true);
     });
 
-    test('flag ON — watcher counts are scoped to agent via the uncloned getContainersRaw view', async () => {
+    test('flag ON — watcher counts are scoped to agent via getContainers filter', async () => {
       const mlContainer = { id: 'c1', watcher: 'local', agent: 'ml', updateAvailable: false };
       const mlContainerUpdate = { id: 'c2', watcher: 'local', agent: 'ml', updateAvailable: true };
       const otherAgentContainer = {
@@ -2514,7 +2487,7 @@ describe('agenttopicsegment flag', () => {
         updateAvailable: true,
       };
       vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
-      vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
         mlContainer,
         mlContainerUpdate,
         otherAgentContainer,
@@ -2538,27 +2511,9 @@ describe('agenttopicsegment flag', () => {
       expect(capturedWatcherUpdateCountValue).toBe('1');
     });
 
-    test('flag ON — a sensor refresh never clones the container list', async () => {
-      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
-      vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
-        { id: 'c1', watcher: 'local', agent: 'ml', updateAvailable: false },
-      ] as any);
-      const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
-
-      for (let i = 0; i < 5; i += 1) {
-        await hassAgent.updateContainerSensors({
-          name: `nginx-${i}`,
-          watcher: 'local',
-          agent: 'ml',
-        });
-      }
-
-      expect(getContainersSpy).not.toHaveBeenCalled();
-    });
-
     test('flag ON — no-agent watcher counts exclude remote-agent containers', async () => {
       vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
-      const getContainersRawSpy = vi.spyOn(containerStore, 'getContainersRaw').mockReturnValue([
+      const getContainersSpy = vi.spyOn(containerStore, 'getContainers').mockReturnValue([
         { id: 'c1', watcher: 'local', agent: undefined, updateAvailable: false },
         { id: 'c2', watcher: 'local', agent: undefined, updateAvailable: true },
         { id: 'c3', watcher: 'local', agent: 'edge', updateAvailable: true },
@@ -2580,7 +2535,7 @@ describe('agenttopicsegment flag', () => {
         agent: undefined,
       });
 
-      expect(getContainersRawSpy).toHaveBeenCalledWith({ watcher: 'local' });
+      expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'local' });
       expect(capturedWatcherTotalCountValue).toBe('2');
       expect(capturedWatcherUpdateCountValue).toBe('1');
     });
@@ -2998,7 +2953,7 @@ describe('hass install commands (#210)', () => {
       const h = makeCommandsHass({}, publishOnlyClient);
       await h.initCommandSubscription();
       expect(logWarnSpy).toHaveBeenCalledWith(
-        'Home Assistant install commands or buttons are enabled but the MQTT client does not support subscriptions; skipping.',
+        'Home Assistant install commands are enabled but the MQTT client does not support subscriptions; skipping.',
       );
       // publishOnlyClient (the client actually passed to Hass) lacks
       // on/subscribeAsync entirely, so no subscription could have been
@@ -3988,9 +3943,6 @@ describe('devicepercontainer flag', () => {
         icon: 'mdi:docker',
         entity_picture: DEFAULT_ENTITY_PICTURE,
         state_topic: 'topic/watcher-name/container-name',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
         force_update: true,
         value_template: VALUE_TEMPLATE,
         latest_version_topic: 'topic/watcher-name/container-name',
@@ -4073,9 +4025,6 @@ describe('devicepercontainer flag', () => {
         icon: 'mdi:docker',
         entity_picture: DEFAULT_ENTITY_PICTURE,
         state_topic: 'topic/watcher-name/container-name',
-        availability_topic: 'topic/status',
-        payload_available: 'online',
-        payload_not_available: 'offline',
         force_update: true,
         value_template: VALUE_TEMPLATE,
         latest_version_topic: 'topic/watcher-name/container-name',

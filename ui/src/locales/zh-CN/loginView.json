@@ -31,8 +31,6 @@
       "challengeExpired": "验证已过期。请重新登录。",
       "challengeLocked": "尝试次数过多。请在 {time}后重试。",
       "challengeLockedLater": "尝试次数过多。请稍后重试。",
-      "rateLimited": "尝试次数过多。请在 {time}后重试。",
-      "rateLimitedLater": "尝试次数过多。请稍后重试。",
       "challengeUnavailable": "当前无法验证。请稍后重试。"
     },
     "connectionLost": {

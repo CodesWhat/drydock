@@ -87,60 +87,6 @@
         "lastSeen": "Son Görülme",
         "never": "asla"
       }
-    },
-    "edgeKeys": {
-      "toggle": "Edge ajan anahtarları",
-      "hide": "Edge ajan anahtarlarını gizle",
-      "title": "Edge ajan anahtarları",
-      "description": "Bir Portwing edge ajanının genel anahtarını kaydedin ki bu denetleyiciye bağlanabilsin. Yalnızca genel anahtarlar saklanır, bu yüzden burada gizli hiçbir şey gösterilmez.",
-      "registerButton": "Anahtar kaydet",
-      "loading": "Anahtarlar yükleniyor...",
-      "empty": "Kayıtlı edge ajan anahtarı yok",
-      "loadError": "Edge ajan anahtarları yüklenemedi",
-      "forbidden": "Edge ajan anahtarlarını yönetmek için oturum açmış bir yönetici oturumu gerekir. API anahtarları ve kurtarma girişleri bunu yapamaz.",
-      "registered": "{label}, {keyId} anahtarı olarak kaydedildi.",
-      "revokeButton": "İptal et",
-      "errors": {
-        "register": "Anahtar kaydedilemedi",
-        "revoke": "Anahtar iptal edilemedi"
-      },
-      "columns": {
-        "label": "Etiket",
-        "keyId": "Anahtar kimliği",
-        "created": "Oluşturulma",
-        "status": "Durum"
-      },
-      "status": {
-        "active": "Etkin",
-        "revoked": "İptal edildi"
-      },
-      "form": {
-        "title": "Edge ajan anahtarı kaydet",
-        "label": "Etiket",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "Genel anahtar",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "44 karakterlik base64 anahtarı ya da portwing keygen -pub-from çıktısındaki satırın tamamını yapıştırın.",
-        "submit": "Kaydet",
-        "invalidKey": "Genel anahtar base64 olmalı ve çözüldüğünde tam olarak 32 bayt olmalıdır."
-      },
-      "revoke": {
-        "header": "Anahtarı iptal et",
-        "message": "{label} iptal edilsin mi? Ajanının bağlantısı hemen kesilir ve yeniden bağlanamaz.",
-        "accept": "İptal et"
-      },
-      "snippet": {
-        "show": "Ajan parçasını göster",
-        "hide": "Ajan parçasını gizle",
-        "title": "Ajan kurulumu",
-        "description": "Ajan makinesinde portwing keygen ile anahtar çiftini oluşturun, genel anahtarı buraya kaydedin, sonra ajanı bu parçalardan biriyle başlatın.",
-        "controllerUrl": "Denetleyici URL'si",
-        "agentName": "Ajan adı",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "Kopyala",
-        "copied": "Kopyalandı"
-      }
     }
   }
 }

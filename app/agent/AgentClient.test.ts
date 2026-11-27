@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import axios from 'axios';
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
-import { checkAgentVersion } from './agent-version-alerts.js';
 
 vi.mock('axios');
 vi.mock('node:fs', () => ({
@@ -50,7 +49,6 @@ vi.mock('../store/container.js', () => ({
   updateContainer: vi.fn((c) => c),
   deleteContainer: vi.fn(),
 }));
-vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
@@ -58,7 +56,6 @@ vi.mock('../event/index.js', () => ({
   emitBatchUpdateCompleted: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
   emitContainerReports: vi.fn(),
-  emitContainerStateAlert: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateApplied: vi.fn().mockResolvedValue(undefined),
   emitContainerUpdateFailed: vi.fn().mockResolvedValue(undefined),
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
@@ -69,7 +66,6 @@ vi.mock('../maturity/gate-watch.js', () => ({
 }));
 vi.mock('../store/update-operation.js', () => ({
   getOperationById: vi.fn(),
-  getOperationsByContainerId: vi.fn(() => []),
   insertOperation: vi.fn((operation) => ({
     ...operation,
     id: operation.id ?? 'inserted-op',
@@ -1369,34 +1365,6 @@ describe('AgentClient', () => {
       });
     });
 
-    test('checks the agent version once when transitioning to connected state', async () => {
-      axios.get
-        .mockResolvedValueOnce({ data: [] })
-        .mockResolvedValueOnce({ data: [] })
-        .mockResolvedValueOnce({ data: [] });
-      storeContainer.getContainers.mockReturnValue([]);
-      client.info = { ...client.info, version: '1.8.0' };
-
-      await client.handshake();
-
-      expect(checkAgentVersion).toHaveBeenCalledTimes(1);
-      expect(checkAgentVersion).toHaveBeenCalledWith('test-agent', '1.8.0');
-    });
-
-    test('skips the version check for Portwing agents', async () => {
-      axios.get
-        .mockResolvedValueOnce({ data: [] })
-        .mockResolvedValueOnce({ data: [] })
-        .mockResolvedValueOnce({ data: [] });
-      storeContainer.getContainers.mockReturnValue([]);
-      client.info = { ...client.info, version: '1.3.0' };
-      (client as any).config.authmode = 'ed25519';
-
-      await client.handshake();
-
-      expect(checkAgentVersion).not.toHaveBeenCalled();
-    });
-
     test('should emit batched container reports after handshake processing', async () => {
       axios.get
         .mockResolvedValueOnce({
@@ -2247,14 +2215,8 @@ describe('AgentClient', () => {
       client.startSse();
       await vi.advanceTimersByTimeAsync(0);
 
-      const handleSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+      // Should not throw
       stream.emit('data', Buffer.from('data: {invalid json}\n\n'));
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(handleSpy).not.toHaveBeenCalled();
-      expect(mockLogChild.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Error parsing SSE data'),
-      );
     });
 
     test('should skip SSE lines that do not start with data:', async () => {
@@ -2651,25 +2613,6 @@ describe('AgentClient', () => {
       mockLogChild.warn.mockClear();
       await client.handleEvent('dd:ack', {});
       expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('runs 1.6.0;'));
-    });
-
-    test.each([
-      ['an edge connection', (c: any) => (c.edgeAdapter = {})],
-      ['ed25519 signing', (c: any) => (c.config.authmode = 'ed25519')],
-      [
-        'a controller Docker transport watcher',
-        (c: any) => c.controllerDockerTransportWatchers.add('w'),
-      ],
-    ])('should skip the minimum-version warning for Portwing agents (%s)', async (_name, mark) => {
-      vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
-      mark(client);
-      mockLogChild.warn.mockClear();
-      await client.handleEvent('dd:ack', { version: '1.3.0' });
-      expect(client.isPortwing).toBe(true);
-      expect(client.warnings).toEqual([]);
-      expect(mockLogChild.warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('image-baked lifecycle hook labels'),
-      );
     });
 
     test('should not warn for agents on 1.7.0 or later', async () => {
@@ -4201,187 +4144,6 @@ describe('AgentClient', () => {
       expect(event.emitBatchUpdateCompleted).not.toHaveBeenCalled();
     });
 
-    describe('dd:container-state-alert', () => {
-      const snapshot = { id: 'c1', name: 'nginx', watcher: 'local' };
-
-      beforeEach(() => {
-        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([]);
-      });
-
-      test.each([
-        ['container-stopped', { reason: 'stopped' }],
-        ['container-exited', { exitCode: 137, reason: 'exit code 137' }],
-        ['container-oom-killed', { exitCode: 137, reason: 'out of memory' }],
-        [
-          'container-restart-loop',
-          { exitCode: 1, reason: 'restart loop', restartCount: 3, windowSeconds: 300 },
-        ],
-      ])('should relay %s from an agent tagged with the agent name', async (kind, extra) => {
-        await client.handleEvent('dd:container-state-alert', {
-          kind,
-          containerName: 'nginx',
-          container: snapshot,
-          ...extra,
-        });
-
-        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
-          kind,
-          containerName: 'nginx',
-          container: { ...snapshot, agent: 'test-agent' },
-          ...extra,
-        });
-      });
-
-      test('should prefer the controller store copy of the container', async () => {
-        const stored = { ...snapshot, agent: 'test-agent', displayName: 'Web' };
-        vi.mocked(storeContainer.getContainer).mockReturnValue(stored);
-
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-stopped',
-          containerName: 'nginx',
-          container: snapshot,
-        });
-
-        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
-          kind: 'container-stopped',
-          containerName: 'nginx',
-          container: stored,
-        });
-      });
-
-      test('should ignore a store container that belongs to another agent', async () => {
-        vi.mocked(storeContainer.getContainer).mockReturnValue({ ...snapshot, agent: 'other' });
-
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-stopped',
-          containerName: 'nginx',
-          container: snapshot,
-        });
-
-        expect(event.emitContainerStateAlert).toHaveBeenCalledWith(
-          expect.objectContaining({ container: { ...snapshot, agent: 'test-agent' } }),
-        );
-      });
-
-      test('should drop an alert while a Drydock operation is replacing the container', async () => {
-        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([
-          { status: 'in-progress' },
-        ]);
-
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-stopped',
-          containerName: 'nginx',
-          container: snapshot,
-        });
-
-        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
-      });
-
-      test('should drop an alert while a rollback operation is replacing the container', async () => {
-        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([
-          { kind: 'rollback', status: 'in-progress' },
-        ]);
-
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-stopped',
-          containerName: 'nginx',
-          container: snapshot,
-        });
-
-        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
-      });
-
-      test('should drop an alert for a rollback-renamed container', async () => {
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-stopped',
-          containerName: 'nginx-old-1700000000000',
-          container: { ...snapshot, name: 'nginx-old-1700000000000' },
-        });
-
-        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
-      });
-
-      test.each([
-        ['null data', null],
-        ['unknown kind', { kind: 'container-paused', containerName: 'nginx', container: snapshot }],
-        ['missing name', { kind: 'container-stopped', container: snapshot }],
-        ['missing container', { kind: 'container-stopped', containerName: 'nginx' }],
-      ])('should ignore a malformed payload (%s)', async (_label, data) => {
-        await client.handleEvent('dd:container-state-alert', data);
-
-        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
-      });
-
-      test('should drop non-numeric optional fields', async () => {
-        await client.handleEvent('dd:container-state-alert', {
-          kind: 'container-exited',
-          containerName: 'nginx',
-          container: snapshot,
-          exitCode: 'x',
-          reason: 5,
-          restartCount: 'y',
-          windowSeconds: 'z',
-        });
-
-        expect(event.emitContainerStateAlert).toHaveBeenCalledWith({
-          kind: 'container-exited',
-          containerName: 'nginx',
-          container: { ...snapshot, agent: 'test-agent' },
-        });
-      });
-    });
-
-    describe('dd:container-event (Portwing)', () => {
-      const stored = { id: 'c1', name: 'nginx', watcher: 'docker', agent: 'test-agent' };
-
-      beforeEach(() => {
-        vi.useFakeTimers();
-        vi.mocked(updateOperationStore.getOperationsByContainerId).mockReturnValue([]);
-        vi.mocked(storeContainer.getContainer).mockReturnValue(stored as never);
-      });
-
-      afterEach(() => {
-        client.stop();
-        vi.useRealTimers();
-      });
-
-      test('should raise a state alert for a die with a non-zero exit code', async () => {
-        await client.handleEvent('dd:container-event', {
-          containerId: 'c1',
-          name: 'nginx',
-          action: 'die',
-          exitCode: 3,
-          time: 1,
-        });
-        await client.handleEvent('dd:container-event', {
-          containerId: 'c1',
-          name: 'nginx',
-          action: 'start',
-          time: 2,
-        });
-        await vi.advanceTimersByTimeAsync(2000);
-
-        expect(event.emitContainerStateAlert).toHaveBeenCalledTimes(1);
-        expect(event.emitContainerStateAlert).toHaveBeenCalledWith(
-          expect.objectContaining({ kind: 'container-exited', exitCode: 3, container: stored }),
-        );
-      });
-
-      test('should drop pending events when the client stops', async () => {
-        await client.handleEvent('dd:container-event', {
-          containerId: 'c1',
-          name: 'nginx',
-          action: 'die',
-          exitCode: 3,
-          time: 1,
-        });
-        client.stop();
-        await vi.advanceTimersByTimeAsync(2000);
-
-        expect(event.emitContainerStateAlert).not.toHaveBeenCalled();
-      });
-    });
-
     test('should emit security-alert when agent sends dd:security-alert', async () => {
       await client.handleEvent('dd:security-alert', {
         containerName: 'local_nginx',
@@ -5747,16 +5509,8 @@ describe('AgentClient', () => {
 
     test('edge connections cannot reveal env', async () => {
       client.edgeAdapter = { requestContainerLogs: vi.fn(), deleteContainer: vi.fn() };
-      const failure = await client.getContainerEnv('c1').catch((e: unknown) => e);
-      expect(failure).toBeInstanceOf(AgentEnvRevealUnsupportedError);
-      expect((failure as Error).message).toBe('Env reveal is not supported for Portwing agents');
-      expect(axios.get).not.toHaveBeenCalled();
-    });
-
-    test('standard Portwing agents cannot reveal env', async () => {
-      (client as any).controllerDockerTransportWatchers.add('docker.local');
-      await expect(client.getContainerEnv('c1')).rejects.toThrow(
-        'Env reveal is not supported for Portwing agents',
+      await expect(client.getContainerEnv('c1')).rejects.toBeInstanceOf(
+        AgentEnvRevealUnsupportedError,
       );
       expect(axios.get).not.toHaveBeenCalled();
     });

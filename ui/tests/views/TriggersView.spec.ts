@@ -490,26 +490,6 @@ describe('TriggersView', () => {
     expect(wrapper.find('[data-test="trigger-detail-dry-run-warning"]').exists()).toBe(false);
   });
 
-  it('surfaces dry-run mode on portainer trigger cards', async () => {
-    preferences.views.triggers.mode = 'cards';
-    const dryRunTrigger = makeTrigger({
-      id: 'portainer.prod',
-      name: 'prod',
-      type: 'portainer',
-      configuration: { dryrun: true },
-    });
-    mockGetAllTriggers.mockResolvedValue([dryRunTrigger]);
-    mockGetTrigger.mockResolvedValue(dryRunTrigger);
-
-    const wrapper = await mountTriggersCardView();
-    expect(
-      wrapper
-        .get('[data-card-id="portainer.prod"]')
-        .find('[data-test="trigger-dry-run-badge"]')
-        .exists(),
-    ).toBe(true);
-  });
-
   it('surfaces dry-run mode on action trigger cards and details', async () => {
     preferences.views.triggers.mode = 'cards';
     const dryRunTrigger = makeTrigger({

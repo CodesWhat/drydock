@@ -1494,39 +1494,7 @@ test('getRollbackConfig preserves settings while disabling auto rollback', () =>
   const result = trigger.getRollbackConfig({
     labels: { 'dd.rollback.auto': 'true', 'dd.rollback.window': '1234' },
   });
-  expect(result).toEqual({
-    autoRollback: false,
-    rollbackWindow: 1234,
-    rollbackInterval: 10000,
-    livenessWindow: 0,
-  });
-});
-
-test('getRollbackConfig forces the liveness watch off and warns when it was requested', () => {
-  const trigger = makeTrigger();
-  const warn = vi.fn();
-  trigger.log = { warn } as never;
-  const fromLabel = trigger.getRollbackConfig(
-    makeContainer({ labels: { 'dd.rollback.liveness': '30000' } }),
-  );
-  expect(fromLabel.livenessWindow).toBe(0);
-  expect(fromLabel.autoRollback).toBe(false);
-  expect(warn).toHaveBeenCalledWith(expect.stringContaining('not supported by Portainer'));
-
-  warn.mockClear();
-  expect(trigger.getRollbackConfig(makeContainer({ labels: {} })).livenessWindow).toBe(0);
-  expect(warn).not.toHaveBeenCalled();
-});
-
-test('the liveness action option is rejected for Portainer', () => {
-  const trigger = new Portainer();
-  expect(() =>
-    trigger.validateConfiguration({
-      url: 'https://portainer.lan',
-      apikey: 'secret',
-      livenesswindow: 30000,
-    }),
-  ).toThrow(/LIVENESSWINDOW is not supported by Portainer/);
+  expect(result).toEqual({ autoRollback: false, rollbackWindow: 1234, rollbackInterval: 10000 });
 });
 
 test('getUpdateLockKeys includes normalized Portainer stack scope', () => {

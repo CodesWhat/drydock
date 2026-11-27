@@ -57,7 +57,6 @@ vi.mock('../../event/index.js', () => ({
   registerUpdateOperationChanged: vi.fn(),
   registerBatchUpdateCompleted: vi.fn(),
   registerSecurityAlert: vi.fn(),
-  registerContainerStateAlert: vi.fn(),
   registerSecurityScanCycleComplete: vi.fn(),
 }));
 
@@ -1105,46 +1104,6 @@ describe('agent API event', () => {
       expect(payload).toContain('"status":"blocked"');
       expect(payload).toContain('"blockingCount":1');
       expect(payload).not.toContain('"container"');
-    });
-
-    test('container-state-alert handler should relay the classified alert with the container snapshot', () => {
-      eventApi.subscribeEvents(req, res);
-      res.write.mockClear();
-      eventApi.initEvents();
-
-      const handler = event.registerContainerStateAlert.mock.calls[0][0];
-      handler({
-        kind: 'container-restart-loop',
-        containerName: 'nginx',
-        exitCode: 1,
-        reason: 'restart loop',
-        restartCount: 3,
-        windowSeconds: 300,
-        container: { id: 'c1', name: 'nginx' },
-      });
-
-      const payload = res.write.mock.calls[0][0];
-      expect(payload).toContain('dd:container-state-alert');
-      expect(payload).toContain('"kind":"container-restart-loop"');
-      expect(payload).toContain('"exitCode":1');
-      expect(payload).toContain('"restartCount":3');
-      expect(payload).toContain('"windowSeconds":300');
-      expect(payload).toContain('"container":{"id":"c1","name":"nginx"}');
-    });
-
-    test('container-state-alert handler should omit absent optional fields', () => {
-      eventApi.subscribeEvents(req, res);
-      res.write.mockClear();
-      eventApi.initEvents();
-
-      const handler = event.registerContainerStateAlert.mock.calls[0][0];
-      handler({ kind: 'container-stopped', containerName: 'nginx' });
-
-      const payload = res.write.mock.calls[0][0];
-      expect(payload).toContain('"kind":"container-stopped"');
-      expect(payload).not.toContain('exitCode');
-      expect(payload).not.toContain('"reason"');
-      expect(payload).not.toContain('"container":');
     });
 
     test('security-alert handler should tolerate non-object payloads', () => {

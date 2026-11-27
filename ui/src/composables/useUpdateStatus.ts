@@ -37,7 +37,7 @@ export type UpdateStatusAction =
   | { kind: 'external'; label: string; href: string };
 
 /** Server-reported blocker reasons plus the non-blocker row for a group manual ceiling. */
-type UpdateStatusConditionReason = UpdateBlockerReason | 'group-manual-only' | 'security-fast-lane';
+type UpdateStatusConditionReason = UpdateBlockerReason | 'group-manual-only';
 
 interface UpdateStatusCondition {
   reason: UpdateStatusConditionReason;
@@ -219,7 +219,6 @@ function conditionAction(
 const CONDITION_ICONS: Record<UpdateStatusConditionReason, string> = {
   'group-notify-only': 'notifications',
   'group-manual-only': 'containers',
-  'security-fast-lane': 'security',
   'security-scan-blocked': 'security',
   'last-update-rolled-back': 'restart',
   'rollback-container': 'restart',
@@ -340,28 +339,6 @@ function groupManualCondition(group: string, t: Translate): UpdateStatusConditio
     action: groupEditorAction(group, t),
   };
 }
-/**
- * The marker for a candidate the server put on the security fast lane. Not a blocker: it
- * explains why the usual holds are not in the way, so it never changes the update state.
- */
-function securityFastLaneCondition(
-  fastLane: NonNullable<UpdateEligibility['securityFastLane']>,
-  t: Translate,
-): UpdateStatusCondition {
-  const more = fastLane.fixedCount > fastLane.fixedIds.length ? ', …' : '';
-  return {
-    reason: 'security-fast-lane',
-    severity: 'soft',
-    tone: 'info',
-    icon: CONDITION_ICONS['security-fast-lane'],
-    heading: conditionHeading('security-fast-lane', t),
-    body: t('containerComponents.updateStatus.securityFastLane', {
-      count: fastLane.fixedCount,
-      ids: `${fastLane.fixedIds.join(', ')}${more}`,
-    }),
-  };
-}
-
 const ACTION_POLICY_TONES: Record<ActionPolicyState, ActionPolicyBadge['tone']> = {
   auto: 'success',
   manual: 'neutral',
@@ -399,10 +376,6 @@ export function deriveUpdateStatus(input: UpdateStatusInput): UpdateStatusViewMo
     .filter((blocker) => !(input.hasActiveOperationBadge && blocker.reason === 'active-operation'))
     .sort(sortConditions);
   const conditions = visibleBlockers.map((blocker) => toCondition(blocker, container, t));
-  const securityFastLane = container.updateEligibility?.securityFastLane;
-  if (securityFastLane !== undefined && hasUpdate) {
-    conditions.unshift(securityFastLaneCondition(securityFastLane, t));
-  }
   if (groupManual !== undefined && hasUpdate) {
     conditions.push(groupManualCondition(groupManual, t));
   }

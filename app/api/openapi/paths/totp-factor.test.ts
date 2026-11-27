@@ -47,9 +47,7 @@ describe('TOTP factor management OpenAPI', () => {
     const status = Object.keys(schemas.TotpFactorStatus.properties ?? {}).sort();
     expect(status).toEqual([
       'activatedAt',
-      'managementAllowed',
       'pendingEnrollment',
-      'reason',
       'recoveryCodesRemaining',
       'status',
     ]);

@@ -1,4 +1,4 @@
-const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update', 'rollback'] as const;
+const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
 
 export type ContainerUpdateOperationKind = (typeof CONTAINER_UPDATE_OPERATION_KINDS)[number];
 

@@ -457,9 +457,6 @@
     "updateInsight": {
       "tooltip": "Neuere Version verfügbar: {tag}. Dieser Tag ist gepinnt, drydock aktualisiert ihn nicht automatisch."
     },
-    "updateCandidates": {
-      "title": "Kandidaten nach Update-Typ"
-    },
     "eligibilityBadges": {
       "securityBlocked": "Durch Sicherheit blockiert",
       "rolledBack": "Rollback ausgeführt",
@@ -484,7 +481,6 @@
       "maturityClockPublished": "Kandidat veröffentlicht am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat veröffentlicht am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
       "maturityClockDetected": "Kandidat erkannt am {date} — noch {count} Tag bis zum {minDays}-Tage-Minimum | Kandidat erkannt am {date} — noch {count} Tage bis zum {minDays}-Tage-Minimum",
       "groupManualOnly": "Die Gruppenrichtlinie '{group}' erlaubt nur manuelle Updates. Drydock wendet dieses Update nicht automatisch an.",
-      "securityFastLane": "Behebt {count} kritische oder hohe Schwachstellen im laufenden Image ({ids}). Zurückstellung, Reifezeit und Wartungsfenster gelten dafür nicht.",
       "updateAvailableRuleDisabled": "Die Benachrichtigungsregel „Update Available“ ist aus und steuert auch automatische Updates. Aktiviere sie unter Settings > Notifications > Update Available, damit Drydock dieses Update selbst anwendet.",
       "updateButton": "Jetzt aktualisieren",
       "blockedButton": "Update blockiert",
@@ -531,7 +527,6 @@
         "update-available-rule-disabled": "Regel „Update Available“ ist aus",
         "group-notify-only": "Gruppe erlaubt nur Benachrichtigungen",
         "group-manual-only": "Gruppe verlangt manuelle Updates",
-        "security-fast-lane": "Sicherheits-Schnellspur",
         "dry-run-trigger": "Trigger-Konfiguration im Dry-Run-Modus",
         "maturity-releases-not-reached": "Reife-Policy wartet"
       },

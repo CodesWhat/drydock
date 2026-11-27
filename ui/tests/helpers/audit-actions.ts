@@ -50,7 +50,6 @@ const backendAuditActions = {
   'config-reloaded': true,
   'config-written': true,
   'auto-update-blocked': true,
-  'security-fast-lane': true,
   'update-policy-override-set': true,
   'update-policy-override-cleared': true,
   'group-policy-set': true,
@@ -65,9 +64,6 @@ const backendAuditActions = {
   'api-key-revoked': true,
   'api-key-auth-failed': true,
   'image-prune': true,
-  cleanup: true,
-  'notification-silence-set': true,
-  'notification-silence-cleared': true,
 } satisfies Record<AuditEntry['action'], true>;
 
 export const BACKEND_AUDIT_ACTIONS = Object.keys(backendAuditActions);

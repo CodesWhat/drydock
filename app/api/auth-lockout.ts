@@ -2,9 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { NextFunction, Response } from 'express';
 import { isBasicAuthorizationHeader } from '../authentications/providers/basic/basic-authorization.js';
-import { type AuthAbuseEventPayload, emitAuthAbuse } from '../event/index.js';
 import log from '../log/index.js';
-import { sanitizeLogParam } from '../log/sanitize.js';
 import {
   recordAuthAccountLockout,
   recordAuthIpLockout,
@@ -442,7 +440,7 @@ function registerFailedLoginAttempt(
   policy: LoginLockoutPolicy,
   key: string | undefined,
   now: number,
-  onLockoutStart?: (failedAttempts: number) => void,
+  onLockoutStart?: () => void,
 ): number | undefined {
   if (!key) {
     return undefined;
@@ -473,7 +471,7 @@ function registerFailedLoginAttempt(
     const wasLocked = existingEntry.lockedUntil > now;
     existingEntry.lockedUntil = now + policy.lockoutMs;
     if (!wasLocked) {
-      onLockoutStart?.(existingEntry.failedAttempts);
+      onLockoutStart?.();
     }
   }
 
@@ -528,36 +526,6 @@ function sendLockoutResponse(
   sendErrorResponse(res, 423, LOGIN_LOCKOUT_ERROR_MESSAGE);
 }
 
-const MAX_ABUSE_SUBJECT_LENGTH = 100;
-
-/**
- * Tell the notification rules a lockout just began. This is the existing lockout threshold
- * crossing, so it fires once per episode and never for the attempts that follow while the lock
- * holds. It carries the username exactly as the failed-login audit entry already records it
- * (sanitized and capped) or the caller's address, and never a password or second-factor code.
- */
-function notifyAuthAbuse(
-  scope: AuthAbuseEventPayload['scope'],
-  subject: string,
-  policy: LoginLockoutPolicy,
-  failedAttempts: number,
-): void {
-  const payload: AuthAbuseEventPayload = {
-    scope,
-    ...(scope === 'ip' ? { source: subject } : { username: subject }),
-    failedAttempts,
-    windowSeconds: Math.round(policy.windowMs / 1000),
-    lockoutSeconds: Math.round(policy.lockoutMs / 1000),
-  };
-  void emitAuthAbuse(payload).catch((error: unknown) => {
-    log.debug(`Failed to emit auth abuse event (${getErrorMessage(error)})`);
-  });
-}
-
-function toAbuseSubject(value: string | undefined): string {
-  return sanitizeLogParam(value, MAX_ABUSE_SUBJECT_LENGTH);
-}
-
 /**
  * Count one failed attempt (password or second factor) against the account and
  * IP budgets and answer it: 423 when that attempt locked the account or IP,
@@ -577,25 +545,14 @@ function rejectFailedAttempt(
     accountLockoutPolicy,
     normalizeIdentity(loginIdentity),
     failedAt,
-    (failedAttempts) => {
-      recordAuthAccountLockout('basic');
-      notifyAuthAbuse(
-        'account',
-        toAbuseSubject(loginIdentity),
-        accountLockoutPolicy,
-        failedAttempts,
-      );
-    },
+    () => recordAuthAccountLockout('basic'),
   );
   const ipLockoutAfterFailure = registerFailedLoginAttempt(
     ipLoginLockouts,
     ipLockoutPolicy,
     normalizeIdentity(req.ip),
     failedAt,
-    (failedAttempts) => {
-      recordAuthIpLockout('basic');
-      notifyAuthAbuse('ip', toAbuseSubject(req.ip), ipLockoutPolicy, failedAttempts);
-    },
+    () => recordAuthIpLockout('basic'),
   );
   const lockoutUntil = Math.max(
     accountLockoutAfterFailure ?? 0,

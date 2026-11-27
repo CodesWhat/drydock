@@ -107,31 +107,6 @@ describe('buildDashboardContainerMetrics', () => {
     });
   });
 
-  it('does not count a never-scanned container as scanned while its first scan runs', () => {
-    const metrics = buildDashboardContainerMetrics([
-      makeContainer({ id: 'c1', image: 'nginx', securityScanState: 'scanning' }),
-    ]);
-
-    expect(metrics.securityByImage.find((aggregate) => aggregate.key === 'nginx')?.scanned).toBe(
-      false,
-    );
-  });
-
-  it('keeps counting a container as scanned when it is re-scanned and still has a summary', () => {
-    const metrics = buildDashboardContainerMetrics([
-      makeContainer({
-        id: 'c1',
-        image: 'nginx',
-        securityScanState: 'scanning',
-        securitySummary: { unknown: 0, low: 1, medium: 0, high: 0, critical: 0 },
-      }),
-    ]);
-
-    expect(metrics.securityByImage.find((aggregate) => aggregate.key === 'nginx')?.scanned).toBe(
-      true,
-    );
-  });
-
   it('falls back to container id when image is empty', () => {
     const metrics = buildDashboardContainerMetrics([
       makeContainer({ id: 'c1', name: 'api', image: '' }),

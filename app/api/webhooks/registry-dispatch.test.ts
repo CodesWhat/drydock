@@ -241,21 +241,6 @@ describe('runRegistryWebhookDispatch', () => {
     });
   });
 
-  test('routes a container from a file watcher to the file watcher', async () => {
-    const container = createContainer({ id: 'file-0123456789abcdef01234567', watcher: 'staging' });
-    const fileWatcher = { watchContainer: vi.fn().mockResolvedValue(undefined) };
-
-    const result = await runRegistryWebhookDispatch({
-      references: [{ image: 'library/nginx', tag: 'latest' }],
-      containers: [container as any],
-      watchers: { 'file.staging': fileWatcher as any },
-      markContainerFresh: vi.fn(),
-    });
-
-    expect(fileWatcher.watchContainer).toHaveBeenCalledWith(container);
-    expect(result.checksTriggered).toBe(1);
-  });
-
   test('counts missing watchers without attempting checks', async () => {
     const container = createContainer({ id: 'one', watcher: 'local' });
 

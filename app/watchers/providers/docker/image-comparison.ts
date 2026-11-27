@@ -1,3 +1,4 @@
+import { RE2JS } from 're2js';
 import log from '../../../log/index.js';
 import {
   type Container,
@@ -11,10 +12,7 @@ import type Registry from '../../../registries/Registry.js';
 import type { RegistryLookupOptions } from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
 import { isCredentialedInstance } from '../../../registry/index.js';
-import { isLocalBaseLookup } from '../../../tag/family.js';
-import { compileFilterRegex } from '../../../tag/filter-regex.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
-import { computeUpdateCandidates } from '../../../tag/update-candidates.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
 import {
@@ -32,7 +30,6 @@ interface ContainerTagLookupProvider {
     options?: RegistryLookupOptions,
   ) => Promise<{
     digest?: string;
-    indexDigest?: string;
     created?: string;
     softwareVersion?: string;
     version?: number;
@@ -71,6 +68,31 @@ export interface ContainerWatchLogger {
   debug: (message: string) => void;
 }
 
+interface SafeRegex {
+  test(value: string): boolean;
+}
+
+function safeRegExp(
+  pattern: string | undefined,
+  logContainer: Pick<ContainerWatchLogger, 'warn'>,
+): SafeRegex | null {
+  if (!pattern) {
+    return null;
+  }
+
+  try {
+    const compiled = RE2JS.compile(pattern);
+    return {
+      test(value: string) {
+        return compiled.matcher(value).find();
+      },
+    };
+  } catch (error: unknown) {
+    logContainer.warn(`Invalid regex pattern "${pattern}": ${getErrorMessage(error)}`);
+    return null;
+  }
+}
+
 function filterTagsForDigestComparison(
   container: Container,
   tags: string[],
@@ -80,16 +102,12 @@ function filterTagsForDigestComparison(
     (tag) => tag !== '' && !tag.startsWith('sha') && !tag.endsWith('.sig'),
   );
 
-  const includeTagsRegex = container.includeTags
-    ? compileFilterRegex(container.includeTags, logContainer)
-    : null;
+  const includeTagsRegex = safeRegExp(container.includeTags, logContainer);
   if (includeTagsRegex) {
     filteredTags = filteredTags.filter((tag) => includeTagsRegex.test(tag));
   }
 
-  const excludeTagsRegex = container.excludeTags
-    ? compileFilterRegex(container.excludeTags, logContainer)
-    : null;
+  const excludeTagsRegex = safeRegExp(container.excludeTags, logContainer);
   if (excludeTagsRegex) {
     filteredTags = filteredTags.filter((tag) => !excludeTagsRegex.test(tag));
   }
@@ -262,9 +280,6 @@ async function handleDigestWatch(
   );
 
   result.digest = remoteDigest.digest;
-  // Always set together with the digest it belongs to, so a stale index never pairs with a new
-  // platform digest.
-  result.indexDigest = remoteDigest.indexDigest;
   result.created = remoteDigest.created;
   if (remoteDigest.softwareVersion) {
     result.softwareVersion = remoteDigest.softwareVersion;
@@ -386,10 +401,7 @@ export async function findNewVersion(
     registryProvider = getRegistry(container.image.registry.name);
   } catch {
     logContainer.error(`Unsupported registry (${container.image.registry.name})`);
-    return {
-      tag: container.image.tag.value,
-      lookupError: `no configured registry matches ${container.image.registry.url || container.image.registry.name}`,
-    };
+    return { tag: container.image.tag.value };
   }
 
   const result: ContainerResult = { tag: container.image.tag.value };
@@ -461,12 +473,7 @@ export async function findNewVersion(
   // RepoDigests), NOT from digest.repo directly: many registry-backed
   // containers simply have digest watching disabled and never populate
   // digest.repo, so gating on its absence would wrongly skip real registries.
-  //
-  // Exception: an explicit dd.registry.lookup.image label declares the upstream
-  // base the user built from, so that reference is a real registry target. The
-  // lookup then reports base image updates (notification-only, see
-  // isLocalBuildContainer guards in the update actions).
-  if (container.image.isLocalImage && !isLocalBaseLookup(container)) {
+  if (container.image.isLocalImage) {
     logContainer.debug('Locally-built image (no repository digest) — registry not queried');
     result.noUpdateReason = 'Locally-built image (no repository digest) — registry not queried';
     return result;
@@ -483,11 +490,7 @@ export async function findNewVersion(
     tags: tagsCandidates,
     noUpdateReason,
     insight,
-    error: tagFilterError,
   } = getTagCandidates(container, tags, logContainer, pinInfoEnabled);
-  if (tagFilterError) {
-    result.lookupError = tagFilterError;
-  }
   if (noUpdateReason) {
     result.noUpdateReason = noUpdateReason;
   }
@@ -516,24 +519,7 @@ export async function findNewVersion(
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);
       logContainer.warn(`Digest watch failed (${errorMessage})`);
-      result.lookupError = errorMessage;
-    }
-  }
-
-  // Per-type candidates are additive: the primary result.tag above is untouched.
-  // Only tag updates have types; digest-only and non-semver updates keep just
-  // the primary. Recorded only when two or more types are on offer, since a
-  // lone candidate is the primary. The primary's digest is the only one the
-  // lookup resolves.
-  if (container.image.tag.semver && tagsCandidates && tagsCandidates.length > 0) {
-    const updateCandidates = computeUpdateCandidates(
-      tagsCandidates,
-      container.image.tag.value,
-      container.transformTags,
-      { tag: result.tag, digest: result.digest },
-    );
-    if (updateCandidates) {
-      result.updateCandidates = updateCandidates;
+      container.error = { message: errorMessage };
     }
   }
 

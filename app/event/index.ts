@@ -213,45 +213,6 @@ export interface ContainerHealthTransitionEventPayload {
   health: 'unhealthy';
 }
 
-export type ContainerStateAlertKind =
-  | 'container-stopped'
-  | 'container-exited'
-  | 'container-oom-killed'
-  | 'container-restart-loop';
-
-export interface ContainerStateAlertEventPayload {
-  kind: ContainerStateAlertKind;
-  containerName: string;
-  container?: Container;
-  /** Exit code of the process that died (absent for a restart loop with no known code). */
-  exitCode?: number;
-  /** Human-readable reason, e.g. `exit code 1`, `out of memory`, `stopped`. */
-  reason?: string;
-  /** Restart loop only: crashes counted inside the window. */
-  restartCount?: number;
-  /** Restart loop only: window length in seconds. */
-  windowSeconds?: number;
-}
-
-export interface AuthAbuseEventPayload {
-  /** `account`: one username crossed the lockout threshold. `ip`: one source address did. */
-  scope: 'account' | 'ip';
-  /** Source address, for the `ip` scope. */
-  source?: string;
-  /** The username as the audit trail already records it, for the `account` scope. */
-  username?: string;
-  failedAttempts: number;
-  windowSeconds: number;
-  lockoutSeconds: number;
-}
-
-export interface AgentVersionMismatchEventPayload {
-  agentName: string;
-  agentVersion: string;
-  controllerVersion: string;
-  difference: 'major' | 'minor' | 'patch';
-}
-
 export interface MaturityGateClearedEventPayload {
   container: Container;
   clearedAt: string;
@@ -357,15 +318,6 @@ const securityAlertHandlers = new Map<number, OrderedEventHandler<SecurityAlertE
 const containerHealthTransitionHandlers = new Map<
   number,
   OrderedEventHandler<ContainerHealthTransitionEventPayload>
->();
-const containerStateAlertHandlers = new Map<
-  number,
-  OrderedEventHandler<ContainerStateAlertEventPayload>
->();
-const authAbuseHandlers = new Map<number, OrderedEventHandler<AuthAbuseEventPayload>>();
-const agentVersionMismatchHandlers = new Map<
-  number,
-  OrderedEventHandler<AgentVersionMismatchEventPayload>
 >();
 const maturityGateClearedHandlers = new Map<
   number,
@@ -617,67 +569,6 @@ export function registerSecurityAlert(
   options: EventHandlerRegistrationOptions = {},
 ): () => void {
   return registerOrderedEventHandler(securityAlertHandlers, handler, options);
-}
-
-/**
- * Emit ContainerStateAlert event (stopped, exited non-zero, OOM-killed, restart loop).
- * @param payload
- */
-export async function emitContainerStateAlert(
-  payload: ContainerStateAlertEventPayload,
-): Promise<void> {
-  await emitOrderedHandlers(containerStateAlertHandlers, payload);
-}
-
-/**
- * Register to ContainerStateAlert event.
- * @param handler
- */
-export function registerContainerStateAlert(
-  handler: OrderedEventHandlerFn<ContainerStateAlertEventPayload>,
-  options: EventHandlerRegistrationOptions = {},
-): () => void {
-  return registerOrderedEventHandler(containerStateAlertHandlers, handler, options);
-}
-
-/**
- * Emit AuthAbuse event (failed sign-ins locked out an account or a source address).
- * @param payload
- */
-export async function emitAuthAbuse(payload: AuthAbuseEventPayload): Promise<void> {
-  await emitOrderedHandlers(authAbuseHandlers, payload);
-}
-
-/**
- * Register to AuthAbuse event.
- * @param handler
- */
-export function registerAuthAbuse(
-  handler: OrderedEventHandlerFn<AuthAbuseEventPayload>,
-  options: EventHandlerRegistrationOptions = {},
-): () => void {
-  return registerOrderedEventHandler(authAbuseHandlers, handler, options);
-}
-
-/**
- * Emit AgentVersionMismatch event (an agent connected on a different version than the controller).
- * @param payload
- */
-export async function emitAgentVersionMismatch(
-  payload: AgentVersionMismatchEventPayload,
-): Promise<void> {
-  await emitOrderedHandlers(agentVersionMismatchHandlers, payload);
-}
-
-/**
- * Register to AgentVersionMismatch event.
- * @param handler
- */
-export function registerAgentVersionMismatch(
-  handler: OrderedEventHandlerFn<AgentVersionMismatchEventPayload>,
-  options: EventHandlerRegistrationOptions = {},
-): () => void {
-  return registerOrderedEventHandler(agentVersionMismatchHandlers, handler, options);
 }
 
 /**
@@ -1047,9 +938,6 @@ export function clearAllListenersForTests(): void {
   updateOperationChangedHandlers.clear();
   securityAlertHandlers.clear();
   containerHealthTransitionHandlers.clear();
-  containerStateAlertHandlers.clear();
-  authAbuseHandlers.clear();
-  agentVersionMismatchHandlers.clear();
   maturityGateClearedHandlers.clear();
   approvalPendingNotificationHandlers.clear();
   securityScanCycleCompleteHandlers.clear();

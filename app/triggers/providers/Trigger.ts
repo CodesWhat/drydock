@@ -16,13 +16,10 @@ import {
 import {
   type Container,
   fullName,
-  isFileSourcedContainer,
-  isLocalBuildContainer,
   isRollbackContainer as isRollbackContainerHelper,
 } from '../../model/container.js';
 import { getContainerGroup } from '../../model/container-group.js';
 import { getGroupExcludeEntries, resolveUpdateModeCeiling } from '../../model/group-policy.js';
-import { applySeparateUpdateTypes } from '../../model/separate-update-types.js';
 import { withCurrentGroupPolicy } from '../../store/group-policy.js';
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
@@ -129,12 +126,6 @@ type NotificationRuleId =
   | 'agent-disconnect'
   | 'agent-reconnect'
   | 'container-unhealthy'
-  | 'container-stopped'
-  | 'container-exited'
-  | 'container-oom-killed'
-  | 'container-restart-loop'
-  | 'auth-abuse'
-  | 'agent-version-mismatch'
   | 'maturity-cleared'
   | 'update-pending-approval';
 
@@ -146,12 +137,6 @@ const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
   'agent-disconnect',
   'agent-reconnect',
   'container-unhealthy',
-  'container-stopped',
-  'container-exited',
-  'container-oom-killed',
-  'container-restart-loop',
-  'auth-abuse',
-  'agent-version-mismatch',
   'maturity-cleared',
   'update-pending-approval',
 ]);
@@ -243,32 +228,6 @@ interface ContainerUnhealthyNotificationEvent {
   previousHealth?: string;
 }
 
-interface AuthAbuseNotificationEvent {
-  kind: 'auth-abuse';
-  scope: 'account' | 'ip';
-  source?: string;
-  username?: string;
-  failedAttempts: number;
-  windowSeconds: number;
-  lockoutSeconds: number;
-}
-
-interface AgentVersionMismatchNotificationEvent {
-  kind: 'agent-version-mismatch';
-  agentName: string;
-  agentVersion: string;
-  controllerVersion: string;
-  difference: 'major' | 'minor' | 'patch';
-}
-
-interface ContainerStateNotificationEvent {
-  kind: event.ContainerStateAlertKind;
-  exitCode?: number;
-  reason?: string;
-  restartCount?: number;
-  windowSeconds?: number;
-}
-
 interface MaturityGateClearedNotificationEvent {
   kind: 'maturity-cleared';
   pendingSince?: string;
@@ -291,9 +250,6 @@ type TriggerNotificationEvent =
   | AgentDisconnectedNotificationEvent
   | AgentReconnectedNotificationEvent
   | ContainerUnhealthyNotificationEvent
-  | ContainerStateNotificationEvent
-  | AuthAbuseNotificationEvent
-  | AgentVersionMismatchNotificationEvent
   | MaturityGateClearedNotificationEvent
   | UpdatePendingApprovalNotificationEvent;
 
@@ -313,12 +269,6 @@ type TriggerTemplateContainer = Container & {
 
 interface EventDispatchOptions extends notificationStore.NotificationRuleDispatchOptions {
   skipThreshold?: boolean;
-  /**
-   * Alert-style rules reach notification triggers only. An empty rule trigger
-   * list means "all notification triggers", so action triggers (Command) must
-   * not fire for it.
-   */
-  notificationTriggersOnly?: boolean;
 }
 
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
@@ -433,21 +383,19 @@ export function buildLiteralTemplateExpression(expression: string): string {
 const DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION =
   'container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")"';
 const DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "New " + updateKindLabel + " found for container " + container.name + container.notificationWatcherSuffix';
+  'container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix';
 const DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION =
   'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available"';
 const DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION =
-  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue + updateKindNote';
+  'container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue';
 const DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION =
   'container.result && container.result.link ? "\\n" + container.result.link : ""';
-const SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION =
-  'container.securityFastLane ? " (security fast lane: fixes " + container.securityFastLane.fixedCount + " critical or high vulnerabilities)" : ""';
 const DEFAULT_SIMPLE_TITLE_TEMPLATE = buildLiteralTemplateExpression(
   `isDigestUpdate ? ${DEFAULT_SIMPLE_TITLE_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_TITLE_UPDATE_EXPRESSION}`,
 );
 const DEFAULT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression(
   `isDigestUpdate ? ${DEFAULT_SIMPLE_BODY_DIGEST_EXPRESSION} : ${DEFAULT_SIMPLE_BODY_UPDATE_EXPRESSION}`,
-)}${buildLiteralTemplateExpression(SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
+)}${buildLiteralTemplateExpression(DEFAULT_SIMPLE_BODY_RESULT_LINK_EXPRESSION)}`;
 
 const AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected`;
 const AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} disconnected${buildLiteralTemplateExpression('event.reason ? ": " + event.reason : ""')}`;
@@ -461,20 +409,8 @@ const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('
 const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
 const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is unhealthy`;
 const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
-const CONTAINER_STOPPED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} stopped`;
-const CONTAINER_STOPPED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} stopped${buildLiteralTemplateExpression('event.reason ? " (" + event.reason + ")" : ""')}`;
-const CONTAINER_EXITED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} exited unexpectedly`;
-const CONTAINER_EXITED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} exited with a non-zero exit code${buildLiteralTemplateExpression('event.exitCode ? " (" + event.exitCode + ")" : ""')}`;
-const CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} was OOM killed`;
-const CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} was killed for running out of memory${buildLiteralTemplateExpression('event.exitCode ? " (exit code " + event.exitCode + ")" : ""')}`;
-const CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is in a restart loop`;
-const CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} crashed ${buildLiteralTemplateExpression('event.restartCount')} times in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds${buildLiteralTemplateExpression('event.exitCode ? " (last exit code " + event.exitCode + ")" : ""')}`;
-const AUTH_ABUSE_SIMPLE_TITLE_TEMPLATE = `Repeated failed logins${buildLiteralTemplateExpression('event.source ? " from " + event.source : ""')}`;
-const AUTH_ABUSE_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('event.source ? "Source " + event.source : "Account " + event.username')} was locked out after ${buildLiteralTemplateExpression('event.failedAttempts')} failed login attempts in ${buildLiteralTemplateExpression('event.windowSeconds')} seconds. The lockout lasts ${buildLiteralTemplateExpression('event.lockoutSeconds')} seconds.`;
-const AGENT_VERSION_MISMATCH_SIMPLE_TITLE_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} version mismatch`;
-const AGENT_VERSION_MISMATCH_SIMPLE_BODY_TEMPLATE = `Agent ${buildLiteralTemplateExpression('event.agentName')} runs ${buildLiteralTemplateExpression('event.agentVersion')} but the controller runs ${buildLiteralTemplateExpression('event.controllerVersion')} (${buildLiteralTemplateExpression('event.difference')} difference)`;
 const MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update ready for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
-const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}${buildLiteralTemplateExpression(SECURITY_FAST_LANE_SIMPLE_BODY_EXPRESSION)}`;
+const MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} can now be updated to ${buildLiteralTemplateExpression('container.result.tag ? container.result.tag : container.result.digest')}: the maturity period has passed${buildLiteralTemplateExpression('event.minAgeDays ? " (" + event.minAgeDays + " day minimum)" : ""')}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Update awaiting approval for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')}`;
 const UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('container.notificationWatcherSuffix')} has an update awaiting approval${buildLiteralTemplateExpression('event.fromRef && event.toRef ? ": " + event.fromRef + " to " + event.toRef : ""')}${buildLiteralTemplateExpression('event.approvalUrl ? "\\n" + event.approvalUrl : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
@@ -486,12 +422,6 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
-  'container-stopped': CONTAINER_STOPPED_SIMPLE_TITLE_TEMPLATE,
-  'container-exited': CONTAINER_EXITED_SIMPLE_TITLE_TEMPLATE,
-  'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_TITLE_TEMPLATE,
-  'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_TITLE_TEMPLATE,
-  'auth-abuse': AUTH_ABUSE_SIMPLE_TITLE_TEMPLATE,
-  'agent-version-mismatch': AGENT_VERSION_MISMATCH_SIMPLE_TITLE_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_TITLE_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_TITLE_TEMPLATE,
 };
@@ -504,12 +434,6 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
   'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
-  'container-stopped': CONTAINER_STOPPED_SIMPLE_BODY_TEMPLATE,
-  'container-exited': CONTAINER_EXITED_SIMPLE_BODY_TEMPLATE,
-  'container-oom-killed': CONTAINER_OOM_KILLED_SIMPLE_BODY_TEMPLATE,
-  'container-restart-loop': CONTAINER_RESTART_LOOP_SIMPLE_BODY_TEMPLATE,
-  'auth-abuse': AUTH_ABUSE_SIMPLE_BODY_TEMPLATE,
-  'agent-version-mismatch': AGENT_VERSION_MISMATCH_SIMPLE_BODY_TEMPLATE,
   'maturity-cleared': MATURITY_GATE_CLEARED_SIMPLE_BODY_TEMPLATE,
   'update-pending-approval': UPDATE_PENDING_APPROVAL_SIMPLE_BODY_TEMPLATE,
 };
@@ -520,10 +444,6 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
   'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
-  'container-stopped': `${buildLiteralTemplateExpression('containers.length')} containers stopped`,
-  'container-exited': `${buildLiteralTemplateExpression('containers.length')} containers exited unexpectedly`,
-  'container-oom-killed': `${buildLiteralTemplateExpression('containers.length')} containers were OOM killed`,
-  'container-restart-loop': `${buildLiteralTemplateExpression('containers.length')} containers are in a restart loop`,
   'maturity-cleared': `${buildLiteralTemplateExpression('containers.length')} updates ready to apply`,
   'update-pending-approval': `${buildLiteralTemplateExpression('containers.length')} updates awaiting approval`,
 };
@@ -586,7 +506,7 @@ function truncateReleaseNotesBody(body: string, maxLength: number) {
 function buildAgentContainer(
   agentName: string,
   state: 'connected' | 'disconnected',
-  eventKind: 'agent-disconnect' | 'agent-reconnect',
+  eventKind: TriggerNotificationEvent['kind'],
   reason?: string,
 ): TriggerNotificationContainer {
   return {
@@ -640,45 +560,6 @@ function buildAgentDisconnectedContainer(
 
 function buildAgentReconnectedContainer(agentName: string): TriggerNotificationContainer {
   return buildAgentContainer(agentName, 'connected', 'agent-reconnect');
-}
-
-function buildAgentVersionMismatchContainer(
-  payload: event.AgentVersionMismatchEventPayload,
-): TriggerNotificationContainer {
-  return {
-    ...buildAgentContainer(payload.agentName, 'connected', 'agent-reconnect'),
-    displayIcon: 'mdi:server-network-off',
-    notificationEvent: {
-      kind: 'agent-version-mismatch',
-      agentName: payload.agentName,
-      agentVersion: payload.agentVersion,
-      controllerVersion: payload.controllerVersion,
-      difference: payload.difference,
-    },
-  };
-}
-
-function buildAuthAbuseContainer(
-  payload: event.AuthAbuseEventPayload,
-): TriggerNotificationContainer {
-  const subject =
-    payload.scope === 'ip' ? (payload.source ?? 'unknown') : (payload.username ?? 'unknown');
-  return {
-    ...buildAgentContainer(`auth-${payload.scope}-${subject}`, 'disconnected', 'agent-disconnect'),
-    name: 'authentication',
-    displayName: 'Authentication',
-    displayIcon: 'mdi:shield-alert',
-    watcher: 'auth',
-    notificationEvent: {
-      kind: 'auth-abuse',
-      scope: payload.scope,
-      source: payload.source,
-      username: payload.username,
-      failedAttempts: payload.failedAttempts,
-      windowSeconds: payload.windowSeconds,
-      lockoutSeconds: payload.lockoutSeconds,
-    },
-  };
 }
 
 function withNotificationEvent(
@@ -738,55 +619,6 @@ function getContainerUnhealthyNotificationEvent(
   return {
     kind: 'container-unhealthy',
     previousHealth: getNonEmptyString(notificationEvent, 'previousHealth'),
-  };
-}
-
-const CONTAINER_STATE_ALERT_KINDS: ReadonlySet<unknown> = new Set<event.ContainerStateAlertKind>([
-  'container-stopped',
-  'container-exited',
-  'container-oom-killed',
-  'container-restart-loop',
-]);
-
-function getContainerStateNotificationEvent(
-  kind: event.ContainerStateAlertKind,
-  notificationEvent: unknown,
-): ContainerStateNotificationEvent {
-  return {
-    kind,
-    exitCode: getFiniteNumber(notificationEvent, 'exitCode'),
-    reason: getNonEmptyString(notificationEvent, 'reason'),
-    restartCount: getFiniteNumber(notificationEvent, 'restartCount'),
-    windowSeconds: getFiniteNumber(notificationEvent, 'windowSeconds'),
-  };
-}
-
-function getAuthAbuseNotificationEvent(notificationEvent: unknown): AuthAbuseNotificationEvent {
-  return {
-    kind: 'auth-abuse',
-    scope: safeGet(notificationEvent, 'scope') === 'ip' ? 'ip' : 'account',
-    source: getNonEmptyString(notificationEvent, 'source'),
-    username: getNonEmptyString(notificationEvent, 'username'),
-    failedAttempts: getFiniteNumber(notificationEvent, 'failedAttempts') ?? 0,
-    windowSeconds: getFiniteNumber(notificationEvent, 'windowSeconds') ?? 0,
-    lockoutSeconds: getFiniteNumber(notificationEvent, 'lockoutSeconds') ?? 0,
-  };
-}
-
-function getAgentVersionMismatchNotificationEvent(
-  notificationEvent: unknown,
-): AgentVersionMismatchNotificationEvent | undefined {
-  const agentName = getNonEmptyString(notificationEvent, 'agentName');
-  if (!agentName) {
-    return undefined;
-  }
-  const difference = safeGet(notificationEvent, 'difference');
-  return {
-    kind: 'agent-version-mismatch',
-    agentName,
-    agentVersion: getNonEmptyString(notificationEvent, 'agentVersion') ?? 'unknown',
-    controllerVersion: getNonEmptyString(notificationEvent, 'controllerVersion') ?? 'unknown',
-    difference: difference === 'major' || difference === 'patch' ? difference : 'minor',
   };
 }
 
@@ -865,21 +697,6 @@ export function getNotificationEvent(
     return getContainerUnhealthyNotificationEvent(notificationEvent);
   }
 
-  if (CONTAINER_STATE_ALERT_KINDS.has(kind)) {
-    return getContainerStateNotificationEvent(
-      kind as event.ContainerStateAlertKind,
-      notificationEvent,
-    );
-  }
-
-  if (kind === 'auth-abuse') {
-    return getAuthAbuseNotificationEvent(notificationEvent);
-  }
-
-  if (kind === 'agent-version-mismatch') {
-    return getAgentVersionMismatchNotificationEvent(notificationEvent);
-  }
-
   if (kind === 'maturity-cleared') {
     return getMaturityGateClearedNotificationEvent(notificationEvent);
   }
@@ -908,7 +725,6 @@ export interface TriggerConfiguration extends ComponentConfiguration {
   manual?: 'all' | 'oninclude';
   order?: number;
   threshold?: string;
-  separateupdatetypes?: boolean;
   mode?: string;
   once?: boolean;
   disabletitle?: boolean;
@@ -963,9 +779,6 @@ class Trigger<
   private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerHealthTransition?: () => void;
-  private unregisterContainerStateAlert?: () => void;
-  private unregisterAuthAbuse?: () => void;
-  private unregisterAgentVersionMismatch?: () => void;
   private unregisterMaturityGateCleared?: () => void;
   private unregisterApprovalPendingNotification?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
@@ -1268,14 +1081,8 @@ class Trigger<
   private isTriggerEnabledForRule(
     ruleId: NotificationRuleId,
     options: notificationStore.NotificationRuleDispatchOptions = {},
-    countSuppression = false,
   ) {
-    return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), {
-      ...options,
-      // Quiet hours and silences mute what Drydock says, never what an action trigger does.
-      applyQuietHours: this.getCategory() === 'notification',
-      countSuppression,
-    });
+    return notificationStore.isTriggerEnabledForRule(ruleId, this.getId(), options);
   }
 
   private getUpdateAvailableAutoTriggerDispatchDecision() {
@@ -1285,12 +1092,7 @@ class Trigger<
     const dispatchDecision = notificationStore.getTriggerDispatchDecisionForRule(
       'update-available',
       this.getId(),
-      {
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-        applyQuietHours: true,
-        countSuppression: true,
-      },
+      { allowAllWhenNoTriggers: true, defaultWhenRuleMissing: true },
     );
     this.warnIfDigestRoutingIsSuppressed(dispatchDecision);
     return dispatchDecision;
@@ -1462,9 +1264,7 @@ class Trigger<
   ) {
     return (
       notificationEvent?.kind !== 'agent-disconnect' &&
-      notificationEvent?.kind !== 'agent-reconnect' &&
-      notificationEvent?.kind !== 'auth-abuse' &&
-      notificationEvent?.kind !== 'agent-version-mismatch'
+      notificationEvent?.kind !== 'agent-reconnect'
     );
   }
 
@@ -1553,12 +1353,7 @@ class Trigger<
       return false;
     }
 
-    if (options.notificationTriggersOnly && this.getCategory() === 'action') {
-      this.log.debug(`Skipping ${ruleId} dispatch for action trigger (notification rules only)`);
-      return false;
-    }
-
-    if (!this.isTriggerEnabledForRule(ruleId, options, true)) {
+    if (!this.isTriggerEnabledForRule(ruleId, options)) {
       this.recordSkip(container, 'rule-disabled', ruleId);
       return false;
     }
@@ -1892,26 +1687,6 @@ class Trigger<
     );
   }
 
-  async handleAuthAbuseEvent(payload: event.AuthAbuseEventPayload) {
-    await this.dispatchContainerForEvent('auth-abuse', buildAuthAbuseContainer(payload), {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-      skipThreshold: true,
-    });
-  }
-
-  async handleAgentVersionMismatchEvent(payload: event.AgentVersionMismatchEventPayload) {
-    await this.dispatchContainerForEvent(
-      'agent-version-mismatch',
-      buildAgentVersionMismatchContainer(payload),
-      {
-        allowAllWhenNoTriggers: true,
-        defaultWhenRuleMissing: true,
-        skipThreshold: true,
-      },
-    );
-  }
-
   async handleContainerHealthTransitionEvent(payload: event.ContainerHealthTransitionEventPayload) {
     const container = payload.container || this.findContainerByBusinessId(payload.containerName);
     const notificationContainer = container
@@ -1925,26 +1700,6 @@ class Trigger<
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
       skipThreshold: true,
-    });
-  }
-
-  async handleContainerStateAlertEvent(payload: event.ContainerStateAlertEventPayload) {
-    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
-    const notificationContainer = container
-      ? withNotificationEvent(container, {
-          kind: payload.kind,
-          exitCode: payload.exitCode,
-          reason: payload.reason,
-          restartCount: payload.restartCount,
-          windowSeconds: payload.windowSeconds,
-        })
-      : undefined;
-
-    await this.dispatchContainerForEvent(payload.kind, notificationContainer, {
-      allowAllWhenNoTriggers: true,
-      defaultWhenRuleMissing: true,
-      skipThreshold: true,
-      notificationTriggersOnly: true,
     });
   }
 
@@ -2611,14 +2366,6 @@ class Trigger<
         reason: 'rollback-container',
       };
     }
-    // A synthetic container from a file watcher has nothing running to act on, so only
-    // notification triggers may fire for it.
-    if (this.getCategory() === 'action' && isFileSourcedContainer(containerResult)) {
-      return {
-        allowed: false,
-        reason: 'file-sourced container is notification-only',
-      };
-    }
     if (this.agent && this.agent !== containerResult.agent) {
       return {
         allowed: false,
@@ -2662,14 +2409,6 @@ class Trigger<
     // `UPDATE_ACTION_TRIGGER_TYPES`), so they fall through to the unchanged
     // plain include/exclude path below, preserving today's behavior exactly.
     if (category === 'action' && this.isUpdateActionTrigger()) {
-      // A locally built image is never replaced by a pulled registry image. Command
-      // triggers skip this branch, which is how a user wires a rebuild.
-      if (isLocalBuildContainer(containerResult)) {
-        return {
-          allowed: false,
-          reason: 'locally built image: base image updates are notification-only',
-        };
-      }
       if (!this.isActionPolicyDispatchWinner(containerResult)) {
         return {
           allowed: false,
@@ -2965,9 +2704,7 @@ class Trigger<
   async handleContainerReport(emittedReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(emittedReport);
-    const containerReport = this.withSeparateUpdateType(
-      Trigger.withCurrentGroupPolicy(emittedReport),
-    );
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     // Confirmation cleanup must run regardless of the current global mode or
     // notification-rule routing. Otherwise an auto -> manual/notify -> auto
@@ -3042,9 +2779,7 @@ class Trigger<
     for (const report of emittedReports) {
       Trigger.canonicalizeReportName(report);
     }
-    const containerReports = emittedReports.map((report) =>
-      this.withSeparateUpdateType(Trigger.withCurrentGroupPolicy(report)),
-    );
+    const containerReports = emittedReports.map((report) => Trigger.withCurrentGroupPolicy(report));
 
     // Mirror the simple/digest suppression-lift (#408): a watcher report
     // confirming updateAvailable=false means the post-update state has landed,
@@ -3241,9 +2976,7 @@ class Trigger<
    */
   async handleContainerReportDigest(emittedReport: ContainerReport) {
     Trigger.canonicalizeReportName(emittedReport);
-    const containerReport = this.withSeparateUpdateType(
-      Trigger.withCurrentGroupPolicy(emittedReport),
-    );
+    const containerReport = Trigger.withCurrentGroupPolicy(emittedReport);
 
     const { container } = containerReport;
     const containerName = getContainerNotificationKey(container) || fullName(container);
@@ -3884,19 +3617,6 @@ class Trigger<
     return container === report.container ? report : { ...report, container };
   }
 
-  /**
-   * With `separateupdatetypes`, a report whose primary update is above the threshold carries
-   * the best candidate inside it instead, so everything downstream (the once gate, the
-   * notification text, the update itself) names that tag. Returns the same report otherwise.
-   */
-  private withSeparateUpdateType(report: ContainerReport): ContainerReport {
-    if (!report.container) {
-      return report;
-    }
-    const container = applySeparateUpdateTypes(report.container, this);
-    return container === report.container ? report : { ...report, container };
-  }
-
   static canonicalizeReportName(report: ContainerReport): void {
     const name = report.container?.name;
     if (typeof name !== 'string') return;
@@ -4058,30 +3778,6 @@ class Trigger<
       },
     );
 
-    this.unregisterContainerStateAlert = event.registerContainerStateAlert(
-      async (payload) => this.handleContainerStateAlertEvent(payload),
-      {
-        id: this.getId(),
-        order: this.configuration.order,
-      },
-    );
-
-    this.unregisterAuthAbuse = event.registerAuthAbuse(
-      async (payload) => this.handleAuthAbuseEvent(payload),
-      {
-        id: this.getId(),
-        order: this.configuration.order,
-      },
-    );
-
-    this.unregisterAgentVersionMismatch = event.registerAgentVersionMismatch(
-      async (payload) => this.handleAgentVersionMismatchEvent(payload),
-      {
-        id: this.getId(),
-        order: this.configuration.order,
-      },
-    );
-
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
       this.unregisterContainerUpdateAppliedForResolution = event.registerContainerUpdateApplied(
@@ -4128,15 +3824,6 @@ class Trigger<
 
     this.unregisterContainerHealthTransition?.();
     this.unregisterContainerHealthTransition = undefined;
-
-    this.unregisterContainerStateAlert?.();
-    this.unregisterContainerStateAlert = undefined;
-
-    this.unregisterAuthAbuse?.();
-    this.unregisterAuthAbuse = undefined;
-
-    this.unregisterAgentVersionMismatch?.();
-    this.unregisterAgentVersionMismatch = undefined;
 
     this.unregisterMaturityGateCleared?.();
     this.unregisterMaturityGateCleared = undefined;
@@ -4206,7 +3893,6 @@ class Trigger<
         .valid('simple', 'batch', 'digest', 'batch+digest')
         .default('simple'),
       once: this.joi.boolean().default(true),
-      separateupdatetypes: this.joi.boolean(),
       digestcron: this.joi
         .string()
         .default('0 8 * * *')
@@ -4366,9 +4052,6 @@ class Trigger<
    * and is never touched from here.
    */
   private deferAutoUpdateForMaintenanceWindow(container: Container): boolean {
-    // The security fast lane lifts the window for a candidate that fixes critical/high
-    // findings; the audit entry is written at admission.
-    if (container.securityFastLane) return false;
     const watcher = getContainerMaintenanceWindowWatcher(container, registry.getState().watcher);
     if (!watcher || typeof watcher.isMaintenanceWindowOpen !== 'function') return false;
     if (watcher.isMaintenanceWindowOpen()) return false;
@@ -4789,45 +4472,17 @@ class Trigger<
                 ? { kind: ruleId, agentName: 'preview-agent' }
                 : ruleId === 'container-unhealthy'
                   ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
-                  : ruleId === 'container-stopped' || ruleId === 'container-exited'
-                    ? { kind: ruleId, exitCode: ruleId === 'container-exited' ? 1 : 0 }
-                    : ruleId === 'container-oom-killed'
-                      ? { kind: ruleId, exitCode: 137, reason: 'out of memory' }
-                      : ruleId === 'container-restart-loop'
-                        ? { kind: ruleId, exitCode: 1, restartCount: 3, windowSeconds: 300 }
-                        : ruleId === 'auth-abuse'
-                          ? {
-                              kind: ruleId,
-                              scope: 'ip',
-                              source: '203.0.113.7',
-                              failedAttempts: 25,
-                              windowSeconds: 900,
-                              lockoutSeconds: 900,
-                            }
-                          : ruleId === 'agent-version-mismatch'
-                            ? {
-                                kind: ruleId,
-                                agentName: 'preview-agent',
-                                agentVersion: '1.8.0',
-                                controllerVersion: '1.9.0',
-                                difference: 'minor',
-                              }
-                            : ruleId === 'maturity-cleared'
-                              ? {
-                                  kind: ruleId,
-                                  pendingSince: '2026-01-01T00:00:00.000Z',
-                                  minAgeDays: 7,
-                                }
-                              : ruleId === 'update-pending-approval'
-                                ? {
-                                    kind: ruleId,
-                                    approvalId: 'preview-approval',
-                                    approvalUrl:
-                                      'https://drydock.example.com/approvals?id=preview-approval',
-                                    fromRef: '1.0.0',
-                                    toRef: '1.1.0',
-                                  }
-                                : { kind: ruleId };
+                  : ruleId === 'maturity-cleared'
+                    ? { kind: ruleId, pendingSince: '2026-01-01T00:00:00.000Z', minAgeDays: 7 }
+                    : ruleId === 'update-pending-approval'
+                      ? {
+                          kind: ruleId,
+                          approvalId: 'preview-approval',
+                          approvalUrl: 'https://drydock.example.com/approvals?id=preview-approval',
+                          fromRef: '1.0.0',
+                          toRef: '1.1.0',
+                        }
+                      : { kind: ruleId };
 
     return {
       id: 'drydock-preview',

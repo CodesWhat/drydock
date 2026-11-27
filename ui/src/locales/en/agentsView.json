@@ -87,60 +87,6 @@
         "lastSeen": "Last Seen",
         "never": "never"
       }
-    },
-    "edgeKeys": {
-      "toggle": "Edge agent keys",
-      "hide": "Hide edge agent keys",
-      "title": "Edge agent keys",
-      "description": "Register the public key of a Portwing edge agent so it can dial in to this controller. Only public keys are stored, so nothing secret is shown here.",
-      "registerButton": "Register key",
-      "loading": "Loading keys...",
-      "empty": "No edge agent keys registered",
-      "loadError": "Failed to load edge agent keys",
-      "forbidden": "Managing edge agent keys needs a signed-in admin session. API keys and recovery logins can't do it.",
-      "registered": "Registered {label} as key {keyId}.",
-      "revokeButton": "Revoke",
-      "errors": {
-        "register": "Failed to register key",
-        "revoke": "Failed to revoke key"
-      },
-      "columns": {
-        "label": "Label",
-        "keyId": "Key ID",
-        "created": "Created",
-        "status": "Status"
-      },
-      "status": {
-        "active": "Active",
-        "revoked": "Revoked"
-      },
-      "form": {
-        "title": "Register an edge agent key",
-        "label": "Label",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "Public key",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "Paste the 44-character base64 key, or the full line printed by portwing keygen -pub-from.",
-        "submit": "Register",
-        "invalidKey": "The public key must be base64 and decode to exactly 32 bytes."
-      },
-      "revoke": {
-        "header": "Revoke key",
-        "message": "Revoke {label}? Its agent is disconnected now and can't reconnect.",
-        "accept": "Revoke"
-      },
-      "snippet": {
-        "show": "Show agent snippet",
-        "hide": "Hide agent snippet",
-        "title": "Agent setup",
-        "description": "Generate the keypair on the agent host with portwing keygen, register its public key here, then start the agent with one of these.",
-        "controllerUrl": "Controller URL",
-        "agentName": "Agent name",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "Copy",
-        "copied": "Copied"
-      }
     }
   }
 }

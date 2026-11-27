@@ -45,7 +45,7 @@ export const totpFactorPaths = {
       tags: ['Authentication'],
       summary: 'Get the current account’s two-factor status',
       operationId: 'getTotpFactor',
-      description: `Reports whether a TOTP factor is active, when it was activated, how many unused recovery codes remain, any pending enrollment, and whether this connection may manage the factor (\`managementAllowed\`, with \`reason\` \`https-required\` when it may not). Never returns a seed, code, digest or counter. ${securityNote} Reading changes nothing, so it is also answered over plain HTTP.`,
+      description: `Reports whether a TOTP factor is active, when it was activated, how many unused recovery codes remain and any pending enrollment. Never returns a seed, code, digest or counter. ${securityNote} Reading changes nothing, so it is also answered over plain HTTP.`,
       responses: {
         200: {
           ...jsonResponse('Factor status', { $ref: '#/components/schemas/TotpFactorStatus' }),

@@ -1,5 +1,4 @@
 import express from 'express';
-import { requireAuthentication } from './auth.js';
 import {
   collectRouteScopes,
   DYNAMIC_SCOPE,
@@ -37,7 +36,6 @@ const EXPECTED_ROUTE_SCOPES = [
   'DELETE /api/v1/icons/cache → admin',
   'DELETE /api/v1/label-overrides/:overrideId → admin',
   'DELETE /api/v1/notifications/outbox/:id → triggers:test',
-  'DELETE /api/v1/notifications/silences/:id → admin',
   'DELETE /api/v1/portwing/keys/:keyId → session-only',
   'GET /api/v1/actions → read',
   'GET /api/v1/actions/:type/:name → read',
@@ -54,12 +52,10 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/approvals/:id → read',
   'GET /api/v1/approvals/summary → read',
   'GET /api/v1/audit → read',
-  'GET /api/v1/audit/export → read',
   'GET /api/v1/auth/totp-factor → session-only',
   'GET /api/v1/authentications → read',
   'GET /api/v1/authentications/:type/:name → read',
   'GET /api/v1/authentications/:type/:name/:agent → read',
-  'GET /api/v1/cleanup → read',
   'GET /api/v1/config → session-only',
   'GET /api/v1/config/:section → session-only',
   'GET /api/v1/config/editor/actions → session-only',
@@ -104,7 +100,6 @@ const EXPECTED_ROUTE_SCOPES = [
   'GET /api/v1/notification-triggers/:type/:name/skips → read',
   'GET /api/v1/notifications → read',
   'GET /api/v1/notifications/outbox → read',
-  'GET /api/v1/notifications/silences → read',
   'GET /api/v1/openapi.json → read',
   'GET /api/v1/portwing/keys → session-only',
   'GET /api/v1/preferences → read',
@@ -146,7 +141,6 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/approvals/bulk → containers:update',
   'POST /api/v1/auth/totp-enrollments → session-only',
   'POST /api/v1/auth/totp-recovery-code-sets → session-only',
-  'POST /api/v1/cleanup/run → admin',
   'POST /api/v1/config/reload → admin',
   'POST /api/v1/config/validate → admin',
   'POST /api/v1/containers/:id/env/reveal → session-only',
@@ -173,7 +167,6 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/notification-triggers/:type/:name/:agent → dynamic',
   'POST /api/v1/notifications/:id/preview → triggers:test',
   'POST /api/v1/notifications/outbox/:id/retry → triggers:test',
-  'POST /api/v1/notifications/silences → admin',
   'POST /api/v1/operations/:id/cancel → containers:update',
   'POST /api/v1/portwing/keys → session-only',
   'POST /api/v1/server/security/assets/:provider/:operation → admin',
@@ -207,12 +200,10 @@ vi.mock('../configuration/index.js', async (importOriginal) => {
 
 describe('route scope completeness', () => {
   let declarations: RouteScopeDeclaration[];
-  let apiRouter: { stack: { handle?: unknown; route?: { path: string } }[] };
 
   beforeAll(async () => {
     const api = await import('./api.js');
-    apiRouter = api.init() as unknown as typeof apiRouter;
-    declarations = collectRouteScopes(apiRouter, '/api/v1');
+    declarations = collectRouteScopes(api.init(), '/api/v1');
   });
 
   test('every route under /api/v1 declares the scope that reaches it', () => {
@@ -265,42 +256,5 @@ describe('route scope completeness', () => {
     expect(
       findUndeclaredRoutes(collectRouteScopes(router, '/api/v1')).map(formatRouteScope),
     ).toStrictEqual(['POST /api/v1/added-without-a-scope → UNDECLARED']);
-  });
-
-  test('every protected router is mounted after requireAuthentication, public ones are listed', () => {
-    const authIndex = apiRouter.stack.findIndex((layer) => layer.handle === requireAuthentication);
-    expect(authIndex).toBeGreaterThan(-1);
-    expect(apiRouter.stack.filter((layer) => layer.handle === requireAuthentication)).toHaveLength(
-      1,
-    );
-
-    const mountPathOf = (layer: { handle?: unknown; route?: { path: string } }) =>
-      layer.route
-        ? `route:${layer.route.path}`
-        : ((layer.handle as Record<symbol, unknown> | undefined)?.[
-            Symbol.for('drydock.api.mountPath')
-          ] as string | undefined);
-
-    const before = apiRouter.stack.slice(0, authIndex).map(mountPathOf).filter(Boolean);
-    expect([...before].sort()).toStrictEqual([
-      '/internal',
-      '/self-update',
-      '/webhook',
-      '/webhooks',
-      'route:/openapi.json',
-    ]);
-
-    // Everything mounted after the auth line is a sub-router or the terminal 404.
-    const after = apiRouter.stack
-      .slice(authIndex + 1)
-      .map(mountPathOf)
-      .filter(Boolean);
-    expect(after).toContain('/app');
-    expect(after).toContain('/store');
-    expect(after).toContain('/debug');
-    expect(after).toContain('/containers');
-    expect(after).toContain('/api-keys');
-    expect(after).not.toContain('/webhook');
-    expect(after).not.toContain('/internal');
   });
 });

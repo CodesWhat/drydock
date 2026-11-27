@@ -17,25 +17,10 @@ interface PinGateContainerLike {
   includeTags?: string;
   tagFamily?: string;
   image: {
-    isLocalImage?: boolean;
-    registry?: { lookupImage?: string };
     tag: {
       tagPrecision?: 'specific' | 'floating';
     };
   };
-}
-
-/**
- * True for a locally built image that declares its upstream base through an
- * explicit lookup label. Its tag records the base version it was built from,
- * not a registry-hosted pin, so the pin gate and the strict floating-alias
- * digest comparison (neither workable without a registry digest) do not apply.
- */
-export function isLocalBaseLookup(container: PinGateContainerLike): boolean {
-  return (
-    container.image.isLocalImage === true &&
-    (container.image.registry?.lookupImage ?? '').trim() !== ''
-  );
 }
 
 /**
@@ -50,7 +35,6 @@ export function isLocalBaseLookup(container: PinGateContainerLike): boolean {
 export function isPinGateGoverned(container: PinGateContainerLike): boolean {
   return (
     container.image.tag.tagPrecision === 'specific' &&
-    !isLocalBaseLookup(container) &&
     !container.includeTags &&
     normalizeTagFamilyPolicy(container.tagFamily) !== 'loose'
   );

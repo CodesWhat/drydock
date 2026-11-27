@@ -336,18 +336,8 @@ export const openApiSchemas = {
       activatedAt: { type: 'string', format: 'date-time' },
       recoveryCodesRemaining: { type: 'integer', minimum: 0 },
       pendingEnrollment: { $ref: '#/components/schemas/TotpPendingEnrollment' },
-      managementAllowed: {
-        type: 'boolean',
-        description:
-          'Whether this connection may enroll, replace or remove a factor. False when the request is plain HTTP from a non-local client and the operator has not set `DD_AUTH_TOTP_ALLOWHTTP=true`.',
-      },
-      reason: {
-        type: 'string',
-        enum: ['https-required'],
-        description: 'Present only when `managementAllowed` is false.',
-      },
     },
-    required: ['status', 'recoveryCodesRemaining', 'managementAllowed'],
+    required: ['status', 'recoveryCodesRemaining'],
     additionalProperties: false,
   },
   TotpReauthenticationRequest: {
@@ -1108,28 +1098,6 @@ export const openApiSchemas = {
       evaluatedAt: { type: 'string', format: 'date-time' },
       actionPolicy: { $ref: '#/components/schemas/ActionPolicy' },
       updateMode: { $ref: '#/components/schemas/UpdateEligibilityUpdateMode' },
-      securityFastLane: {
-        type: 'object',
-        description:
-          'Set when the container opted in to the security fast lane and the pending candidate fixes critical or high vulnerabilities present in the running image.',
-        properties: {
-          fixedIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Capped list of fixed vulnerability IDs.',
-          },
-          fixedCount: { type: 'integer', minimum: 1 },
-          fixedCritical: { type: 'integer', minimum: 0 },
-          fixedHigh: { type: 'integer', minimum: 0 },
-          bypassedHolds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Holds (snoozed, maturity, maintenance window) lifted on this evaluation.',
-          },
-        },
-        required: ['fixedIds', 'fixedCount', 'fixedCritical', 'fixedHigh', 'bypassedHolds'],
-        additionalProperties: false,
-      },
     },
     required: ['eligible', 'blockers', 'evaluatedAt'],
     additionalProperties: false,
@@ -1146,18 +1114,6 @@ export const openApiSchemas = {
       updateAvailable: { type: 'boolean' },
       tagPinGated: { type: 'boolean' },
       updateEligibility: { $ref: '#/components/schemas/UpdateEligibility' },
-      result: {
-        type: 'object',
-        description:
-          'Latest registry lookup. result.tag is the highest allowed update; ' +
-          'result.updateCandidates adds the best newer tag per update type.',
-        properties: {
-          tag: { type: 'string' },
-          digest: { type: 'string' },
-          updateCandidates: { $ref: '#/components/schemas/UpdateCandidates' },
-        },
-        additionalProperties: true,
-      },
       notificationSkips: {
         type: 'array',
         items: { $ref: '#/components/schemas/ContainerNotificationSkip' },
@@ -1233,32 +1189,6 @@ export const openApiSchemas = {
     },
     required: ['id', 'name'],
     additionalProperties: true,
-  },
-  UpdateCandidate: {
-    type: 'object',
-    properties: {
-      tag: { type: 'string' },
-      digest: {
-        type: 'string',
-        description: 'Only set when the lookup resolved a digest for this tag.',
-      },
-      semverDiff: { type: 'string', enum: ['patch', 'minor', 'major'] },
-    },
-    required: ['tag', 'semverDiff'],
-    additionalProperties: false,
-  },
-  UpdateCandidates: {
-    type: 'object',
-    description:
-      'Best newer tag per update type relative to the running version, after include/exclude, ' +
-      'family, ceiling and skip rules. A type with no candidate is omitted. Only present for ' +
-      'semver tag updates with candidates of at least two types.',
-    properties: {
-      patch: { $ref: '#/components/schemas/UpdateCandidate' },
-      minor: { $ref: '#/components/schemas/UpdateCandidate' },
-      major: { $ref: '#/components/schemas/UpdateCandidate' },
-    },
-    additionalProperties: false,
   },
   ReleaseNotesResource: {
     type: 'object',
@@ -2003,54 +1933,6 @@ export const openApiSchemas = {
     required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
-  NotificationSilence: {
-    type: 'object',
-    properties: {
-      id: { type: 'string' },
-      ruleId: { type: 'string', description: 'Absent for a silence on every rule' },
-      reason: { type: 'string' },
-      createdAt: { type: 'string', format: 'date-time' },
-      expiresAt: { type: 'string', format: 'date-time' },
-      createdBy: { type: 'string' },
-    },
-    required: ['id', 'createdAt', 'expiresAt'],
-    additionalProperties: false,
-  },
-  NotificationSilenceResult: {
-    type: 'object',
-    properties: {
-      data: { type: 'array', items: { $ref: '#/components/schemas/NotificationSilence' } },
-      total: { type: 'integer', minimum: 0 },
-      quietHours: {
-        type: ['object', 'null'],
-        properties: {
-          schedule: { type: 'string' },
-          timezone: { type: 'string' },
-          rules: { type: 'array', items: { type: 'string' } },
-          exempt: { type: 'array', items: { type: 'string' } },
-          activeNow: { type: 'boolean' },
-        },
-        required: ['schedule', 'timezone', 'rules', 'exempt', 'activeNow'],
-        additionalProperties: false,
-      },
-      suppressed: {
-        type: 'array',
-        description: 'Notifications dropped since the process started, per rule and reason',
-        items: {
-          type: 'object',
-          properties: {
-            ruleId: { type: 'string' },
-            reason: { type: 'string', enum: ['quiet-hours', 'silenced'] },
-            count: { type: 'integer', minimum: 1 },
-          },
-          required: ['ruleId', 'reason', 'count'],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ['data', 'total', 'quietHours', 'suppressed'],
-    additionalProperties: false,
-  },
   Approval: {
     type: 'object',
     description:
@@ -2083,23 +1965,6 @@ export const openApiSchemas = {
       scanLow: { type: 'integer', minimum: 0 },
       scanUnknown: { type: 'integer', minimum: 0 },
       scanAt: { type: 'string', format: 'date-time' },
-      securityFastLane: {
-        type: 'object',
-        description:
-          'Set when the container opted in to the security fast lane and the pending candidate fixes critical or high vulnerabilities present in the running image.',
-        properties: {
-          fixedIds: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Capped list of fixed vulnerability IDs.',
-          },
-          fixedCount: { type: 'integer', minimum: 1 },
-          fixedCritical: { type: 'integer', minimum: 0 },
-          fixedHigh: { type: 'integer', minimum: 0 },
-        },
-        required: ['fixedIds', 'fixedCount', 'fixedCritical', 'fixedHigh'],
-        additionalProperties: false,
-      },
       createdAt: { type: 'string', format: 'date-time' },
       createdAtMs: { type: 'integer', minimum: 0 },
       decision: { type: 'string', enum: ['pending', 'approved', 'rejected', 'deferred'] },
@@ -2198,12 +2063,6 @@ export const openApiSchemas = {
         type: 'string',
         maxLength: 500,
         description: 'Free-text reason recorded on every decided row and its audit entry',
-      },
-      scope: {
-        type: 'string',
-        enum: ['tag', 'minor', 'major'],
-        description:
-          'Reject only. Skip just the tag (default), its whole X.Y line, or its whole X line.',
       },
     },
     required: ['ids', 'action'],

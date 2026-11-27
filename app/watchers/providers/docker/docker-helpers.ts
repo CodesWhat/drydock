@@ -15,7 +15,6 @@ export interface ResolvedImgset {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: boolean;
-  tagCeiling?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -377,7 +376,6 @@ export function getResolvedImgsetConfiguration(
     ]),
     tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family']),
     tagPinInfo: getFirstConfigBoolean(imgsetConfiguration, ['tag.pin.info']),
-    tagCeiling: getFirstConfigString(imgsetConfiguration, ['tag.ceiling']),
     linkTemplate: getFirstConfigString(imgsetConfiguration, ['link.template', 'linkTemplate']),
     displayName: getFirstConfigString(imgsetConfiguration, ['display.name', 'displayName']),
     displayIcon: getFirstConfigString(imgsetConfiguration, ['display.icon', 'displayIcon']),
@@ -546,6 +544,18 @@ export function getSemverTagFromInspectPath(
   }
   const parsedTag = parseSemver(transformTag(transformTags, tagValue));
   return parsedTag?.version;
+}
+
+/**
+ * Return true if container must be watched.
+ * @param watchLabelValue the value of the dd.watch label
+ * @param watchByDefault true if containers must be watched by default
+ * @returns {boolean}
+ */
+export function isContainerToWatch(watchLabelValue: string, watchByDefault: boolean) {
+  return watchLabelValue !== undefined && watchLabelValue !== ''
+    ? watchLabelValue.toLowerCase() === 'true'
+    : watchByDefault;
 }
 
 function isDockerHubDomain(domain?: string) {

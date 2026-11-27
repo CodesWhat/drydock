@@ -1,4 +1,4 @@
-import { exportAuditLog, getAuditLog } from '@/services/audit';
+import { getAuditLog } from '@/services/audit';
 
 describe('audit service', () => {
   beforeEach(() => {
@@ -167,63 +167,5 @@ describe('audit service', () => {
     });
 
     await expect(getAuditLog()).rejects.toThrow('Failed to fetch audit log: Internal Server Error');
-  });
-
-  it('sends the actor filter', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: [], total: 0 }),
-    });
-
-    await getAuditLog({ actor: 'alice smith' });
-
-    expect((global.fetch as any).mock.calls[0][0]).toContain('actor=alice+smith');
-  });
-
-  describe('exportAuditLog', () => {
-    const okResponse = (disposition: string | null, text = 'csv-body') => ({
-      ok: true,
-      headers: { get: (name: string) => (name === 'content-disposition' ? disposition : null) },
-      text: () => Promise.resolve(text),
-    });
-
-    it('requests the export route with the format and every filter', async () => {
-      global.fetch = vi.fn().mockResolvedValue(okResponse('attachment; filename="a.csv"'));
-
-      const result = await exportAuditLog('csv', {
-        action: 'update-applied',
-        actions: ['a', 'b'],
-        container: 'nginx',
-        actor: 'alice',
-        from: '2026-01-01',
-        to: '2026-01-31',
-      });
-
-      const [url, init] = (global.fetch as any).mock.calls[0];
-      const params = new URL(url, 'http://localhost').searchParams;
-      expect(url.startsWith('/api/v1/audit/export?')).toBe(true);
-      expect(Object.fromEntries(params)).toEqual({
-        format: 'csv',
-        action: 'update-applied',
-        actions: 'a,b',
-        container: 'nginx',
-        actor: 'alice',
-        from: '2026-01-01',
-        to: '2026-01-31',
-      });
-      expect(init).toEqual({ credentials: 'include' });
-      expect(result).toEqual({ filename: 'a.csv', text: 'csv-body' });
-    });
-
-    it('falls back to a default filename when the server sends none', async () => {
-      global.fetch = vi.fn().mockResolvedValue(okResponse(null, '[]'));
-      expect(await exportAuditLog('json')).toEqual({ filename: 'drydock-audit.json', text: '[]' });
-      expect((global.fetch as any).mock.calls[0][0]).toBe('/api/v1/audit/export?format=json');
-    });
-
-    it('throws when the server refuses', async () => {
-      global.fetch = vi.fn().mockResolvedValue({ ok: false, statusText: 'Forbidden' });
-      await expect(exportAuditLog('csv')).rejects.toThrow('Failed to export audit log: Forbidden');
-    });
   });
 });

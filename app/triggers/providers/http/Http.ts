@@ -13,10 +13,6 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
   proxy?: {
     host: string;
     port: number;
-    auth?: {
-      username: string;
-      password: string;
-    };
   };
 }
 
@@ -213,18 +209,6 @@ interface HttpConfiguration extends TriggerConfiguration {
 }
 
 /**
- * Percent-decode a proxy URL credential, keeping the raw component when it
- * holds a malformed escape (for example "%zz") instead of throwing.
- */
-function decodeProxyCredential(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-/**
  * HTTP Trigger implementation
  */
 class Http extends Trigger<HttpConfiguration> {
@@ -238,41 +222,10 @@ class Http extends Trigger<HttpConfiguration> {
 
     const defaultProxyPort = proxyUrl.protocol === 'https:' ? 443 : 80;
     const proxyPort = proxyUrl.port ? Number.parseInt(proxyUrl.port, 10) : defaultProxyPort;
-    const proxyConfiguration: NonNullable<HttpRequestOptions['proxy']> = {
+    return {
       host: proxyUrl.hostname,
       port: proxyPort,
     };
-    if (proxyUrl.username || proxyUrl.password) {
-      proxyConfiguration.auth = {
-        username: decodeProxyCredential(proxyUrl.username),
-        password: decodeProxyCredential(proxyUrl.password),
-      };
-    }
-    return proxyConfiguration;
-  }
-
-  /**
-   * Replace any userinfo in a proxy URL with a placeholder. Rebuilt from the
-   * parsed parts so the original string, raw or decoded, never reaches the
-   * result. An unparseable value is redacted whole.
-   */
-  private static maskProxyUrl(proxy: string): string {
-    let parsed: URL;
-    try {
-      parsed = new URL(proxy);
-    } catch {
-      return '[REDACTED]';
-    }
-    // A value like "user:pw@host" parses as an opaque `user:` scheme with no
-    // host, so the secret would ride through untouched. Treat it as malformed.
-    if (!parsed.host) {
-      return '[REDACTED]';
-    }
-    if (!parsed.username && !parsed.password) {
-      return proxy;
-    }
-    const path = parsed.pathname === '/' ? '' : parsed.pathname;
-    return `${parsed.protocol}//[REDACTED]@${parsed.host}${path}${parsed.search}${parsed.hash}`;
   }
 
   /**
@@ -333,9 +286,6 @@ class Http extends Trigger<HttpConfiguration> {
    */
   maskConfiguration() {
     const { auth, ...rest } = this.configuration;
-    if (typeof rest.proxy === 'string') {
-      rest.proxy = Http.maskProxyUrl(rest.proxy);
-    }
     if (!auth) {
       return { ...rest } as HttpConfiguration;
     }

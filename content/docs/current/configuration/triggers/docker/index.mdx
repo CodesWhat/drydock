@@ -35,10 +35,8 @@ If Drydock restarts while an update is in progress, it automatically reconciles 
 | `DD_ACTION_DOCKER_{trigger_name}_PRUNE` | ⚪ | If old image versions must be pruned | `true`, `false` | `false` |
 | `DD_ACTION_DOCKER_{trigger_name}_DRYRUN` | ⚪ | When enabled, only pull the new image ahead of time | `true`, `false` | `false` |
 | `DD_ACTION_DOCKER_{trigger_name}_BACKUPCOUNT` | ⚪ | Number of image backups to retain per container | Integer | `3` |
-| `DD_ACTION_DOCKER_{trigger_name}_LIVENESSWINDOW` | ⚪ | Milliseconds to watch a recreated container that has no `HEALTHCHECK`, rolling back if it exits, is OOM-killed or restarts. `0` disables the watch | Integer | `0` |
 | `DD_ACTION_DOCKER_{trigger_name}_AUTOREMOVETIMEOUT` | ⚪ | Wait timeout for container auto-removal (ms) | Integer | `10000` |
 | `DD_ACTION_DOCKER_{trigger_name}_PULLTIMEOUT` | ⚪ | Maximum time allowed for an image pull and its progress stream (ms) | Positive integer | `600000` (10 min) |
-| `DD_ACTION_DOCKER_{trigger_name}_PULLCONCURRENCY` | ⚪ | Max simultaneous image pulls per registry host across all Docker and Docker Compose actions in this process. Docker Hub aliases (`docker.io`, `index.docker.io`, `registry-1.docker.io`) count as one registry. See [Pull pacing](/docs/configuration/actions#pull-pacing) | Positive integer | `2` |
 | `DD_ACTION_DOCKER_{trigger_name}_HELPERCOMPLETIONTIMEOUT` | ⚪ | Hard deadline for an infrastructure-update helper to complete and report its durably saved result (ms) | Positive integer | `600000` (10 min) |
 | `DD_ACTION_DOCKER_{trigger_name}_CONCURRENCY` | ⚪ | Max simultaneous container updates through this trigger; overrides the global [`DD_UPDATE_CONCURRENCY`](/docs/configuration/actions#update-concurrency) | Positive integer | inherits the global value (`1`) |
 
@@ -104,9 +102,6 @@ Configure auto-rollback using container labels:
 | `dd.rollback.auto` | Enable auto-rollback on health failure | `false` |
 | `dd.rollback.window` | Monitoring window in milliseconds | `300000` (5 min) |
 | `dd.rollback.interval` | Health check poll interval in milliseconds | `10000` (10 sec) |
-| `dd.rollback.liveness` | Liveness window in milliseconds for a container without a `HEALTHCHECK`; overrides `LIVENESSWINDOW` | unset |
-
-For a container with no `HEALTHCHECK`, a liveness window (from the label or the `LIVENESSWINDOW` action option) makes Drydock watch the recreated container for that long and roll back if it exits, is OOM-killed or restarts. See [Backup & Rollback](/docs/configuration/rollback#liveness-watch-for-images-without-a-healthcheck).
 
 The initial health gate described in step 6 above (waiting for the recreated container to report `healthy` before finalizing the update) runs whenever the container was running and has a `HEALTHCHECK` defined, whether or not `dd.rollback.auto` is set. `dd.rollback.auto` controls what happens after that: only when it's enabled does Drydock continue polling the container's health status at the `dd.rollback.interval` after the update finalizes. If the container becomes `unhealthy` within the `dd.rollback.window` monitoring window, an automatic rollback is triggered. If the window expires without failure, the container is considered stable. With `dd.rollback.auto` unset, a failing initial health gate still aborts the update and rolls back per the automatic-rollback steps above; there's just no further post-finalize monitoring. A container whose healthcheck is disabled (`healthcheck: disable: true` in Compose, or `--no-healthcheck`) is treated as having no healthcheck and is not health-gated.
 
@@ -212,7 +207,7 @@ If any step fails, the helper rolls back to the previous container automatically
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_ACTION_DOCKER_EXAMPLE_PRUNE=true
@@ -224,7 +219,7 @@ services:
 docker run \
   -e "DD_ACTION_DOCKER_EXAMPLE_PRUNE=true" \
   ...
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 </Tab>
 </Tabs>

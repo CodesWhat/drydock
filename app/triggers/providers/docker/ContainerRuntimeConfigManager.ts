@@ -53,13 +53,6 @@ type RuntimeConfigOptions = {
   runtimeFieldOrigins?: RuntimeFieldOrigins;
   defaultRuntime?: string;
   hookLabelProvenance?: HookLabelProvenance;
-  /**
-   * MAC addresses the operator explicitly configured per runtime network name
-   * (for Compose, resolved from the service definition). Inspect cannot tell
-   * these from daemon-generated MACs, so they are the only addresses pinned
-   * onto a recreated endpoint besides the legacy primary-network fallback.
-   */
-  explicitEndpointMacAddresses?: Record<string, string>;
   logContainer?: RuntimeConfigLogger;
 };
 
@@ -149,7 +142,6 @@ function isRuntimeConfigOptions(
     Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'defaultRuntime') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'hookLabelProvenance') ||
-    Object.hasOwn(runtimeOptionsOrLogContainer, 'explicitEndpointMacAddresses') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer')
   );
 }

@@ -218,7 +218,6 @@ export function createLoginChallengeCompletion(
             status: 'success',
             containerName: 'authentication',
             details: `subject=${challenge.subjectId}`,
-            actor: challenge.username,
           });
         }
       })

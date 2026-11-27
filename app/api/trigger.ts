@@ -3,7 +3,7 @@ import joi from 'joi';
 import * as agent from '../agent/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import { type Container, isFileSourcedContainer } from '../model/container.js';
+import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { clearNotificationSkip } from '../triggers/notification-skips.js';
@@ -231,13 +231,6 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
 
   if (Trigger.isRollbackContainer(containerToTrigger)) {
     sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
-    return;
-  }
-
-  // A synthetic container from a file watcher has nothing running to act on. Update triggers
-  // are refused further down by the eligibility blockers; this covers the other actions.
-  if (isFileSourcedContainer(containerToTrigger) && resolvedCategoryIsAction) {
-    sendErrorResponse(res, 409, 'Containers from a file watcher are notification-only');
     return;
   }
 

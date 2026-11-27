@@ -28,10 +28,7 @@ import { imageAge } from '../../utils/audit-helpers';
 import { useNow } from '../../composables/useNow';
 import { formatUptimeFromIso } from '../../utils/uptime';
 import { updateInsightColor } from '../../utils/display';
-import {
-  findDryRunActionTrigger,
-  isManagedUpdateTrigger,
-} from '../../views/containers/useContainerTriggers';
+import { findDryRunActionTrigger } from '../../views/containers/useContainerTriggers';
 import { enrichContainerPorts } from '../../utils/ports';
 import { useAgentHosts } from '../../composables/useAgentHosts';
 
@@ -42,7 +39,6 @@ interface RevealEnvResponse {
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
 const envRevealLoading = ref(false);
-const envRevealError = ref<string | null>(null);
 
 function revealCacheKey(containerId: string, key: string) {
   return `${containerId}:${key}`;
@@ -63,7 +59,6 @@ async function toggleReveal(containerId: string, key: string) {
   }
 
   envRevealLoading.value = true;
-  envRevealError.value = null;
   try {
     const result: RevealEnvResponse = await revealContainerEnv(containerId);
     const envMap = new Map<string, string>();
@@ -73,10 +68,8 @@ async function toggleReveal(containerId: string, key: string) {
     revealedEnvCache.set(containerId, envMap);
     revealedKeys.add(cacheKey);
   } catch (error: unknown) {
-    envRevealError.value = errorMessage(
-      error,
-      t('containerComponents.sideTabContent.revealFailed'),
-    );
+    void errorMessage(error);
+    // silently fail — user can retry
   } finally {
     envRevealLoading.value = false;
   }
@@ -182,7 +175,7 @@ const {
   updateMode,
 } = useContainersViewTemplateContext();
 
-const { resolveHost, isPortwingAgent } = useAgentHosts();
+const { resolveHost } = useAgentHosts();
 const enrichedPorts = computed(() =>
   enrichContainerPorts(
     selectedContainer.value.details.ports,
@@ -219,6 +212,10 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
 function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
+}
+
+function isManagedUpdateTrigger(trigger: { type: string }) {
+  return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
 function getUpdateKindLabel(kind: Container['updateKind']) {
@@ -716,7 +713,6 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
                     <AppIconButton
-                      v-if="!isPortwingAgent(selectedContainer.agent)"
                       :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
                       size="toolbar"
                       variant="muted"
@@ -728,7 +724,6 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 </div>
               </div>
               <p v-else class="text-xs dd-text-muted italic">{{ t('containerComponents.fullPageEnvironment.noEnvVars') }}</p>
-              <p v-if="envRevealError" class="mt-2 text-2xs" style="color: var(--dd-danger);">{{ envRevealError }}</p>
             </div>
           </div>
           <div class="dd-rounded overflow-hidden"

@@ -17,7 +17,6 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
-import { enforceOidcAccessPolicy, OidcAccessDeniedError } from './access-policy.js';
 import { type BearerBindingContext, verifyBearerBinding } from './bearer-binding.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
@@ -128,10 +127,6 @@ interface OidcConfiguration {
   timeout: number;
   bearer: boolean;
   beareraudiences?: string;
-  allowedemails?: string;
-  allowedemaildomains?: string;
-  requiredgroup?: string;
-  groupclaim?: string;
 }
 
 const BEARER_DISABLED_WARNING_INTERVAL_MS = 5 * 60 * 1000;
@@ -429,10 +424,6 @@ class Oidc extends Authentication<OidcConfiguration> {
       timeout: this.joi.number().greater(500).default(5000),
       bearer: this.joi.boolean().default(false),
       beareraudiences: this.joi.string().allow(''),
-      allowedemails: this.joi.string().allow(''),
-      allowedemaildomains: this.joi.string().allow(''),
-      requiredgroup: this.joi.string().allow(''),
-      groupclaim: this.joi.string(),
     });
   }
 
@@ -466,16 +457,6 @@ class Oidc extends Authentication<OidcConfiguration> {
       ...(this.configuration.beareraudiences
         ? { beareraudiences: this.configuration.beareraudiences }
         : {}),
-      ...(this.configuration.allowedemails
-        ? { allowedemails: this.configuration.allowedemails }
-        : {}),
-      ...(this.configuration.allowedemaildomains
-        ? { allowedemaildomains: this.configuration.allowedemaildomains }
-        : {}),
-      ...(this.configuration.requiredgroup
-        ? { requiredgroup: this.configuration.requiredgroup }
-        : {}),
-      ...(this.configuration.groupclaim ? { groupclaim: this.configuration.groupclaim } : {}),
     };
   }
 
@@ -823,16 +804,6 @@ class Oidc extends Authentication<OidcConfiguration> {
         throw new Error('Access token is missing from OIDC authorization response');
       }
 
-      // Resolve and gate the user before the session is regenerated or any
-      // principal is written, so a denied user never gets a session.
-      this.log.debug('Get user info');
-      const idTokenClaims = tokenSet.claims?.();
-      const user = await this.getUserFromAccessToken(
-        tokenSet.access_token,
-        idTokenClaims?.sub,
-        idTokenClaims as Record<string, unknown> | undefined,
-      );
-
       const rememberMePreference = req.session?.rememberMe;
       await this.persistCallbackSession(
         req,
@@ -841,6 +812,9 @@ class Oidc extends Authentication<OidcConfiguration> {
         callbackData.callbackState,
         rememberMePreference,
       );
+      this.log.debug('Get user info');
+      const expectedSub = tokenSet.claims?.()?.sub;
+      const user = await this.getUserFromAccessToken(tokenSet.access_token, expectedSub);
 
       await enforceConcurrentSessionLimit({
         username: user.username,
@@ -851,14 +825,6 @@ class Oidc extends Authentication<OidcConfiguration> {
 
       this.completeLogin(req, res, user, loginVerificationStartedAt);
     } catch (err: unknown) {
-      if (err instanceof OidcAccessDeniedError) {
-        this.log.warn(
-          `OIDC login denied by access policy for strategy ${this.getSessionKey()} (${err.reason})`,
-        );
-        this.recordLoginMetrics('invalid', loginVerificationStartedAt);
-        res.status(403).json({ error: 'Access denied' });
-        return;
-      }
       this.log.warn(`Error when logging the user [${sanitizeOidcErrorMessage(err)}]`);
       this.recordLoginMetrics('error', loginVerificationStartedAt);
       res.status(401).json({ error: 'Authentication failed' });
@@ -1097,7 +1063,6 @@ class Oidc extends Authentication<OidcConfiguration> {
   async getUserFromAccessToken(
     accessToken: string,
     expectedSubject?: string,
-    idTokenClaims?: Record<string, unknown>,
   ): Promise<OidcAuthenticatedUser> {
     const openidClient = await this.getOpenIdClient();
     await this.ensureClientInitialized();
@@ -1110,7 +1075,6 @@ class Oidc extends Authentication<OidcConfiguration> {
       accessToken,
       subjectCheck,
     );
-    enforceOidcAccessPolicy(this.configuration, { ...idTokenClaims, ...userInfo });
     return {
       username: userInfo.email || userInfo.sub || 'unknown',
     };

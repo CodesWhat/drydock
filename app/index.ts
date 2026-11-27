@@ -1,5 +1,4 @@
 import { loadConfigFileIntoLayer } from './configuration/file/loader.js';
-import { enableObservationMode } from './runtime/observation-mode.js';
 
 /**
  * `totp` (the offline two-factor commands, `api/totp-offline-cli.ts`) runs
@@ -25,27 +24,6 @@ async function runTotpCommandFromBootstrap(argv: string[]): Promise<number> {
     return 1;
   }
   return cli.runTotpCommand(argv);
-}
-
-/**
- * `scan` (the one-shot observation-only scan, `cli/scan.ts`) runs after the
- * file layer is loaded and instead of `./main.js`. Observation mode is turned
- * on before anything imports the logger, so logs go to stderr from the first
- * line and stdout carries only the scan output. A scan that timed out can
- * still have registry or Docker requests in flight, so that one outcome
- * exits explicitly, after stdout has drained; every other outcome leaves
- * nothing running and just sets the exit code.
- */
-async function runScanFromBootstrap(args: string[]): Promise<void> {
-  enableObservationMode();
-  process.umask(0o077);
-  const { runScanCommand, SCAN_EXIT_TIMEOUT } = await import('./cli/scan.js');
-  const exitCode = await runScanCommand(args);
-  process.exitCode = exitCode;
-  if (exitCode === SCAN_EXIT_TIMEOUT) {
-    await new Promise<void>((resolve) => process.stdout.write('', () => resolve()));
-    process.exit(exitCode);
-  }
 }
 
 /**
@@ -123,11 +101,6 @@ async function bootstrap(): Promise<void> {
 
   if (argv[0] === 'totp') {
     process.exitCode = await runTotpCommandFromBootstrap(argv.slice(1));
-    return;
-  }
-
-  if (argv[0] === 'scan') {
-    await runScanFromBootstrap(argv.slice(1));
     return;
   }
 

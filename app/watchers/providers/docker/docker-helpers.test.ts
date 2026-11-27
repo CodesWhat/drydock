@@ -23,6 +23,7 @@ import {
   getResolvedImgsetConfiguration,
   getSemverTagFromInspectPath,
   getStillInWatchScopeContainerIds,
+  isContainerToWatch,
   isDigestToWatch,
   shouldUpdateDisplayNameFromContainerName,
 } from './docker-helpers.js';
@@ -288,13 +289,6 @@ describe('docker helper extraction module', () => {
     ).toBe('loose');
   });
 
-  test('resolves nested imgset tag.ceiling', () => {
-    expect(
-      getResolvedImgsetConfiguration('service', { tag: { ceiling: 'minor' } }).tagCeiling,
-    ).toBe('minor');
-    expect(getResolvedImgsetConfiguration('service', {}).tagCeiling).toBeUndefined();
-  });
-
   test('resolves nested imgset tag.pin.info booleans without reviving flat aliases (#498)', () => {
     expect(
       getResolvedImgsetConfiguration('service', {
@@ -341,6 +335,8 @@ describe('docker helper extraction module', () => {
     expect(getSemverTagFromInspectPath({}, 'Config/Labels/version', 's/v//')).toBeUndefined();
     expect(getRepoDigest({ RepoDigests: [] })).toBeUndefined();
     expect(getRepoDigest({ RepoDigests: ['repo@sha256:abc123'] })).toBe('sha256:abc123');
+    expect(isContainerToWatch('true', false)).toBe(true);
+    expect(isContainerToWatch('', true)).toBe(true);
   });
 
   describe('getOrderedRepoDigests (#669)', () => {

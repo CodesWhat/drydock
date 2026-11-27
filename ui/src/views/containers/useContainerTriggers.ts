@@ -34,14 +34,11 @@ export function findDryRunActionTrigger(
   return triggers.find(isDryRunActionTrigger);
 }
 
-export function isManagedUpdateTrigger(trigger: { type: string }): boolean {
-  return (
-    trigger.type === 'docker' || trigger.type === 'dockercompose' || trigger.type === 'portainer'
-  );
-}
-
 export function isDryRunActionTrigger(trigger: ApiContainerTrigger): boolean {
-  return isManagedUpdateTrigger(trigger) && trigger.configuration?.dryrun === true;
+  return (
+    (trigger.type === 'docker' || trigger.type === 'dockercompose') &&
+    trigger.configuration?.dryrun === true
+  );
 }
 
 async function runAssociatedTriggerState(args: {

@@ -87,60 +87,6 @@
         "lastSeen": "最后活跃",
         "never": "从未"
       }
-    },
-    "edgeKeys": {
-      "toggle": "边缘代理密钥",
-      "hide": "隐藏边缘代理密钥",
-      "title": "边缘代理密钥",
-      "description": "注册 Portwing 边缘代理的公钥，让它能够连接到此控制器。只会保存公钥，所以这里不会显示任何机密内容。",
-      "registerButton": "注册密钥",
-      "loading": "正在加载密钥...",
-      "empty": "尚未注册边缘代理密钥",
-      "loadError": "加载边缘代理密钥失败",
-      "forbidden": "管理边缘代理密钥需要已登录的管理员会话。API 密钥和恢复登录无法执行此操作。",
-      "registered": "已将 {label} 注册为密钥 {keyId}。",
-      "revokeButton": "吊销",
-      "errors": {
-        "register": "注册密钥失败",
-        "revoke": "吊销密钥失败"
-      },
-      "columns": {
-        "label": "标签",
-        "keyId": "密钥 ID",
-        "created": "创建时间",
-        "status": "状态"
-      },
-      "status": {
-        "active": "有效",
-        "revoked": "已吊销"
-      },
-      "form": {
-        "title": "注册边缘代理密钥",
-        "label": "标签",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "公钥",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "粘贴 44 个字符的 base64 密钥，或 portwing keygen -pub-from 输出的完整一行。",
-        "submit": "注册",
-        "invalidKey": "公钥必须是 base64，且解码后正好为 32 字节。"
-      },
-      "revoke": {
-        "header": "吊销密钥",
-        "message": "确定吊销 {label}？其代理会立即断开，且无法重新连接。",
-        "accept": "吊销"
-      },
-      "snippet": {
-        "show": "显示代理代码片段",
-        "hide": "隐藏代理代码片段",
-        "title": "代理设置",
-        "description": "在代理主机上用 portwing keygen 生成密钥对，在此注册其公钥，然后用下面任一方式启动代理。",
-        "controllerUrl": "控制器 URL",
-        "agentName": "代理名称",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "复制",
-        "copied": "已复制"
-      }
     }
   }
 }
