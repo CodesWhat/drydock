@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Préparation du scanner réussie",
       "scanner-asset-warm-failed": "Échec de la préparation du scanner",
       "container-unhealthy": "Conteneur défaillant",
+      "container-stopped": "Conteneur arrêté",
+      "container-exited": "Conteneur terminé",
+      "container-oom-killed": "Conteneur tué par manque de mémoire",
+      "container-restart-loop": "Conteneur en boucle de redémarrage",
       "env-reveal": "Variables d’environnement affichées",
       "debug-dump": "Données de débogage téléchargées",
       "config-read": "Configuration lue",
@@ -171,6 +175,22 @@
       "container-unhealthy": {
         "name": "Conteneur défaillant",
         "description": "Lorsque le healthcheck Docker d'un conteneur passe à l'état « unhealthy »"
+      },
+      "container-stopped": {
+        "name": "Conteneur arrêté",
+        "description": "Lorsqu'un conteneur surveillé s'arrête"
+      },
+      "container-exited": {
+        "name": "Conteneur terminé",
+        "description": "Lorsqu'un conteneur surveillé se termine avec un code de sortie non nul"
+      },
+      "container-oom-killed": {
+        "name": "Conteneur tué par manque de mémoire",
+        "description": "Lorsque le noyau tue un conteneur surveillé faute de mémoire"
+      },
+      "container-restart-loop": {
+        "name": "Conteneur en boucle de redémarrage",
+        "description": "Lorsqu'un conteneur surveillé plante et redémarre en boucle"
       },
       "maturity-cleared": {
         "name": "Maturité effacée",

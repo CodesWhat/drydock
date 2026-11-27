@@ -171,6 +171,10 @@ describe('NotificationBell', () => {
         'security-alert',
         'agent-disconnect',
         'container-unhealthy',
+        'container-stopped',
+        'container-exited',
+        'container-oom-killed',
+        'container-restart-loop',
         'maturity-cleared',
       ],
     });
@@ -257,6 +261,10 @@ describe('NotificationBell', () => {
         'security-alert',
         'agent-disconnect',
         'container-unhealthy',
+        'container-stopped',
+        'container-exited',
+        'container-oom-killed',
+        'container-restart-loop',
         'maturity-cleared',
       ],
     });

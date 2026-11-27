@@ -1,7 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEventStreamStore } from '@/stores/eventStream';
-import { BELL_ACTIONS, useNotificationStore } from '@/stores/notifications';
+import { BELL_ACTIONS, isBellRuleSupported, useNotificationStore } from '@/stores/notifications';
 
 const mockGetAuditLog = vi.fn();
 const mockGetAllNotificationRules = vi.fn();
@@ -198,6 +198,26 @@ describe('useNotificationStore', () => {
     expect(mockGetAuditLog).toHaveBeenCalledWith({
       limit: 20,
       actions: ['notification-delivery-failed', 'container-unhealthy'],
+    });
+  });
+
+  it.each([
+    'container-stopped',
+    'container-exited',
+    'container-oom-killed',
+    'container-restart-loop',
+  ])('queries %s audit entries when that bell rule is enabled', async (ruleId) => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: ruleId, bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(isBellRuleSupported(ruleId)).toBe(true);
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['notification-delivery-failed', ruleId],
     });
   });
 

@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Scanner Warm-up Succeeded",
       "scanner-asset-warm-failed": "Scanner Warm-up Failed",
       "container-unhealthy": "Container Unhealthy",
+      "container-stopped": "Container Stopped",
+      "container-exited": "Container Exited",
+      "container-oom-killed": "Container OOM Killed",
+      "container-restart-loop": "Container Restart Loop",
       "env-reveal": "Environment Revealed",
       "debug-dump": "Debug Dump Downloaded",
       "config-read": "Configuration Read",
@@ -171,6 +175,22 @@
       "container-unhealthy": {
         "name": "Container Unhealthy",
         "description": "When a container's Docker health check enters the unhealthy state"
+      },
+      "container-stopped": {
+        "name": "Container Stopped",
+        "description": "When a watched container stops"
+      },
+      "container-exited": {
+        "name": "Container Exited",
+        "description": "When a watched container exits with a non-zero exit code"
+      },
+      "container-oom-killed": {
+        "name": "Container OOM Killed",
+        "description": "When the kernel kills a watched container for running out of memory"
+      },
+      "container-restart-loop": {
+        "name": "Container Restart Loop",
+        "description": "When a watched container keeps crashing and restarting"
       },
       "maturity-cleared": {
         "name": "Maturity Cleared",

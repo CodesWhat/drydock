@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Scanner-Vorbereitung erfolgreich",
       "scanner-asset-warm-failed": "Scanner-Vorbereitung fehlgeschlagen",
       "container-unhealthy": "Container nicht funktionsfähig",
+      "container-stopped": "Container gestoppt",
+      "container-exited": "Container beendet",
+      "container-oom-killed": "Container wegen OOM beendet",
+      "container-restart-loop": "Container im Neustart-Loop",
       "env-reveal": "Umgebungsvariablen angezeigt",
       "debug-dump": "Debug-Daten heruntergeladen",
       "config-read": "Konfiguration gelesen",
@@ -171,6 +175,22 @@
       "container-unhealthy": {
         "name": "Container fehlerhaft",
         "description": "Wenn der Docker-Healthcheck eines Containers in den Status „unhealthy“ wechselt"
+      },
+      "container-stopped": {
+        "name": "Container gestoppt",
+        "description": "Wenn ein überwachter Container stoppt"
+      },
+      "container-exited": {
+        "name": "Container beendet",
+        "description": "Wenn ein überwachter Container mit einem Exit-Code ungleich null endet"
+      },
+      "container-oom-killed": {
+        "name": "Container wegen OOM beendet",
+        "description": "Wenn der Kernel einen überwachten Container wegen Speichermangels beendet"
+      },
+      "container-restart-loop": {
+        "name": "Container im Neustart-Loop",
+        "description": "Wenn ein überwachter Container immer wieder abstürzt und neu startet"
       },
       "maturity-cleared": {
         "name": "Reife aufgehoben",

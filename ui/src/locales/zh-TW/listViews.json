@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "掃描器預熱成功",
       "scanner-asset-warm-failed": "掃描器預熱失敗",
       "container-unhealthy": "容器不健康",
+      "container-stopped": "容器已停止",
+      "container-exited": "容器已結束",
+      "container-oom-killed": "容器因記憶體不足被終止",
+      "container-restart-loop": "容器重新啟動迴圈",
       "env-reveal": "已顯示環境變數",
       "debug-dump": "已下載偵錯資料",
       "config-read": "已讀取設定",
@@ -171,6 +175,22 @@
       "container-unhealthy": {
         "name": "容器不健康",
         "description": "當容器的 Docker 健康檢查進入 unhealthy 狀態時"
+      },
+      "container-stopped": {
+        "name": "容器已停止",
+        "description": "受監控的容器停止時"
+      },
+      "container-exited": {
+        "name": "容器已結束",
+        "description": "受監控的容器以非零結束碼結束時"
+      },
+      "container-oom-killed": {
+        "name": "容器因記憶體不足被終止",
+        "description": "核心因記憶體不足終止受監控的容器時"
+      },
+      "container-restart-loop": {
+        "name": "容器重新啟動迴圈",
+        "description": "受監控的容器反覆當機並重新啟動時"
       },
       "maturity-cleared": {
         "name": "成熟度已清除",

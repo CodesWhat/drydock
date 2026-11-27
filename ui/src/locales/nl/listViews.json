@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Voorbereiding van scanner geslaagd",
       "scanner-asset-warm-failed": "Voorbereiding van scanner mislukt",
       "container-unhealthy": "Container ongezond",
+      "container-stopped": "Container gestopt",
+      "container-exited": "Container beëindigd",
+      "container-oom-killed": "Container door geheugentekort beëindigd",
+      "container-restart-loop": "Container in herstartlus",
       "env-reveal": "Omgevingsvariabelen getoond",
       "debug-dump": "Debuggegevens gedownload",
       "config-read": "Configuratie gelezen",
@@ -171,6 +175,22 @@
       "container-unhealthy": {
         "name": "Container ongezond",
         "description": "Wanneer de Docker-gezondheidscontrole van een container de status \"unhealthy\" bereikt"
+      },
+      "container-stopped": {
+        "name": "Container gestopt",
+        "description": "Wanneer een bewaakte container stopt"
+      },
+      "container-exited": {
+        "name": "Container beëindigd",
+        "description": "Wanneer een bewaakte container eindigt met een exitcode ongelijk aan nul"
+      },
+      "container-oom-killed": {
+        "name": "Container door geheugentekort beëindigd",
+        "description": "Wanneer de kernel een bewaakte container beëindigt wegens geheugentekort"
+      },
+      "container-restart-loop": {
+        "name": "Container in herstartlus",
+        "description": "Wanneer een bewaakte container steeds crasht en opnieuw start"
       },
       "maturity-cleared": {
         "name": "Volwassenheid gewist",

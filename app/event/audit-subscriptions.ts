@@ -5,6 +5,7 @@ import type {
   AgentDisconnectedEventPayload,
   ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
+  ContainerStateAlertEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
   MaturityGateClearedEventPayload,
@@ -15,6 +16,7 @@ const AUDIT_HANDLER_OPTIONS = { id: 'audit', order: 200 };
 const SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
 const CONTAINER_UNHEALTHY_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
+const CONTAINER_STATE_ALERT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
 const MATURITY_GATE_CLEARED_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const CONTAINER_LIFECYCLE_AUDIT_STATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -37,6 +39,7 @@ export interface AuditSubscriptionRegistrars {
   registerSecurityAlert: OrderedEventRegistrarFn<SecurityAlertEventPayload>;
   registerContainerHealthTransition: OrderedEventRegistrarFn<ContainerHealthTransitionEventPayload>;
   registerMaturityGateCleared: OrderedEventRegistrarFn<MaturityGateClearedEventPayload>;
+  registerContainerStateAlert: OrderedEventRegistrarFn<ContainerStateAlertEventPayload>;
   registerAgentDisconnected: OrderedEventRegistrarFn<AgentDisconnectedEventPayload>;
   registerContainerAdded: EventRegistrarFn<ContainerLifecycleEventPayload>;
   registerContainerUpdated: EventRegistrarFn<ContainerLifecycleEventPayload>;
@@ -46,6 +49,7 @@ export interface AuditSubscriptionRegistrars {
 const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
 const containerUnhealthyAuditSeenAt = new Map<string, number>();
+const containerStateAlertAuditSeenAt = new Map<string, number>();
 const maturityGateClearedAuditSeenAt = new Map<string, number>();
 const updateAvailableAuditState = new Map<string, string>();
 const containerLifecycleAuditState = new Map<string, { signature: string; lastSeenAt: number }>();
@@ -381,6 +385,40 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
     getAuditCounter()?.inc({ action: 'maturity-cleared' });
   }, AUDIT_HANDLER_OPTIONS);
 
+  registrars.registerContainerStateAlert(async (payload) => {
+    const containerIdentityKey = payload.container
+      ? getContainerIdentityKey(payload.container)
+      : undefined;
+    const dedupeKey = `${payload.kind}|${containerIdentityKey ?? payload.containerName}`;
+    if (
+      isDuplicateAuditEvent(
+        containerStateAlertAuditSeenAt,
+        dedupeKey,
+        CONTAINER_STATE_ALERT_AUDIT_DEDUPE_WINDOW_MS,
+      )
+    ) {
+      return;
+    }
+    const containerImage = payload.container?.image?.name;
+    const details =
+      payload.kind === 'container-restart-loop' &&
+      payload.restartCount !== undefined &&
+      payload.windowSeconds !== undefined
+        ? `${payload.restartCount} crashes in ${payload.windowSeconds}s`
+        : payload.reason;
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: payload.kind,
+      containerName: payload.containerName,
+      ...(containerIdentityKey !== undefined ? { containerIdentityKey } : {}),
+      ...(containerImage !== undefined ? { containerImage } : {}),
+      status: payload.kind === 'container-stopped' ? 'info' : 'error',
+      details,
+    });
+    getAuditCounter()?.inc({ action: payload.kind });
+  }, AUDIT_HANDLER_OPTIONS);
+
   registrars.registerAgentDisconnected(async (payload) => {
     const dedupeKey = `${payload.agentName}|${payload.reason || ''}`;
     if (
@@ -486,6 +524,7 @@ export function clearAuditSubscriptionCachesForTests(): void {
   securityAlertAuditSeenAt.clear();
   agentDisconnectedAuditSeenAt.clear();
   containerUnhealthyAuditSeenAt.clear();
+  containerStateAlertAuditSeenAt.clear();
   maturityGateClearedAuditSeenAt.clear();
   updateAvailableAuditState.clear();
   containerLifecycleAuditState.clear();
