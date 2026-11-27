@@ -8,6 +8,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Audit log: settings updates, notification rule edits, notification outbox retry/delete, update-operation cancels and agent key add/revoke/rotate now write audit rows, and a route inventory test fails when any new POST/PUT/PATCH/DELETE endpoint has neither an audit row nor a justified exemption.
+
 ### Security
 
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
