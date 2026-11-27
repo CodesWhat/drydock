@@ -1,0 +1,59 @@
+---
+title: "AMQP"
+description: "The amqp trigger lets you publish container update events to an AMQP 0-9-1 broker such as RabbitMQ."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `amqp` trigger publishes container update events as JSON messages to an AMQP 0-9-1 broker such as [RabbitMQ](https://www.rabbitmq.com/). Drydock keeps one connection open and reconnects when the broker drops it.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_URL` | 🔴 | The broker connection url, credentials included | `amqp://` or `amqps://` url |  |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_EXCHANGE` | ⚪ | Exchange to publish to. Empty publishes to the default exchange, where the routing key is the queue name. A named exchange is asserted as durable | Any string | empty |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_EXCHANGETYPE` | ⚪ | Type used when asserting a named exchange | `direct`, `topic`, `fanout`, `headers` | `topic` |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_ROUTINGKEY` | ⚪ | Routing key of each message | Any string | `drydock-container` |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_PERSISTENT` | ⚪ | Ask the broker to persist messages | `true`, `false` | `true` |
+| `DD_NOTIFICATION_AMQP_{trigger_name}_DISABLETITLE` | ⚪ | Send an empty `title` field | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Message format
+
+Each message is a JSON object. A single update carries `title`, `message`, `mode` set to `simple`, and the full `container`. A batch carries `title`, `message`, `mode` set to `batch`, `eventKind`, `count` and the `containers` array.
+
+<Callout type="info">The url usually carries the broker password, so it is masked wherever Drydock prints the trigger configuration.</Callout>
+
+## Examples
+
+### Publish to a topic exchange
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_AMQP_RABBIT_URL=amqp://user:pass@rabbitmq:5672
+      - DD_NOTIFICATION_AMQP_RABBIT_EXCHANGE=drydock
+      - DD_NOTIFICATION_AMQP_RABBIT_ROUTINGKEY=container.update
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_AMQP_RABBIT_URL="amqp://user:pass@rabbitmq:5672" \
+  -e DD_NOTIFICATION_AMQP_RABBIT_EXCHANGE="drydock" \
+  -e DD_NOTIFICATION_AMQP_RABBIT_ROUTINGKEY="container.update" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

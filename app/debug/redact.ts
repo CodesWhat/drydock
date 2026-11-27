@@ -17,6 +17,7 @@ const SENSITIVE_KEY_SUBSTRINGS = [
   'privatekey',
   'clientkey',
   'signingkey',
+  'devicekey',
 ];
 
 // Short enough that a substring rule would fire on ordinary words (compass,
@@ -36,6 +37,9 @@ const PROVIDER_SPECIFIC_SENSITIVE_ENV_FIELDS = new Map<string, ReadonlySet<strin
   ['apprise', new Set(['urls'])],
   ['rocketchat', new Set(['id'])],
   ['telegram', new Set(['chatid'])],
+  ['nats', new Set(['nkey'])],
+  ['prowl', new Set(['providerkey'])],
+  ['whatsapp', new Set(['phonenumberid', 'recipient'])],
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

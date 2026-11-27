@@ -1,0 +1,79 @@
+---
+title: "Prowl"
+description: "The prowl trigger lets you send container update notifications to iOS via Prowl."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `prowl` trigger lets you send container update notifications to your iPhone via [Prowl](https://www.prowlapp.com/) using its public API.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_APIKEY` | 🔴 | The Prowl API key | A 40 character Prowl API key |  |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_PRIORITY` | ⚪ | The Prowl message priority | Integer between `-2` and `2` | `0` |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_APPLICATION` | ⚪ | Application name shown in Prowl | Any string | `drydock` |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_URL` | ⚪ | The Prowl API endpoint | An `http` or `https` url | `https://api.prowlapp.com/publicapi/add` |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_OPENURL` | ⚪ | Url opened from the notification. Falls back to the update link of the container when unset | An `http` or `https` url |  |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_PROVIDERKEY` | ⚪ | Prowl provider key, for accounts with a raised API limit | A Prowl provider key |  |
+| `DD_NOTIFICATION_PROWL_{trigger_name}_DISABLETITLE` | ⚪ | Use a fixed event name (`Update` or `Batch Updates`) instead of the rendered title | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+## Examples
+
+### Configure the trigger
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_PROWL_PHONE_APIKEY=your-prowl-api-key
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_PROWL_PHONE_APIKEY="your-prowl-api-key" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
+
+### Send with high priority and open the Drydock UI
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_PROWL_PHONE_APIKEY=your-prowl-api-key
+      - DD_NOTIFICATION_PROWL_PHONE_PRIORITY=1
+      - DD_NOTIFICATION_PROWL_PHONE_OPENURL=https://drydock.example.com
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_PROWL_PHONE_APIKEY="your-prowl-api-key" \
+  -e DD_NOTIFICATION_PROWL_PHONE_PRIORITY="1" \
+  -e DD_NOTIFICATION_PROWL_PHONE_OPENURL="https://drydock.example.com" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

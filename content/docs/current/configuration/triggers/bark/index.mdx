@@ -1,0 +1,82 @@
+---
+title: "Bark"
+description: "The bark trigger lets you send container update notifications to iOS via Bark."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `bark` trigger lets you send container update notifications to your iPhone via [Bark](https://bark.day.app/). It posts to the Bark server `/push` endpoint, so it works with the public `https://api.day.app` server or one you host yourself.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_BARK_{trigger_name}_URL` | ⚪ | The Bark server url | The `http` or `https` Bark server address | `https://api.day.app` |
+| `DD_NOTIFICATION_BARK_{trigger_name}_DEVICEKEY` | 🔴 | The Bark device key of the target device | The key shown in the Bark app |  |
+| `DD_NOTIFICATION_BARK_{trigger_name}_BARKGROUP` | ⚪ | The Bark notification group the messages are filed under | Any string | `drydock` |
+| `DD_NOTIFICATION_BARK_{trigger_name}_ICON` | ⚪ | Icon shown on the notification | An `http` or `https` image url |  |
+| `DD_NOTIFICATION_BARK_{trigger_name}_SOUND` | ⚪ | Notification sound | A sound name known to the Bark app |  |
+| `DD_NOTIFICATION_BARK_{trigger_name}_BADGE` | ⚪ | App icon badge number | Integer greater or equal than `0` |  |
+| `DD_NOTIFICATION_BARK_{trigger_name}_URLTOOPEN` | ⚪ | Url opened when the notification is tapped. Falls back to the update link of the container when unset | An `http` or `https` url |  |
+| `DD_NOTIFICATION_BARK_{trigger_name}_DISABLETITLE` | ⚪ | Send the body only, without a title | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+<Callout type="info">The group is configured with `BARKGROUP` because `GROUP` is already the common notification-group option.</Callout>
+
+## Examples
+
+### Configure the trigger for the public Bark server
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_BARK_PHONE_DEVICEKEY=your-bark-device-key
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_BARK_PHONE_DEVICEKEY="your-bark-device-key" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
+
+### Configure the trigger for a self-hosted Bark server
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_BARK_HOME_URL=https://bark.example.com
+      - DD_NOTIFICATION_BARK_HOME_DEVICEKEY=your-bark-device-key
+      - DD_NOTIFICATION_BARK_HOME_BARKGROUP=updates
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_BARK_HOME_URL="https://bark.example.com" \
+  -e DD_NOTIFICATION_BARK_HOME_DEVICEKEY="your-bark-device-key" \
+  -e DD_NOTIFICATION_BARK_HOME_BARKGROUP="updates" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

@@ -413,6 +413,7 @@ describe('debug/redact', () => {
     'DD_NOTIFICATION_MATRIX_M_ACCESSTOKEN',
     'DD_NOTIFICATION_PUSHOVER_P_USER',
     'DD_AGENT_X_AGENTSECRET',
+    'DD_NOTIFICATION_BARK_B_DEVICEKEY',
   ])('redacts the compound secret key %s', (key) => {
     const redacted = redactDebugDump({ [key]: 'the-real-secret' }) as Record<string, unknown>;
 
@@ -430,6 +431,24 @@ describe('debug/redact', () => {
       DD_NOTIFICATION_PUSHOVER_P_USER: REDACTED_VALUE,
       DD_NOTIFICATION_PUSHOVER_P_DEVICE: 'phone',
       DD_NOTIFICATION_SMTP_ALERTS_USER: 'alerts@example.com',
+    });
+  });
+
+  test('redacts the NATS nkey, Prowl provider key and WhatsApp identifiers per provider', () => {
+    const redacted = redactDebugDump({
+      DD_NOTIFICATION_NATS_N_NKEY: 'SUAAAA',
+      DD_NOTIFICATION_PROWL_P_PROVIDERKEY: 'provider',
+      DD_NOTIFICATION_WHATSAPP_W_PHONENUMBERID: '1234',
+      DD_NOTIFICATION_WHATSAPP_W_RECIPIENT: '15550001111',
+      DD_NOTIFICATION_XMPP_X_TO: 'ops@example.com',
+    }) as Record<string, unknown>;
+
+    expect(redacted).toEqual({
+      DD_NOTIFICATION_NATS_N_NKEY: REDACTED_VALUE,
+      DD_NOTIFICATION_PROWL_P_PROVIDERKEY: REDACTED_VALUE,
+      DD_NOTIFICATION_WHATSAPP_W_PHONENUMBERID: REDACTED_VALUE,
+      DD_NOTIFICATION_WHATSAPP_W_RECIPIENT: REDACTED_VALUE,
+      DD_NOTIFICATION_XMPP_X_TO: 'ops@example.com',
     });
   });
 
