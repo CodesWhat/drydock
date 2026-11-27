@@ -9,6 +9,7 @@ import type {
   AgentDisconnectedEventPayload,
   ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
+  ContainerStateAlertEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
   MaturityGateClearedEventPayload,
@@ -37,6 +38,7 @@ function setupAuditSubscriptions(): {
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   containerHealthTransitionHandler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
   maturityGateClearedHandler: OrderedEventHandlerFn<MaturityGateClearedEventPayload>;
+  containerStateAlertHandler: OrderedEventHandlerFn<ContainerStateAlertEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
   containerAddedHandler: (payload: ContainerLifecycleEventPayload) => void;
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
@@ -48,6 +50,7 @@ function setupAuditSubscriptions(): {
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     containerHealthTransition?: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
     maturityGateCleared?: OrderedEventHandlerFn<MaturityGateClearedEventPayload>;
+    containerStateAlert?: OrderedEventHandlerFn<ContainerStateAlertEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
     containerAdded?: (payload: ContainerLifecycleEventPayload) => void;
     containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
@@ -86,6 +89,9 @@ function setupAuditSubscriptions(): {
     registerMaturityGateCleared: registerOrdered<MaturityGateClearedEventPayload>((handler) => {
       handlers.maturityGateCleared = handler;
     }),
+    registerContainerStateAlert: registerOrdered<ContainerStateAlertEventPayload>((handler) => {
+      handlers.containerStateAlert = handler;
+    }),
     registerAgentDisconnected: registerOrdered<AgentDisconnectedEventPayload>((handler) => {
       handlers.agentDisconnected = handler;
     }),
@@ -108,6 +114,7 @@ function setupAuditSubscriptions(): {
     !handlers.securityAlert ||
     !handlers.containerHealthTransition ||
     !handlers.maturityGateCleared ||
+    !handlers.containerStateAlert ||
     !handlers.agentDisconnected ||
     !handlers.containerAdded ||
     !handlers.containerUpdated ||
@@ -122,6 +129,7 @@ function setupAuditSubscriptions(): {
     securityAlertHandler: handlers.securityAlert,
     containerHealthTransitionHandler: handlers.containerHealthTransition,
     maturityGateClearedHandler: handlers.maturityGateCleared,
+    containerStateAlertHandler: handlers.containerStateAlert,
     agentDisconnectedHandler: handlers.agentDisconnected,
     containerAddedHandler: handlers.containerAdded,
     containerUpdatedHandler: handlers.containerUpdated,
@@ -741,6 +749,102 @@ describe('audit-subscriptions dedupe windows', () => {
       3,
       expect.objectContaining({ containerIdentityKey: 'edge-a::podman::web' }),
     );
+  });
+
+  describe('container state alerts', () => {
+    function makeStateAlertPayload(
+      overrides: Partial<ContainerStateAlertEventPayload> = {},
+    ): ContainerStateAlertEventPayload {
+      return {
+        kind: 'container-exited',
+        containerName: 'web',
+        container: {
+          id: 'edge-a-web',
+          name: 'web',
+          watcher: 'docker',
+          agent: 'edge-a',
+          image: { name: 'library/nginx' },
+        },
+        exitCode: 1,
+        reason: 'exit code 1',
+        ...overrides,
+      } as unknown as ContainerStateAlertEventPayload;
+    }
+
+    test.each([
+      ['container-stopped', 'info', 'stopped'],
+      ['container-exited', 'error', 'exit code 1'],
+      ['container-oom-killed', 'error', 'out of memory'],
+    ] as const)('records %s audits with status %s', async (kind, status, reason) => {
+      const { containerStateAlertHandler } = setupAuditSubscriptions();
+      await containerStateAlertHandler(makeStateAlertPayload({ kind, reason }));
+
+      expect(mockInsertAudit).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          action: kind,
+          status,
+          containerName: 'web',
+          containerImage: 'library/nginx',
+          containerIdentityKey: 'edge-a::docker::web',
+          details: reason,
+        }),
+      );
+      expect(mockInc).toHaveBeenLastCalledWith({ action: kind });
+    });
+
+    test('describes a restart loop with its crash count and window', async () => {
+      const { containerStateAlertHandler } = setupAuditSubscriptions();
+      await containerStateAlertHandler(
+        makeStateAlertPayload({
+          kind: 'container-restart-loop',
+          reason: undefined,
+          restartCount: 5,
+          windowSeconds: 300,
+        }),
+      );
+
+      expect(mockInsertAudit).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          action: 'container-restart-loop',
+          status: 'error',
+          details: '5 crashes in 300s',
+        }),
+      );
+    });
+
+    test('omits details and identity when the payload carries neither', async () => {
+      const { containerStateAlertHandler } = setupAuditSubscriptions();
+      await containerStateAlertHandler(
+        makeStateAlertPayload({ container: undefined, reason: undefined }),
+      );
+
+      const entry = mockInsertAudit.mock.calls.at(-1)?.[0];
+      expect(entry.details).toBeUndefined();
+      expect(entry).not.toHaveProperty('containerIdentityKey');
+      expect(entry).not.toHaveProperty('containerImage');
+    });
+
+    test('deduplicates per kind and container for a minute, then records again', async () => {
+      const { containerStateAlertHandler } = setupAuditSubscriptions();
+      await containerStateAlertHandler(makeStateAlertPayload());
+      await containerStateAlertHandler(makeStateAlertPayload());
+      await containerStateAlertHandler(makeStateAlertPayload({ kind: 'container-oom-killed' }));
+      expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+
+      vi.advanceTimersByTime(60 * 1000);
+      await containerStateAlertHandler(makeStateAlertPayload());
+      expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    });
+
+    test('keys the dedupe on the container name without a container record', async () => {
+      const { containerStateAlertHandler } = setupAuditSubscriptions();
+      await containerStateAlertHandler(makeStateAlertPayload({ container: undefined }));
+      await containerStateAlertHandler(makeStateAlertPayload({ container: undefined }));
+      await containerStateAlertHandler(
+        makeStateAlertPayload({ container: undefined, containerName: 'api' }),
+      );
+      expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+    });
   });
 
   test('omits maturity gate cleared details when minAgeDays is not provided', async () => {

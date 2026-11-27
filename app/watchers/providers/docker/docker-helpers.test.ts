@@ -7,7 +7,6 @@ import {
   getContainerConfigValue,
   getContainerDisplayName,
   getContainerName,
-  getErrorMessage,
   getFirstConfigBoolean,
   getFirstConfigNumber,
   getFirstConfigString,
@@ -768,11 +767,6 @@ describe('docker helper extraction module', () => {
         'unknown',
       ),
     ).toBe(false);
-  });
-
-  test('returns fallback message when error payload is empty', () => {
-    expect(getErrorMessage(undefined)).toBe('Unexpected container processing error');
-    expect(getErrorMessage('boom')).toBe('boom');
   });
 
   test('builds fallback container report and preserves existing updateKind', () => {

@@ -4,9 +4,6 @@ import log from '../../../log/index.js';
 import type { Container, ContainerImage } from '../../../model/container.js';
 import { parse as parseSemver, transform as transformTag } from '../../../tag/index.js';
 import type { TagPrecision } from '../../../tag/precision.js';
-import { getErrorMessage as getSharedErrorMessage } from '../../../util/error.js';
-
-const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 
 export interface ResolvedImgset {
   name: string;
@@ -55,10 +52,6 @@ interface ImageWithRepoDigests {
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null;
-}
-
-export function getErrorMessage(error: unknown, fallback = UNKNOWN_CONTAINER_PROCESSING_ERROR) {
-  return getSharedErrorMessage(error, fallback);
 }
 
 export function buildFallbackContainerReport(container: Container, message: string) {
@@ -227,7 +220,7 @@ function normalizeConfigStringValue(value: unknown) {
   return valueTrimmed === '' ? undefined : valueTrimmed;
 }
 
-export function normalizeConfigBooleanValue(value: unknown) {
+function normalizeConfigBooleanValue(value: unknown) {
   if (typeof value === 'boolean') {
     return value;
   }

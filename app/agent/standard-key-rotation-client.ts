@@ -5,6 +5,7 @@ import type { KeyRotationStatus, RotationRequest } from './standard-key-rotation
 export function createRotationRequest(
   baseUrl: string,
   options: AxiosRequestConfig,
+  getAudience: () => string | undefined = () => undefined,
 ): RotationRequest {
   return async (identity, action, payload) => {
     const target = '/_portwing/auth/rotation' + (action === 'status' ? '' : `/${action}`);
@@ -15,6 +16,7 @@ export function createRotationRequest(
       path: target,
       keyId: identity.keyId,
       privateKey: identity.privateKey,
+      audience: getAudience(),
       body: data === undefined ? undefined : Buffer.from(JSON.stringify(data)),
     });
     const response = await axios.request<KeyRotationStatus>({

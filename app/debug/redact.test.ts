@@ -6,6 +6,14 @@ describe('debug/redact', () => {
     expect(REDACTED_VALUE).toBe('[REDACTED]');
   });
 
+  test('redacts SSH key passphrases and passwords in watcher configuration', () => {
+    expect(redactDebugDump({ sshpassphrase: 'pp', sshpassword: 'pw', sshuser: 'u' })).toEqual({
+      sshpassphrase: '[REDACTED]',
+      sshpassword: '[REDACTED]',
+      sshuser: 'u',
+    });
+  });
+
   test('redacts values for sensitive keys recursively', () => {
     const source = {
       metadata: {
@@ -133,6 +141,7 @@ describe('debug/redact', () => {
       apikey: 'api-token',
       accesskey: 'access-token',
       privatekey: '-----BEGIN PRIVATE KEY-----',
+      routingkey: 'pagerduty-routing-key',
       LOGIN: 'operator',
     };
 
@@ -145,6 +154,7 @@ describe('debug/redact', () => {
       apikey: '[REDACTED]',
       accesskey: '[REDACTED]',
       privatekey: '[REDACTED]',
+      routingkey: '[REDACTED]',
       LOGIN: 'operator',
     });
   });

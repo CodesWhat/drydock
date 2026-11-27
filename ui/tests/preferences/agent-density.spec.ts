@@ -6,6 +6,7 @@ import { getPreferences, updatePreferences } from '@/services/preferences';
 vi.mock('@/services/preferences', () => ({
   getPreferences: vi.fn(),
   updatePreferences: vi.fn(),
+  PreferencesRevisionConflictError: class PreferencesRevisionConflictError extends Error {},
 }));
 
 describe('Agents density preferences', () => {
@@ -78,6 +79,7 @@ describe('Agents density preferences', () => {
         schemaVersion: CURRENT_SCHEMA_VERSION,
         preferences: { views: { agents: { density: 'compact' } }, sync: { enabled: true } },
         updatedAt: '2026-09-15T23:00:00Z',
+        revision: 1,
       });
       preferences.views.agents.density = 'normal';
       await nextTick();
@@ -95,6 +97,7 @@ describe('Agents density preferences', () => {
             agents: expect.objectContaining({ density: 'normal' }),
           }),
         }),
+        1,
       );
     } finally {
       preferences.sync.enabled = false;

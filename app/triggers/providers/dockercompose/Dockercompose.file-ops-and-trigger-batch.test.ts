@@ -118,6 +118,50 @@ describe('Dockercompose Trigger', () => {
     expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('copy failed'));
   });
 
+  test('backup should copy the mode and owner of the source onto the backup', async () => {
+    fs.stat.mockResolvedValueOnce({ mode: 0o100600, uid: 1001, gid: 1002 });
+    const chmodSpy = vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+    const chownSpy = vi.spyOn(fs, 'chown').mockResolvedValue(undefined);
+
+    await trigger.backup('/opt/drydock/test/compose.yml', '/opt/drydock/test/compose.yml.back');
+
+    expect(chmodSpy).toHaveBeenCalledWith('/opt/drydock/test/compose.yml.back', 0o600);
+    expect(chownSpy).toHaveBeenCalledWith('/opt/drydock/test/compose.yml.back', 1001, 1002);
+  });
+
+  test('writeComposeFileAtomic should apply the original mode and owner to the temp file before rename', async () => {
+    fs.stat.mockResolvedValueOnce({ mode: 0o100600, uid: 1001, gid: 1002 });
+    const order: string[] = [];
+    const chmodSpy = vi.spyOn(fs, 'chmod').mockImplementation(async () => {
+      order.push('chmod');
+    });
+    const chownSpy = vi.spyOn(fs, 'chown').mockImplementation(async () => {
+      order.push('chown');
+    });
+    fs.rename.mockImplementationOnce(async () => {
+      order.push('rename');
+    });
+
+    await trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data');
+
+    const temporaryFilePath = fs.writeFile.mock.calls[0][0];
+    expect(fs.stat).toHaveBeenCalledWith('/opt/drydock/test/compose.yml');
+    expect(chmodSpy).toHaveBeenCalledWith(temporaryFilePath, 0o600);
+    expect(chownSpy).toHaveBeenCalledWith(temporaryFilePath, 1001, 1002);
+    expect(order).toEqual(['chmod', 'chown', 'rename']);
+  });
+
+  test('writeComposeFileAtomic should warn and still rename when chown fails', async () => {
+    fs.stat.mockResolvedValueOnce({ mode: 0o100640, uid: 0, gid: 0 });
+    vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+    vi.spyOn(fs, 'chown').mockRejectedValueOnce(new Error('EPERM: operation not permitted'));
+
+    await trigger.writeComposeFileAtomic('/opt/drydock/test/compose.yml', 'data');
+
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+    expect(fs.rename).toHaveBeenCalledTimes(1);
+  });
+
   test('writeComposeFile should log error and throw when lock acquisition fails outright', async () => {
     fs.writeFile.mockRejectedValueOnce(new Error('write failed'));
 

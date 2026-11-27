@@ -557,11 +557,12 @@ curl http://drydock:3000/api/v1/preferences
   "username": "alice",
   "schemaVersion": null,
   "preferences": null,
-  "updatedAt": null
+  "updatedAt": null,
+  "revision": 0
 }
 ```
 
-`schemaVersion`, `preferences`, and `updatedAt` are `null` until the user has synced at least once.
+`schemaVersion`, `preferences`, and `updatedAt` are `null` until the user has synced at least once, and `revision` is `0`. Every write bumps `revision` by one.
 
 ### Update preferences
 
@@ -570,14 +571,15 @@ Replaces the full stored preferences blob — this is a full replace, not a part
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/preferences \
   -H 'Content-Type: application/json' \
-  -d '{"apiVersion": 1, "schemaVersion": 12, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
+  -d '{"apiVersion": 1, "schemaVersion": 12, "revision": 0, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
 
 {
   "apiVersion": 1,
   "username": "alice",
   "schemaVersion": 12,
   "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}},
-  "updatedAt": "2026-07-11T12:00:00.000Z"
+  "updatedAt": "2026-07-11T12:00:00.000Z",
+  "revision": 1
 }
 ```
 
@@ -588,8 +590,11 @@ curl -X PATCH http://drydock:3000/api/v1/preferences \
 | `schemaVersion` | integer \| null | The client preference schema version at time of write; `null` if never synced |
 | `preferences` | object \| null | The full preferences blob, opaque to the server; `null` if never synced |
 | `updatedAt` | string \| null | ISO 8601 timestamp of the last server-side write; `null` if never synced |
+| `revision` | integer | Write counter for the stored document; `0` if never synced. Send it back as `revision` in the next `PATCH` |
 
-Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if there is no session, 403 if the session is anonymous (sync requires a real user identity), 409 if `apiVersion` does not match the server's supported version, or 413 if the request body exceeds the global 256 kb JSON body limit.
+Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if there is no session, 403 if the session is anonymous (sync requires a real user identity), 409 if `apiVersion` does not match the server's supported version (`PREFERENCES_API_VERSION_MISMATCH`) or if `revision` is behind the stored document (`PREFERENCES_REVISION_STALE`), or 413 if the request body exceeds the global 256 kb JSON body limit.
+
+A `PATCH` that carries `revision` only lands if it still matches the stored document. Otherwise the server writes nothing and answers `409` with `{"error": "PREFERENCES_REVISION_STALE", "currentRevision": 5}`. This covers a write that committed but whose response was lost, and an edit made on another device in between. The client then re-fetches with `GET`, merges, and sends the result with the new revision. The Drydock UI merges by top-level section: sections you changed here stay, sections changed elsewhere (or on both sides) take the server value. Omitting `revision` makes the write unconditional, as it was before.
 
 ## Container groups
 

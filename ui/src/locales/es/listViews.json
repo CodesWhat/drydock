@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Preparación del escáner completada",
       "scanner-asset-warm-failed": "Preparación del escáner fallida",
       "container-unhealthy": "Contenedor no saludable",
+      "container-stopped": "Contenedor detenido",
+      "container-exited": "Contenedor finalizado",
+      "container-oom-killed": "Contenedor terminado por falta de memoria",
+      "container-restart-loop": "Contenedor en bucle de reinicio",
       "env-reveal": "Variables de entorno reveladas",
       "debug-dump": "Volcado de depuración descargado",
       "config-read": "Configuración leída",
@@ -122,7 +126,12 @@
       "image-prune": "Depuración de imagen",
       "cleanup": "Limpieza",
       "notification-silence-set": "Silencio de notificaciones activado",
-      "notification-silence-cleared": "Silencio de notificaciones eliminado"
+      "notification-silence-cleared": "Silencio de notificaciones eliminado",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Contenedor",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "Contenedor con problemas",
         "description": "Cuando la comprobación de estado de Docker de un contenedor entra en estado \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Contenedor detenido",
+        "description": "Cuando un contenedor vigilado se detiene"
+      },
+      "container-exited": {
+        "name": "Contenedor finalizado",
+        "description": "Cuando un contenedor vigilado termina con un código de salida distinto de cero"
+      },
+      "container-oom-killed": {
+        "name": "Contenedor terminado por falta de memoria",
+        "description": "Cuando el kernel termina un contenedor vigilado por quedarse sin memoria"
+      },
+      "container-restart-loop": {
+        "name": "Contenedor en bucle de reinicio",
+        "description": "Cuando un contenedor vigilado falla y se reinicia repetidamente"
       },
       "maturity-cleared": {
         "name": "Madurez liberada",

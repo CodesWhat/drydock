@@ -55,6 +55,18 @@ const pages = {
       { name: "Configuration", url: `${BASE_URL}/docs/v1.8/configuration` },
     ],
   }),
+  "archived docs page": buildDocsJsonLd({
+    url: `${BASE_URL}/docs/v1.4/configuration`,
+    title: "Configuration",
+    description: "Configure Drydock.",
+    version: "v1.4",
+    archived: true,
+    crumbs: [
+      { name: "Home", url: BASE_URL },
+      { name: "Documentation", url: `${BASE_URL}/docs/v1.4` },
+      { name: "Configuration", url: `${BASE_URL}/docs/v1.4/configuration` },
+    ],
+  }),
   "security index": buildSecurityIndexJsonLd(ADVISORIES),
   "security advisory": buildAdvisoryJsonLd(advisory.slug, {
     abstract: "Not affected.",
@@ -221,4 +233,21 @@ test("every JSON-LD script goes through the shared component", () => {
     offenders.map((p) => p.split("/src/")[1]),
     ["components/json-ld.tsx"],
   );
+});
+
+test("archived docs versions are marked archived and versioned, the current docs are not", () => {
+  const article = (block) => nodesOf(block).find((n) => n["@type"] === "TechArticle");
+  const archived = article(pages["archived docs page"]);
+  assert.equal(archived.version, "1.4");
+  assert.equal(archived.creativeWorkStatus, "Archived");
+  assert.equal(archived.isPartOf.name, "Drydock v1.4 documentation (archived)");
+  assert.equal(archived.isPartOf.url, `${BASE_URL}/docs/v1.4`);
+  const current = article(pages["docs page"]);
+  assert.equal(current.creativeWorkStatus, undefined);
+  assert.equal(current.isPartOf, undefined);
+});
+
+test("the docs page passes archived-ness from the version list to the JSON-LD", () => {
+  const source = read("../src/app/docs/[[...slug]]/page.tsx");
+  assert.match(source, /archived: versionSlug !== versions\[0\]\.slug/);
 });

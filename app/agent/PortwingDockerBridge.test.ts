@@ -1,6 +1,7 @@
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import Dockerode from 'dockerode';
 import { describe, expect, test, vi } from 'vitest';
+import { AgentRequestTimeoutError } from './AgentRequestTimeoutError.js';
 import { PortwingDockerBridge } from './PortwingDockerBridge.js';
 
 type Deferred<T> = {
@@ -365,6 +366,7 @@ describe('PortwingDockerBridge', () => {
       502,
     ],
     ['timeout', new Error('Request abc timed out after 30000ms'), 504],
+    ['request-timeout', new AgentRequestTimeoutError('docker request exceeded 1m'), 504],
     [
       'agent-unreachable',
       Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),

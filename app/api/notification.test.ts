@@ -1,6 +1,7 @@
 import { createMockResponse } from '../test/helpers.js';
 
 const {
+  mockRecordAuditEvent,
   mockRouter,
   mockGetNotificationRules,
   mockGetNotificationRule,
@@ -14,6 +15,7 @@ const {
     batchTitle: templates.batchTitle ?? 'Default batch',
   }));
   return {
+    mockRecordAuditEvent: vi.fn(),
     mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn() },
     mockGetNotificationRules: vi.fn(() => [
       {
@@ -61,6 +63,8 @@ const {
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
 }));
+
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
@@ -204,6 +208,12 @@ describe('Notification Router', () => {
       bellThreshold: 'all',
       templates: {},
       description: 'When a container has a new version',
+    });
+    expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+      action: 'notification-rule-updated',
+      status: 'success',
+      containerName: 'notifications',
+      details: 'rule=update-available; fields=enabled,triggers',
     });
   });
 

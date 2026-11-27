@@ -16,6 +16,7 @@ import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/a
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
+import { sleep } from '../../../util/sleep.js';
 import Authentication from '../Authentication.js';
 import { enforceOidcAccessPolicy, OidcAccessDeniedError } from './access-policy.js';
 import { type BearerBindingContext, verifyBearerBinding } from './bearer-binding.js';
@@ -130,9 +131,27 @@ interface OidcConfiguration {
   beareraudiences?: string;
   allowedemails?: string;
   allowedemaildomains?: string;
+  requireemailverified?: boolean;
   requiredgroup?: string;
   groupclaim?: string;
+  idtokensignedalg?: string;
 }
+
+const ID_TOKEN_SIGNED_ALGORITHMS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+  'HS256',
+  'HS384',
+  'HS512',
+] as const;
 
 const BEARER_DISABLED_WARNING_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -295,23 +314,16 @@ async function withOidcSessionLock<T>(sessionId: string, operation: () => Promis
   }, OIDC_SESSION_LOCK_STALE_TTL_MS);
   staleLockCleanupTimer.unref?.();
 
-  let previousLockWaitTimer: ReturnType<typeof setTimeout> | undefined;
+  const previousLockWait = new AbortController();
 
   try {
     await Promise.race([
       previousLock.catch(() => undefined),
-      new Promise<void>((resolve) => {
-        previousLockWaitTimer = setTimeout(resolve, OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS);
-        previousLockWaitTimer.unref?.();
-      }),
+      sleep(OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS, previousLockWait.signal).catch(() => undefined),
     ]);
     return await operation();
   } finally {
-    /* v8 ignore start -- always assigned: Promise executor runs synchronously */
-    if (previousLockWaitTimer !== undefined) {
-      clearTimeout(previousLockWaitTimer);
-    }
-    /* v8 ignore stop */
+    previousLockWait.abort();
     clearTimeout(staleLockCleanupTimer);
     releaseLock?.();
     if (oidcSessionLocks.get(sessionId) === nextLock) {
@@ -431,8 +443,10 @@ class Oidc extends Authentication<OidcConfiguration> {
       beareraudiences: this.joi.string().allow(''),
       allowedemails: this.joi.string().allow(''),
       allowedemaildomains: this.joi.string().allow(''),
+      requireemailverified: this.joi.boolean(),
       requiredgroup: this.joi.string().allow(''),
       groupclaim: this.joi.string(),
+      idtokensignedalg: this.joi.string().valid(...ID_TOKEN_SIGNED_ALGORITHMS),
     });
   }
 
@@ -472,10 +486,14 @@ class Oidc extends Authentication<OidcConfiguration> {
       ...(this.configuration.allowedemaildomains
         ? { allowedemaildomains: this.configuration.allowedemaildomains }
         : {}),
+      ...(this.configuration.requireemailverified ? { requireemailverified: true } : {}),
       ...(this.configuration.requiredgroup
         ? { requiredgroup: this.configuration.requiredgroup }
         : {}),
       ...(this.configuration.groupclaim ? { groupclaim: this.configuration.groupclaim } : {}),
+      ...(this.configuration.idtokensignedalg
+        ? { idtokensignedalg: this.configuration.idtokensignedalg }
+        : {}),
     };
   }
 
@@ -536,7 +554,12 @@ class Oidc extends Authentication<OidcConfiguration> {
     this.client = await openidClient.discovery(
       discoveryUrl,
       this.configuration.clientid,
-      this.configuration.clientsecret,
+      this.configuration.idtokensignedalg
+        ? {
+            client_secret: this.configuration.clientsecret,
+            id_token_signed_response_alg: this.configuration.idtokensignedalg,
+          }
+        : this.configuration.clientsecret,
       openidClient.ClientSecretPost(this.configuration.clientsecret),
       discoveryOptions,
     );

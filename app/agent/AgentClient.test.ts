@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import axios from 'axios';
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { AgentRequestTimeoutError } from './AgentRequestTimeoutError.js';
 import { checkAgentVersion } from './agent-version-alerts.js';
 
 vi.mock('axios');
@@ -51,6 +52,12 @@ vi.mock('../store/container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
+// No saved signature v3 pin: the node:fs mock above would otherwise hand the
+// real pin file reader a fake certificate buffer.
+vi.mock('./portwing-audience.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./portwing-audience.js')>()),
+  getAudiencePinStore: () => ({ get: () => undefined, set: vi.fn() }),
+}));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
@@ -11090,6 +11097,111 @@ describe('AgentClient', () => {
       );
       expect(listed.body.toString()).toBe('[{"Id":"c1"}]');
       expect(pulled.body.toString()).toBe('{"status":"pulled"}\n');
+    });
+
+    describe('dd:request-timeout hint', () => {
+      const ack = (capabilities?: unknown) => {
+        vi.spyOn(client, 'handshake').mockResolvedValue(undefined);
+        return client.handleEvent('dd:ack', { version: '1.4.0', capabilities });
+      };
+
+      test('records capabilities from dd:ack and replaces them on the next ack', async () => {
+        await ack(['dd:request-timeout', 7, 'dd:cancel']);
+        expect((client as any).agentCapabilities).toEqual(
+          new Set(['dd:request-timeout', 'dd:cancel']),
+        );
+        await ack(undefined);
+        expect((client as any).agentCapabilities.size).toBe(0);
+      });
+
+      test('standard mode sends the hint header and arms hint + 5 s with the capability', async () => {
+        await ack(['dd:request-timeout']);
+        axios.mockResolvedValue({ status: 204, headers: {}, data: Buffer.alloc(0) });
+
+        await client.requestDockerApi('POST', '/v1.44/containers/a/stop?t=60');
+
+        expect(axios).toHaveBeenCalledWith(
+          expect.objectContaining({
+            timeout: 80_000,
+            headers: expect.objectContaining({ 'X-Portwing-Timeout-Ms': '75000' }),
+          }),
+        );
+      });
+
+      test('standard mode never sends the hint or extends the timer without the capability', async () => {
+        await ack(['something-else']);
+        axios.mockResolvedValue({ status: 204, headers: {}, data: Buffer.alloc(0) });
+
+        await client.requestDockerApi('POST', '/v1.44/containers/a/wait');
+
+        const config = axios.mock.calls[0][0] as { timeout: number; headers: object };
+        expect(config.timeout).toBe(30_000);
+        expect(config.headers).not.toHaveProperty('X-Portwing-Timeout-Ms');
+      });
+
+      test('standard mode leaves ordinary calls alone even with the capability', async () => {
+        await ack(['dd:request-timeout']);
+        axios.mockResolvedValue({ status: 200, headers: {}, data: Buffer.alloc(0) });
+
+        await client.requestDockerApi('GET', '/v1.44/info');
+
+        const config = axios.mock.calls[0][0] as { timeout: number; headers: object };
+        expect(config.timeout).toBe(30_000);
+        expect(config.headers).not.toHaveProperty('X-Portwing-Timeout-Ms');
+      });
+
+      test('maps a 504 with X-Portwing-Code request_timeout to the typed error', async () => {
+        axios.mockResolvedValue({
+          status: 504,
+          headers: { 'x-portwing-code': 'request_timeout' },
+          data: Buffer.from('docker request exceeded 1m'),
+        });
+
+        const failure = await client
+          .requestDockerApi('POST', '/v1.44/containers/a/stop?t=60')
+          .catch((e) => e);
+
+        expect(failure).toBeInstanceOf(AgentRequestTimeoutError);
+        expect(failure.message).toContain('may still have completed');
+      });
+
+      test('a plain 504 or another code on a 504 is passed through unchanged', async () => {
+        axios.mockResolvedValueOnce({ status: 504, headers: {}, data: Buffer.alloc(0) });
+        await expect(client.requestDockerApi('GET', '/v1.44/info')).resolves.toMatchObject({
+          statusCode: 504,
+        });
+        axios.mockResolvedValueOnce({
+          status: 504,
+          headers: { 'x-portwing-code': 'other' },
+          data: Buffer.alloc(0),
+        });
+        await expect(client.requestDockerApi('GET', '/v1.44/info')).resolves.toMatchObject({
+          statusCode: 504,
+        });
+      });
+
+      test('edge mode passes the hint option to ordinary requests only for long calls', async () => {
+        const sendRequest = vi.fn().mockResolvedValue({ statusCode: 204, headers: {}, body: null });
+        const sendStreamRequest = vi.fn().mockResolvedValue({ statusCode: 200, headers: {} });
+        client.edgeAdapter = { sendRequest, sendStreamRequest } as never;
+
+        await client.requestDockerApi('POST', '/v1.44/containers/a/stop?t=60', {});
+        await client.requestDockerApi('POST', '/v1.44/images/create?fromImage=x', {});
+
+        expect(sendRequest).toHaveBeenCalledWith(
+          'POST',
+          '/v1.44/containers/a/stop?t=60',
+          {},
+          undefined,
+          { timeoutMs: 75_000 },
+        );
+        expect(sendStreamRequest).toHaveBeenCalledWith(
+          'POST',
+          '/v1.44/images/create?fromImage=x',
+          {},
+          undefined,
+        );
+      });
     });
 
     describe('connect tracking on standard-mode failures', () => {

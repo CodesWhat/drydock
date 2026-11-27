@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Observateur de mise à jour d'image de conteneur : 23 registres, 21 fournisseurs de notifications et d'actions.**
+**Observateur de mise à jour d'image de conteneur : 27 registres, 26 fournisseurs de notifications et d'actions.**
 
 </div>
 
@@ -254,7 +254,7 @@ Entièrement interactif : véritable interface utilisateur, données fictives, 
 
 Les images de conteneurs deviennent obsolètes en silence. Une image de base corrige un CVE, une application supprime une version, une balise se déplace. À moins que vous ne surveilliez chaque registre à la main, vos conteneurs en cours d'exécution prennent du retard jusqu'à ce que quelque chose se brise ou soit exploité.
 
-La plupart des outils imposent un compromis. Les mises à jour automatiques (Watchtower, Ouroboros) s'exécutent et redémarrent avec peu de visibilité ou de contrôle, et ne sont désormais en grande partie pas entretenues. Les tableaux de bord (Portainer) gèrent les conteneurs mais ne sont pas conçus pour l'intelligence des mises à jour. Drydock est **surveillant d'abord** : il surveille 23 registres et vous indique exactement ce qui a changé (majeur, mineur, correctif ou résumé) avant que quoi que ce soit ne se produise, puis n'agit que lorsque vous l'autorisez. Et cela va plus loin que n’importe lequel d’entre eux. L'analyse des vulnérabilités Trivy/Grype bloque les mises à jour dangereuses, Cosign vérifie les signatures, les sauvegardes d'images préalables à la mise à jour sont automatiquement annulées en cas d'échec du contrôle de santé, les agents distribués couvrent les hôtes distants et 21 intégrations de notifications et d'actions bouclent la boucle. Le cycle de vie complet des mises à jour, avec une interface utilisateur Web et une API REST.
+La plupart des outils imposent un compromis. Les mises à jour automatiques (Watchtower, Ouroboros) s'exécutent et redémarrent avec peu de visibilité ou de contrôle, et ne sont désormais en grande partie pas entretenues. Les tableaux de bord (Portainer) gèrent les conteneurs mais ne sont pas conçus pour l'intelligence des mises à jour. Drydock est **surveillant d'abord** : il surveille 27 registres et vous indique exactement ce qui a changé (majeur, mineur, correctif ou résumé) avant que quoi que ce soit ne se produise, puis n'agit que lorsque vous l'autorisez. Et cela va plus loin que n’importe lequel d’entre eux. L'analyse des vulnérabilités Trivy/Grype bloque les mises à jour dangereuses, Cosign vérifie les signatures, les sauvegardes d'images préalables à la mise à jour sont automatiquement annulées en cas d'échec du contrôle de santé, les agents distribués couvrent les hôtes distants et 26 intégrations de notifications et d'actions bouclent la boucle. Le cycle de vie complet des mises à jour, avec une interface utilisateur Web et une API REST.
 
 <hr>
 
@@ -263,8 +263,8 @@ La plupart des outils imposent un compromis. Les mises à jour automatiques (Wat
 | | Fonctionnalité | Descriptif |
 | --- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔭  | **Détection sur le moniteur en premier**               | Surveille chaque conteneur en cours d'exécution et classe chaque mise à jour disponible comme majeure, mineure, correctif ou résumé avant que quoi que ce soit ne se produise. Rien ne change jusqu'à ce que vous le disiez.                                                                                                                                                                                                                                                                                                                                |
-| 📦  | **23 fournisseurs de registre**                        | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus et 12 autres. Public et privé, cloud et auto-hébergé, avec TLS et authentification par registre.                                                                                                                                                                                                                                                                                                                                                                             |
-| 🔔  | **21 déclencheurs**                                    | 17 canaux de notification (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy et plus) ainsi que des actions Docker, Docker Compose, Portainer et Command, avec des modèles par événement/fournisseur, un aperçu en direct, un filtrage de seuil et un mode batch.                                                                                                                                                                                                                                                                                                   |
+| 📦  | **27 fournisseurs de registre**                        | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus et 16 autres. Public et privé, cloud et auto-hébergé, avec TLS et authentification par registre.                                                                                                                                                                                                                                                                                                                                                                             |
+| 🔔  | **26 déclencheurs**                                    | 22 canaux de notification (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy et plus) ainsi que des actions Docker, Docker Compose, Portainer et Command, avec des modèles par événement/fournisseur, un aperçu en direct, un filtrage de seuil et un mode batch.                                                                                                                                                                                                                                                                                                   |
 | 🥊  | **Update Bouncer**                                     | L'analyse des vulnérabilités Trivy/Grype bloque les mises à jour dangereuses avant leur déploiement, avec vérification de la signature Cosign et génération SBOM (CycloneDX et SPDX).                                                                                                                                                                                                                                                                                                                                                                    |
 | ↩️  | **Sauvegarde d'image et restauration automatique**     | Pré-mettez à jour les instantanés d'image avec conservation configurable, restauration automatique en cas d'échec du contrôle de santé et restauration manuelle en un clic depuis l'interface utilisateur.                                                                                                                                                                                                                                                                                                                                                                  |
 | 🪝  | **Crochets de cycle de vie**                           | Commandes shell avant et après la mise à jour via des étiquettes de conteneur, avec délais d'attente par hook et contrôle d'abandon en cas d'échec.                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -282,17 +282,17 @@ La plupart des outils imposent un compromis. Les mises à jour automatiques (Wat
 
 <h2 align="center" id="supported-integrations">Supported Integrations</h2>
 
-### Registres (23)
+### Registres (27)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personnalisé · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personnalisé · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
 
 ### Actions (4)
 
 Docker · Docker Compose · Portainer · Command
 
-### Notifications (17)
+### Notifications (22)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
 
 ### Authentification
 
@@ -340,9 +340,9 @@ L'analyse des vulnérabilités basée sur Trivy ou Grype bloque les mises à jou
 <tr><td>Journal d'audit</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / rôles multi-utilisateurs</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Authentification OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Canaux de déclenchement / notification</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Canaux de déclenchement / notification</td><td align="center">26</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Fournisseurs de registres</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Fournisseurs de registres</td><td align="center">27</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API REST</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API webhook pour CI/CD</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Jetons / clés d'API à portée limitée</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -386,9 +386,9 @@ L'analyse des vulnérabilités basée sur Trivy ou Grype bloque les mises à jou
 <tr><td>Journal d'audit</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / rôles multi-utilisateurs</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>Authentification OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Canaux de déclenchement / notification</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Canaux de déclenchement / notification</td><td align="center">26</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Fournisseurs de registres</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Fournisseurs de registres</td><td align="center">27</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Métriques Prometheus</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Agents distribués (distants)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Regroupement de conteneurs / piles</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>

@@ -4,7 +4,7 @@ Guidance for coding agents working in this repository.
 
 ## What is Drydock?
 
-Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 21 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
+Drydock is a Docker container update manager. It watches running containers, checks registries for newer image versions, and triggers notifications/actions when updates are available. It supports 23 registry providers, 26 trigger types, and a distributed controller-agent architecture (including native integration with [Portwing](https://github.com/CodesWhat/portwing) agents).
 
 ## Repository structure
 

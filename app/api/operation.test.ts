@@ -1,15 +1,19 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetOperationById, mockRequestOperationCancellation } = vi.hoisted(() => ({
-  mockRouter: {
-    use: vi.fn(),
-    get: vi.fn(),
-    post: vi.fn(),
-    delete: vi.fn(),
-  },
-  mockGetOperationById: vi.fn(),
-  mockRequestOperationCancellation: vi.fn(),
-}));
+const { mockRouter, mockGetOperationById, mockRequestOperationCancellation, mockRecordAuditEvent } =
+  vi.hoisted(() => ({
+    mockRecordAuditEvent: vi.fn(),
+    mockRouter: {
+      use: vi.fn(),
+      get: vi.fn(),
+      post: vi.fn(),
+      delete: vi.fn(),
+    },
+    mockGetOperationById: vi.fn(),
+    mockRequestOperationCancellation: vi.fn(),
+  }));
+
+vi.mock('./audit-events.js', () => ({ recordAuditEvent: mockRecordAuditEvent }));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -63,6 +67,7 @@ describe('Operation Router', () => {
     });
 
     test('returns 409 when operation is already terminal', () => {
+      mockRecordAuditEvent.mockClear();
       mockGetOperationById.mockReturnValue({ id: 'op-1', status: 'succeeded' });
       const handler = getHandler();
       const res = createMockResponse();
@@ -114,6 +119,12 @@ describe('Operation Router', () => {
       expect(mockRequestOperationCancellation).toHaveBeenCalledWith('op-2');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ data: cancelled });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith({
+        action: 'operation-cancelled',
+        status: 'success',
+        containerName: 'web',
+        details: 'operation=op-2; outcome=cancelled',
+      });
     });
 
     test('returns 202 with cancel-requested operation when in-progress', () => {
@@ -138,6 +149,9 @@ describe('Operation Router', () => {
       expect(mockRequestOperationCancellation).toHaveBeenCalledWith('op-3');
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ data: flagged });
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ details: 'operation=op-3; outcome=cancel-requested' }),
+      );
     });
 
     test('returns 404 when requestOperationCancellation returns undefined after pre-check', () => {

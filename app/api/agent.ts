@@ -8,6 +8,7 @@ import {
   projectStatsBucket,
 } from '../util/container-summary.js';
 import { parseLogQueryInteger } from '../util/parse.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { refuseRecoveryAssuranceSession } from './recovery-assurance.js';
 import { SESSION_ONLY, scoped } from './route-scopes.js';
@@ -246,6 +247,12 @@ async function changeSigningKeyRotation(req: Request<AgentLogEntriesRequestParam
       return;
     }
     const result = await agent.rotateSigningKey(body.action);
+    recordAuditEvent({
+      action: 'agent-key-changed',
+      status: 'success',
+      containerName: agent.name,
+      details: `signing key ${body.action}`,
+    });
     res.status('phase' in result && result.phase === 'awaiting-reconnect' ? 202 : 200).json(result);
   } catch {
     sendErrorResponse(

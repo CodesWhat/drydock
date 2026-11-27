@@ -25,6 +25,13 @@
  *   header value.
  * - nonce: 32 lowercase hex characters (16 random bytes), identical to the
  *   nonce header value.
+ *
+ * Signature version 3 binds the signature to one agent (the audience) so a
+ * request captured for agent A cannot replay on agent B when both trust the
+ * same controller key. The signed bytes gain a fixed prefix and the agent ID:
+ *   portwing-sig-v3\n<agentId>\nMETHOD\nTARGET\nBODY_SHA256\nTIMESTAMP\nNONCE
+ * It is selected by passing `audience` to signRequest(); without one the
+ * signer produces version 2.
  */
 
 import type { KeyObject } from 'node:crypto';
@@ -39,7 +46,17 @@ export interface Ed25519SignedHeaders {
   'X-Portwing-Timestamp': string;
   'X-Portwing-Nonce': string;
   'X-Portwing-Signature': string;
-  'X-Portwing-Signature-Version': '2';
+  'X-Portwing-Signature-Version': '2' | '3';
+  /** Present only on version 3: the agent ID the signature is bound to. */
+  'X-Portwing-Audience'?: string;
+}
+
+/** Portwing's agent ID rule (`agentIdRule.pattern` in the published vectors). */
+const AGENT_ID_PATTERN = /^[a-z0-9-]{1,64}$/;
+
+/** True when `value` is a string Portwing accepts as an agent ID. */
+export function isValidAgentId(value: unknown): value is string {
+  return typeof value === 'string' && AGENT_ID_PATTERN.test(value);
 }
 
 /**
@@ -83,6 +100,21 @@ export function buildCanonicalMessage(
   return `${method}\n${path}\n${bodyHashHex}\n${timestampSeconds}\n${nonce}`;
 }
 
+/**
+ * Canonical bytes for signature version 3: the version 2 layout with a
+ * `portwing-sig-v3` prefix line and the audience agent ID ahead of the method.
+ */
+export function buildCanonicalMessageV3(
+  agentId: string,
+  method: string,
+  path: string,
+  bodyHashHex: string,
+  timestampSeconds: number,
+  nonce: string,
+): string {
+  return `portwing-sig-v3\n${agentId}\n${buildCanonicalMessage(method, path, bodyHashHex, timestampSeconds, nonce)}`;
+}
+
 export interface SignRequestOptions {
   /** HTTP method, any case — normalized to uppercase before signing. */
   method: string;
@@ -94,6 +126,12 @@ export interface SignRequestOptions {
   keyId: string;
   /** Parsed Ed25519 private key (see loadEd25519PrivateKey). */
   privateKey: KeyObject;
+  /**
+   * The agent ID to bind the signature to. When set the request is signed as
+   * version 3 and an `X-Portwing-Audience` header is added; when omitted it is
+   * signed as version 2.
+   */
+  audience?: string;
   /** Injectable clock (epoch milliseconds). Defaults to Date.now. */
   now?: () => number;
   /** Injectable nonce (32 lowercase hex chars). Defaults to a fresh random one. */
@@ -111,18 +149,33 @@ export function generateNonce(): string {
  * node:crypto calls (randomBytes/sign) — no network or AgentClient coupling.
  */
 export function signRequest(options: SignRequestOptions): Ed25519SignedHeaders {
-  const { method, path, body = new Uint8Array(0), keyId, privateKey, now = Date.now } = options;
+  const {
+    method,
+    path,
+    body = new Uint8Array(0),
+    keyId,
+    privateKey,
+    audience,
+    now = Date.now,
+  } = options;
+  if (audience !== undefined && !isValidAgentId(audience)) {
+    throw new Error('Signature audience is not a valid Portwing agent ID');
+  }
 
   const timestampSeconds = Math.floor(now() / 1000);
   const nonce = options.nonce ?? generateNonce();
   const bodyHashHex = bodySha256Hex(body);
-  const canonicalMessage = buildCanonicalMessage(
-    method.toUpperCase(),
-    path,
-    bodyHashHex,
-    timestampSeconds,
-    nonce,
-  );
+  const canonicalMessage =
+    audience === undefined
+      ? buildCanonicalMessage(method.toUpperCase(), path, bodyHashHex, timestampSeconds, nonce)
+      : buildCanonicalMessageV3(
+          audience,
+          method.toUpperCase(),
+          path,
+          bodyHashHex,
+          timestampSeconds,
+          nonce,
+        );
 
   const signature = cryptoSign(null, Buffer.from(canonicalMessage, 'utf8'), privateKey);
 
@@ -131,6 +184,7 @@ export function signRequest(options: SignRequestOptions): Ed25519SignedHeaders {
     'X-Portwing-Timestamp': String(timestampSeconds),
     'X-Portwing-Nonce': nonce,
     'X-Portwing-Signature': signature.toString('base64url'),
-    'X-Portwing-Signature-Version': '2',
+    'X-Portwing-Signature-Version': audience === undefined ? '2' : '3',
+    ...(audience === undefined ? {} : { 'X-Portwing-Audience': audience }),
   };
 }

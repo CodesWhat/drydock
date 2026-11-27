@@ -8,14 +8,38 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ## [Unreleased]
 
+### Added
+
+- Audit log: settings updates, notification rule edits, notification outbox retry/delete, update-operation cancels and agent key add/revoke/rotate now write audit rows, and a route inventory test fails when any new POST/PUT/PATCH/DELETE endpoint has neither an audit row nor a justified exemption.
+- Container state alerts (stopped, exited, OOM killed, restart loop) now appear in the audit log and can show in the notification bell, and the notification editor shows translated names and descriptions for them.
+- OIDC: new `DD_AUTH_OIDC_{name}_IDTOKENSIGNEDALG` option sets `id_token_signed_response_alg` so IdPs that sign ID tokens with ES256 (or other non-RS256 algorithms) can log in. Validated against a JOSE allowlist; default behaviour is unchanged. Idea from WUD.
+- OIDC: new opt-in `DD_AUTH_OIDC_{name}_REQUIREEMAILVERIFIED=true` denies sign-in when an email or domain allowlist is set and the IdP sends no `email_verified` claim. Default is unchanged (a missing claim is still accepted).
+- Four new registry providers: Elastic (`docker.elastic.co`), Linode, Scaleway (`scw.cloud`) and self-hosted ProGet. Each matches only its own hosts (no suffix or lookalike spoofing), supports anonymous bearer and credentialed auth, and masks secrets. Elastic, Linode and Scaleway are enabled anonymously by default, so registries go from 23 to 27.
+- Native notification providers for PagerDuty (Events API v2), Opsgenie, Signal (signal-cli-rest-api), Zulip and Uptime Kuma push monitors, configured with `DD_NOTIFICATION_{PAGERDUTY,OPSGENIE,SIGNAL,ZULIP,UPTIMEKUMA}_*`. Each supports single and batch templates, masks its secrets in configuration output, and uses the outbound HTTP timeout.
+- Docker watchers can reach a remote host over SSH with `DD_WATCHER_<name>_PROTOCOL=ssh` (runs `docker system dial-stdio` on the host). It needs `SSHUSER`, a pinned `SSHHOSTKEY` SHA-256 fingerprint, and a key file, agent or password. A host key mismatch refuses the connection. Requirements are documented on the watchers page, and SSH passphrases are now redacted in debug dumps.
+
 ### Security
 
+- Agents using Ed25519 request signing now sign Portwing signature v3, which binds each request to the agent's own ID. A request captured for one agent can no longer replay on another agent that trusts the same controller key. Drydock reads the ID from /_portwing/info, confirms the agent accepts v3, pins it per agent, never falls back to v2 once pinned, and stops signing if the agent's ID changes. `DD_AGENT_{name}_AUDIENCE` sets the ID explicitly. Needs Portwing 1.1.0 or newer. Rolling back to 1.8 needs `portwing signature-lock clear <keyID>` on the agents first.
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
+### Changed
+
+- Website: archived docs versions (v1.3 to v1.8) now emit JSON-LD marked as archived (`creativeWorkStatus: "Archived"` plus an `isPartOf` pointing at the versioned docs root), while the current docs keep unversioned-status markup.
+- Internal cleanup: one shared `getErrorMessage` (the docker-helpers copy is gone), the session-lock waits in basic auth and OIDC now use abortable `sleep`, and the demo app no longer registers `DELETE /api/v1/icons/cache` twice.
+
 ### Fixed
 
+- **Synced preferences no longer lose an edit to a replayed write.** `PATCH /api/v1/preferences` now takes the document `revision` and answers `409 PREFERENCES_REVISION_STALE` when it is behind. This covers a write that committed but whose response was lost, followed by an edit on another device. The UI re-fetches, merges by section and retries. `GET` and `PATCH` responses carry the new `revision` field, and omitting it on `PATCH` keeps the old unconditional write.
+- Security fast lane: a replica whose running scan is newer than the remembered candidate scan now gets its own fresh candidate scan instead of being marked attempted and left waiting for its next running-scan change.
+- Image pruning after a digest update no longer removes the previous image when a retained rollback backup records that digest, so the rollback no longer fails on a missing image.
+- Auto-rollback health monitoring no longer logs "container is healthy" at the end of its window when every inspect failed or the healthcheck was still starting. The log now reports the real outcome (inspect failed, still starting, healthy, or never reported a status).
+- Portwing agents: long Docker operations (stop/restart with a long `t`, wait, image load, archive upload, prune) no longer hit the fixed 30 s request cap when the agent advertises `dd:request-timeout`. Drydock sends a per-request timeout hint and waits hint + 5 s, maps the agent's `request_timeout` error (and a Standard 504 with `X-Portwing-Code: request_timeout`) to a typed error whose message says the operation may still have completed, and sends `dd:cancel` from Edge request timeouts and aborts when the agent advertises it.
 - Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
+- Registries: manifests whose body omits `mediaType` no longer fail with "no manifest found". The type is inferred from the response Content-Type, then from the body shape (`manifests[]` is an index, `config` plus `layers` is a single manifest).
+- Compose file updates keep the file's mode and owner. Drydock now copies permissions and ownership onto the temp file before the atomic rename, and onto the `.back` copy. A chown failure (non-root) logs a warning and doesn't block the update.
+- Recreating a container now reconciles its Healthcheck against the new image field by field. A healthcheck inherited from the old image follows the new image (or is dropped if the new image has none), while fields you set yourself, including an explicit NONE, are kept. Rollback restores the old image's default the same way.
 
 ## [1.9.0-rc.1] - 2026-11-20
 

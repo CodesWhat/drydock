@@ -50,7 +50,7 @@ vi.mock('../../../configuration/index.js', () => ({
   isWatcherSocketExplicitlyConfigured: mockIsWatcherSocketExplicitlyConfigured,
 }));
 
-vi.mock('./docker-helpers.js', () => ({
+vi.mock('../../../util/error.js', () => ({
   getErrorMessage: mockGetErrorMessage,
 }));
 
@@ -510,6 +510,38 @@ describe('docker remote auth module', () => {
     );
     expect(watcher.remoteAuthBlockedReason).toBeUndefined();
     expect(watcher.dockerApi).toBe(dockerApi);
+  });
+
+  test('initWatcherWithRemoteAuth builds ssh options for protocol=ssh without TLS or auth headers', async () => {
+    mockDockerodeCtor.mockImplementation(function DockerodeMock() {
+      return { modem: { headers: {} } };
+    });
+
+    const watcher = createWatcher({
+      configuration: {
+        host: 'remote.example',
+        port: 22,
+        protocol: 'ssh',
+        sshuser: 'drydock',
+        sshhostkey: `SHA256:${'A'.repeat(43)}`,
+        sshagent: '/run/agent.sock',
+      },
+    });
+
+    await initWatcherWithRemoteAuth(watcher as any);
+
+    expect(mockDockerodeCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        protocol: 'ssh',
+        host: 'remote.example',
+        port: 22,
+        username: 'drydock',
+        sshOptions: expect.objectContaining({ agent: '/run/agent.sock', hostHash: 'sha256' }),
+      }),
+    );
+    expect(mockReadFileSync).not.toHaveBeenCalled();
+    expect(watcher.applyRemoteAuthHeaders).not.toHaveBeenCalled();
+    expect(mockProbeSocketApiVersion).not.toHaveBeenCalled();
   });
 
   test('initWatcherWithRemoteAuth does not probe version or disable redirects for remote host watchers', async () => {

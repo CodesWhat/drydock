@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type {
   NotificationOutboxEntry,
   NotificationOutboxEntryStatus,
@@ -11,6 +12,7 @@ import {
   requeueDeadLetterEntry,
 } from '../store/notification-outbox.js';
 import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
+import { recordAuditEvent } from './audit-events.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { scoped } from './route-scopes.js';
@@ -200,6 +202,12 @@ function retryOutboxEntry(req: Request<{ id: string }>, res: Response) {
       sendErrorResponse(res, 404, 'Outbox entry not found or not in dead-letter status');
       return;
     }
+    recordAuditEvent({
+      action: 'notification-outbox-updated',
+      status: 'success',
+      containerName: 'notifications',
+      details: `retried entry=${sanitizeLogParam(id)}`,
+    });
     res.status(200).json(sanitizeOutboxEntryForResponse(requeued));
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));
@@ -215,6 +223,12 @@ function deleteOutboxEntry(req: Request<{ id: string }>, res: Response) {
       return;
     }
     removeOutboxEntry(id);
+    recordAuditEvent({
+      action: 'notification-outbox-updated',
+      status: 'success',
+      containerName: 'notifications',
+      details: `deleted entry=${sanitizeLogParam(id)}`,
+    });
     res.status(204).send();
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));

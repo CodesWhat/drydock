@@ -1021,6 +1021,7 @@ registerAuditLogSubscriptions({
   registerSecurityAlert,
   registerContainerHealthTransition,
   registerMaturityGateCleared,
+  registerContainerStateAlert,
   registerAgentDisconnected,
   registerContainerAdded,
   registerContainerUpdated,

@@ -92,3 +92,17 @@ test('rotation refuses redirects and preserves remote error status for recovery'
   expect(redirected).toBe(false);
   await expect(request(key, 'commit')).rejects.toMatchObject({ status: 401 });
 });
+
+test('rotation RPC signs version 3 for the agent audience when one is pinned', async () => {
+  const key = identity();
+  const audience = '0123456789abcdef0123456789abcdef';
+  const seen: Record<string, string | string[] | undefined> = {};
+  const origin = await listen((req, res) => {
+    Object.assign(seen, req.headers);
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ root_key_id: key.keyId, current_key_id: key.keyId }));
+  });
+  await createRotationRequest(origin, {}, () => audience)(key, 'status');
+  expect(seen['x-portwing-signature-version']).toBe('3');
+  expect(seen['x-portwing-audience']).toBe(audience);
+});

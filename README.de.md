@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Container-Image-Update-Watcher – 23 Register, 21 Benachrichtigungs- und Aktionsanbieter.**
+**Container-Image-Update-Watcher – 27 Register, 26 Benachrichtigungs- und Aktionsanbieter.**
 
 </div>
 
@@ -254,7 +254,7 @@ Vollständig interaktiv – echte Benutzeroberfläche, Scheindaten, keine Instal
 
 Containerbilder veralten stillschweigend. Ein Basisimage patcht ein CVE, eine App schneidet eine Version, ein Tag wird verschoben. Sofern Sie nicht jede Registrierung manuell überwachen, bleiben Ihre laufenden Container zurück, bis etwas kaputt geht oder ausgenutzt wird.
 
-Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouroboros) ziehen und starten mit wenig Sichtbarkeit oder Kontrolle neu und werden jetzt weitgehend nicht mehr gewartet. Die Dashboards (Portainer) verwalten Container, sind jedoch nicht für Update-Intelligenz konzipiert. Drydock ist **monitor-first**: Es überwacht 23 Register und teilt Ihnen genau mit, was sich geändert hat (Major, Minor, Patch oder Digest), bevor etwas passiert, und reagiert dann nur, wenn Sie es zulassen. Und es geht weiter als alle anderen. Trivy/Grype Schwachstellenscans blockieren unsichere Updates, Cosign überprüft Signaturen, Image-Backups vor dem Update werden automatisch zurückgesetzt, wenn die Integritätsprüfung fehlschlägt, verteilte Agents decken Remote-Hosts ab und 21 Benachrichtigungs- und Aktionsintegrationen schließen den Kreis. Der vollständige Update-Lebenszyklus mit einer Web-Benutzeroberfläche und einer REST-API.
+Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouroboros) ziehen und starten mit wenig Sichtbarkeit oder Kontrolle neu und werden jetzt weitgehend nicht mehr gewartet. Die Dashboards (Portainer) verwalten Container, sind jedoch nicht für Update-Intelligenz konzipiert. Drydock ist **monitor-first**: Es überwacht 27 Register und teilt Ihnen genau mit, was sich geändert hat (Major, Minor, Patch oder Digest), bevor etwas passiert, und reagiert dann nur, wenn Sie es zulassen. Und es geht weiter als alle anderen. Trivy/Grype Schwachstellenscans blockieren unsichere Updates, Cosign überprüft Signaturen, Image-Backups vor dem Update werden automatisch zurückgesetzt, wenn die Integritätsprüfung fehlschlägt, verteilte Agents decken Remote-Hosts ab und 26 Benachrichtigungs- und Aktionsintegrationen schließen den Kreis. Der vollständige Update-Lebenszyklus mit einer Web-Benutzeroberfläche und einer REST-API.
 
 <hr>
 
@@ -263,8 +263,8 @@ Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouro
 | | Funktion | Beschreibung |
 | --- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔭  | **Monitor-First-Erkennung**                    | Überwacht jeden laufenden Container und klassifiziert jedes verfügbare Update als Haupt-, Neben-, Patch- oder Digest-Update, bevor etwas passiert. Es ändert sich nichts, bis Sie es sagen.                                                                                                                                                                                                                                                                                                                                                                   |
-| 📦  | **23 Registrierungsanbieter**                  | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus und 12 weitere. Öffentlich und privat, in der Cloud und selbst gehostet, mit TLS und Authentifizierung pro Registrierung.                                                                                                                                                                                                                                                                                                                                                     |
-| 🔔  | **21 Auslöser**                                | 17 Benachrichtigungskanäle (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy und mehr) plus Docker-, Docker Compose-, Portainer- und Command-Aktionen, mit Vorlagen pro Ereignis/Anbieter, Live-Vorschau, Schwellenwertfilterung und Batch-Modus.                                                                                                                                                                                                                                                                                                                     |
+| 📦  | **27 Registrierungsanbieter**                  | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus und 16 weitere. Öffentlich und privat, in der Cloud und selbst gehostet, mit TLS und Authentifizierung pro Registrierung.                                                                                                                                                                                                                                                                                                                                                     |
+| 🔔  | **26 Auslöser**                                | 22 Benachrichtigungskanäle (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy und mehr) plus Docker-, Docker Compose-, Portainer- und Command-Aktionen, mit Vorlagen pro Ereignis/Anbieter, Live-Vorschau, Schwellenwertfilterung und Batch-Modus.                                                                                                                                                                                                                                                                                                                     |
 | 🥊  | **Update Bouncer**                             | Der Schwachstellenscan Trivy/Grype blockiert unsichere Updates vor der Bereitstellung, mit Cosign-Signaturüberprüfung und SBOM-Generierung (CycloneDX und SPDX).                                                                                                                                                                                                                                                                                                                                                                                           |
 | ↩️  | **Image-Sicherung und automatisches Rollback** | Image-Snapshots vor dem Update mit konfigurierbarer Aufbewahrung, automatischem Rollback bei fehlgeschlagener Integritätsprüfung und manuellem Rollback mit einem Klick über die Benutzeroberfläche.                                                                                                                                                                                                                                                                                                                                                                          |
 | 🪝  | **Lebenszyklus-Hooks**                         | Shell-Befehle vor und nach dem Update über Container-Labels, mit Zeitüberschreitungen pro Hook und Steuerung des Abbruchs bei Fehler.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -282,17 +282,17 @@ Die meisten Tools erzwingen einen Kompromiss. Die Auto-Updater (Watchtower, Ouro
 
 <h2 align="center" id="supported-integrations">Unterstützte Integrationen</h2>
 
-### Register (23)
+### Register (27)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Custom · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
 
 ### Aktionen (4)
 
 Docker · Docker Compose · Portainer · Command
 
-### Benachrichtigungen (17)
+### Benachrichtigungen (22)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
 
 ### Authentifizierung
 
@@ -340,9 +340,9 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <tr><td>Audit-Protokoll</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / Mehrbenutzerrollen</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>OIDC-/SSO-Authentifizierung</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Trigger-/Benachrichtigungskanäle</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Trigger-/Benachrichtigungskanäle</td><td align="center">26</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Registry-Anbieter</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Registry-Anbieter</td><td align="center">27</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST-API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Webhook-API für CI/CD</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Begrenzte API-Tokens / -Schlüssel</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -386,9 +386,9 @@ Trivy- oder Grype-gestützte Schwachstellenscans blockieren unsichere Updates, b
 <tr><td>Audit-Protokoll</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / Mehrbenutzerrollen</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>OIDC-/SSO-Authentifizierung</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Trigger-/Benachrichtigungskanäle</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Trigger-/Benachrichtigungskanäle</td><td align="center">26</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Registry-Anbieter</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Registry-Anbieter</td><td align="center">27</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Prometheus-Metriken</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Verteilte Agenten (remote)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Container-Gruppierung / Stacks</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>

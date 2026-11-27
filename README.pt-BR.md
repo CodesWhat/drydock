@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Observador de atualização de imagem de contêiner, 23 registros, 21 provedores de notificação e ação.**
+**Observador de atualização de imagem de contêiner, 27 registros, 26 provedores de notificação e ação.**
 
 </div>
 
@@ -254,7 +254,7 @@ Totalmente interativo – UI real, dados simulados, sem necessidade de instalaç
 
 As imagens dos contêineres ficam desatualizadas silenciosamente. Uma imagem base corrige um CVE, um aplicativo corta uma versão, uma tag se move. A menos que você observe cada registro manualmente, seus contêineres em execução ficarão para trás até que algo quebre ou seja explorado.
 
-A maioria das ferramentas força uma compensação. Os atualizadores automáticos (Watchtower, Ouroboros) puxam e reiniciam com pouca visibilidade ou controle e agora não recebem manutenção. Os painéis (Portainer) gerenciam contêineres, mas não foram criados para inteligência de atualização. Drydock é **monitorar primeiro**: ele monitora 23 registros e informa exatamente o que mudou (principal, secundário, patch ou resumo) antes que algo aconteça, e então age apenas quando você permite. E vai além de qualquer um deles. A verificação de vulnerabilidades Trivy/Grype bloqueia atualizações inseguras, o Cosign verifica assinaturas, os backups de imagem pré-atualização são revertidos automaticamente em caso de falha na verificação de integridade, os agentes distribuídos cobrem hosts remotos e 21 integrações de notificação e ação fecham o ciclo. O ciclo de vida completo da atualização, com uma UI web e uma API REST.
+A maioria das ferramentas força uma compensação. Os atualizadores automáticos (Watchtower, Ouroboros) puxam e reiniciam com pouca visibilidade ou controle e agora não recebem manutenção. Os painéis (Portainer) gerenciam contêineres, mas não foram criados para inteligência de atualização. Drydock é **monitorar primeiro**: ele monitora 27 registros e informa exatamente o que mudou (principal, secundário, patch ou resumo) antes que algo aconteça, e então age apenas quando você permite. E vai além de qualquer um deles. A verificação de vulnerabilidades Trivy/Grype bloqueia atualizações inseguras, o Cosign verifica assinaturas, os backups de imagem pré-atualização são revertidos automaticamente em caso de falha na verificação de integridade, os agentes distribuídos cobrem hosts remotos e 26 integrações de notificação e ação fecham o ciclo. O ciclo de vida completo da atualização, com uma UI web e uma API REST.
 
 <hr>
 
@@ -263,8 +263,8 @@ A maioria das ferramentas força uma compensação. Os atualizadores automático
 | | Recurso | Descrição |
 | --- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔭  | **Detecção que prioriza o monitoramento**  | Observa cada contêiner em execução e classifica cada atualização disponível como principal, secundária, patch ou resumo antes que algo aconteça. Nada muda até que você diga.                                                                                                                                                                                                                                                                                                                                                                |
-| 📦  | **23 provedores de registro**              | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus e mais 12. Público e privado, em nuvem e auto-hospedado, com TLS e autenticação por registro.                                                                                                                                                                                                                                                                                                                                                                 |
-| 🔔  | **21 gatilhos**                            | 17 canais de notificação (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy e mais) além de Docker, Docker Compose, Portainer e ações de comando, com modelos por evento/provedor, visualização ao vivo, filtragem de limite e modo em lote.                                                                                                                                                                                                                                                                                                         |
+| 📦  | **27 provedores de registro**              | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus e mais 16. Público e privado, em nuvem e auto-hospedado, com TLS e autenticação por registro.                                                                                                                                                                                                                                                                                                                                                                 |
+| 🔔  | **26 gatilhos**                            | 22 canais de notificação (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy e mais) além de Docker, Docker Compose, Portainer e ações de comando, com modelos por evento/provedor, visualização ao vivo, filtragem de limite e modo em lote.                                                                                                                                                                                                                                                                                                         |
 | 🥊  | **Update Bouncer**                         | A verificação de vulnerabilidades Trivy/Grype bloqueia atualizações inseguras antes de serem implantadas, com verificação da assinatura Cosign e geração de SBOM (CycloneDX e SPDX).                                                                                                                                                                                                                                                                                                                                                      |
 | ↩️  | **Backup de imagem e reversão automática** | Instantâneos de imagem pré-atualizados com retenção configurável, reversão automática em caso de falha na verificação de integridade e reversão manual com um clique na interface do usuário.                                                                                                                                                                                                                                                                                                                                                                |
 | 🪝  | **Ganchos de ciclo de vida**               | Comandos shell pré e pós-atualização por meio de rótulos de contêiner, com tempos limite por gancho e controle de aborto em caso de falha.                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -282,17 +282,17 @@ A maioria das ferramentas força uma compensação. Os atualizadores automático
 
 <h2 align="center" id="supported-integrations">Integrações suportadas</h2>
 
-### Registros (23)
+### Registros (27)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
 
 ### Ações (4)
 
 Docker · Docker Compose · Portainer · Command
 
-### Notificações (17)
+### Notificações (22)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
 
 ### Autenticação
 
@@ -340,9 +340,9 @@ A verificação de vulnerabilidades com tecnologia Trivy ou Grype bloqueia atual
 <tr><td>Log de auditoria</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / funções multiusuário</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Autenticação OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Canais de gatilho / notificação</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Canais de gatilho / notificação</td><td align="center">26</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Provedores de registro</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Provedores de registro</td><td align="center">27</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API REST</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API de webhook para CI/CD</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Tokens / chaves de API com escopo</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -386,9 +386,9 @@ A verificação de vulnerabilidades com tecnologia Trivy ou Grype bloqueia atual
 <tr><td>Log de auditoria</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / funções multiusuário</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>Autenticação OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Canais de gatilho / notificação</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Canais de gatilho / notificação</td><td align="center">26</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Provedores de registro</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Provedores de registro</td><td align="center">27</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Métricas do Prometheus</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Agentes distribuídos (remotos)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Agrupamento de contêineres / stacks</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>

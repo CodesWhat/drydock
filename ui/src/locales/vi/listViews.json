@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Đã chuẩn bị máy quét",
       "scanner-asset-warm-failed": "Chuẩn bị máy quét thất bại",
       "container-unhealthy": "Container không khỏe mạnh",
+      "container-stopped": "Container đã dừng",
+      "container-exited": "Container đã thoát",
+      "container-oom-killed": "Container bị hủy do hết bộ nhớ",
+      "container-restart-loop": "Container lặp khởi động lại",
       "env-reveal": "Đã hiển thị biến môi trường",
       "debug-dump": "Đã tải dữ liệu gỡ lỗi",
       "config-read": "Đã đọc cấu hình",
@@ -122,7 +126,12 @@
       "image-prune": "Dọn dẹp Image",
       "cleanup": "Dọn dẹp",
       "notification-silence-set": "Đã tắt tiếng thông báo",
-      "notification-silence-cleared": "Đã bật lại tiếng thông báo"
+      "notification-silence-cleared": "Đã bật lại tiếng thông báo",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Container",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "Container không khỏe mạnh",
         "description": "Khi health check Docker của container chuyển sang trạng thái \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Container đã dừng",
+        "description": "Khi một container được theo dõi dừng lại"
+      },
+      "container-exited": {
+        "name": "Container đã thoát",
+        "description": "Khi một container được theo dõi thoát với mã thoát khác không"
+      },
+      "container-oom-killed": {
+        "name": "Container bị hủy do hết bộ nhớ",
+        "description": "Khi nhân hệ điều hành hủy một container được theo dõi do hết bộ nhớ"
+      },
+      "container-restart-loop": {
+        "name": "Container lặp khởi động lại",
+        "description": "Khi một container được theo dõi liên tục gặp sự cố và khởi động lại"
       },
       "maturity-cleared": {
         "name": "Đã đạt độ chín",

@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "نجح تجهيز الماسح",
       "scanner-asset-warm-failed": "فشل تجهيز الماسح",
       "container-unhealthy": "حاوية غير سليمة",
+      "container-stopped": "تم إيقاف الحاوية",
+      "container-exited": "انتهت الحاوية",
+      "container-oom-killed": "تم إنهاء الحاوية بسبب نفاد الذاكرة",
+      "container-restart-loop": "الحاوية في حلقة إعادة تشغيل",
       "env-reveal": "تم إظهار متغيرات البيئة",
       "debug-dump": "تم تنزيل بيانات التصحيح",
       "config-read": "تمت قراءة الإعدادات",
@@ -122,7 +126,12 @@
       "image-prune": "تنظيف الصورة",
       "cleanup": "التنظيف",
       "notification-silence-set": "تم كتم الإشعارات",
-      "notification-silence-cleared": "أُلغي كتم الإشعارات"
+      "notification-silence-cleared": "أُلغي كتم الإشعارات",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "الحاوية",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "الحاوية غير سليمة",
         "description": "عندما يدخل فحص الحالة الصحية لـ Docker الخاص بالحاوية في حالة غير سليمة"
+      },
+      "container-stopped": {
+        "name": "تم إيقاف الحاوية",
+        "description": "عندما تتوقف حاوية مراقبة"
+      },
+      "container-exited": {
+        "name": "انتهت الحاوية",
+        "description": "عندما تنتهي حاوية مراقبة برمز خروج غير صفري"
+      },
+      "container-oom-killed": {
+        "name": "تم إنهاء الحاوية بسبب نفاد الذاكرة",
+        "description": "عندما تنهي النواة حاوية مراقبة بسبب نفاد الذاكرة"
+      },
+      "container-restart-loop": {
+        "name": "الحاوية في حلقة إعادة تشغيل",
+        "description": "عندما تتعطل حاوية مراقبة وتعيد التشغيل باستمرار"
       },
       "maturity-cleared": {
         "name": "اكتمل النضج",

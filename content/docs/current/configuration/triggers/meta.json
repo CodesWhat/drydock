@@ -19,11 +19,16 @@
     "mattermost",
     "mqtt",
     "ntfy",
+    "opsgenie",
+    "pagerduty",
     "pushover",
     "rocketchat",
+    "signal",
     "slack",
     "smtp",
     "teams",
-    "telegram"
+    "telegram",
+    "uptimekuma",
+    "zulip"
   ]
 }

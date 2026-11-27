@@ -62,7 +62,6 @@ import mockParse from 'parse-docker-image-name';
 import * as mockPrometheus from '../../../prometheus/watcher.js';
 import * as mockTag from '../../../tag/index.js';
 import * as containerInit from './container-init.js';
-import * as dockerHelpers from './docker-helpers.js';
 import * as maintenance from './maintenance.js';
 
 const mockAxios = axios as Mocked<typeof axios>;
@@ -1475,9 +1474,8 @@ describe('Docker Watcher', () => {
       expect(diagnostics.enrichmentErrors).toBe(2);
     });
 
-    test('should fallback to stringified error when image detail fetch error has empty message', async () => {
-      const getErrorMessageSpy = vi.spyOn(dockerHelpers, 'getErrorMessage').mockReturnValue('');
-      try {
+    test('should fall back to the shared unknown-error message when image detail fetch error has empty message', async () => {
+      {
         mockDockerApi.listContainers.mockResolvedValue([
           { Id: '1', Labels: { 'dd.watch': 'true' }, Names: ['/test1'] },
         ]);
@@ -1488,12 +1486,10 @@ describe('Docker Watcher', () => {
         const result = await docker.getContainers();
 
         expect(docker.log.warn).toHaveBeenCalledWith(
-          expect.stringContaining('test1: Failed to fetch image detail ([object Object])'),
+          expect.stringContaining('test1: Failed to fetch image detail (unknown error)'),
         );
         // Non-Error thrown value is wrapped into an Error and excluded from result
         expect(result).toEqual([]);
-      } finally {
-        getErrorMessageSpy.mockRestore();
       }
     });
 

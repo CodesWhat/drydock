@@ -925,6 +925,10 @@ export const openApiPaths = {
                 apiVersion: { type: 'integer', enum: [1] },
                 schemaVersion: { type: 'integer', minimum: 1 },
                 preferences: { type: 'object', additionalProperties: true },
+                // The `revision` from the last GET/PATCH response. When it no longer
+                // matches the stored document the write is refused with 409
+                // PREFERENCES_REVISION_STALE. Omit for an unconditional write.
+                revision: { type: 'integer', minimum: 0 },
               },
               required: ['apiVersion', 'schemaVersion', 'preferences'],
               additionalProperties: false,
@@ -937,7 +941,9 @@ export const openApiPaths = {
         400: errorResponse('Invalid preferences payload'),
         401: errorResponse('Authentication required'),
         403: errorResponse('Sync is not available in anonymous mode'),
-        409: errorResponse('Preferences API version mismatch (apiVersion !== supported version)'),
+        409: errorResponse(
+          'Either PREFERENCES_API_VERSION_MISMATCH (apiVersion !== supported version) or PREFERENCES_REVISION_STALE (revision is behind the stored document; body carries currentRevision, re-fetch, merge and retry)',
+        ),
         413: errorResponse(
           'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
         ),

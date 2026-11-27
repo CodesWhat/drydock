@@ -61,6 +61,9 @@ export const AUDIT_ACTOR_MIGRATION_VERSION = 15;
 /** Index on update_operations.new_container_id so the list endpoint's lookup stops scanning the table. */
 export const UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION = 16;
 
+/** ui_preferences.revision, the optimistic-concurrency counter for preference writes (PREF-REVISION). */
+export const UI_PREFERENCES_REVISION_MIGRATION_VERSION = 17;
+
 export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
@@ -254,6 +257,12 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     version: UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
     note: 'index update_operations.new_container_id',
     sql: 'CREATE INDEX update_operations_new_container_id ON update_operations(new_container_id);',
+  },
+  {
+    version: UI_PREFERENCES_REVISION_MIGRATION_VERSION,
+    // Existing rows start at 1 so a stored record never shares revision 0 with "no record yet".
+    note: 'add ui_preferences.revision for stale-write detection (PREF-REVISION)',
+    sql: 'ALTER TABLE ui_preferences ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;',
   },
 ];
 

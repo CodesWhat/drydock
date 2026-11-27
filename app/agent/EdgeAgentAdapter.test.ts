@@ -13,6 +13,7 @@ import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import * as registry from '../registry/index.js';
 import * as ids from '../util/uuid.js';
 import { AgentClient } from './AgentClient.js';
+import { AgentRequestTimeoutError } from './AgentRequestTimeoutError.js';
 import { AgentResponseTooLargeError } from './AgentResponseTooLargeError.js';
 import { checkAgentVersion } from './agent-version-alerts.js';
 import {
@@ -4229,4 +4230,230 @@ test('managed Edge rotation uses correlated RPC and closes the current tunnel on
     db.close();
     bindings.clearCollectionForTesting();
   }
+});
+
+describe('EdgeAgentAdapter — request timeout hint and cancel capabilities', () => {
+  afterEach(() => vi.useRealTimers());
+
+  function capAdapter(capabilities: string[]) {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, { capabilities });
+    return { adapter, ws };
+  }
+  const frames = (ws: { sentMessages: string[] }) => ws.sentMessages.map((m) => JSON.parse(m));
+
+  test('records capabilities from the hello', () => {
+    expect(capAdapter([]).adapter.supportsRequestTimeout).toBe(false);
+    expect(capAdapter([]).adapter.supportsCancel).toBe(false);
+    const { adapter } = capAdapter(['dd:request-timeout', 'dd:cancel']);
+    expect(adapter.supportsRequestTimeout).toBe(true);
+    expect(adapter.supportsCancel).toBe(true);
+  });
+
+  test('sends timeoutMs and arms the timer at hint + 5 s with the capability', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter(['dd:request-timeout']);
+    const promise = adapter.sendRequest('POST', '/containers/a/stop?t=60', {}, undefined, {
+      timeoutMs: 75_000,
+    });
+    expect(frames(ws)[0].data.timeoutMs).toBe(75_000);
+    const rejected = expect(promise).rejects.toThrow('timed out after 80000ms');
+    await vi.advanceTimersByTimeAsync(79_999);
+    expect(adapter['pendingRequests'].size).toBe(1);
+    await vi.advanceTimersByTimeAsync(2);
+    await rejected;
+    expect(frames(ws).map((f) => f.type)).toEqual(['request']);
+  });
+
+  test('clamps an out-of-range hint', async () => {
+    const { adapter, ws } = capAdapter(['dd:request-timeout']);
+    void adapter
+      .sendRequest('POST', '/containers/a/wait', {}, undefined, { timeoutMs: 5_000_000 })
+      .catch(() => undefined);
+    expect(frames(ws)[0].data.timeoutMs).toBe(900_000);
+    await adapter.onDisconnect();
+  });
+
+  test('never sends the hint or extends the timer without the capability', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter([]);
+    const promise = adapter.sendRequest('POST', '/containers/a/wait', {}, undefined, {
+      timeoutMs: 900_000,
+    });
+    expect(frames(ws)[0].data).not.toHaveProperty('timeoutMs');
+    const rejected = expect(promise).rejects.toThrow('timed out after 30000ms');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+  });
+
+  test('no hint option leaves the frame untouched even with the capability', async () => {
+    const { adapter, ws } = capAdapter(['dd:request-timeout']);
+    void adapter.sendRequest('GET', '/x').catch(() => undefined);
+    expect(frames(ws)[0].data).not.toHaveProperty('timeoutMs');
+    await adapter.onDisconnect();
+  });
+
+  test('upload requests carry the hint on the request frame', async () => {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream', 'dd:request-timeout'],
+    });
+    void adapter
+      .sendRequest('PUT', '/containers/a/archive?path=/', {}, Buffer.from([1]), {
+        timeoutMs: 900_000,
+      })
+      .catch(() => undefined);
+    expect(frames(ws)[0].data).toMatchObject({ bodyStream: true, timeoutMs: 900_000 });
+    await adapter.onDisconnect();
+  });
+
+  test('streaming uploads never carry a hint', async () => {
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream', 'dd:request-timeout'],
+    });
+    void adapter.sendStreamRequest('POST', '/build', {}, Buffer.from([1])).catch(() => undefined);
+    expect(frames(ws)[0].data).not.toHaveProperty('timeoutMs');
+    await adapter.onDisconnect();
+  });
+
+  test('maps error code request_timeout to a typed error', async () => {
+    const { adapter, ws } = capAdapter(['dd:request-timeout']);
+    const promise = adapter.sendRequest('POST', '/containers/a/stop?t=60');
+    const requestId = frames(ws)[0].data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({
+        type: 'error',
+        data: { requestId, code: 'request_timeout', message: 'docker request exceeded 1m15s' },
+      }),
+    );
+    const error = await promise.catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AgentRequestTimeoutError);
+    expect((error as Error).message).toContain('may still have completed');
+    expect((error as AgentRequestTimeoutError).code).toBe('request_timeout');
+  });
+
+  test('sends dd:cancel exactly once when a request times out', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+    const promise = adapter.sendRequest('GET', '/slow');
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+    const sent = frames(ws);
+    expect(sent.map((f) => f.type)).toEqual(['request', 'dd:cancel']);
+    expect(sent[1].data).toEqual({ requestId: sent[0].data.requestId, reason: 'timeout' });
+  });
+
+  test('does not send dd:cancel without the capability', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter([]);
+    const promise = adapter.sendRequest('GET', '/slow');
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+    expect(frames(ws).map((f) => f.type)).toEqual(['request']);
+  });
+
+  test('dd:cancel send failures are swallowed', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+    const promise = adapter.sendRequest('GET', '/slow');
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    vi.mocked(ws.send).mockImplementation(() => {
+      throw new Error('closing');
+    });
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+  });
+
+  test('dd:cancel is not sent after disconnect', async () => {
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+    await adapter.onDisconnect();
+    adapter['sendCancel']('r1');
+    expect(ws.sentMessages).toHaveLength(0);
+  });
+
+  test('stream request timeout and stream inactivity timeouts send dd:cancel', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+
+    const first = adapter.sendStreamRequest('GET', '/events');
+    const firstRejected = expect(first).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await firstRejected;
+
+    const second = adapter.sendStreamRequest('GET', '/events');
+    const secondRejected = expect(second).rejects.toThrow('timed out');
+    const secondId = frames(ws).filter((f) => f.type === 'request')[1].data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'response', data: { requestId: secondId, isStream: true } }),
+    );
+    await vi.advanceTimersByTimeAsync(30_001);
+    await secondRejected;
+
+    const third = adapter.sendStreamRequest('GET', '/events');
+    const thirdRejected = expect(third).rejects.toThrow('timed out');
+    const thirdId = frames(ws).filter((f) => f.type === 'request')[2].data.requestId;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'stream', data: { requestId: thirdId, data: 'AA==' } }),
+    );
+    await vi.advanceTimersByTimeAsync(30_001);
+    await thirdRejected;
+
+    const cancelIds = frames(ws)
+      .filter((f) => f.type === 'dd:cancel')
+      .map((f) => f.data.requestId);
+    expect(cancelIds).toHaveLength(3);
+    expect(cancelIds).toContain(secondId);
+    expect(cancelIds).toContain(thirdId);
+  });
+
+  test('an oversized stream response aborts with dd:cancel', async () => {
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+    const promise = adapter.sendStreamRequest('GET', '/events');
+    const rejected = expect(promise).rejects.toThrow('response limit');
+    const requestId = frames(ws)[0].data.requestId;
+    const entry = adapter['pendingRequests'].get(`stream:${requestId}`);
+    if (entry) entry.streamBytes = 100 * 1024 * 1024;
+    await adapter['onMessage'](
+      JSON.stringify({ type: 'stream', data: { requestId, data: 'AA==' } }),
+    );
+    await rejected;
+    expect(frames(ws).map((f) => f.type)).toEqual(['request', 'dd:cancel']);
+  });
+
+  test('a timed-out upload sends dd:cancel instead of request-cancelled', async () => {
+    vi.useFakeTimers();
+    const { client, ws } = createAdapter();
+    const adapter = new EdgeAgentAdapter(client, ws, {
+      capabilities: ['edge-request-body-stream', 'dd:cancel'],
+    });
+    const promise = adapter.sendRequest('POST', '/build', {}, Buffer.from([255]));
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejected;
+    expect(frames(ws).map((f) => f.type)).toEqual(['request', 'dd:cancel']);
+  });
+
+  test('late frames for a cancelled id are dropped silently', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = capAdapter(['dd:cancel']);
+    const promise = adapter.sendRequest('GET', '/slow');
+    const rejected = expect(promise).rejects.toThrow('timed out');
+    await vi.advanceTimersByTimeAsync(30_001);
+    await rejected;
+    const requestId = frames(ws)[0].data.requestId;
+    const before = ws.sentMessages.length;
+    for (const frame of [
+      { type: 'response', data: { requestId, statusCode: 200 } },
+      { type: 'stream', data: { requestId, data: 'AA==' } },
+      { type: 'stream_end', data: { requestId, reason: 'cancelled' } },
+      { type: 'error', data: { requestId, code: 'cancelled', message: 'request cancelled' } },
+    ]) {
+      await expect(adapter['onMessage'](JSON.stringify(frame))).resolves.toBeUndefined();
+    }
+    expect(ws.sentMessages).toHaveLength(before);
+    expect(adapter['pendingRequests'].size).toBe(0);
+  });
 });

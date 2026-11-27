@@ -254,6 +254,7 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 | `DD_AGENT_{name}_SIGNINGKEYID` | 🔴¹ | **Required when `AUTHMODE=ed25519`.** The key id sent as the `X-Portwing-Key-ID` header — the 16-hex-char id Portwing derived from the public key at registration (`hex(SHA-256(pubkey)[:8])`). | |
 | `DD_AGENT_{name}_SIGNINGKEY` | 🔴¹ | **Required when `AUTHMODE=ed25519`.** PEM-encoded PKCS#8 Ed25519 private key (the format Portwing's keygen produces). | |
 | `DD_AGENT_{name}_SIGNINGKEY__FILE` | ⚪ | Path to a file containing the PEM Ed25519 private key, instead of inlining it. Note the **double** underscore, per the [secret-file convention](/docs/configuration#secret-management). | |
+| `DD_AGENT_{name}_AUDIENCE` | ⚪ | Portwing agent ID to bind signature version 3 to (`^[a-z0-9-]{1,64}$`). Only valid with `AUTHMODE=ed25519`. Skips discovery from `/_portwing/info` and takes precedence over a saved pin. See [signature version 3](#signature-version-3-audience-bound). | |
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
 | `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
@@ -304,11 +305,27 @@ By default the controller authenticates to each agent with a shared secret token
 - `X-Portwing-Timestamp` (Unix seconds)
 - `X-Portwing-Nonce`
 - `X-Portwing-Signature` (base64url Ed25519 signature)
-- `X-Portwing-Signature-Version: 2`
+- `X-Portwing-Signature-Version` (`3` once the agent is pinned, `2` otherwise)
 
 Signature version 2 signs `METHOD\nREQUEST-TARGET\nSHA-256-hex(body)\ntimestamp\nnonce`, where `REQUEST-TARGET` is the exact origin-form target placed on the wire: the escaped path plus `?` and the unmodified raw query when present. Percent escaping, query ordering, repeated parameters, and the raw body bytes are signature inputs and must not be decoded, normalized, or reordered. This matches [Portwing's verifier](/docs/api/portwing#standard-mode-ed25519-request-signing). No `X-Dd-Agent-Secret` is sent.
 
 Use it when the remote agent verifies requests with a registered Ed25519 public key (Portwing's scheme) rather than a shared secret. Unlike a static token, a captured signature can't be replayed and there's no long-lived shared secret on the wire.
+
+#### Signature version 3 (audience-bound)
+
+One controller key registered on several Portwing agents would let a request captured for agent A replay on agent B inside the timestamp window. Signature version 3 closes that by signing the agent's own ID into every request: `portwing-sig-v3\nAGENT-ID\nMETHOD\nREQUEST-TARGET\nSHA-256-hex(body)\ntimestamp\nnonce`. Requests also carry an `X-Portwing-Audience` header with the same ID, so a wrong-agent request is refused as `audience-mismatch` instead of a bare `invalid-signature`. Edge mode is unaffected, since it has no per-request controller signatures.
+
+You don't configure anything. The first time Drydock connects it reads `GET /_portwing/info` (signed with version 2), and when the agent reports `v3: true` it sends one version 3 request to confirm the agent accepts it, then pins that agent ID. Agents that can't do version 3 (`agent-id-not-persistent`, `agent-id-not-v3-compatible`, `state-not-writable`) stay on version 2, and the reason is logged. Version 3 needs Portwing 1.1.0 or newer.
+
+After the pin is saved Drydock never signs version 2 for that agent again, even if a later `/_portwing/info` says `v3: false` or a request comes back `invalid-signature`, because the info body is unsigned and anything that terminates TLS between the controller and the agent could forge either one. On every connect Drydock checks the pinned ID against what the agent reports. If it differs, or the agent answers `audience-mismatch`, Drydock stops signing requests to that agent and logs the pinned and reported IDs. The pins live in `portwing-audience-pins.json` in the store directory (`DD_STORE_PATH`), a plain file rather than a database table so it doesn't change the database schema.
+
+Set `DD_AGENT_{name}_AUDIENCE` to a Portwing agent ID to skip discovery and sign version 3 for that ID from the first request. It takes precedence over a saved pin.
+
+**Upgrading.** Update the agents to Portwing 1.1.0 or newer first, then upgrade Drydock. Once the first version 3 request is accepted, Portwing locks that key against version 2 and legacy signatures (`signature-locked`). Once every controller signs version 3, setting `SIGNATURE_MIN_VERSION=3` on the agent makes the floor global. Keep the agent's state directory on a persistent volume: the lock lives there, and an agent ID that changes on restart can't be pinned.
+
+**Rolling back.** The lock outlives a Drydock downgrade, so a Drydock 1.8 controller (which only signs version 2) is refused with `signature-locked` by any agent whose key already signed version 3. Before rolling back, clear the lock on each agent with `portwing signature-lock clear <keyID>` (or use a different key for the rolled-back controller). Drydock 1.8 ignores `portwing-audience-pins.json`, and after you upgrade again the saved pin still applies. The lock is not carried across a key rotation, so a freshly rotated key starts unlocked.
+
+**Replacing an agent.** If you deliberately replace an agent with one that has a different ID, remove that agent's entry from `portwing-audience-pins.json` while Drydock is stopped, or set `DD_AGENT_{name}_AUDIENCE` to the new ID, then start Drydock. Drydock won't do this for you, since a changed ID is exactly what an impostor looks like.
 
 ```yaml
 services:
@@ -504,7 +521,7 @@ When the Docker watcher on an agent fails to enumerate containers (e.g. a brief 
 
 When the controller proxies an update to an agent, it posts to the agent-local `POST /api/triggers/{type}/{name}` route (or `…/batch` for batch updates). Agent-local routes are intentionally unversioned and authenticated with `X-Dd-Agent-Secret`; controller API clients should continue to use the canonical `/api/v1/*` routes. For single-update calls on `docker` and `dockercompose` triggers the controller sends only `{ id, name }` (plus an `operationId` when one is in flight) rather than the full container object, which prevents HTTP 413 errors where full payloads exceeded the agent's 256 KB body cap. Batch update calls (`…/batch`) still send the full container per item, so a very large fleet updated in one batch can still approach that cap.
 
-Portwing 0.9.0's controller-owned Docker transport does not use those legacy watcher/trigger POST routes. The exact `transport=docker-api`, `execution=controller`, `events=portwing` marker causes Drydock to start its native Docker watcher and update action against a loopback-only, random bearer-authenticated bridge. That bridge forwards Docker API calls through the agent client's existing authentication: Standard HTTP (token or Ed25519 signature version 2) or Edge correlated `request`/`response`/`stream` transport.
+Portwing 0.9.0's controller-owned Docker transport does not use those legacy watcher/trigger POST routes. The exact `transport=docker-api`, `execution=controller`, `events=portwing` marker causes Drydock to start its native Docker watcher and update action against a loopback-only, random bearer-authenticated bridge. That bridge forwards Docker API calls through the agent client's existing authentication: Standard HTTP (token or Ed25519 signature version 2 or 3) or Edge correlated `request`/`response`/`stream` transport.
 
 Because registry enrichment is controller-owned on this path, later Portwing inventory commonly carries the raw defaults `updateAvailable=false` and `updateKind=unknown`. Drydock preserves its stored `result`, update status, policy, security, rollback, and operation fields instead of allowing those raw defaults to erase a controller-enriched result. Portwing's lifecycle events remain authoritative; the delegated native watcher runs with its own Docker event subscription disabled to avoid duplicate streams.
 

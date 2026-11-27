@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const COVERAGE_READ_RETRY_DELAY_MS = 15;
 const COVERAGE_READ_RETRY_MAX_ATTEMPTS = 40;
@@ -33,11 +34,6 @@ export interface CoverageProviderForReads {
   toSlices: (filenames: string[], concurrency: number) => string[][];
   pendingPromises: Promise<unknown>[];
 }
-
-const sleep = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
 
 export async function readCoverageFileWithRetry(filename: string): Promise<string> {
   for (let attempt = 1; attempt <= COVERAGE_READ_RETRY_MAX_ATTEMPTS; attempt += 1) {

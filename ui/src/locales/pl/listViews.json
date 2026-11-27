@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Przygotowano skaner",
       "scanner-asset-warm-failed": "Przygotowanie skanera nie powiodło się",
       "container-unhealthy": "Kontener w złym stanie",
+      "container-stopped": "Kontener zatrzymany",
+      "container-exited": "Kontener zakończył działanie",
+      "container-oom-killed": "Kontener zabity z powodu braku pamięci",
+      "container-restart-loop": "Kontener w pętli restartów",
       "env-reveal": "Wyświetlono zmienne środowiskowe",
       "debug-dump": "Pobrano dane diagnostyczne",
       "config-read": "Odczytano konfigurację",
@@ -122,7 +126,12 @@
       "image-prune": "Czyszczenie obrazu",
       "cleanup": "Czyszczenie",
       "notification-silence-set": "Wyciszono powiadomienia",
-      "notification-silence-cleared": "Zdjęto wyciszenie powiadomień"
+      "notification-silence-cleared": "Zdjęto wyciszenie powiadomień",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Kontener",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "Kontener niesprawny",
         "description": "Gdy kontrola stanu Docker kontenera przejdzie w stan \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Kontener zatrzymany",
+        "description": "Gdy monitorowany kontener zostanie zatrzymany"
+      },
+      "container-exited": {
+        "name": "Kontener zakończył działanie",
+        "description": "Gdy monitorowany kontener zakończy działanie z niezerowym kodem wyjścia"
+      },
+      "container-oom-killed": {
+        "name": "Kontener zabity z powodu braku pamięci",
+        "description": "Gdy jądro zabije monitorowany kontener z powodu braku pamięci"
+      },
+      "container-restart-loop": {
+        "name": "Kontener w pętli restartów",
+        "description": "Gdy monitorowany kontener ciągle się zawiesza i restartuje"
       },
       "maturity-cleared": {
         "name": "Dojrzałość wyczyszczona",

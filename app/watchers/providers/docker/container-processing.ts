@@ -8,8 +8,10 @@ import {
   fullName,
 } from '../../../model/container.js';
 import * as storeContainer from '../../../store/container.js';
-import { getErrorMessage } from './docker-helpers.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { enrichContainerWithReleaseNotes } from './release-notes-enrichment.js';
+
+const UNKNOWN_CONTAINER_PROCESSING_ERROR = 'Unexpected container processing error';
 
 export interface DockerContainerWatchOptions {
   refreshImageDetails?: boolean;
@@ -291,7 +293,7 @@ async function runContainerWatch(
     }
     await enrichWithinBudget(containerWithResult, logContainer, watchSeq, isScanStale);
   } catch (e: unknown) {
-    const errorMessage = getErrorMessage(e);
+    const errorMessage = getErrorMessage(e, UNKNOWN_CONTAINER_PROCESSING_ERROR);
     logContainer.warn(`Error when processing (${errorMessage})`);
     logContainer.debug(e);
     containerWithResult.error = {

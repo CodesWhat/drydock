@@ -18,6 +18,10 @@ export interface AuditEntry {
     | 'scanner-asset-warm-failed'
     | 'agent-disconnect'
     | 'container-unhealthy'
+    | 'container-stopped'
+    | 'container-exited'
+    | 'container-oom-killed'
+    | 'container-restart-loop'
     | 'maturity-cleared'
     | 'container-added'
     | 'container-removed'
@@ -68,7 +72,12 @@ export interface AuditEntry {
     | 'image-prune'
     | 'cleanup'
     | 'notification-silence-set'
-    | 'notification-silence-cleared';
+    | 'notification-silence-cleared'
+    | 'settings-updated'
+    | 'notification-rule-updated'
+    | 'notification-outbox-updated'
+    | 'operation-cancelled'
+    | 'agent-key-changed';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;

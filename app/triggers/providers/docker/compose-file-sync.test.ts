@@ -104,6 +104,53 @@ describe('syncComposeFileTag', () => {
     expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('compose file'));
   });
 
+  test('should preserve the mode and owner of the compose file on the temp file before rename', async () => {
+    const logContainer = makeLog();
+    vi.mocked(fs.readFile).mockResolvedValue(COMPOSE_CONTENT);
+    vi.mocked(fs.stat).mockResolvedValue({ mode: 0o100600, uid: 1001, gid: 1002 } as never);
+    const order: string[] = [];
+    vi.mocked(fs.chmod).mockImplementation(async () => {
+      order.push('chmod');
+    });
+    vi.mocked(fs.chown).mockImplementation(async () => {
+      order.push('chown');
+    });
+    vi.mocked(fs.rename).mockImplementation(async () => {
+      order.push('rename');
+    });
+
+    const result = await syncComposeFileTag({
+      labels: makeLabels(),
+      newImage: 'hemmeligapp/hemmelig:v7',
+      logContainer,
+    });
+
+    expect(result).toBe(true);
+    const tmpPath = vi.mocked(fs.writeFile).mock.calls[0][0];
+    expect(fs.stat).toHaveBeenCalledWith('/home/user/stacks/app/docker-compose.yml');
+    expect(fs.chmod).toHaveBeenCalledWith(tmpPath, 0o600);
+    expect(fs.chown).toHaveBeenCalledWith(tmpPath, 1001, 1002);
+    expect(order).toEqual(['chmod', 'chown', 'rename']);
+  });
+
+  test('should log a warning and still update when chown fails', async () => {
+    const logContainer = makeLog();
+    vi.mocked(fs.readFile).mockResolvedValue(COMPOSE_CONTENT);
+    vi.mocked(fs.stat).mockResolvedValue({ mode: 0o100640, uid: 0, gid: 0 } as never);
+    vi.mocked(fs.chmod).mockResolvedValue(undefined);
+    vi.mocked(fs.chown).mockRejectedValue(new Error('EPERM: operation not permitted'));
+
+    const result = await syncComposeFileTag({
+      labels: makeLabels(),
+      newImage: 'hemmeligapp/hemmelig:v7',
+      logContainer,
+    });
+
+    expect(result).toBe(true);
+    expect(logContainer.warn).toHaveBeenCalledWith(expect.stringContaining('EPERM'));
+    expect(fs.rename).toHaveBeenCalledTimes(1);
+  });
+
   test('should skip when container has no compose labels', async () => {
     const logContainer = makeLog();
 

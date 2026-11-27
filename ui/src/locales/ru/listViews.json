@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Подготовка сканера завершена",
       "scanner-asset-warm-failed": "Ошибка подготовки сканера",
       "container-unhealthy": "Контейнер неисправен",
+      "container-stopped": "Контейнер остановлен",
+      "container-exited": "Контейнер завершился",
+      "container-oom-killed": "Контейнер убит из-за нехватки памяти",
+      "container-restart-loop": "Контейнер в цикле перезапусков",
       "env-reveal": "Переменные окружения показаны",
       "debug-dump": "Отладочные данные скачаны",
       "config-read": "Конфигурация прочитана",
@@ -122,7 +126,12 @@
       "image-prune": "Очистка образа",
       "cleanup": "Очистка",
       "notification-silence-set": "Уведомления заглушены",
-      "notification-silence-cleared": "Заглушение уведомлений снято"
+      "notification-silence-cleared": "Заглушение уведомлений снято",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Контейнер",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "Контейнер нездоров",
         "description": "Когда проверка состояния Docker контейнера переходит в состояние \"unhealthy\""
+      },
+      "container-stopped": {
+        "name": "Контейнер остановлен",
+        "description": "Когда отслеживаемый контейнер останавливается"
+      },
+      "container-exited": {
+        "name": "Контейнер завершился",
+        "description": "Когда отслеживаемый контейнер завершается с ненулевым кодом выхода"
+      },
+      "container-oom-killed": {
+        "name": "Контейнер убит из-за нехватки памяти",
+        "description": "Когда ядро убивает отслеживаемый контейнер из-за нехватки памяти"
+      },
+      "container-restart-loop": {
+        "name": "Контейнер в цикле перезапусков",
+        "description": "Когда отслеживаемый контейнер постоянно падает и перезапускается"
       },
       "maturity-cleared": {
         "name": "Зрелость снята",

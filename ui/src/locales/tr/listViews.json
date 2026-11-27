@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "Tarayıcı hazırlığı tamamlandı",
       "scanner-asset-warm-failed": "Tarayıcı hazırlığı başarısız",
       "container-unhealthy": "Konteyner sağlıksız",
+      "container-stopped": "Konteyner durduruldu",
+      "container-exited": "Konteyner sonlandı",
+      "container-oom-killed": "Konteyner bellek yetersizliğinden öldürüldü",
+      "container-restart-loop": "Konteyner yeniden başlatma döngüsünde",
       "env-reveal": "Ortam değişkenleri gösterildi",
       "debug-dump": "Hata ayıklama verileri indirildi",
       "config-read": "Yapılandırma okundu",
@@ -122,7 +126,12 @@
       "image-prune": "İmaj Temizleme",
       "cleanup": "Temizlik",
       "notification-silence-set": "Bildirim Sessize Alma Ayarlandı",
-      "notification-silence-cleared": "Bildirim Sessize Alma Kaldırıldı"
+      "notification-silence-cleared": "Bildirim Sessize Alma Kaldırıldı",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "Kapsayıcı",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "Container sağlıksız",
         "description": "Bir container'ın Docker sağlık kontrolü \"unhealthy\" durumuna girdiğinde"
+      },
+      "container-stopped": {
+        "name": "Konteyner durduruldu",
+        "description": "İzlenen bir konteyner durduğunda"
+      },
+      "container-exited": {
+        "name": "Konteyner sonlandı",
+        "description": "İzlenen bir konteyner sıfırdan farklı bir çıkış koduyla sonlandığında"
+      },
+      "container-oom-killed": {
+        "name": "Konteyner bellek yetersizliğinden öldürüldü",
+        "description": "Çekirdek, izlenen bir konteyneri bellek yetersizliği nedeniyle öldürdüğünde"
+      },
+      "container-restart-loop": {
+        "name": "Konteyner yeniden başlatma döngüsünde",
+        "description": "İzlenen bir konteyner sürekli çöküp yeniden başladığında"
       },
       "maturity-cleared": {
         "name": "Olgunluk Temizlendi",

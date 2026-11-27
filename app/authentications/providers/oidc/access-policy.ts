@@ -1,6 +1,7 @@
 export interface OidcAccessPolicyConfiguration {
   allowedemails?: string;
   allowedemaildomains?: string;
+  requireemailverified?: boolean;
   requiredgroup?: string;
   groupclaim?: string;
 }
@@ -48,6 +49,7 @@ export function isOidcAccessPolicyConfigured(configuration: OidcAccessPolicyConf
  * entries are alternatives (either admits the user); the group requirement is
  * an additional condition. `email_verified` must not be false when the IdP
  * supplies it, so an unverified address cannot claim an allowlisted identity.
+ * With `requireemailverified`, a missing claim is denied as well.
  */
 export function enforceOidcAccessPolicy(
   configuration: OidcAccessPolicyConfiguration,
@@ -64,6 +66,9 @@ export function enforceOidcAccessPolicy(
       throw new OidcAccessDeniedError('email claim is missing');
     }
     const verified = claims.email_verified;
+    if (verified === undefined && configuration.requireemailverified === true) {
+      throw new OidcAccessDeniedError('email_verified claim is missing');
+    }
     if (verified !== undefined && verified !== true && verified !== 'true') {
       throw new OidcAccessDeniedError('email is not verified');
     }

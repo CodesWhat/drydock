@@ -1874,8 +1874,10 @@ export const openApiSchemas = {
       // synced document exists yet for this user.
       preferences: { type: ['object', 'null'], additionalProperties: true },
       updatedAt: { type: ['string', 'null'], format: 'date-time' },
+      // Write counter for the stored document; 0 until the user has synced once.
+      revision: { type: 'integer', minimum: 0 },
     },
-    required: ['apiVersion', 'username', 'schemaVersion', 'preferences', 'updatedAt'],
+    required: ['apiVersion', 'username', 'schemaVersion', 'preferences', 'updatedAt', 'revision'],
     additionalProperties: false,
   },
   NotificationRule: {

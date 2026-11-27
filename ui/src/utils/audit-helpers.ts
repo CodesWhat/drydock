@@ -60,6 +60,7 @@ export function actionIcon(action: string): string {
   if (action.includes('notification-delivery-failed')) return 'xmark';
   if (action.includes('security-alert')) return 'security';
   if (action.includes('agent-disconnect')) return 'network';
+  if (action === 'container-exited' || action === 'container-oom-killed') return 'xmark';
   if (action.includes('rollback') || action === 'auto-rollback') return 'restart';
   if (action.includes('restart')) return 'restart';
   if (action.includes('start')) return 'play';

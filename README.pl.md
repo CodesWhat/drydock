@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Obserwator aktualizacji obrazów kontenerów, 23 rejestry, 21 dostawców powiadomień i działań.**
+**Obserwator aktualizacji obrazów kontenerów, 27 rejestry, 26 dostawców powiadomień i działań.**
 
 </div>
 
@@ -254,7 +254,7 @@ W pełni interaktywny — prawdziwy interfejs użytkownika, próbne dane, nie wy
 
 Obrazy kontenerów po cichu stają się nieaktualne. Obraz bazowy łata CVE, aplikacja wycofuje wersję, tag się przenosi. Jeśli nie będziesz oglądać każdego rejestru ręcznie, działające kontenery pozostaną w tyle, dopóki coś się nie zepsuje lub nie zostanie wykorzystane.
 
-Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower, Ouroboros) pobierają się i uruchamiają ponownie przy niewielkiej widoczności lub kontroli i obecnie w dużej mierze nie są konserwowane. Pulpity nawigacyjne (Portainer) zarządzają kontenerami, ale nie są zbudowane pod kątem analizy aktualizacji. Drydock to **najpierw monitor**: obserwuje 23 rejestry i dokładnie informuje Cię, co się zmieniło (główne, poboczne, poprawki lub podsumowanie), zanim cokolwiek się wydarzy, a następnie działa tylko wtedy, gdy na to pozwolisz. I sięga dalej niż którykolwiek z nich. Skanowanie pod kątem luk w zabezpieczeniach Trivy/Grype blokuje niebezpieczne aktualizacje, cosign weryfikuje podpisy, kopie zapasowe obrazów przed aktualizacją przywracają się automatycznie w przypadku niepowodzenia kontroli stanu, rozproszoni agenci obsługują zdalne hosty, a 21 integracji powiadomień i działań zamyka pętlę. Pełny cykl życia aktualizacji z interfejsem internetowym i interfejsem API REST.
+Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower, Ouroboros) pobierają się i uruchamiają ponownie przy niewielkiej widoczności lub kontroli i obecnie w dużej mierze nie są konserwowane. Pulpity nawigacyjne (Portainer) zarządzają kontenerami, ale nie są zbudowane pod kątem analizy aktualizacji. Drydock to **najpierw monitor**: obserwuje 27 rejestry i dokładnie informuje Cię, co się zmieniło (główne, poboczne, poprawki lub podsumowanie), zanim cokolwiek się wydarzy, a następnie działa tylko wtedy, gdy na to pozwolisz. I sięga dalej niż którykolwiek z nich. Skanowanie pod kątem luk w zabezpieczeniach Trivy/Grype blokuje niebezpieczne aktualizacje, cosign weryfikuje podpisy, kopie zapasowe obrazów przed aktualizacją przywracają się automatycznie w przypadku niepowodzenia kontroli stanu, rozproszoni agenci obsługują zdalne hosty, a 26 integracji powiadomień i działań zamyka pętlę. Pełny cykl życia aktualizacji z interfejsem internetowym i interfejsem API REST.
 
 <hr>
 
@@ -263,8 +263,8 @@ Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower,
 | | Funkcja | Opis |
 | --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 🔭  | **Wykrywanie najpierw na monitorze**                  | Obserwuje każdy działający kontener i zanim cokolwiek się wydarzy, klasyfikuje każdą dostępną aktualizację jako główną, pomocniczą, poprawkę lub podsumowanie. Nic się nie zmieni, dopóki tak nie powiesz.                                                                                                                                                                                                                                                                                                                                     |
-| 📦  | **23 Dostawcy rejestru**                              | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus i 12 innych. Publiczne i prywatne, w chmurze i na własnym serwerze, z TLS i uwierzytelnianiem dla poszczególnych rejestrów.                                                                                                                                                                                                                                                                                                                                     |
-| 🔔  | **21 wyzwalaczy**                                     | 17 kanałów powiadomień (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy i więcej) oraz Docker, Docker Compose, Portainer i akcje poleceń, z szablonami dla poszczególnych zdarzeń/dostawców, podglądem na żywo, filtrowaniem progów i trybem wsadowym.                                                                                                                                                                                                                                                                                               |
+| 📦  | **27 Dostawcy rejestru**                              | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus i 16 innych. Publiczne i prywatne, w chmurze i na własnym serwerze, z TLS i uwierzytelnianiem dla poszczególnych rejestrów.                                                                                                                                                                                                                                                                                                                                     |
+| 🔔  | **26 wyzwalaczy**                                     | 22 kanałów powiadomień (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy i więcej) oraz Docker, Docker Compose, Portainer i akcje poleceń, z szablonami dla poszczególnych zdarzeń/dostawców, podglądem na żywo, filtrowaniem progów i trybem wsadowym.                                                                                                                                                                                                                                                                                               |
 | 🥊  | **Update Bouncer**                                    | Skanowanie pod kątem luk w zabezpieczeniach Trivy/Grype blokuje niebezpieczne aktualizacje przed ich wdrożeniem, z weryfikacją podpisu Cosign i generowaniem SBOM (CycloneDX i SPDX).                                                                                                                                                                                                                                                                                                                                                       |
 | ↩️  | **Kopia zapasowa obrazu i automatyczne przywracanie** | Wstępnie aktualizuj migawki obrazów z konfigurowalnym przechowywaniem, automatycznym przywracaniem w przypadku niepowodzenia kontroli stanu i ręcznym przywracaniem jednym kliknięciem z poziomu interfejsu użytkownika.                                                                                                                                                                                                                                                                                                                                       |
 | 🪝  | **Haki cyklu życia**                                  | Polecenia powłoki przed i po aktualizacji za pośrednictwem etykiet kontenerów, z limitami czasu dla poszczególnych haków i kontrolą przerwania w przypadku awarii.                                                                                                                                                                                                                                                                                                                                                                                             |
@@ -282,17 +282,17 @@ Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower,
 
 <h2 align="center" id="supported-integrations">Obsługiwane integracje</h2>
 
-### Rejestry (23)
+### Rejestry (27)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Niestandardowy · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Niestandardowy · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
 
 ### Akcje (4)
 
 Doker · Docker Compose · Portainer · Command
 
-### Powiadomienia (17)
+### Powiadomienia (22)
 
-Appprise · Discord · Czat Google · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Appprise · Discord · Czat Google · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
 
 ### Uwierzytelnianie
 
@@ -340,9 +340,9 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / role wielu użytkowników</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Uwierzytelnianie OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">26</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Dostawcy rejestrów</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Dostawcy rejestrów</td><td align="center">27</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>REST API</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Webhook API dla CI/CD</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Tokeny / klucze API z zakresem uprawnień</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -386,9 +386,9 @@ Skanowanie pod kątem luk w zabezpieczeniach oparte na Trivy lub Grype blokuje n
 <tr><td>Dziennik audytu</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / role wielu użytkowników</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>Uwierzytelnianie OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Kanały wyzwalaczy / powiadomień</td><td align="center">26</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Dostawcy rejestrów</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Dostawcy rejestrów</td><td align="center">27</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Metryki Prometheus</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Agenci rozproszeni (zdalni)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Grupowanie kontenerów / stosy</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>

@@ -10,7 +10,7 @@
 
 <h1>drydock</h1>
 
-**Observador de actualizaciones de imágenes de contenedores: 23 registros, 21 proveedores de notificaciones y acciones.**
+**Observador de actualizaciones de imágenes de contenedores: 27 registros, 26 proveedores de notificaciones y acciones.**
 
 </div>
 
@@ -254,7 +254,7 @@ Totalmente interactivo: interfaz de usuario real, datos simulados, no requiere i
 
 Las imágenes de los contenedores quedan obsoletas silenciosamente. Una imagen base parchea un CVE, una aplicación corta una versión, una etiqueta se mueve. A menos que esté observando cada registro manualmente, sus contenedores en ejecución se retrasan hasta que algo se rompe o es explotado.
 
-La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores automáticos (Watchtower, Ouroboros) se activan y reinician con poca visibilidad o control, y ahora prácticamente no reciben mantenimiento. Los paneles (Portainer) administran contenedores pero no están diseñados para inteligencia de actualización. Drydock es **monitor primero**: observa 23 registros y le dice exactamente qué cambió (mayor, menor, parche o resumen) antes de que suceda algo, luego actúa solo cuando usted lo permite. Y va más allá que cualquiera de ellos. El escaneo de vulnerabilidades Trivy/Grype bloquea actualizaciones no seguras, cosign verifica firmas, las copias de seguridad de imágenes previas a la actualización se revierten automáticamente en caso de falla en la verificación de estado, los agentes distribuidos cubren hosts remotos y 21 integraciones de notificaciones y acciones cierran el ciclo. El ciclo de vida completo de la actualización, con una interfaz de usuario web y una API REST.
+La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores automáticos (Watchtower, Ouroboros) se activan y reinician con poca visibilidad o control, y ahora prácticamente no reciben mantenimiento. Los paneles (Portainer) administran contenedores pero no están diseñados para inteligencia de actualización. Drydock es **monitor primero**: observa 27 registros y le dice exactamente qué cambió (mayor, menor, parche o resumen) antes de que suceda algo, luego actúa solo cuando usted lo permite. Y va más allá que cualquiera de ellos. El escaneo de vulnerabilidades Trivy/Grype bloquea actualizaciones no seguras, cosign verifica firmas, las copias de seguridad de imágenes previas a la actualización se revierten automáticamente en caso de falla en la verificación de estado, los agentes distribuidos cubren hosts remotos y 26 integraciones de notificaciones y acciones cierran el ciclo. El ciclo de vida completo de la actualización, con una interfaz de usuario web y una API REST.
 
 <hr>
 
@@ -263,8 +263,8 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 | | Característica | Descripción |
 | --- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 🔭  | **Monitorizar primero la detección**                      | Observa cada contenedor en ejecución y clasifica cada actualización disponible como principal, menor, parche o resumen antes de que suceda algo. Nada cambia hasta que tú lo digas.                                                                                                                                                                                                                                                                                                                                                                                                                |
-| 📦  | **23 proveedores de registro**                            | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus y 12 más. Público y privado, en la nube y autohospedado, con autenticación y TLS por registro.                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| 🔔  | **21 activadores**                                        | 17 canales de notificación (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy y más) además de acciones de Docker, Docker Compose, Portainer y Command, con plantillas por evento/proveedor, vista previa en vivo, filtrado de umbral y modo por lotes.                                                                                                                                                                                                                                                                                                                                                    |
+| 📦  | **27 proveedores de registro**                            | Docker Hub, GHCR, ECR, ACR, GCR, GAR, GitLab, Quay, Harbour, Artifactory, Nexus y 16 más. Público y privado, en la nube y autohospedado, con autenticación y TLS por registro.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 🔔  | **26 activadores**                                        | 22 canales de notificación (Slack, Discord, Telegram, Teams, SMTP, MQTT, ntfy y más) además de acciones de Docker, Docker Compose, Portainer y Command, con plantillas por evento/proveedor, vista previa en vivo, filtrado de umbral y modo por lotes.                                                                                                                                                                                                                                                                                                                                                    |
 | 🥊  | **Update Bouncer**                                        | El escaneo de vulnerabilidades Trivy/Grype bloquea las actualizaciones no seguras antes de que se implementen, con verificación de firma Cosign y generación de SBOM (CycloneDX y SPDX).                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ↩️  | **Copia de seguridad de imágenes y reversión automática** | Instantáneas de imágenes previas a la actualización con retención configurable, reversión automática en caso de falla en la verificación de estado y reversión manual con un solo clic desde la interfaz de usuario.                                                                                                                                                                                                                                                                                                                                                                                               |
 | 🪝  | **Ganchos de ciclo de vida**                              | Comandos de shell previos y posteriores a la actualización a través de etiquetas de contenedor, con tiempos de espera por gancho y control de cancelación en caso de falla.                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -282,17 +282,17 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 
 <h2 align="center" id="supported-integrations">Integraciones admitidas</h2>
 
-### Registros (23)
+### Registros (27)
 
-Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud
+Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
 
 ### Acciones (4)
 
 Docker · Docker Compose · Portainer · Command
 
-### Notificaciones (17)
+### Notificaciones (22)
 
-Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Pushover · Rocket.Chat · Slack · SMTP · Telegram
+Apprise · Discord · Google Chat · Gotify · HTTP · IFTTT · Kafka · Matrix · Mattermost · MQTT · MS Teams · NTFY · Opsgenie · PagerDuty · Pushover · Rocket.Chat · Signal · Slack · SMTP · Telegram · Uptime Kuma · Zulip
 
 ### Autenticación
 
@@ -340,9 +340,9 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <tr><td>Registro de auditoría</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>RBAC / roles multiusuario</td><td align="center">❌</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
 <tr><td>Autenticación OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
-<tr><td>Canales de activación / notificación</td><td align="center">21</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
+<tr><td>Canales de activación / notificación</td><td align="center">26</td><td align="center">33</td><td align="center">17</td><td align="center">~20</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td></tr>
-<tr><td>Proveedores de registro</td><td align="center">23</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Proveedores de registro</td><td align="center">27</td><td align="center">25</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API REST</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>API de webhooks para CI/CD</td><td align="center">✅</td><td align="center">⚠️</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Tokens / claves de API con alcance</td><td align="center">✅</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td></tr>
@@ -386,9 +386,9 @@ El escaneo de vulnerabilidades impulsado por Trivy o Grype bloquea las actualiza
 <tr><td>Registro de auditoría</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>RBAC / roles multiusuario</td><td align="center">❌</td><td align="center">✅</td><td align="center">✅</td><td align="center">⚠️</td></tr>
 <tr><td>Autenticación OIDC / SSO</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>Canales de activación / notificación</td><td align="center">21</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
+<tr><td>Canales de activación / notificación</td><td align="center">26</td><td align="center">11+</td><td align="center">5</td><td align="center">15+</td></tr>
 <tr><td>MQTT / Home Assistant</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>Proveedores de registro</td><td align="center">23</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
+<tr><td>Proveedores de registro</td><td align="center">27</td><td align="center">⚠️</td><td align="center">⚠️</td><td align="center">⚠️</td></tr>
 <tr><td>Métricas de Prometheus</td><td align="center">✅</td><td align="center">❌</td><td align="center">❌</td><td align="center">✅</td></tr>
 <tr><td>Agentes distribuidos (remotos)</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td></tr>
 <tr><td>Agrupación de contenedores / stacks</td><td align="center">✅</td><td align="center">✅</td><td align="center">✅</td><td align="center">?</td></tr>

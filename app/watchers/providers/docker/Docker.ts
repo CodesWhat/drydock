@@ -35,6 +35,7 @@ import * as registry from '../../../registry/index.js';
 import { isObservationMode } from '../../../runtime/observation-mode.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { sleep } from '../../../util/sleep.js';
 import {
   forgetControllerLocalEnumeration,
@@ -107,7 +108,6 @@ import {
   buildFallbackContainerReport,
   getContainerDisplayName,
   getContainerName,
-  getErrorMessage,
   getFirstConfigNumber,
   getFirstConfigString,
   getImageForRegistryLookup,
@@ -186,7 +186,13 @@ export interface DockerWatcherConfiguration
     ContainerWatchFilterConfiguration {
   socket: string;
   host?: string;
-  protocol?: 'http' | 'https';
+  protocol?: 'http' | 'https' | 'ssh';
+  sshuser?: string;
+  sshpassword?: string;
+  sshkeyfile?: string;
+  sshpassphrase?: string;
+  sshagent?: string;
+  sshhostkey?: string;
   port: number;
   restartloop?: RestartLoopConfiguration;
   auth?: {
@@ -433,19 +439,44 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return joi.object().keys({
       socket: this.joi.string().default('/var/run/docker.sock'),
       host: this.joi.string(),
-      protocol: this.joi.string().valid('http', 'https'),
-      port: this.joi.number().port().default(2375),
-      auth: this.joi.object({
-        type: this.joi.string().valid('basic', 'bearer', 'oidc').insensitive(),
-        user: this.joi.string(),
-        password: this.joi.string(),
-        bearer: this.joi.string(),
-        insecure: this.joi.boolean().default(false),
-        oidc: this.joi.object().unknown(true),
+      protocol: this.joi.string().valid('http', 'https', 'ssh'),
+      port: this.joi
+        .number()
+        .port()
+        .default((parent: { protocol?: string }) => (parent.protocol === 'ssh' ? 22 : 2375)),
+      sshuser: this.joi.string().when('protocol', {
+        is: 'ssh',
+        then: this.joi.required(),
+        otherwise: this.joi.forbidden(),
       }),
-      cafile: this.joi.string(),
-      certfile: this.joi.string(),
-      keyfile: this.joi.string(),
+      sshhostkey: this.joi.string().when('protocol', {
+        is: 'ssh',
+        then: this.joi.required(),
+        otherwise: this.joi.forbidden(),
+      }),
+      sshpassword: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshkeyfile: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshpassphrase: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshagent: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      auth: this.joi
+        .object({
+          type: this.joi.string().valid('basic', 'bearer', 'oidc').insensitive(),
+          user: this.joi.string(),
+          password: this.joi.string(),
+          bearer: this.joi.string(),
+          insecure: this.joi.boolean().default(false),
+          oidc: this.joi.object().unknown(true),
+        })
+        .when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      cafile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      certfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      keyfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
       cron: joi.string().cron().default('0 */6 * * *'),
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
@@ -1520,7 +1551,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
-          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
+          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage})`,
         );
         return error instanceof Error ? error : new Error(String(error));
       }),

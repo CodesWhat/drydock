@@ -64,6 +64,10 @@
       "scanner-asset-warm-succeeded": "스캐너 준비 성공",
       "scanner-asset-warm-failed": "스캐너 준비 실패",
       "container-unhealthy": "컨테이너 비정상",
+      "container-stopped": "컨테이너 중지됨",
+      "container-exited": "컨테이너 종료됨",
+      "container-oom-killed": "컨테이너 메모리 부족으로 종료됨",
+      "container-restart-loop": "컨테이너 재시작 반복",
       "env-reveal": "환경 변수 표시됨",
       "debug-dump": "디버그 데이터 다운로드됨",
       "config-read": "설정 읽음",
@@ -122,7 +126,12 @@
       "image-prune": "이미지 정리",
       "cleanup": "정리",
       "notification-silence-set": "알림 음소거 설정됨",
-      "notification-silence-cleared": "알림 음소거 해제됨"
+      "notification-silence-cleared": "알림 음소거 해제됨",
+      "settings-updated": "Settings Updated",
+      "notification-rule-updated": "Notification Rule Updated",
+      "notification-outbox-updated": "Notification Outbox Updated",
+      "operation-cancelled": "Update Operation Cancelled",
+      "agent-key-changed": "Agent Key Changed"
     },
     "target": {
       "container": "컨테이너",
@@ -166,6 +175,22 @@
       "container-unhealthy": {
         "name": "컨테이너 비정상",
         "description": "컨테이너의 Docker 헬스체크가 unhealthy 상태가 될 때"
+      },
+      "container-stopped": {
+        "name": "컨테이너 중지됨",
+        "description": "감시 중인 컨테이너가 중지될 때"
+      },
+      "container-exited": {
+        "name": "컨테이너 종료됨",
+        "description": "감시 중인 컨테이너가 0이 아닌 종료 코드로 종료될 때"
+      },
+      "container-oom-killed": {
+        "name": "컨테이너 메모리 부족으로 종료됨",
+        "description": "메모리 부족으로 커널이 감시 중인 컨테이너를 강제 종료할 때"
+      },
+      "container-restart-loop": {
+        "name": "컨테이너 재시작 반복",
+        "description": "감시 중인 컨테이너가 계속 충돌하고 다시 시작될 때"
       },
       "maturity-cleared": {
         "name": "성숙도 해제됨",
