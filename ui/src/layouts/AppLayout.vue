@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import whaleLogo from '@/assets/whale-logo.png';
+import { withBasePath } from '@/utils/base-path';
 import AnnouncementBanner from '@/components/AnnouncementBanner.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import InstallBanner from '@/components/InstallBanner.vue';
@@ -1161,7 +1162,7 @@ function recoverFromOutage() {
   // hashes; router.push would try to lazy-load stale chunks and fail.
   sseService.disconnect();
   stopConnectivityPolling();
-  globalThis.location.replace('/login');
+  globalThis.location.replace(withBasePath('/login'));
 }
 
 async function checkConnectivity() {

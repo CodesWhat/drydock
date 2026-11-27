@@ -585,6 +585,7 @@ test('getServerConfiguration should return configured api (new vars)', async () 
   delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
   delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    basepath: '',
     cookie: {},
     compression: {},
     cors: {},
@@ -606,6 +607,7 @@ test('getServerConfiguration should allow disabling metrics auth', async () => {
   delete configuration.ddEnvVars.DD_SERVER_PORT;
   configuration.ddEnvVars.DD_SERVER_METRICS_AUTH = 'false';
   expect(configuration.getServerConfiguration()).toStrictEqual({
+    basepath: '',
     cookie: {},
     compression: {},
     cors: {},
@@ -1565,6 +1567,66 @@ describe('getConfiguredPublicUrl', () => {
   test('returns undefined when the value is unsafe', () => {
     configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
     expect(configuration.getConfiguredPublicUrl()).toBeUndefined();
+  });
+});
+
+describe('DD_SERVER_BASEPATH', () => {
+  afterEach(() => {
+    delete configuration.ddEnvVars.DD_SERVER_BASEPATH;
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test.each([
+    ['', ''],
+    ['/', ''],
+    ['///', ''],
+    ['/drydock', '/drydock'],
+    ['drydock', '/drydock'],
+    ['/drydock/', '/drydock'],
+    ['  /tools/drydock//  ', '/tools/drydock'],
+  ])('normalizes %j to %j', (input, expected) => {
+    configuration.ddEnvVars.DD_SERVER_BASEPATH = input;
+    expect(configuration.getServerConfiguration().basepath).toBe(expected);
+  });
+
+  test.each(['/dry dock', '/a/../b', '/a?b=c', '/drydock#x', 'http://host/drydock', '/..'])(
+    'rejects %j',
+    (input) => {
+      configuration.ddEnvVars.DD_SERVER_BASEPATH = input;
+      expect(() => configuration.getServerConfiguration()).toThrow();
+    },
+  );
+
+  test('normalizeServerBasePath returns undefined for an unsafe path', () => {
+    expect(configuration.normalizeServerBasePath('/a b')).toBeUndefined();
+  });
+
+  test('getPublicUrl appends the base path to a configured public url', () => {
+    configuration.ddEnvVars.DD_SERVER_BASEPATH = '/drydock';
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://my.public.url';
+    expect(configuration.getPublicUrl({})).toBe('https://my.public.url/drydock');
+  });
+
+  test('getPublicUrl appends the base path to the origin inferred from the request', () => {
+    configuration.ddEnvVars.DD_SERVER_BASEPATH = '/drydock';
+    expect(configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' })).toBe(
+      'https://example.com/drydock',
+    );
+  });
+
+  test('getPublicUrl falls back to the base path when no origin can be built', () => {
+    configuration.ddEnvVars.DD_SERVER_BASEPATH = '/drydock';
+    expect(configuration.getPublicUrl({ protocol: '', hostname: '' })).toBe('/drydock');
+    expect(
+      configuration.getPublicUrl({
+        protocol: 'https',
+        hostname: 'trusted.example@attacker.example',
+      }),
+    ).toBe('/drydock');
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'javascript:alert(1)';
+    expect(configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' })).toBe(
+      '/drydock',
+    );
   });
 });
 

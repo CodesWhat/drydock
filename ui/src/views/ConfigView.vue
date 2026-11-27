@@ -7,6 +7,7 @@ import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
 import { useUpdateMode } from '../composables/useUpdateMode';
+import { getBasePath } from '../utils/base-path';
 import AppTabBar from '../components/AppTabBar.vue';
 import ConfigApiKeysTab from '../components/config/ConfigApiKeysTab.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
@@ -162,7 +163,7 @@ const webhookBaseUrl = computed(() => {
   if (typeof window === 'undefined') {
     return '';
   }
-  return window.location.origin;
+  return `${window.location.origin}${getBasePath()}`;
 });
 const webhookExample = computed(
   () =>

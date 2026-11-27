@@ -29,8 +29,12 @@ import { isValidFontSize } from './preferences/validators';
 import router from './router';
 import { getSettings } from './services/settings';
 import { useOperationStore } from './stores/operations';
+import { installBasePathFetch } from './utils/base-path';
 import './theme/tokens.css';
 import './style.css';
+
+// Honour DD_SERVER_BASEPATH before anything wraps fetch.
+installBasePathFetch();
 
 installVitePreloadErrorHandler();
 

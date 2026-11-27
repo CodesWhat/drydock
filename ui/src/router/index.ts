@@ -12,6 +12,7 @@ import { useApiKeyReview } from '@/composables/useApiKeyReview';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { hydrateFromServer, syncAuthenticatedUser } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
+import { getBasePath } from '@/utils/base-path';
 import { ROUTES } from './routes';
 
 const viewLoaders = {
@@ -72,7 +73,7 @@ const routes: RouteRecordRaw[] = [
 ];
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(getBasePath() ? `${getBasePath()}/` : import.meta.env.BASE_URL),
   routes,
 });
 

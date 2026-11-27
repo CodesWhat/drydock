@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
+import { withBasePath } from '../utils/base-path';
 
 export type SseBusEvent =
   | 'sse:connected'
@@ -183,7 +184,7 @@ export function createFixedRingBuffer<T>(capacity: number): FixedRingBuffer<T> {
 }
 
 export function createManagedEventSource(streamUrl: string): EventSource {
-  return new EventSource(streamUrl);
+  return new EventSource(withBasePath(streamUrl));
 }
 
 export const useEventStreamStore = defineStore('eventStream', () => {

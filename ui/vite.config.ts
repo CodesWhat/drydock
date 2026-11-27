@@ -48,8 +48,30 @@ export const navigateFallbackAllowlist: RegExp[] = Object.values(ROUTES).map(
   buildSpaNavigateFallbackPattern,
 );
 
+// DD_SERVER_BASEPATH: the same build has to work at "/" and under any sub-path,
+// so URLs that Vite would otherwise bake in as "/assets/..." are resolved at
+// runtime. JS (the dynamic-import preload helper) reads the base path the
+// server publishes in <meta name="dd-base-path">; CSS url() references become
+// relative to the stylesheet. The few absolute URLs in index.html, the web
+// manifest and registerSW.js are rewritten by the server (app/api/ui.ts).
+export const renderBuiltUrl = (
+  filename: string,
+  { hostType }: { hostType: 'js' | 'css' | 'html' },
+): string | { runtime: string } | { relative: true } | undefined => {
+  if (hostType === 'js') {
+    return {
+      runtime: `((document.querySelector('meta[name="dd-base-path"]')?.getAttribute('content') ?? '').replace(/\\/$/, '') + '/' + ${JSON.stringify(filename)})`,
+    };
+  }
+  if (hostType === 'css') {
+    return { relative: true };
+  }
+  return undefined;
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
+  experimental: { renderBuiltUrl },
   plugins: [
     vue({
       template: {

@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
+import { withBasePath } from '../utils/base-path';
 
 export type FontId =
   | 'ibm-plex-mono'
@@ -120,7 +121,7 @@ async function loadFont(id: FontId): Promise<void> {
           new Promise<void>((resolve, reject) => {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = `/fonts/${id}/${weight}.css`;
+            link.href = withBasePath(`/fonts/${id}/${weight}.css`);
             link.dataset.font = id;
             link.onload = () => resolve();
             link.onerror = () => reject(new Error(`Failed to load font ${id} weight ${weight}`));
