@@ -5,7 +5,7 @@ import { parse as parseYaml } from 'yaml';
 
 const RC_VERSION = '1.9.0-rc.2';
 const PREV_RC_VERSION = '1.9.0-rc.1';
-const RC_DATE = '2026-11-26';
+const RC_DATE = '2026-11-27';
 const RC_DISPLAY_DATE = 'November 26, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
