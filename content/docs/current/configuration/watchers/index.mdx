@@ -74,8 +74,14 @@ and label-backed settings are not made editable by this four-field feature.
 | `DD_WATCHER_{watcher_name}_MATURITY_SKIP_RELEASES` | ⚪ | v1.8.0-rc.1: skip the first N distinct stable releases in each candidate family when mature mode is enabled | integer (`0` to `100`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_MATURITY_RELEASE_FALLBACK_DAYS` | ⚪ | v1.8.0-rc.1: optional age fallback for unavailable or insufficient release evidence; the day minimum still applies | integer (`0` to `365`) | `0` (disabled) |
 | `DD_WATCHER_{watcher_name}_PROVIDER` | ⚪ | Watcher provider. `file` reads a static image list instead of a Docker host, see [File Watcher](/docs/configuration/watchers/file) | `docker`, `file` | `docker` |
-| `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
-| `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
+| `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch (the SSH port when `PROTOCOL=ssh`) | | `2375` (`22` for `ssh`) |
+| `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https`, `ssh` | `http` |
+| `DD_WATCHER_{watcher_name}_SSHUSER` | ⚪ | SSH login user (required when `PROTOCOL=ssh`) | | |
+| `DD_WATCHER_{watcher_name}_SSHHOSTKEY` | ⚪ | SHA-256 fingerprint of the remote SSH host key, `SHA256:<base64>` or hex (required when `PROTOCOL=ssh`) | | |
+| `DD_WATCHER_{watcher_name}_SSHKEYFILE` | ⚪ | Private key file path (only for `PROTOCOL=ssh`) | | |
+| `DD_WATCHER_{watcher_name}_SSHPASSPHRASE` | ⚪ | Passphrase for the private key (only for `PROTOCOL=ssh`) | | |
+| `DD_WATCHER_{watcher_name}_SSHAGENT` | ⚪ | SSH agent socket path (only for `PROTOCOL=ssh`) | | `SSH_AUTH_SOCK` |
+| `DD_WATCHER_{watcher_name}_SSHPASSWORD` | ⚪ | SSH login password (only for `PROTOCOL=ssh`) | | |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
 | `DD_WATCHER_{watcher_name}_TAG_FAMILY` | ⚪ | Default actionable tag-family policy for this watcher; imgsets and labels can override it | `strict`, `loose` | `strict` |
 | `DD_WATCHER_{watcher_name}_TAG_CEILING` | ⚪ | Default running-version ceiling for this watcher; imgsets and labels can override it. See [Cap updates at the running major or minor](#cap-updates-at-the-running-major-or-minor) | `major`, `minor` | unset |
@@ -375,16 +381,19 @@ docker run \
 
 ### Connecting via SSH
 
-Drydock does not currently support the `ssh://` protocol for remote Docker connections. The `PROTOCOL` variable only accepts `http` or `https`.
+Drydock can reach a remote Docker host over SSH with `PROTOCOL=ssh`. It opens an SSH session to the host and runs `docker system dial-stdio` there, the same transport as `docker -H ssh://user@host`. Nothing is exposed on the remote host except SSH.
 
-If your remote Docker host is only reachable over SSH, you can use an **SSH tunnel** to forward the remote Docker socket to a local TCP port or Unix socket, then point Drydock at that forwarded endpoint:
+Requirements on the remote host:
 
-```bash
-# Forward the remote Docker socket to a local TCP port
-ssh -nNT -L 2375:/var/run/docker.sock user@remote-host
-```
+- An SSH server that allows the login user to run commands (no forced command, `ForceCommand` or restricted shell).
+- The `docker` CLI (19.03 or newer, for `dial-stdio`) on that user's non-interactive `PATH`. A bare `ssh host docker version` must work.
+- The login user can use the Docker socket, usually by being in the `docker` group. This is full Docker control, so treat the key like root.
 
-Then configure Drydock to connect to the forwarded port:
+Requirements on the Drydock side:
+
+- `SSHUSER`, plus `SSHHOSTKEY` with the host key's SHA-256 fingerprint. The host key is pinned and a mismatch refuses the connection. Drydock does not trust the host on first use and has no known_hosts file. Get the fingerprint with `ssh-keyscan -t ed25519 remote-host | ssh-keygen -lf -`.
+- One credential: `SSHKEYFILE` (mounted into the container, with `SSHPASSPHRASE` if the key has one), an SSH agent (`SSHAGENT`, or `SSH_AUTH_SOCK` in the Drydock environment), or `SSHPASSWORD`. A key is the better choice.
+- `AUTH_*`, `CAFILE`, `CERTFILE` and `KEYFILE` do not apply to `ssh` and are rejected.
 
 ```yaml
 services:
@@ -392,13 +401,18 @@ services:
     image: codeswhat/drydock:1.9.0-rc.1
     ...
     environment:
-      - DD_WATCHER_MYREMOTEHOST_HOST=host.docker.internal
-      - DD_WATCHER_MYREMOTEHOST_PORT=2375
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - DD_WATCHER_MYREMOTEHOST_HOST=remote-host
+      - DD_WATCHER_MYREMOTEHOST_PROTOCOL=ssh
+      - DD_WATCHER_MYREMOTEHOST_SSHUSER=drydock
+      - DD_WATCHER_MYREMOTEHOST_SSHHOSTKEY=SHA256:liaLbyzV2uR5Ts/4by2hEQkA5CtXcCP/Nk8Aclp90ys
+      - DD_WATCHER_MYREMOTEHOST_SSHKEYFILE=/keys/id_ed25519
+    volumes:
+      - ./id_ed25519:/keys/id_ed25519:ro
 ```
 
-<Callout type="info">For production SSH tunneling, consider using [autossh](https://www.harding.motd.ca/autossh/) to automatically restart the tunnel if the connection drops.</Callout>
+Drydock opens a new SSH session for each Docker API call, including the event stream. That is fine for watching a handful of hosts, but it costs more than a TCP socket proxy on a busy host.
+
+<Callout type="info">An SSH tunnel to a forwarded port (`ssh -nNT -L 2375:/var/run/docker.sock user@remote-host`, ideally kept alive with [autossh](https://www.harding.motd.ca/autossh/)) still works as an alternative. Point `DD_WATCHER_MYREMOTEHOST_HOST` and `_PORT` at the forwarded endpoint with the default `http` protocol.</Callout>
 
 ## Docker Socket Security
 
