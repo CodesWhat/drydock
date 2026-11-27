@@ -3,10 +3,11 @@ import { createMockResponse } from '../test/helpers.js';
 import { openApiPaths } from './openapi/paths/index.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const { router, getStored, replaceStored, broadcast } = vi.hoisted(() => ({
+const { router, getStored, replaceStored, getRevision, broadcast } = vi.hoisted(() => ({
   router: { use: vi.fn(), get: vi.fn(), patch: vi.fn() },
   getStored: vi.fn(),
   replaceStored: vi.fn(),
+  getRevision: vi.fn(),
   broadcast: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache') }));
 vi.mock('../store/ui-preferences', () => ({
   getPreferences: getStored,
   replacePreferences: replaceStored,
+  getRevision,
 }));
 vi.mock('./sse', () => ({ broadcastPreferencesUpdated: broadcast }));
 vi.mock('../log/index.js', () => ({
@@ -30,6 +32,7 @@ const record = {
   schemaVersion: 11,
   preferences: { sync: { enabled: true } },
   updatedAt: '2026-07-11T12:00:00.000Z',
+  revision: 3,
 };
 
 function handler(method: 'get' | 'patch') {
@@ -80,6 +83,7 @@ describe('preferences router', () => {
       schemaVersion: null,
       preferences: null,
       updatedAt: null,
+      revision: 0,
     });
     assertContract('get', res);
   });
@@ -99,10 +103,41 @@ describe('preferences router', () => {
     const res = createMockResponse();
     const body = { apiVersion: 1, schemaVersion: 11, preferences: record.preferences };
     handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
-    expect(replaceStored).toHaveBeenCalledWith('alice', 11, record.preferences);
+    expect(replaceStored).toHaveBeenCalledWith('alice', 11, record.preferences, undefined);
     expect(broadcast).toHaveBeenCalledWith();
     expect(res.status).toHaveBeenCalledWith(200);
     assertContract('patch', res);
+  });
+
+  it('passes the client revision to the store', () => {
+    const res = createMockResponse();
+    const body = { apiVersion: 1, schemaVersion: 11, preferences: record.preferences, revision: 3 };
+    handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
+    expect(replaceStored).toHaveBeenCalledWith('alice', 11, record.preferences, 3);
+    expect(res.status).toHaveBeenCalledWith(200);
+    assertContract('patch', res);
+  });
+
+  it('returns 409 PREFERENCES_REVISION_STALE without broadcasting when the revision is stale', () => {
+    replaceStored.mockReturnValue(null);
+    getRevision.mockReturnValue(5);
+    const res = createMockResponse();
+    const body = { apiVersion: 1, schemaVersion: 11, preferences: record.preferences, revision: 3 };
+    handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'PREFERENCES_REVISION_STALE',
+      currentRevision: 5,
+    });
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it.each([-1, 1.5, 'x'])('returns 400 for an invalid revision %s', (revision) => {
+    const res = createMockResponse();
+    const body = { apiVersion: 1, schemaVersion: 11, preferences: {}, revision };
+    handler('patch')({ principal: { kind: 'basic', username: 'alice' }, body }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(replaceStored).not.toHaveBeenCalled();
   });
 
   it('accepts unknown keys inside the opaque preferences blob', () => {
@@ -115,7 +150,7 @@ describe('preferences router', () => {
       },
       res,
     );
-    expect(replaceStored).toHaveBeenCalledWith('alice', 99, preferences);
+    expect(replaceStored).toHaveBeenCalledWith('alice', 99, preferences, undefined);
   });
 
   it('returns 409 for an API version mismatch without writing or broadcasting', () => {

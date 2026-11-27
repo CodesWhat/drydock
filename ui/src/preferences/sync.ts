@@ -1,6 +1,10 @@
 import { nextTick, watch } from 'vue';
 import { setI18nLocale } from '../boot/i18n';
-import { getPreferences, updatePreferences } from '../services/preferences';
+import {
+  getPreferences,
+  PreferencesRevisionConflictError,
+  updatePreferences,
+} from '../services/preferences';
 import { errorMessage } from '../utils/error';
 import { applyFontSize } from './font-size';
 import { migrate } from './migrate';
@@ -30,6 +34,49 @@ let syncRetryCount = 0;
 // Bumped on every session reset. A username compare cannot tell alice -> bob ->
 // alice apart from alice throughout, so async completions compare this instead.
 let syncSessionId = 0;
+// The server document revision this client last read or wrote, sent with every
+// write so the server can refuse one made against a document that has since
+// moved on (a retried PATCH whose response was lost, an edit on another device).
+let knownRevision = 0;
+// The server document as of knownRevision. It is the common ancestor for the
+// section-level merge after a stale write.
+let serverBase: PreferencesSchema | undefined;
+
+function snapshotPreferences(): PreferencesSchema {
+  return JSON.parse(JSON.stringify(preferences));
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Three-way merge by top-level section. A section edited only here keeps the
+ * local value, a section edited on the server (or on both sides) takes the
+ * server value. Without a base nothing can be attributed to this device, so the
+ * server wins.
+ */
+function mergeSections(
+  base: PreferencesSchema | undefined,
+  local: PreferencesSchema,
+  server: PreferencesSchema,
+): PreferencesSchema {
+  if (!base) {
+    return server;
+  }
+  const merged: Record<string, unknown> = { ...server };
+  const baseRecord = base as unknown as Record<string, unknown>;
+  const localRecord = local as unknown as Record<string, unknown>;
+  const serverRecord = server as unknown as Record<string, unknown>;
+  for (const key of Object.keys(serverRecord)) {
+    const editedLocally = !sameValue(localRecord[key], baseRecord[key]);
+    const editedOnServer = !sameValue(serverRecord[key], baseRecord[key]);
+    if (editedLocally && !editedOnServer) {
+      merged[key] = localRecord[key];
+    }
+  }
+  return merged as unknown as PreferencesSchema;
+}
 
 /**
  * Diff-and-apply the server's migrated blob onto the reactive preferences
@@ -86,6 +133,9 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
     if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
       return;
     }
+    // The snapshot is the newest server state and nothing local is pending, so
+    // the next write is made against this revision.
+    knownRevision = response.revision ?? 0;
     if (!response.preferences) {
       return;
     }
@@ -100,6 +150,7 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
       return;
     }
     await applyServerMerge(migrated);
+    serverBase = structuredClone(migrated);
   } catch (error) {
     console.debug(`Preferences sync: hydration failed for ${username}: ${errorMessage(error)}`);
   }
@@ -113,6 +164,8 @@ function resetSyncSessionState(): void {
   currentUsername = undefined;
   sessionOwner = undefined;
   syncSessionId += 1;
+  knownRevision = 0;
+  serverBase = undefined;
 }
 
 /**
@@ -173,7 +226,18 @@ export async function pushInitialSync(username: string): Promise<void> {
   }
   syncWriteInFlight = true;
   try {
-    await updatePreferences(preferences.schemaVersion, preferences);
+    try {
+      await writePreferences();
+    } catch (error) {
+      if (!(error instanceof PreferencesRevisionConflictError)) {
+        throw error;
+      }
+      // The toggle is an explicit decision: take the server's current revision
+      // and write over it once instead of surfacing the conflict.
+      const current = await getPreferences();
+      knownRevision = current.revision ?? 0;
+      await writePreferences();
+    }
   } finally {
     syncWriteInFlight = false;
   }
@@ -184,10 +248,72 @@ export async function pushInitialSync(username: string): Promise<void> {
   clearSyncFlushTimer();
 }
 
+/**
+ * PATCH the current blob against the known revision and record the revision
+ * and base the server now holds.
+ */
+async function writePreferences(): Promise<void> {
+  const sent = snapshotPreferences();
+  const envelope = await updatePreferences(preferences.schemaVersion, preferences, knownRevision);
+  knownRevision = envelope.revision ?? knownRevision;
+  serverBase = sent;
+}
+
 function clearSyncFlushTimer(): void {
   if (syncFlushTimer !== undefined) {
     clearTimeout(syncFlushTimer);
     syncFlushTimer = undefined;
+  }
+}
+
+/**
+ * A write made against an older revision was refused. Re-fetch the server
+ * document, merge by section (this device's own edits survive unless the server
+ * changed the same section), adopt the new revision, and re-queue whatever the
+ * server doesn't have yet.
+ */
+async function resolveRevisionConflict(writingSessionId: number): Promise<void> {
+  const response = await getPreferences();
+  if (writingSessionId !== syncSessionId) {
+    return;
+  }
+  knownRevision = response.revision ?? 0;
+  if (!response.preferences) {
+    // Nothing stored server-side: the local blob is the only copy, push it.
+    queueRetryWrite();
+    return;
+  }
+  const server = migrate(response.preferences);
+  if (!server.sync.enabled) {
+    // The apply-gate: a server blob with sync off never overrides this device,
+    // so the local blob goes out against the fresh revision.
+    queueRetryWrite();
+    return;
+  }
+  const merged = mergeSections(serverBase, snapshotPreferences(), server);
+  await applyServerMerge(merged);
+  serverBase = structuredClone(server);
+  if (!sameValue(merged, server)) {
+    queueRetryWrite();
+  }
+}
+
+function queueRetryWrite(): void {
+  syncDirty = true;
+  syncRetryCount = 0;
+  scheduleSyncFlush();
+}
+
+function handleWriteFailure(error: unknown, writingSessionId: number): void {
+  console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
+  // The edit never reached the server, so it is still pending: keep the
+  // fetch guard up so a reconnect cannot overwrite it with older server state.
+  if (preferences.sync.enabled && writingSessionId === syncSessionId) {
+    syncDirty = true;
+    if (syncRetryCount < SYNC_WRITE_MAX_RETRIES) {
+      syncRetryCount += 1;
+      scheduleSyncFlush();
+    }
   }
 }
 
@@ -202,19 +328,17 @@ async function flushSyncWrite(): Promise<void> {
   const writingSessionId = syncSessionId;
   try {
     syncWriteInFlight = true;
-    await updatePreferences(preferences.schemaVersion, preferences);
-    syncRetryCount = 0;
-  } catch (error) {
-    console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
-    // The edit never reached the server, so it is still pending: keep the
-    // fetch guard up so a reconnect cannot overwrite it with older server state.
-    if (preferences.sync.enabled && writingSessionId === syncSessionId) {
-      syncDirty = true;
-      if (syncRetryCount < SYNC_WRITE_MAX_RETRIES) {
-        syncRetryCount += 1;
-        scheduleSyncFlush();
+    try {
+      await writePreferences();
+      syncRetryCount = 0;
+    } catch (error) {
+      if (!(error instanceof PreferencesRevisionConflictError)) {
+        throw error;
       }
+      await resolveRevisionConflict(writingSessionId);
     }
+  } catch (error) {
+    handleWriteFailure(error, writingSessionId);
   } finally {
     syncWriteInFlight = false;
   }

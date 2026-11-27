@@ -41,6 +41,7 @@ describe('UI preferences store', () => {
       schemaVersion: 11,
       preferences: { sync: { enabled: true } },
       updatedAt: '2026-07-11T12:00:00.000Z',
+      revision: 1,
     });
   });
 
@@ -48,7 +49,7 @@ describe('UI preferences store', () => {
     vi.setSystemTime('2026-07-11T12:34:56.000Z');
     uiPreferences.createCollections(db);
 
-    const result = uiPreferences.replacePreferences('alice', 11, { theme: 'dark' });
+    const result = uiPreferences.replacePreferences('alice', 11, { theme: 'dark' })!;
 
     expect(
       db.prepare('SELECT username, schema_version, preferences FROM ui_preferences').get(),
@@ -89,12 +90,65 @@ describe('UI preferences store', () => {
     uiPreferences.createCollections(db);
     const returned = uiPreferences.replacePreferences('alice', 11, {
       appearance: { fontSize: 1 },
-    });
+    })!;
 
     (returned.preferences.appearance as { fontSize: number }).fontSize = 1.3;
 
     expect(uiPreferences.getPreferences('alice')?.preferences).toEqual({
       appearance: { fontSize: 1 },
+    });
+  });
+
+  it('starts at revision 0 for an unknown user and bumps on every write', () => {
+    uiPreferences.createCollections(db);
+    expect(uiPreferences.getRevision('alice')).toBe(0);
+    expect(uiPreferences.replacePreferences('alice', 11, {})?.revision).toBe(1);
+    expect(uiPreferences.replacePreferences('alice', 11, { a: 1 })?.revision).toBe(2);
+    expect(uiPreferences.getRevision('alice')).toBe(2);
+    expect(uiPreferences.getRevision('bob')).toBe(0);
+  });
+
+  it('writes when the expected revision matches', () => {
+    uiPreferences.createCollections(db);
+    expect(uiPreferences.replacePreferences('alice', 11, { a: 1 }, 0)?.revision).toBe(1);
+    expect(uiPreferences.replacePreferences('alice', 11, { a: 2 }, 1)?.revision).toBe(2);
+    expect(uiPreferences.getPreferences('alice')?.preferences).toEqual({ a: 2 });
+  });
+
+  it('refuses a stale expected revision and leaves the stored document alone', () => {
+    uiPreferences.createCollections(db);
+    uiPreferences.replacePreferences('alice', 11, { a: 1 });
+    uiPreferences.replacePreferences('alice', 11, { a: 2 });
+
+    expect(uiPreferences.replacePreferences('alice', 11, { a: 'stale' }, 1)).toBeNull();
+    expect(uiPreferences.replacePreferences('bob', 11, { a: 'first' }, 4)).toBeNull();
+    expect(uiPreferences.getPreferences('alice')).toMatchObject({
+      preferences: { a: 2 },
+      revision: 2,
+    });
+    expect(uiPreferences.getPreferences('bob')).toBeNull();
+  });
+
+  it('keeps the second device edit when a lost-response write is replayed', () => {
+    uiPreferences.createCollections(db);
+    // Device A writes against revision 0 and the server commits it, but the
+    // response never reaches A, so A still believes the document is at revision 0.
+    expect(uiPreferences.replacePreferences('alice', 11, { theme: 'dark' }, 0)?.revision).toBe(1);
+    // Device B reads revision 1 and makes its own edit.
+    const seenByB = uiPreferences.getPreferences('alice')!;
+    expect(
+      uiPreferences.replacePreferences(
+        'alice',
+        11,
+        { theme: 'dark', sidebar: true },
+        seenByB.revision,
+      )?.revision,
+    ).toBe(2);
+    // A retries the same full-replace blob with its old revision and is refused.
+    expect(uiPreferences.replacePreferences('alice', 11, { theme: 'dark' }, 0)).toBeNull();
+    expect(uiPreferences.getPreferences('alice')?.preferences).toEqual({
+      theme: 'dark',
+      sidebar: true,
     });
   });
 });
