@@ -21,6 +21,10 @@ const GLOBAL_UPDATE_TOAST = 'composables/useGlobalUpdateToast.ts';
 // Ratchet: `max` is the exact current count of toast calls. Adding a call
 // fails, and so does removing one without lowering the number here.
 const ALLOWLIST: Record<string, { max: number; reason: string }> = {
+  'services/permission-denied.ts': {
+    max: 1,
+    reason: 'one warning toast when the server refuses a request for the signed-in role',
+  },
   'components/containers/ContainerUpdateDialog.vue': {
     max: 5,
     reason:

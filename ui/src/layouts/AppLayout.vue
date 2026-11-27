@@ -142,7 +142,13 @@ const roleLabel = computed(() => {
   if (role === undefined) {
     return '';
   }
-  return t(`appShell.layout.topbar.role${role[0].toUpperCase()}${role.slice(1)}`);
+  if (role === 'viewer') {
+    return t('appShell.layout.topbar.roleViewer');
+  }
+  if (role === 'operator') {
+    return t('appShell.layout.topbar.roleOperator');
+  }
+  return t('appShell.layout.topbar.roleAdmin');
 });
 
 const baseNavGroups = computed<NavGroup[]>(() => [

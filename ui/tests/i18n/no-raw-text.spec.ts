@@ -228,6 +228,11 @@ function inFile(file: string, literals: string[], reason: string): [string, stri
 
 const ALLOWED_IN_FILE = new Map<string, string>([
   ...inFile(
+    'services/permission-denied.ts',
+    ['Role does not permit this action'],
+    'server error string matched on the wire, never shown to the user',
+  ),
+  ...inFile(
     'composables/useColumnVisibility.ts',
     [
       'Container',
