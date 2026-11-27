@@ -67,6 +67,25 @@ describe('enforceOidcAccessPolicy', () => {
     expect(() => enforceOidcAccessPolicy(config, { email: 'a@one.test' })).not.toThrow();
   });
 
+  test('strict mode denies a missing email_verified claim, default allows it', () => {
+    const strict = { allowedemails: 'a@one.test', requireemailverified: true };
+    expect(() => enforceOidcAccessPolicy(strict, { email: 'a@one.test' })).toThrow(
+      'email_verified claim is missing',
+    );
+    expect(() =>
+      enforceOidcAccessPolicy(strict, { email: 'a@one.test', email_verified: true }),
+    ).not.toThrow();
+    expect(() =>
+      enforceOidcAccessPolicy(strict, { email: 'a@one.test', email_verified: false }),
+    ).toThrow('email is not verified');
+    expect(() =>
+      enforceOidcAccessPolicy(
+        { allowedemails: 'a@one.test', requireemailverified: false },
+        { email: 'a@one.test' },
+      ),
+    ).not.toThrow();
+  });
+
   test('does not require email_verified when only a group is required', () => {
     expect(() =>
       enforceOidcAccessPolicy(
