@@ -53,6 +53,7 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     title: data.title,
     description: data.description,
     version: versionSlug,
+    archived: versionSlug !== versions[0].slug,
     crumbs,
   });
 
