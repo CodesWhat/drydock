@@ -448,7 +448,7 @@ Drydock updates itself using a **helper container pattern**: it renames the old 
 
 For this to work:
 
-- The Docker socket must be bind-mounted at `/var/run/docker.sock`
+- Drydock must reach the Docker daemon, either through the socket bind-mounted at `/var/run/docker.sock` or through a TCP watcher (host, port and protocol, for example a socket proxy). See [Self-Update](/docs/configuration/self-update#tcp-deployments-socket-proxy).
 - The Docker trigger must be enabled
 - Drydock must be able to create temporary helper containers
 

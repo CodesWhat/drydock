@@ -79,7 +79,7 @@ export const features: Feature[] = [
   },
   {
     icon: Bell,
-    title: "21 Triggers",
+    title: "23 Triggers",
     color: "text-amber-500 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/50",
     description:
@@ -119,7 +119,7 @@ export const features: Feature[] = [
     color: "text-lime-500 dark:text-lime-400",
     bg: "bg-lime-100 dark:bg-lime-900/50",
     description:
-      "Hold updates for a human to approve before anything runs. Available in the v1.8 release candidate.",
+      "Hold updates for a human to approve before anything runs. Available in the v1.9 release candidate.",
     category: "operations",
   },
   {
@@ -344,6 +344,19 @@ export const roadmap: Milestone[] = [
       "Per-action update policy",
       "Keyboard shortcuts and PWA",
       "Legacy DD_TRIGGER_* variables removed",
+    ],
+  },
+  {
+    version: "v1.7.1",
+    title: "Maintenance & security fixes (GA 2026-11-11)",
+    emoji: "\u{1F512}",
+    status: "released",
+    dotColor:
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
+    items: [
+      "Container recreation fixes",
+      "Environment-secret redaction",
+      "Runtime security updates",
     ],
   },
   {

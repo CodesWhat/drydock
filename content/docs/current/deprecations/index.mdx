@@ -97,6 +97,17 @@ The `PUT` method on `/api/v1/settings` is a compatibility alias for `PATCH`. Res
 | **Detection** | Log warning on each `PUT` request; `Deprecation` and `Sunset` response headers |
 | **Migration** | Change `PUT /api/v1/settings` to `PATCH /api/v1/settings` |
 
+### `/api/v1/triggers` (combined trigger routes) {#combined-trigger-routes}
+
+The `DD_ACTION_*` / `DD_NOTIFICATION_*` split now has matching API routes: `/api/v1/actions` for action triggers (`docker`, `dockercompose`, `portainer`, `command`) and `/api/v1/notification-triggers` for notification triggers. Both accept the same methods, auth and response shapes as `/api/v1/triggers`, filtered by category; a trigger of the other category returns 404. The old routes keep working, add `Deprecation: true` and `Link: <successor>; rel="successor-version"` headers, and log a one-time warning per process. The agent-local `/api/triggers` routes used for controller-to-agent calls are not affected.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.7.1 |
+| **Removal** | No earlier than v1.9.0. `/api/v1` is frozen, so the removal itself waits for API v2 unless the maintainers schedule it sooner |
+| **Detection** | `Deprecation` and `Link` response headers; one log warning per process |
+| **Migration** | Call `/api/v1/actions` for `docker`, `dockercompose`, `portainer` and `command` triggers and `/api/v1/notification-triggers` for everything else. Paths after the prefix are unchanged |
+
 ### HTTP OIDC discovery URLs {#oidc-http-discovery}
 
 OIDC providers configured with `http://` discovery URLs are rejected. Identity Providers must serve discovery over HTTPS.
@@ -260,6 +271,18 @@ For Compose-labeled containers, state topics now use an encoded `project.service
 
 With Home Assistant discovery enabled, resync clears replaced name-based discovery topics derived from known stored containers. A successful sweep is recorded per broker URL, base topic, discovery prefix and agent-topic-segment setting; failed publishes leave the sweep eligible for retry. This is not a broker-wide cleanup and does not remove all pre-v1.7 watcher or aggregate entities. Update hand-written subscriptions and any automations using old entity IDs. See [MQTT](/docs/configuration/triggers/mqtt).
 
+### Bundled Trivy and cosign binaries in the Docker image {#bundled-trivy-cosign}
+
+Through v1.7.x the image carried a vendored `trivy` binary and an Alpine `cosign` package. v1.8.0 removes both. Trivy is now supported through a worker or a remote server only, and cosign, Grype and Syft run from pinned worker images. `DD_SECURITY_BACKEND` has a new default, `auto`: for each provider it runs a local command when `DD_SECURITY_<PROVIDER>_COMMAND` is set or the binary is on `PATH`, and a hardened, digest-pinned Docker worker otherwise.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.8.0 |
+| **Removed since** | v1.8.0 |
+| **Affects** | Installs with `DD_SECURITY_SCANNER=trivy` or `both` that relied on the `trivy` binary in the image, and installs with `DD_SECURITY_VERIFY_SIGNATURES=true` that relied on the `cosign` binary |
+| **Detection** | One `WARN` per process when Trivy falls back to the worker; counted in `dd_legacy_input_total{source="env"}` and the deprecation banner |
+| **Migration** | Set `DD_SECURITY_SCANNER=grype`, or keep `trivy` with a Trivy server (`DD_SECURITY_BACKEND=remote`) or your own mounted binary. Drydock needs a Docker API connection that can create containers (`DD_SECURITY_DOCKER_SOCKET`, or `DD_SECURITY_DOCKER_HOST` and `DD_SECURITY_DOCKER_PORT` for a socket proxy). See [Update Bouncer](/docs/configuration/security#execution-backends) |
+
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
 `GET /auth/strategies` returned the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. As of v1.8.0, the route no longer serves the old shape. Unlike `GET /api/auth/methods` above, `/auth/strategies` was never registered under the `/api` mount, so it isn't covered by that tombstone middleware; instead it has its own explicit **410 Gone** tombstone, registered ahead of the authentication guard so the response is the same whether or not the request carries credentials.
@@ -332,5 +355,5 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | **Startup log warnings** | All runtime-detectable deprecations |
 | **UI deprecation banners** | Active `dd.trigger.*` container-label usage (the `DD_TRIGGER_*` env var prefix now fails startup instead, so there is no running instance left to surface a banner for) |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for active `dd.trigger.*` label usage, API tombstones, and historical observations |
-| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings` |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/v1/settings`; `Deprecation` and `Link` on the combined `/api/v1/triggers` routes |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

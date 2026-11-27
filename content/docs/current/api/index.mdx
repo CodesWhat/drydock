@@ -742,7 +742,7 @@ Over plain HTTP from anywhere but loopback, these calls are refused with `403` a
 
 | Route | Purpose |
 |---|---|
-| `GET /api/v1/auth/totp-factor` | Status: `unenrolled` or `active`, `activatedAt`, `recoveryCodesRemaining`, any `pendingEnrollment`. No secrets. |
+| `GET /api/v1/auth/totp-factor` | Status: `unenrolled` or `active`, `activatedAt`, `recoveryCodesRemaining`, any `pendingEnrollment`, and `managementAllowed` (`false` with `reason: "https-required"` when the request fails the HTTPS-or-loopback check the enrollment routes apply). No secrets. |
 | `POST /api/v1/auth/totp-enrollments` | Start an enrollment (or a replacement). Returns the base32 `secret` and `otpauthUri` once. `409` if one is already pending. |
 | `PUT /api/v1/auth/totp-enrollments/:id` | Confirm with `{ "code": "123456" }`. Returns the ten `recoveryCodes` once. `410` expired, `422` wrong code. The fifth wrong code deletes the enrollment, and later calls get `404`. |
 | `DELETE /api/v1/auth/totp-enrollments/:id` | Cancel. Always `204`. |

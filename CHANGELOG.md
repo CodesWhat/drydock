@@ -12,14 +12,18 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Trimmed homepage filler: removed the long coverage-scope note under the hero stats and the "Probably not for you yet" and "Switching" blocks under the comparison table. The coverage badge now reads "100% backend coverage", and the WUD and Watchtower comparison pages carry the migration steps.
 
+### Fixed
+
+- Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
+
 ### Security
 
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
-### Fixed
+### Documentation
 
-- Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
+- Refreshed the README and docs for 1.9: the trigger count is 23 with the GitHub Dispatch and GitLab Pipeline providers, the roadmap rows list RBAC and required upgrade stops under v1.9.0, and the Biome badge is 2.6. Fixed the broken cleanup Images link and the ContainerForge link, removed the retired `DD_TRIGGER_*` and `dd.trigger.*` rows from the live reference, documented `result.updateCandidates` and the totp-factor `managementAllowed` field, and added the combined `/api/v1/triggers` and bundled Trivy/cosign entries to the deprecation schedule.
 
 ## [1.9.0-rc.1] - 2026-11-20
 

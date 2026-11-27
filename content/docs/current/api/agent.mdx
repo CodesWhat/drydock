@@ -109,7 +109,7 @@ reserved credential-management namespace.
 
 ### Get agent log entries
 
-Returns application log entries from a connected agent, proxied through the controller. See [Log API](/docs/api/log#get-agent-log-entries) for query parameters.
+Returns application log entries from a connected agent, proxied through the controller. See [Log API](/docs/api/log#get-agent-log-entries) for query parameters. Returns 501 for Portwing agents.
 
 ```bash
 curl "http://drydock:3000/api/v1/agents/agent1/log/entries?level=warn&tail=50"

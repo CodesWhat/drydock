@@ -54,7 +54,7 @@ test("site title and description carry the search phrase and the README counts",
   assert.match(siteConfig.SITE_CONFIG.title, /Self-Hosted/);
   assert.match(siteConfig.SITE_CONFIG.description, /Docker/);
   assert.match(siteConfig.SITE_CONFIG.description, /23 registries/);
-  assert.match(siteConfig.SITE_CONFIG.description, /21 triggers/);
+  assert.match(siteConfig.SITE_CONFIG.description, /23 triggers/);
   assert.ok(siteConfig.SITE_CONFIG.description.length <= 160);
   const structured = read("../src/lib/structured-data.ts");
   assert.match(structured, /description: SITE_CONFIG\.description/);
