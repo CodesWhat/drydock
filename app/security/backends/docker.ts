@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path';
-import { Writable } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import { getAbortReason } from '../abort.js';
 
 const DEFAULT_MEMORY_BYTES = 1024 * 1024 * 1024;
@@ -66,12 +66,19 @@ interface DockerScannerStream {
   once?: (event: string, listener: (...args: unknown[]) => void) => unknown;
 }
 
+type DockerScannerLogsSource = DockerScannerStream | Buffer;
+
 interface DockerScannerContainer {
   attach: (options: {
     stream: boolean;
     stdout: boolean;
     stderr: boolean;
   }) => Promise<DockerScannerStream>;
+  logs: (options: {
+    stdout: boolean;
+    stderr: boolean;
+    follow: false;
+  }) => Promise<DockerScannerLogsSource>;
   start: () => Promise<unknown>;
   wait: () => Promise<{ StatusCode?: number }>;
   stop: (options: { t: number }) => Promise<unknown>;
@@ -323,7 +330,9 @@ function buildContainerConfiguration(
 function createStreamCompletion(stream: DockerScannerStream): {
   done: Promise<void>;
   failed: Promise<never>;
+  hasEnded: () => boolean;
 } {
+  let ended = false;
   let resolveDone!: () => void;
   let rejectFailed!: (error: Error) => void;
   const done = new Promise<void>((resolve) => {
@@ -334,14 +343,18 @@ function createStreamCompletion(stream: DockerScannerStream): {
   });
   if (typeof stream.once !== 'function') {
     resolveDone?.();
-    return { done, failed };
+    return { done, failed, hasEnded: () => false };
   }
-  stream.once('end', () => resolveDone?.());
-  stream.once('close', () => resolveDone?.());
+  const markEnded = () => {
+    ended = true;
+    resolveDone?.();
+  };
+  stream.once('end', markEnded);
+  stream.once('close', markEnded);
   stream.once('error', (error: unknown) =>
     rejectFailed?.(error instanceof Error ? error : new Error(String(error))),
   );
-  return { done, failed };
+  return { done, failed, hasEnded: () => ended };
 }
 
 function createOutputCollectors(maxOutputBytes: number): {
@@ -391,6 +404,53 @@ function createOutputCollectors(maxOutputBytes: number): {
     overflowError: () => outputLimitError,
     overflow,
   };
+}
+
+// A worker can exit cleanly and close attach before the separate wait response arrives, so the
+// stream ending first is not proof of truncation. Complete output parses as one JSON document or
+// as one JSON document per line; a cut-off report does not.
+function isCompleteJsonOutput(output: string): boolean {
+  const trimmed = output.trim();
+  if (trimmed === '') {
+    return false;
+  }
+  try {
+    JSON.parse(trimmed);
+    return true;
+  } catch {
+    return trimmed.split('\n').every((line) => {
+      try {
+        JSON.parse(line);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+}
+
+async function readWorkerLogs(
+  client: DockerScannerClient,
+  container: DockerScannerContainer,
+  maxOutputBytes: number,
+): Promise<{ stdout: string; stderr: string }> {
+  const raw = await container.logs({ stdout: true, stderr: true, follow: false });
+  let source: DockerScannerStream;
+  if (Buffer.isBuffer(raw)) {
+    const passThrough = new PassThrough();
+    passThrough.end(raw);
+    source = passThrough;
+  } else {
+    source = raw;
+  }
+  const completion = createStreamCompletion(source);
+  const collectors = createOutputCollectors(maxOutputBytes);
+  void completion.failed.catch(() => undefined);
+  void collectors.overflow.catch(() => undefined);
+  client.modem.demuxStream(source, collectors.stdout, collectors.stderr);
+  // overflow rejects the race, so a completed race means the output stayed within the cap.
+  await Promise.race([completion.done, collectors.overflow, completion.failed]);
+  return { stdout: collectors.stdoutText(), stderr: collectors.stderrText() };
 }
 
 async function terminateWorker(container: DockerScannerContainer): Promise<void> {
@@ -604,6 +664,7 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
         streamCompletion.failed,
         cancellation.promise,
       ]);
+      const streamClosedBeforeExit = streamCompletion.hasEnded();
       await Promise.race([
         streamCompletion.done,
         collectors.overflow,
@@ -620,8 +681,30 @@ export function createDockerScannerBackend(options: DockerScannerBackendOptions)
       if (!Number.isInteger(exitCode)) {
         throw new Error('Scanner worker returned an invalid exit status');
       }
-      const stdout = collectors.stdoutText();
-      const stderr = collectors.stderrText();
+      let stdout = collectors.stdoutText();
+      let stderr = collectors.stderrText();
+      // The attach stream can be cut mid-scan by a proxy in front of the Docker API while the
+      // container keeps running, so the logs are the authoritative copy of the output.
+      try {
+        ({ stdout, stderr } = await Promise.race([
+          readWorkerLogs(options.client, container, runOptions.maxOutputBytes),
+          timeout.promise,
+          cancellation.promise,
+        ]));
+      } catch (logsError: unknown) {
+        if (
+          logsError instanceof DockerScannerOutputLimitError ||
+          logsError instanceof DockerScannerTimeoutError ||
+          cancellation.isAbort(logsError)
+        ) {
+          throw logsError;
+        }
+        if (streamClosedBeforeExit && exitCode === 0 && !isCompleteJsonOutput(stdout)) {
+          throw new Error(
+            'Scanner worker attach stream closed before the scanner exited and its logs could not be read; a socket proxy in front of the Docker API may have cut the connection',
+          );
+        }
+      }
       if (exitCode !== 0) {
         // Inspect before the finally block removes the container, so OOMKilled is still readable.
         const oomKilled = exitCode === 137 && (await wasOomKilled(container));

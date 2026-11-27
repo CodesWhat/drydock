@@ -26,6 +26,7 @@ import {
   parseGrypeOutput,
 } from './providers/grype.js';
 import { hasValidCommandPath } from './runtime.js';
+import { parseScannerJson } from './scanner-json.js';
 import { getDefaultScannerRuntime } from './scanner-runtime.js';
 import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
 
@@ -266,7 +267,11 @@ function parseTrivyOutput(trivyOutput: string, maxOutputBytes: number): Containe
       `Trivy output is too large to parse (${trivyOutputBytes} bytes); max supported is ${maxOutputBytes} bytes; raise ${TRIVY_MAX_OUTPUT_ENV_VAR} to scan this image`,
     );
   }
-  const parsedOutput = JSON.parse(trivyOutput) as TrivyRawOutput;
+  const parsedOutput = parseScannerJson(
+    trivyOutput,
+    'Trivy',
+    TRIVY_MAX_OUTPUT_ENV_VAR,
+  ) as TrivyRawOutput;
   const results = Array.isArray(parsedOutput?.Results) ? parsedOutput.Results : [];
   const vulnerabilities = results.flatMap((result) => {
     const target = typeof result?.Target === 'string' ? result.Target : undefined;
