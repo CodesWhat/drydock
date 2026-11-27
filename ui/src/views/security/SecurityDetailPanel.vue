@@ -94,6 +94,7 @@ const showSbomDocumentModel = computed({
         class="mt-2 flex items-center gap-2 flex-wrap">
         <div v-if="selectedImage.hasUpdate" class="flex items-center gap-2 flex-wrap">
           <AppButton
+            v-can="'containers:update'"
             v-if="updatesAllowed"
             size="xs"
             variant="secondary"

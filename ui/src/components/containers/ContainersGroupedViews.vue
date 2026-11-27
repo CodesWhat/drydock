@@ -1609,32 +1609,32 @@ onScopeDispose(() => {
             class="my-1"
             :style="{ borderTop: '1px solid var(--dd-border)' }"
           />
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.status === 'running'"
+          <AppButton v-can="'containers:control'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.status === 'running'"
                   @click="confirmStop(openActionsContainer); closeActionsMenu()">
             <AppIcon name="stop" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
             {{ t('containerComponents.groupedViews.stopAction') }}
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else
+          <AppButton v-can="'containers:control'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else
                   @click="startContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="play" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
             {{ t('containerComponents.groupedViews.startAction') }}
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer); closeActionsMenu()">
+          <AppButton v-can="'containers:control'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmRestart(openActionsContainer); closeActionsMenu()">
             <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
             {{ t('containerComponents.groupedViews.restartAction') }}
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
+          <AppButton v-can="'containers:watch'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
             {{ t('containerComponents.groupedViews.scanAction') }}
           </AppButton>
-          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="recheckContainer(openActionsContainer); closeActionsMenu()">
+          <AppButton v-can="'containers:watch'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="recheckContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
             {{ t('containerComponents.groupedViews.recheckAction') }}
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
           <template v-if="updateMode !== 'notify' && openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
+            <AppButton v-can="'containers:update'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
@@ -1650,17 +1650,17 @@ onScopeDispose(() => {
               <AppIcon name="lock" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
               {{ t('containerComponents.fullPageDetail.blockedButton') }}
             </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else-if="openActionsContainer.bouncer === 'blocked'"
+            <AppButton v-can="'containers:update'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else-if="openActionsContainer.bouncer === 'blocked'"
                     @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
-            <AppButton v-else size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
+            <AppButton v-can="'containers:update'" v-else size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
                     @click="confirmUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="cloud-download" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
               {{ t('containerComponents.groupedViews.updateAction') }}
             </AppButton>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer); closeActionsMenu()">
+            <AppButton v-can="'containers:update'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="skipUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="skip-forward" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
               {{ t('containerComponents.groupedViews.skipUpdateAction') }}
             </AppButton>
@@ -1677,7 +1677,7 @@ onScopeDispose(() => {
             {{ t('containerComponents.groupedViews.rollbackAction') }}
           </AppButton>
           <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-          <AppButton size="md" variant="text-danger" weight="medium" class="w-full text-left flex items-center gap-2"
+          <AppButton v-can="'admin'" size="md" variant="text-danger" weight="medium" class="w-full text-left flex items-center gap-2"
                   @click="confirmDelete(openActionsContainer); closeActionsMenu()">
             <AppIcon name="trash" :size="12" class="w-3 text-center inline-flex justify-center" />
             {{ t('containerComponents.groupedViews.deleteAction') }}

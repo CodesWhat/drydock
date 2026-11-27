@@ -2,6 +2,8 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 import ContainerFullPageDetail from '@/components/containers/ContainerFullPageDetail.vue';
+import { setCurrentAuthority } from '@/composables/useCan';
+import { canDirective } from '@/directives/can';
 import { seedOperation } from '../../helpers/operations';
 
 const selectedContainer = ref<any>({
@@ -115,6 +117,52 @@ describe('ContainerFullPageDetail', () => {
       expect(root.classes()).not.toContain('sm:pr-2');
       expect(root.classes()).not.toContain('sm:pr-4');
       expect(root.classes()).not.toContain('sm:pr-5');
+    });
+  });
+
+  describe('role gating', () => {
+    afterEach(() => setCurrentAuthority(undefined));
+
+    function mountWithCan() {
+      selectedContainer.value.newTag = '2.0.0';
+      selectedContainer.value.updateKind = 'major';
+      return mount(ContainerFullPageDetail, {
+        global: {
+          directives: { can: canDirective },
+          stubs: {
+            AppIcon: { template: '<span class="app-icon-stub" />', props: ['name', 'size'] },
+            ContainerFullPageTabContent: { template: '<div class="tab-content-stub" />' },
+          },
+        },
+      });
+    }
+
+    function hiddenActionCount(wrapper: ReturnType<typeof mountWithCan>) {
+      return wrapper.findAll('button').filter((button) => button.element.style.display === 'none')
+        .length;
+    }
+
+    it('hides every container action from a viewer', () => {
+      setCurrentAuthority({ role: 'viewer', scopes: ['read'] });
+      const wrapper = mountWithCan();
+      // stop, restart, scan, recheck, update and delete
+      expect(hiddenActionCount(wrapper)).toBe(6);
+    });
+
+    it('shows an operator everything but delete, which needs admin', () => {
+      setCurrentAuthority({
+        role: 'operator',
+        scopes: ['read', 'containers:watch', 'containers:update', 'containers:control'],
+      });
+      expect(hiddenActionCount(mountWithCan())).toBe(1);
+    });
+
+    it('hides nothing from an admin', () => {
+      setCurrentAuthority({
+        role: 'admin',
+        scopes: ['read', 'containers:watch', 'containers:update', 'containers:control', 'admin'],
+      });
+      expect(hiddenActionCount(mountWithCan())).toBe(0);
     });
   });
 

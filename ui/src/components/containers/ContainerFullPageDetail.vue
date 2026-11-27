@@ -177,7 +177,7 @@ function getStatusTone(container: Container) {
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <AppButton
+          <AppButton v-can="'containers:control'"
             v-if="selectedContainer.status === 'running'"
             size="md"
             variant="danger"
@@ -188,7 +188,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'stop'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.stopButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:control'"
             v-else
             size="md"
             variant="success"
@@ -199,7 +199,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'play'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.startButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:control'"
             size="md"
             variant="muted"
             class="inline-flex items-center gap-1.5"
@@ -209,7 +209,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'restart'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.restartButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:watch'"
             size="md"
             variant="muted"
             class="inline-flex items-center gap-1.5"
@@ -219,7 +219,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.scanButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:watch'"
             size="md"
             variant="muted"
             class="inline-flex items-center gap-1.5"
@@ -229,7 +229,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="recheckingContainerId === selectedContainer.id ? 'spinner' : 'restart'" :size="12" :class="recheckingContainerId === selectedContainer.id ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.recheckButton') }}
           </AppButton>
-	          <AppButton
+	          <AppButton v-can="'containers:update'"
 	            v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)"
 	            size="md"
 	            variant="danger"
@@ -240,7 +240,7 @@ function getStatusTone(container: Container) {
 	            <AppIcon name="lock" :size="12" />
 	            {{ t('containerComponents.fullPageDetail.blockedButton') }}
 	          </AppButton>
-	          <AppButton
+	          <AppButton v-can="'containers:update'"
 	            v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'"
 	            size="md"
 	            variant="danger"
@@ -252,7 +252,7 @@ function getStatusTone(container: Container) {
             <AppIcon name="lock" :size="12" />
             {{ t('containerComponents.fullPageDetail.blockedButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'containers:update'"
             v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer)"
             size="md"
             variant="success"
@@ -264,7 +264,7 @@ function getStatusTone(container: Container) {
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'cloud-download'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.updateButton') }}
           </AppButton>
-          <AppButton
+          <AppButton v-can="'admin'"
             size="md"
             variant="danger"
             class="inline-flex items-center gap-1.5"

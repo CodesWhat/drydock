@@ -115,7 +115,7 @@ function getStatusTone(container: Container) {
       @full-page="openFullPage">
       <template #toolbar>
         <div class="flex flex-wrap items-center gap-0.5" data-test="container-side-detail-actions">
-          <AppIconButton
+          <AppIconButton v-can="'containers:control'"
             v-if="selectedContainer.status === 'running'"
             icon="stop"
             size="sm"
@@ -123,7 +123,7 @@ function getStatusTone(container: Container) {
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.stopTooltip')"
             @click="confirmStop(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'containers:control'"
             v-else
             icon="play"
             size="sm"
@@ -131,21 +131,21 @@ function getStatusTone(container: Container) {
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.startTooltip')"
             @click="startContainer(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'containers:control'"
             icon="restart"
             size="sm"
             variant="muted"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.restartTooltip')"
             @click="confirmRestart(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'containers:watch'"
             icon="security"
             size="sm"
             variant="secondary"
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.scanTooltip')"
             @click="scanContainer(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'containers:watch'"
             icon="restart"
             size="sm"
             variant="secondary"
@@ -153,14 +153,14 @@ function getStatusTone(container: Container) {
             :disabled="recheckingContainerId === selectedContainer.id || isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.recheckTooltip')"
             @click="recheckContainer(selectedContainer)" />
-	          <AppIconButton
+	          <AppIconButton v-can="'containers:update'"
 	            v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)"
 	            icon="lock"
 	            size="sm"
 	            variant="danger"
 	            :disabled="true"
 	            :tooltip="getUpdateBlockedTooltip(selectedContainer)" />
-	          <AppIconButton
+	          <AppIconButton v-can="'containers:update'"
 	            v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'"
 	            icon="lock"
 	            size="sm"
@@ -168,7 +168,7 @@ function getStatusTone(container: Container) {
 	            :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.blockedForceUpdateTooltip')"
             @click="confirmForceUpdate(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'containers:update'"
             v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer)"
             icon="cloud-download"
             size="sm"
@@ -176,7 +176,7 @@ function getStatusTone(container: Container) {
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.updateTooltip')"
             @click="confirmUpdate(selectedContainer)" />
-          <AppIconButton
+          <AppIconButton v-can="'admin'"
             icon="trash"
             size="sm"
             variant="danger"

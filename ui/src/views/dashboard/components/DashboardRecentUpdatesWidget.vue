@@ -309,6 +309,7 @@ function updateKindInitial(kind?: string): string {
       </div>
       <div class="flex items-center gap-3">
         <AppButton
+          v-can="'containers:update'"
           v-if="updatesAllowed && pendingUpdatesCount > 0"
           data-test="dashboard-update-all-btn"
           size="compact"
@@ -491,6 +492,7 @@ function updateKindInitial(kind?: string): string {
                   <AppIcon name="lock" :size="14" />
                 </span>
                 <AppIconButton
+                  v-can="'containers:update'"
                   v-else-if="updatesAllowed && (row.status === 'pending' || row.status === 'maturity-blocked')"
                   icon="cloud-download"
                   size="toolbar"

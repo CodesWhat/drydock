@@ -740,16 +740,16 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-	                  <AppButton v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
+	                  <AppButton v-can="'containers:update'" v-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
 	                          :disabled="true">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	                  </AppButton>
-	                  <AppButton v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
+	                  <AppButton v-can="'containers:update'" v-else-if="updateMode !== 'notify' && hasRawUpdateCandidate(selectedContainer) && selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
 	                          :disabled="isActionInProgress(selectedContainer)"
 	                          @click="confirmForceUpdate(selectedContainer)">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
-                  <AppButton v-else-if="updateMode !== 'notify'"
+                  <AppButton v-can="'containers:update'" v-else-if="updateMode !== 'notify'"
                           size="sm" variant="outlined"
                           :disabled="!hasRawUpdateCandidate(selectedContainer) || isActionInProgress(selectedContainer)"
                           :title="dryRunTrigger ? t('containerComponents.fullPageActions.dryRunUpdateTooltip') : undefined"
@@ -757,12 +757,12 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="confirmUpdate(selectedContainer)">
                     {{ dryRunTrigger ? t('containerComponents.fullPageActions.previewOnly') : t('containerComponents.fullPageActions.updateNow') }}
                   </AppButton>
-                  <AppButton size="sm" variant="outlined"
+                  <AppButton v-can="'containers:watch'" size="sm" variant="outlined"
                           :disabled="isActionInProgress(selectedContainer)"
                           @click="scanContainer(selectedContainer)">
                     {{ t('containerComponents.fullPageActions.scanNow') }}
                   </AppButton>
-                  <AppButton size="sm" variant="outlined"
+                  <AppButton v-can="'containers:watch'" size="sm" variant="outlined"
                           :disabled="recheckingContainerId === selectedContainer.id || isActionInProgress(selectedContainer)"
                           @click="recheckContainer(selectedContainer)">
                     {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
@@ -786,12 +786,12 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="skipCurrentForSelected">
                     {{ t('containerComponents.fullPageActions.skipThisUpdate') }}
                   </AppButton>
-                  <AppButton size="sm" variant="outlined"
+                  <AppButton v-can="'containers:update'" size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(1)">
                     {{ t('containerComponents.fullPageActions.snooze1d') }}
                   </AppButton>
-                  <AppButton size="sm" variant="outlined"
+                  <AppButton v-can="'containers:update'" size="sm" variant="outlined"
                           :disabled="policyInProgress !== null"
                           @click="snoozeSelected(7)">
                     {{ t('containerComponents.fullPageActions.snooze7d') }}
@@ -828,7 +828,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="confirmClearPolicy">
                     {{ t('containerComponents.fullPageActions.clearPolicy') }}
                   </AppButton>
-                  <AppButton data-test="policy-revert-all" size="sm" variant="outlined"
+                  <AppButton v-can="'containers:update'" data-test="policy-revert-all" size="sm" variant="outlined"
                           :disabled="selectedPolicyOverrideFields.size === 0 || policyInProgress !== null"
                           @click="revertPolicySelected()">
                     {{ t('containerComponents.fullPageActions.revertAll') }}
@@ -851,7 +851,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     {{ t('containerComponents.fullPageActions.skippedTags') }}
                     <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipTags')" data-test="policy-group-skipTags" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipTags')" data-test="policy-overridden-skipTags" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-can="'containers:update'" v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipTags.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -859,7 +859,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ tag }}</span>
-                      <AppIconButton
+                      <AppIconButton v-can="'containers:update'"
                         icon="xmark"
                         size="toolbar"
                         variant="muted"
@@ -875,7 +875,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     {{ t('containerComponents.fullPageActions.skippedDigests') }}
                     <AppBadge v-if="selectedPolicyGroupName && selectedPolicyGroupFields.has('skipDigests')" data-test="policy-group-skipDigests" tone="info" size="xs">{{ t('containerComponents.fullPageActions.groupSource', { group: selectedPolicyGroupName }) }}</AppBadge>
                     <AppBadge v-if="selectedPolicyOverriddenFields.has('skipDigests')" data-test="policy-overridden-skipDigests" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
-                    <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    <AppButton v-can="'containers:update'" v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="plain" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
                   </div>
                   <div v-if="selectedSkipDigests.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                   <div class="mt-1 flex flex-wrap gap-1">
@@ -883,7 +883,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ digest }}</span>
-                      <AppIconButton
+                      <AppIconButton v-can="'containers:update'"
                         icon="xmark"
                         size="toolbar"
                         variant="muted"
@@ -985,7 +985,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       {{ t('containerComponents.triggers.autoBadge') }}
                     </AppBadge>
                   </div>
-                  <AppButton size="xs"
+                  <AppButton v-can="'containers:update'" size="xs"
                           :disabled="triggerRunInProgress !== null || (updateMode === 'notify' && isManagedUpdateTrigger(trigger))"
                           @click="runAssociatedTrigger(trigger)">
                     {{ triggerRunInProgress === getTriggerKey(trigger) ? t('containerComponents.fullPageActions.runningButton') : t('containerComponents.fullPageActions.runButton') }}
@@ -1026,7 +1026,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
             <div>
               <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.backupsRollback') }}</div>
               <div class="mb-2">
-                <AppButton size="sm" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
+                <AppButton v-can="'containers:update'" size="sm" variant="outlined" :disabled="backupsLoading || detailBackups.length === 0 || rollbackInProgress !== null"
                         @click="confirmRollback()">
                   {{ rollbackInProgress === 'latest' ? t('containerComponents.fullPageActions.rollingBack') : t('containerComponents.fullPageActions.rollbackLatest') }}
                 </AppButton>
@@ -1040,7 +1040,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div class="font-semibold dd-text font-mono truncate">{{ backup.imageName }}:{{ backup.imageTag }}</div>
                     <div class="text-2xs dd-text-muted">{{ formatTimestamp(backup.timestamp) }}</div>
                   </div>
-                  <AppButton size="xs"
+                  <AppButton v-can="'containers:update'" size="xs"
                           :disabled="rollbackInProgress !== null"
                           @click="confirmRollback(backup.id)">
                     {{ rollbackInProgress === backup.id ? t('containerComponents.fullPageActions.rollingButton') : t('containerComponents.fullPageActions.useButton') }}
