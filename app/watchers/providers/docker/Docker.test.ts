@@ -475,6 +475,14 @@ describe('Docker Watcher', () => {
       ).toThrow();
     });
 
+    test('accepts imgset tag.stops so a TAG_STOPS imgset does not reject the watcher', () => {
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        imgset: { nextcloud: { image: 'nextcloud', tag: { stops: '27,28,29' } } },
+      });
+      expect(validated.imgset.nextcloud.tag.stops).toBe('27,28,29');
+    });
+
     test('should validate configuration with tag.pin.info override (#498)', async () => {
       const config = {
         socket: '/var/run/docker.sock',
@@ -2109,6 +2117,33 @@ describe('Docker Watcher', () => {
       expect(masked.auth.oidc.clientsecret).not.toBe('super-secret');
       expect(masked.authblocked).toBe(false);
       expect(masked.authblockedreason).toBeUndefined();
+    });
+
+    test('should mask SSH credentials', async () => {
+      docker.configuration = {
+        socket: '/var/run/docker.sock',
+        protocol: 'ssh',
+        host: 'remote',
+        sshuser: 'deploy',
+        sshpassword: 'hunter2-password',
+        sshkeyfile: '/keys/id_ed25519',
+        sshpassphrase: 'key-passphrase',
+      };
+      const masked = docker.maskConfiguration();
+      const serialized = JSON.stringify(masked);
+      expect(serialized).not.toContain('hunter2-password');
+      expect(serialized).not.toContain('key-passphrase');
+      expect(masked.sshpassword).toBe(Docker.mask('hunter2-password'));
+      expect(masked.sshpassphrase).toBe(Docker.mask('key-passphrase'));
+      expect(masked.sshuser).toBe('deploy');
+      expect(masked.sshkeyfile).toBe('/keys/id_ed25519');
+    });
+
+    test('should leave absent SSH credentials undefined when masking', async () => {
+      docker.configuration = { socket: '/var/run/docker.sock' };
+      const masked = docker.maskConfiguration();
+      expect(masked.sshpassword).toBeUndefined();
+      expect(masked.sshpassphrase).toBeUndefined();
     });
 
     test('should expose blocked remote auth reason in masked configuration', async () => {

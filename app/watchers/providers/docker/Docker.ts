@@ -515,6 +515,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
               transform: this.joi.string(),
               family: this.joi.string().valid('strict', 'loose'),
               ceiling: this.joi.string().valid('major', 'minor'),
+              stops: this.joi.string(),
               pin: this.joi.object({
                 info: this.joi.boolean(),
               }),
@@ -563,6 +564,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       maintenancenextwindow: nextMaintenanceWindow,
       authblocked: this.remoteAuthBlockedReason !== undefined,
       authblockedreason: this.remoteAuthBlockedReason,
+      sshpassword: Docker.mask(this.configuration.sshpassword),
+      sshpassphrase: Docker.mask(this.configuration.sshpassphrase),
       auth: this.configuration.auth
         ? {
             type: this.configuration.auth.type,
