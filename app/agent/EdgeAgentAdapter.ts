@@ -15,11 +15,21 @@ import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
 import {
+  AGENT_REQUEST_TIMEOUT_CODE,
+  AgentRequestTimeoutError,
+} from './AgentRequestTimeoutError.js';
+import {
   AGENT_RESPONSE_TOO_LARGE_CODE,
   AgentResponseTooLargeError,
 } from './AgentResponseTooLargeError.js';
 import { EdgeKeyRotationController } from './edge-key-rotation.js';
 import { addAgent, getAgent, removeAgent } from './index.js';
+import {
+  CAPABILITY_CANCEL,
+  CAPABILITY_REQUEST_TIMEOUT,
+  clampTimeoutHintMs,
+  controllerTimeoutForHint,
+} from './portwing-request-timeout.js';
 
 const MAX_REQUEST_BODY_BYTES = 512 * 1024 * 1024;
 const REQUEST_BODY_CHUNK_BYTES = 32 * 1024;
@@ -117,6 +127,15 @@ export type WebSocketLike = {
   off?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
+export interface EdgeRequestOptions {
+  /**
+   * Per-request timeout hint in milliseconds for a long Docker call. Only sent
+   * (and the controller timer only extended) when the agent advertised
+   * `dd:request-timeout`.
+   */
+  timeoutMs?: number;
+}
+
 export interface EdgeAgentAdapterOptions {
   keyId?: string;
   capabilities?: string[];
@@ -141,6 +160,8 @@ export function buildEdgeSentinelConfig(agentId: string): AgentClientConfig {
 export class EdgeAgentAdapter {
   private readonly keyRotation?: EdgeKeyRotationController;
   readonly supportsRequestBodyStream: boolean;
+  readonly supportsRequestTimeout: boolean;
+  readonly supportsCancel: boolean;
   private uploadingBytes = 0;
   private readonly client: AgentClient;
   private readonly ws: WebSocketLike;
@@ -182,6 +203,9 @@ export class EdgeAgentAdapter {
   constructor(client: AgentClient, ws: WebSocketLike, options: EdgeAgentAdapterOptions = {}) {
     this.supportsRequestBodyStream =
       options.capabilities?.includes('edge-request-body-stream') ?? false;
+    this.supportsRequestTimeout =
+      options.capabilities?.includes(CAPABILITY_REQUEST_TIMEOUT) ?? false;
+    this.supportsCancel = options.capabilities?.includes(CAPABILITY_CANCEL) ?? false;
     this.client = client;
     this.ws = ws;
     this.agentName = client.name;
@@ -806,6 +830,7 @@ export class EdgeAgentAdapter {
       clearTimeout(streamPending.timer);
       streamPending.timer = setTimeout(() => {
         this.pendingRequests.delete(streamKey);
+        this.sendCancel(requestId);
         streamPending.reject(
           new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
         );
@@ -841,6 +866,7 @@ export class EdgeAgentAdapter {
       if (streamBytes > MAX_STREAM_RESPONSE_BYTES) {
         clearTimeout(pending.timer);
         this.pendingRequests.delete(streamKey);
+        this.sendCancel(requestId);
         pending.reject(
           new Error(
             `Stream response exceeded the ${MAX_STREAM_RESPONSE_BYTES}-byte response limit`,
@@ -860,6 +886,7 @@ export class EdgeAgentAdapter {
     clearTimeout(pending.timer);
     pending.timer = setTimeout(() => {
       this.pendingRequests.delete(streamKey);
+      this.sendCancel(requestId);
       pending.reject(
         new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
       );
@@ -911,7 +938,9 @@ export class EdgeAgentAdapter {
       pending.reject(
         data.code === AGENT_RESPONSE_TOO_LARGE_CODE
           ? new AgentResponseTooLargeError(message)
-          : new Error(message ?? 'agent error'),
+          : data.code === AGENT_REQUEST_TIMEOUT_CODE
+            ? new AgentRequestTimeoutError(message)
+            : new Error(message ?? 'agent error'),
       );
     }
   }
@@ -1161,6 +1190,35 @@ export class EdgeAgentAdapter {
     });
   }
 
+  /** The clamped hint to put on the wire, or undefined without the capability. */
+  private timeoutHint(options?: EdgeRequestOptions): number | undefined {
+    if (!this.supportsRequestTimeout || options?.timeoutMs === undefined) {
+      return undefined;
+    }
+    return clampTimeoutHintMs(options.timeoutMs);
+  }
+
+  private timerMs(hintMs: number | undefined): number {
+    return hintMs === undefined ? REQUEST_TIMEOUT_MS : controllerTimeoutForHint(hintMs);
+  }
+
+  /**
+   * Tell the agent the controller gave up on a request so it frees the slot.
+   * Never sent without the `dd:cancel` capability; a late frame for the dropped
+   * id is ignored by the handlers because the pending entry is gone.
+   */
+  private sendCancel(requestId: string): boolean {
+    if (!this.supportsCancel || this.disconnected) {
+      return false;
+    }
+    try {
+      this.ws.send(JSON.stringify({ type: 'dd:cancel', data: { requestId, reason: 'timeout' } }));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /**
    * Send a streaming tunnel request frame to the edge agent.
    * The pending entry is registered under `stream:${requestId}` so that
@@ -1187,6 +1245,7 @@ export class EdgeAgentAdapter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
+        this.sendCancel(requestId);
         reject(new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
       }, REQUEST_TIMEOUT_MS);
 
@@ -1216,10 +1275,11 @@ export class EdgeAgentAdapter {
     path: string,
     headers?: Record<string, string>,
     body?: unknown,
+    options?: EdgeRequestOptions,
   ): Promise<unknown> {
     if (this.disconnected) return Promise.reject(new Error('connection closed'));
     if (Buffer.isBuffer(body)) {
-      return this.sendBodyRequest(method, path, headers, body, false);
+      return this.sendBodyRequest(method, path, headers, body, false, options);
     }
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       const requestId = uuidv7();
@@ -1241,11 +1301,14 @@ export class EdgeAgentAdapter {
     }
 
     const requestId = uuidv7();
+    const hintMs = this.timeoutHint(options);
+    const timeoutMs = this.timerMs(hintMs);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(requestId);
-        reject(new Error(`Request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
-      }, REQUEST_TIMEOUT_MS);
+        this.sendCancel(requestId);
+        reject(new Error(`Request ${requestId} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
 
       this.pendingRequests.set(requestId, { resolve, reject, timer });
 
@@ -1253,7 +1316,14 @@ export class EdgeAgentAdapter {
         this.ws.send(
           JSON.stringify({
             type: 'request',
-            data: { requestId, method, path, headers, body },
+            data: {
+              requestId,
+              method,
+              path,
+              headers,
+              body,
+              ...(hintMs === undefined ? {} : { timeoutMs: hintMs }),
+            },
           }),
         );
       } catch (err: unknown) {
@@ -1270,6 +1340,7 @@ export class EdgeAgentAdapter {
     headers: Record<string, string> | undefined,
     body: Buffer,
     streaming: boolean,
+    options?: EdgeRequestOptions,
   ): Promise<unknown> {
     if (!this.supportsRequestBodyStream) {
       return Promise.reject(new Error('Edge agent does not support streamed request bodies'));
@@ -1285,6 +1356,9 @@ export class EdgeAgentAdapter {
     }
     const requestId = uuidv7();
     const pendingKey = streaming ? `stream:${requestId}` : requestId;
+    // Stream-classified routes are already unbounded on the agent; no hint.
+    const hintMs = streaming ? undefined : this.timeoutHint(options);
+    const timeoutMs = this.timerMs(hintMs);
     const upload: { body?: Buffer; offset: number } = { body, offset: 0 };
     this.uploadingBytes += body.length;
     // The callbacks retain this small state object, never the body after cleanup.
@@ -1295,8 +1369,8 @@ export class EdgeAgentAdapter {
       }
     };
     return new Promise((resolve, reject) => {
-      const fail = (error: unknown) => {
-        if (upload.body && !this.disconnected) {
+      const fail = (error: unknown, cancelSent = false) => {
+        if (upload.body && !this.disconnected && !cancelSent) {
           try {
             this.ws.send(
               JSON.stringify({
@@ -1313,8 +1387,10 @@ export class EdgeAgentAdapter {
       };
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
-        fail(new Error(`Request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
-      }, REQUEST_TIMEOUT_MS);
+        // dd:cancel is a strict superset of the upload-only request-cancelled.
+        const cancelSent = this.sendCancel(requestId);
+        fail(new Error(`Request ${requestId} timed out after ${timeoutMs}ms`), cancelSent);
+      }, timeoutMs);
       this.pendingRequests.set(pendingKey, {
         timer,
         resolve: (value) => {
@@ -1360,7 +1436,17 @@ export class EdgeAgentAdapter {
           fail(error);
         }
       };
-      write({ type: 'request', data: { requestId, method, path, headers, bodyStream: true } });
+      write({
+        type: 'request',
+        data: {
+          requestId,
+          method,
+          path,
+          headers,
+          bodyStream: true,
+          ...(hintMs === undefined ? {} : { timeoutMs: hintMs }),
+        },
+      });
     });
   }
 

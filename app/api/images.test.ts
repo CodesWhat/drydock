@@ -540,6 +540,23 @@ describe('Images Router', () => {
       },
     );
 
+    test('maps a bridge request-timeout failure to a 504 saying the prune may have completed', async () => {
+      const error = Object.assign(new Error('(HTTP code 504) unexpected - x'), {
+        statusCode: 504,
+        json: { message: 'Portwing Docker transport failed', reason: 'request-timeout' },
+      });
+      agentDockerApi.pruneImages.mockRejectedValue(error);
+
+      const res = await invokePostPrune(
+        pruneRequest({ body: { host: 'edge.docker.remote', mode: 'dangling' } }),
+      );
+
+      expect(res.status).toHaveBeenCalledWith(504);
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.error).toContain('may still have completed');
+      expect(body.details).toEqual({ reason: 'request-timeout' });
+    });
+
     test('maps a bridge timeout failure to the 504 still-running error', async () => {
       const error = Object.assign(new Error('(HTTP code 504) unexpected - x'), {
         statusCode: 504,

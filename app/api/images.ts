@@ -215,6 +215,9 @@ function isAgentTimeoutError(error: unknown, reason: string | undefined): boolea
   return /timeout|timed out|socket hang up/i.test(message);
 }
 
+const AGENT_REQUEST_TIMEOUT_MESSAGE =
+  'The agent timed out waiting for Docker. The operation may still have completed; refresh to see the current state before retrying.';
+
 function respondWithHostError(
   res: Response,
   host: ImageHost,
@@ -229,6 +232,13 @@ function respondWithHostError(
     }
     if (reason === 'bad-upstream-response') {
       sendErrorResponse(res, 502, { message: AGENT_BAD_RESPONSE_MESSAGE, details: { reason } });
+      return;
+    }
+    if (reason === 'request-timeout') {
+      sendErrorResponse(res, 504, {
+        message: AGENT_REQUEST_TIMEOUT_MESSAGE,
+        details: { reason: 'request-timeout' },
+      });
       return;
     }
     if (isAgentTimeoutError(error, reason)) {

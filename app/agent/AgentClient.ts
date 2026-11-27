@@ -68,14 +68,25 @@ import { InventoryRefreshOperationError } from '../watchers/inventory-refresh.js
 import { resolveLookupImageFromContainerLabels } from '../watchers/providers/docker/container-init.js';
 import { isDrydockInitiatedStateChange } from '../watchers/providers/docker/container-state-alerts.js';
 import { normalizeContainer } from '../watchers/providers/docker/image-comparison.js';
+import {
+  AGENT_REQUEST_TIMEOUT_CODE,
+  AgentRequestTimeoutError,
+} from './AgentRequestTimeoutError.js';
 import { AgentInventoryRefresh } from './agent-inventory.js';
 import { checkAgentVersion } from './agent-version-alerts.js';
 import { type AgentWarning, getAgentWarnings } from './agent-warnings.js';
 import type { AgentAuthMode } from './components/Agent.js';
 import { usesControllerDockerTransport } from './controller-docker-transport.js';
-import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
+import type { EdgeAgentAdapter, EdgeRequestOptions } from './EdgeAgentAdapter.js';
 import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
 import { PORTWING_CONTAINER_EVENT, PortwingStateAlerts } from './portwing-container-events.js';
+import {
+  CAPABILITY_REQUEST_TIMEOUT,
+  clampTimeoutHintMs,
+  controllerTimeoutForHint,
+  longRequestTimeoutHintMs,
+  TIMEOUT_HINT_HEADER,
+} from './portwing-request-timeout.js';
 import { StandardKeyRotation } from './standard-key-rotation.js';
 import { createRotationRequest } from './standard-key-rotation-client.js';
 
@@ -225,6 +236,7 @@ interface AgentRuntimeAckPayload {
   lastSeen?: unknown;
   logLevel?: unknown;
   pollInterval?: unknown;
+  capabilities?: unknown;
 }
 
 interface AgentSsePayload {
@@ -448,6 +460,11 @@ export class AgentClient {
    * against the (nonexistent) edge-agent-placeholder host.
    */
   public edgeAdapter?: EdgeAgentAdapter;
+  /**
+   * Capability strings a standard Portwing agent advertised in its `dd:ack`
+   * event. Replaced on every ack; empty until the first one arrives.
+   */
+  private agentCapabilities: ReadonlySet<string> = new Set();
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -780,9 +797,13 @@ export class AgentClient {
           }
         }
       }
+      const hintMs = longRequestTimeoutHintMs(method, target);
+      // The adapter only puts the hint on the wire (and extends its timer)
+      // when the agent advertised dd:request-timeout.
+      const extra: [EdgeRequestOptions?] = hintMs === undefined ? [] : [{ timeoutMs: hintMs }];
       const response = await (isStreamingDockerTarget(target)
         ? this.edgeAdapter.sendStreamRequest(method, target, headers, edgeBody)
-        : this.edgeAdapter.sendRequest(method, target, headers, edgeBody));
+        : this.edgeAdapter.sendRequest(method, target, headers, edgeBody, ...extra));
       if (!response || typeof response !== 'object' || Array.isArray(response)) {
         throw new Error('Malformed Docker API response from edge agent');
       }
@@ -799,6 +820,15 @@ export class AgentClient {
 
     const authConfig = this.buildRequestConfig(method, target, body);
     const connectState = { connected: false };
+    // Never send the hint, or wait longer for the answer, unless the agent
+    // advertised dd:request-timeout in its ack.
+    const hintMs = this.agentCapabilities.has(CAPABILITY_REQUEST_TIMEOUT)
+      ? longRequestTimeoutHintMs(method, target)
+      : undefined;
+    const requestTimeoutMs =
+      hintMs === undefined
+        ? PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS
+        : controllerTimeoutForHint(hintMs);
     const response = await axios({
       ...authConfig,
       method,
@@ -807,16 +837,16 @@ export class AgentClient {
       headers: {
         ...headers,
         ...(authConfig.headers as Record<string, string> | undefined),
+        ...(hintMs === undefined
+          ? {}
+          : { [TIMEOUT_HINT_HEADER]: String(clampTimeoutHintMs(hintMs)) }),
       },
       responseType: 'arraybuffer',
-      timeout: PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS,
+      timeout: requestTimeoutMs,
       maxContentLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxBodyLength: MAX_DOCKER_PROXY_RESPONSE_BYTES,
       maxRedirects: 0,
-      transport: createConnectTrackingTransport(
-        connectState,
-        PORTWING_DOCKER_PROXY_INACTIVITY_TIMEOUT_MS,
-      ),
+      transport: createConnectTrackingTransport(connectState, requestTimeoutMs),
       validateStatus: () => true,
     }).catch((error: unknown) => {
       if (typeof error === 'object' && error !== null) {
@@ -824,9 +854,16 @@ export class AgentClient {
       }
       throw error;
     });
+    const responseHeaders = normalizeDockerProxyHeaders(response.headers);
+    if (
+      response.status === 504 &&
+      responseHeaders['x-portwing-code'] === AGENT_REQUEST_TIMEOUT_CODE
+    ) {
+      throw new AgentRequestTimeoutError();
+    }
     return {
       statusCode: response.status,
-      headers: normalizeDockerProxyHeaders(response.headers),
+      headers: responseHeaders,
       body: normalizeDockerProxyBody(response.data),
     };
   }
@@ -1856,6 +1893,11 @@ export class AgentClient {
   private handleAckEvent(data: unknown) {
     this.info = this.buildRuntimeInfoFromAck(data);
     const ackData = data as AgentRuntimeAckPayload;
+    this.agentCapabilities = new Set(
+      Array.isArray(ackData.capabilities)
+        ? ackData.capabilities.filter((value): value is string => typeof value === 'string')
+        : [],
+    );
     const { build } = this.info;
     const buildSuffix = build && build !== ackData.version ? `, build: ${build}` : '';
     this.log.info(`Agent ${this.name} connected (version: ${ackData.version}${buildSuffix})`);
