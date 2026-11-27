@@ -64,20 +64,23 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   heroTitle: "Watchtower alternative: Drydock vs Watchtower",
   heroDescription: (
     <>
-    <p>
-      Watchtower was{" "}
-      <strong className="text-neutral-900 dark:text-neutral-200">archived in December 2025</strong>.
-      Its last release was v1.7.1 in November 2023, and an unofficial community fork,
-      nicholas-fedor/watchtower, is still released. Drydock is an actively maintained, MIT-licensed
-      alternative with a web dashboard, dry-run preview, image backup and automatic rollback on
-      health-check failure, and it checks 23 registries.
-    </p>
-    <p>
-      Still running Watchtower? This page doubles as a migration guide. Drydock watches the same
-      Docker socket, so label the containers you want tracked with <code>dd.watch=true</code>, add
-      a <code>DD_NOTIFICATION_*</code> trigger for each service you used through Shoutrrr, and turn
-      on a <code>DD_ACTION_*</code> trigger only for the containers you want updated automatically.
-    </p>
+      <p>
+        Watchtower was{" "}
+        <strong className="text-neutral-900 dark:text-neutral-200">
+          archived in December 2025
+        </strong>
+        . Its last release was v1.7.1 in November 2023, and an unofficial community fork,
+        nicholas-fedor/watchtower, is still released. Drydock is an actively maintained,
+        MIT-licensed alternative with a web dashboard, dry-run preview, image backup and automatic
+        rollback on health-check failure, and it checks 23 registries.
+      </p>
+      <p>
+        Still running Watchtower? This page doubles as a migration guide. Drydock watches the same
+        Docker socket, so label the containers you want tracked with <code>dd.watch=true</code>, add
+        a <code>DD_NOTIFICATION_*</code> trigger for each service you used through Shoutrrr, and
+        turn on a <code>DD_ACTION_*</code> trigger only for the containers you want updated
+        automatically.
+      </p>
     </>
   ),
   competitorBadge: {
