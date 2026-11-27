@@ -13,6 +13,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
+### Changed
+
+- Website: archived docs versions (v1.3 to v1.8) now emit JSON-LD marked as archived (`creativeWorkStatus: "Archived"` plus an `isPartOf` pointing at the versioned docs root), while the current docs keep unversioned-status markup.
+
 ### Fixed
 
 - Security fast lane: a replica whose running scan is newer than the remembered candidate scan now gets its own fresh candidate scan instead of being marked attempted and left waiting for its next running-scan change.

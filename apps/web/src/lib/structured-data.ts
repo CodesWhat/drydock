@@ -219,6 +219,7 @@ export function buildDocsJsonLd({
   title,
   description,
   version,
+  archived = false,
   crumbs,
 }: {
   url: string;
@@ -226,6 +227,8 @@ export function buildDocsJsonLd({
   description?: string;
   /** Docs version slug, e.g. "v1.8". */
   version: string;
+  /** True for every docs version except the current one. */
+  archived?: boolean;
   crumbs: Crumb[];
 }): Node {
   return graph(
@@ -238,6 +241,16 @@ export function buildDocsJsonLd({
       url,
       inLanguage: "en",
       version: version.replace(/^v/, ""),
+      ...(archived
+        ? {
+            creativeWorkStatus: "Archived",
+            isPartOf: {
+              "@type": "CreativeWork",
+              name: `Drydock ${version} documentation (archived)`,
+              url: `${BASE_URL}/docs/${version}`,
+            },
+          }
+        : {}),
       mainEntityOfPage: url,
       author: ref(ORGANIZATION_ID),
       publisher: ref(ORGANIZATION_ID),
