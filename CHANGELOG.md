@@ -14,6 +14,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Container state alerts (stopped, exited, OOM killed, restart loop) now appear in the audit log and can show in the notification bell, and the notification editor shows translated names and descriptions for them.
 - OIDC: new `DD_AUTH_OIDC_{name}_IDTOKENSIGNEDALG` option sets `id_token_signed_response_alg` so IdPs that sign ID tokens with ES256 (or other non-RS256 algorithms) can log in. Validated against a JOSE allowlist; default behaviour is unchanged. Idea from WUD.
 - OIDC: new opt-in `DD_AUTH_OIDC_{name}_REQUIREEMAILVERIFIED=true` denies sign-in when an email or domain allowlist is set and the IdP sends no `email_verified` claim. Default is unchanged (a missing claim is still accepted).
+- Four new registry providers: Elastic (`docker.elastic.co`), Linode, Scaleway (`scw.cloud`) and self-hosted ProGet. Each matches only its own hosts (no suffix or lookalike spoofing), supports anonymous bearer and credentialed auth, and masks secrets. Elastic, Linode and Scaleway are enabled anonymously by default, so registries go from 23 to 27.
 
 ### Security
 
