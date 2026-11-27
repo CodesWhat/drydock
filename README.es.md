@@ -285,6 +285,7 @@ La mayoría de las herramientas obligan a hacer concesiones. Los actualizadores 
 ### Registros (27)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
+
 ### Acciones (4)
 
 Docker · Docker Compose · Portainer · Command

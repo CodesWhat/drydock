@@ -285,6 +285,7 @@ Większość narzędzi wymusza kompromis. Automatyczne aktualizacje (Watchtower,
 ### Rejestry (27)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Niestandardowy · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
+
 ### Akcje (4)
 
 Doker · Docker Compose · Portainer · Command

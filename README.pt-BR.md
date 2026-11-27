@@ -285,6 +285,7 @@ A maioria das ferramentas força uma compensação. Os atualizadores automático
 ### Registros (27)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personalizado · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
+
 ### Ações (4)
 
 Docker · Docker Compose · Portainer · Command

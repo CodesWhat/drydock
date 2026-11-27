@@ -285,6 +285,7 @@ La plupart des outils imposent un compromis. Les mises à jour automatiques (Wat
 ### Registres (27)
 
 Docker Hub · GHCR · ECR · ACR · GCR · GAR · GitLab · Quay · LSCR · Harbor · Artifactory · Nexus · Gitea · Forgejo · Codeberg · MAU · TrueForge · Personnalisé · DOCR · DHI · IBM Cloud · Oracle Cloud · Alibaba Cloud · Elastic · Linode · Scaleway · ProGet
+
 ### Actions (4)
 
 Docker · Docker Compose · Portainer · Command
