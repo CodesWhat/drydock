@@ -133,7 +133,24 @@ interface OidcConfiguration {
   allowedemaildomains?: string;
   requiredgroup?: string;
   groupclaim?: string;
+  idtokensignedalg?: string;
 }
+
+const ID_TOKEN_SIGNED_ALGORITHMS = [
+  'RS256',
+  'RS384',
+  'RS512',
+  'PS256',
+  'PS384',
+  'PS512',
+  'ES256',
+  'ES384',
+  'ES512',
+  'EdDSA',
+  'HS256',
+  'HS384',
+  'HS512',
+] as const;
 
 const BEARER_DISABLED_WARNING_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -427,6 +444,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       allowedemaildomains: this.joi.string().allow(''),
       requiredgroup: this.joi.string().allow(''),
       groupclaim: this.joi.string(),
+      idtokensignedalg: this.joi.string().valid(...ID_TOKEN_SIGNED_ALGORITHMS),
     });
   }
 
@@ -470,6 +488,9 @@ class Oidc extends Authentication<OidcConfiguration> {
         ? { requiredgroup: this.configuration.requiredgroup }
         : {}),
       ...(this.configuration.groupclaim ? { groupclaim: this.configuration.groupclaim } : {}),
+      ...(this.configuration.idtokensignedalg
+        ? { idtokensignedalg: this.configuration.idtokensignedalg }
+        : {}),
     };
   }
 
@@ -530,7 +551,12 @@ class Oidc extends Authentication<OidcConfiguration> {
     this.client = await openidClient.discovery(
       discoveryUrl,
       this.configuration.clientid,
-      this.configuration.clientsecret,
+      this.configuration.idtokensignedalg
+        ? {
+            client_secret: this.configuration.clientsecret,
+            id_token_signed_response_alg: this.configuration.idtokensignedalg,
+          }
+        : this.configuration.clientsecret,
       openidClient.ClientSecretPost(this.configuration.clientsecret),
       discoveryOptions,
     );

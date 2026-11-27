@@ -91,6 +91,16 @@ services:
     expect(migrated.labelReplacements).toBe(2);
   });
 
+  test('wud source maps the OIDC id token algorithm variable', () => {
+    const migrated = migrateLegacyConfigContent(
+      'WUD_AUTH_OIDC_SSO_IDTOKENSIGNEDALG=ES256\n',
+      'wud',
+    );
+
+    expect(migrated.content).toBe('DD_AUTH_OIDC_SSO_IDTOKENSIGNEDALG=ES256\n');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
   test('auto source migrates both wud and watchtower patterns', () => {
     const content = `
 WUD_SERVER_PORT=3000

@@ -1,5 +1,6 @@
 import { hasValidCommandPath } from '../runtime.js';
 import type { ContainerVulnerability } from '../scan.js';
+import { parseScannerJson } from '../scanner-json.js';
 
 const GRYPE_MAX_OUTPUT_ENV_VAR = 'DD_SECURITY_GRYPE_MAXOUTPUTBYTES';
 
@@ -102,7 +103,7 @@ export function parseGrypeOutput(output: string, maxOutputBytes: number): Contai
     );
   }
 
-  const parsed = JSON.parse(output) as unknown;
+  const parsed = parseScannerJson(output, 'Grype', GRYPE_MAX_OUTPUT_ENV_VAR);
   if (!isRecord(parsed) || !Array.isArray(parsed.matches)) {
     return [];
   }

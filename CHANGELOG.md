@@ -31,6 +31,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Image pruning after a digest update no longer removes the previous image when a retained rollback backup records that digest, so the rollback no longer fails on a missing image.
 - Auto-rollback health monitoring no longer logs "container is healthy" at the end of its window when every inspect failed or the healthcheck was still starting. The log now reports the real outcome (inspect failed, still starting, healthy, or never reported a status).
 - Portwing agents: long Docker operations (stop/restart with a long `t`, wait, image load, archive upload, prune) no longer hit the fixed 30 s request cap when the agent advertises `dd:request-timeout`. Drydock sends a per-request timeout hint and waits hint + 5 s, maps the agent's `request_timeout` error (and a Standard 504 with `X-Portwing-Code: request_timeout`) to a typed error whose message says the operation may still have completed, and sends `dd:cancel` from Edge request timeouts and aborts when the agent advertises it.
+- Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
+
 
 ## [1.9.0-rc.1] - 2026-11-20
 
