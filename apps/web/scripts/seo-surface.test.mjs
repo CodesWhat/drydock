@@ -118,16 +118,10 @@ test("homepage comparison swaps Portainer for WUD and takes its cells from the R
   assert.match(source, /archived December 2025/);
 });
 
-test("homepage comparison says what Drydock doesn't do and points WUD and Watchtower users somewhere", () => {
+test("homepage comparison leaves migration and not-yet-supported detail to the comparison pages", () => {
   const source = read("../src/components/compare-section.tsx");
-  assert.match(source, /Probably not for you yet/);
-  assert.match(
-    source,
-    /Swarm, Kubernetes and\s+Nomad watchers, RBAC and multi-user roles, and a one-shot CI mode/,
-  );
-  assert.match(source, /config migrate --dry-run/);
-  assert.match(source, /href="\/compare\/watchtower"/);
-  assert.match(source, /href="\/compare\/wud"/);
+  assert.doesNotMatch(source, /Probably not for you yet|config migrate --dry-run/);
+  assert.match(read("../src/lib/comparison-route-data/wud.tsx"), /config migrate --dry-run/);
 });
 
 test("comparison page metadata stays inside SERP length and uses the alternative pattern for dead tools", () => {
