@@ -30,6 +30,7 @@ const API_SCOPE_VALUES = [
   'read',
   'containers:watch',
   'containers:update',
+  'containers:control',
   'triggers:test',
   'admin',
   'api-keys:manage',

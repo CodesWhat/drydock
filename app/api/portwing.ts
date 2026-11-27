@@ -26,10 +26,14 @@ const router = express.Router();
  */
 router.get(
   '/keys',
-  scoped(SESSION_ONLY, (_req: Request, res: Response) => {
-    const keys = agentKeys.listKeys();
-    res.json(keys);
-  }),
+  scoped(
+    SESSION_ONLY,
+    (_req: Request, res: Response) => {
+      const keys = agentKeys.listKeys();
+      res.json(keys);
+    },
+    { role: 'admin' },
+  ),
 );
 
 /**
@@ -40,73 +44,77 @@ router.get(
  */
 router.post(
   '/keys',
-  scoped(SESSION_ONLY, (req: Request, res: Response) => {
-    // An agent key keeps working after a factor reset, so a session that
-    // signed in with a recovery code cannot register one.
-    if (refuseRecoveryAssuranceSession(req, res, 'register agent keys')) {
-      return;
-    }
-
-    const { pubkeyBase64, label } = req.body as { pubkeyBase64?: unknown; label?: unknown };
-
-    if (typeof pubkeyBase64 !== 'string' || !pubkeyBase64) {
-      sendErrorResponse(res, 400, 'pubkeyBase64 must be a non-empty string');
-      return;
-    }
-
-    if (typeof label !== 'string' || !label) {
-      sendErrorResponse(res, 400, 'label must be a non-empty string');
-      return;
-    }
-
-    let pubkeyBuffer: Buffer;
-    try {
-      pubkeyBuffer = Buffer.from(pubkeyBase64, 'base64');
-      // Verify it actually decoded (empty base64 or non-base64)
-      if (pubkeyBuffer.length === 0) {
-        sendErrorResponse(res, 400, 'pubkeyBase64 does not decode to any bytes');
+  scoped(
+    SESSION_ONLY,
+    (req: Request, res: Response) => {
+      // An agent key keeps working after a factor reset, so a session that
+      // signed in with a recovery code cannot register one.
+      if (refuseRecoveryAssuranceSession(req, res, 'register agent keys')) {
         return;
       }
-      /* v8 ignore start */
-    } catch {
-      sendErrorResponse(res, 400, 'pubkeyBase64 is not valid base64');
-      return;
-    }
-    /* v8 ignore stop */
 
-    if (pubkeyBuffer.length !== 32) {
-      sendErrorResponse(
-        res,
-        400,
-        `Ed25519 public key must be exactly 32 bytes; got ${pubkeyBuffer.length}`,
-      );
-      return;
-    }
+      const { pubkeyBase64, label } = req.body as { pubkeyBase64?: unknown; label?: unknown };
 
-    let record: agentKeys.AgentKeyRecord;
-    try {
-      record = agentKeys.addKey(pubkeyBuffer, label);
-    } catch (error: unknown) {
-      if (error instanceof agentKeys.AgentKeyConflictError) {
-        sendErrorResponse(res, 409, error.message);
+      if (typeof pubkeyBase64 !== 'string' || !pubkeyBase64) {
+        sendErrorResponse(res, 400, 'pubkeyBase64 must be a non-empty string');
         return;
       }
-      sendErrorResponse(res, 500, sanitizeApiError(error));
-      return;
-    }
 
-    recordAuditEvent({
-      action: 'agent-key-changed',
-      status: 'success',
-      containerName: 'agents',
-      details: `added key=${record.keyId}; label=${sanitizeLogParam(record.label)}`,
-    });
-    res.status(201).json({
-      keyId: record.keyId,
-      label: record.label,
-      createdAt: record.createdAt,
-    });
-  }),
+      if (typeof label !== 'string' || !label) {
+        sendErrorResponse(res, 400, 'label must be a non-empty string');
+        return;
+      }
+
+      let pubkeyBuffer: Buffer;
+      try {
+        pubkeyBuffer = Buffer.from(pubkeyBase64, 'base64');
+        // Verify it actually decoded (empty base64 or non-base64)
+        if (pubkeyBuffer.length === 0) {
+          sendErrorResponse(res, 400, 'pubkeyBase64 does not decode to any bytes');
+          return;
+        }
+        /* v8 ignore start */
+      } catch {
+        sendErrorResponse(res, 400, 'pubkeyBase64 is not valid base64');
+        return;
+      }
+      /* v8 ignore stop */
+
+      if (pubkeyBuffer.length !== 32) {
+        sendErrorResponse(
+          res,
+          400,
+          `Ed25519 public key must be exactly 32 bytes; got ${pubkeyBuffer.length}`,
+        );
+        return;
+      }
+
+      let record: agentKeys.AgentKeyRecord;
+      try {
+        record = agentKeys.addKey(pubkeyBuffer, label);
+      } catch (error: unknown) {
+        if (error instanceof agentKeys.AgentKeyConflictError) {
+          sendErrorResponse(res, 409, error.message);
+          return;
+        }
+        sendErrorResponse(res, 500, sanitizeApiError(error));
+        return;
+      }
+
+      recordAuditEvent({
+        action: 'agent-key-changed',
+        status: 'success',
+        containerName: 'agents',
+        details: `added key=${record.keyId}; label=${sanitizeLogParam(record.label)}`,
+      });
+      res.status(201).json({
+        keyId: record.keyId,
+        label: record.label,
+        createdAt: record.createdAt,
+      });
+    },
+    { role: 'admin' },
+  ),
 );
 
 /**
@@ -115,26 +123,30 @@ router.post(
  */
 router.delete(
   '/keys/:keyId',
-  scoped(SESSION_ONLY, (req: Request, res: Response) => {
-    const { keyId } = req.params as { keyId: string };
-    if (!KEY_ID_PATTERN.test(keyId)) {
-      sendErrorResponse(res, 400, 'Invalid keyId format');
-      return;
-    }
-    const revoked = agentKeys.revokeKey(keyId);
-    if (!revoked) {
-      sendErrorResponse(res, 404, `Key ${keyId} not found`);
-      return;
-    }
-    disconnectByKeyId(keyId);
-    recordAuditEvent({
-      action: 'agent-key-changed',
-      status: 'success',
-      containerName: 'agents',
-      details: `revoked key=${keyId}`,
-    });
-    res.status(204).send();
-  }),
+  scoped(
+    SESSION_ONLY,
+    (req: Request, res: Response) => {
+      const { keyId } = req.params as { keyId: string };
+      if (!KEY_ID_PATTERN.test(keyId)) {
+        sendErrorResponse(res, 400, 'Invalid keyId format');
+        return;
+      }
+      const revoked = agentKeys.revokeKey(keyId);
+      if (!revoked) {
+        sendErrorResponse(res, 404, `Key ${keyId} not found`);
+        return;
+      }
+      disconnectByKeyId(keyId);
+      recordAuditEvent({
+        action: 'agent-key-changed',
+        status: 'success',
+        containerName: 'agents',
+        details: `revoked key=${keyId}`,
+      });
+      res.status(204).send();
+    },
+    { role: 'admin' },
+  ),
 );
 
 /**

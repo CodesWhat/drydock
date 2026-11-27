@@ -6,6 +6,7 @@ import * as registry from '../registry/index.js';
 import { getErrorMessage } from '../util/error.js';
 import { apiKeyAuthenticator } from './api-key-auth.js';
 import {
+  type Authenticator,
   clearAuthenticators,
   getAuthenticators,
   registerAuthenticator,
@@ -15,6 +16,58 @@ import { sessionAuthenticator } from './session-principal.js';
 interface AuthStatusResponse {
   providers: StrategyDescription[];
   errors: registry.AuthenticationRegistrationError[];
+}
+
+type RoleGrantingAuthenticator = Authenticator & {
+  readonly grantedRole: NonNullable<Authenticator['grantedRole']>;
+};
+
+function getRoleGrantingAuthenticators(): RoleGrantingAuthenticator[] {
+  return getAuthenticators().filter(
+    (authenticator): authenticator is RoleGrantingAuthenticator =>
+      authenticator.grantedRole !== undefined,
+  );
+}
+
+/**
+ * Refuse to start when roles are configured and no authenticator grants
+ * admin. Nobody could manage the instance, and there is nothing to click out
+ * of, so this fails fast and names the fix instead.
+ */
+function assertAdminRoleReachable(): void {
+  const granting = getRoleGrantingAuthenticators();
+  if (granting.length === 0) {
+    return;
+  }
+  if (granting.some((authenticator) => authenticator.grantedRole.role === 'admin')) {
+    return;
+  }
+  throw new Error(
+    'No authentication grants the admin role, so nobody could manage this instance. Set DD_AUTH_BASIC_<name>_ROLE=admin on at least one user (or leave it unset), configure OIDC, or set DD_ANONYMOUS_AUTH_ROLE=admin.',
+  );
+}
+
+/**
+ * One startup line naming the role each authenticator grants, plus a hint
+ * when several Basic users exist and none has a role, since they are then all
+ * admin.
+ */
+function logGrantedRoles(): void {
+  const granting = getRoleGrantingAuthenticators();
+  if (granting.length === 0) {
+    return;
+  }
+  log.info(
+    `Authentication roles: ${granting
+      .map((authenticator) => `${authenticator.id}=${authenticator.grantedRole.role}`)
+      .join(', ')}`,
+  );
+  const basic = granting.filter((authenticator) => authenticator.readsBasicHeader === true);
+  if (basic.length > 1 && basic.every((authenticator) => !authenticator.grantedRole.explicit)) {
+    log.info(
+      `All ${basic.length} Basic users have the admin role. Set DD_AUTH_BASIC_<name>_ROLE=operator or viewer to limit one.`,
+    );
+  }
 }
 
 export function resetAuthenticatorsForTests(): void {
@@ -66,6 +119,8 @@ export function registerAuthenticators(app: Application): void {
   categorized
     .filter(({ isAnonymous }) => isAnonymous)
     .forEach(({ authentication }) => useAuthenticator(authentication, app));
+  logGrantedRoles();
+  assertAdminRoleReachable();
 }
 
 /**

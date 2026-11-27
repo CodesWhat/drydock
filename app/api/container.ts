@@ -362,7 +362,7 @@ export function init() {
       validate: { xForwardedForHeader: false },
       ...identityAwareRateLimitOptions,
     }),
-    scoped(SESSION_ONLY, crudHandlers.revealContainerEnv),
+    scoped(SESSION_ONLY, crudHandlers.revealContainerEnv, { role: 'admin' }),
   );
   router.post(
     '/:id/scan',

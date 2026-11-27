@@ -5,6 +5,7 @@ import {
   markVerifiedCredentialsDeclined,
 } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
+import { DEFAULT_ROLE, ROLES, type Role } from '../../../api/roles.js';
 import {
   deriveSubjectId,
   isSecondFactorRequired,
@@ -25,6 +26,8 @@ import {
 interface BasicConfiguration {
   user: string;
   hash: string;
+  /** `DD_AUTH_BASIC_<name>_ROLE`. Absent means admin, which is what every user was before roles. */
+  role?: Role;
 }
 
 function hashValue(value: string): Buffer {
@@ -316,6 +319,14 @@ class Basic extends Authentication<BasicConfiguration> {
           [JOI_INVALID_HASH_CODE]:
             '"hash" must be an argon2id hash ($argon2id$v=19$m=65536,t=3,p=4$salt$hash) or compatible Drydock format (argon2id$memory$passes$parallelism$salt$hash)',
         }),
+      // Fails registration on anything else, so a typo locks this user out
+      // rather than guessing a role for them.
+      role: this.joi
+        .string()
+        .trim()
+        .lowercase()
+        .valid(...ROLES)
+        .messages({ 'any.only': `"role" must be one of ${ROLES.join(', ')}` }),
     });
   }
 
@@ -327,7 +338,13 @@ class Basic extends Authentication<BasicConfiguration> {
     return {
       user: this.configuration.user,
       hash: Basic.mask(this.configuration.hash),
+      role: this.getRole(),
     };
+  }
+
+  /** The role this user holds: the configured one, or admin when none is set. */
+  getRole(): Role {
+    return this.configuration.role ?? DEFAULT_ROLE;
   }
 
   /**
@@ -343,6 +360,7 @@ class Basic extends Authentication<BasicConfiguration> {
       id: this.getId(),
       persistsSession: false,
       readsBasicHeader: true,
+      grantedRole: { role: this.getRole(), explicit: this.configuration.role !== undefined },
       // Read on use, so it names the account as it is configured now. A factor
       // enrolled under any other subject is orphaned (spec 11.1.2 decision 10).
       get localSubjectId(): string {

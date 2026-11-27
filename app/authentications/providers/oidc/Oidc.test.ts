@@ -365,6 +365,8 @@ describe('getAuthenticator / authenticateBearer', () => {
 
     expect(authenticator.id).toBe('oidc.default');
     expect(authenticator.persistsSession).toBe(false);
+    // Every OIDC user is admin until group-to-role mapping exists.
+    expect(authenticator.grantedRole).toStrictEqual({ role: 'admin', explicit: false });
   });
 
   test('wires the redirect and callback routes exactly as the strategy did', () => {

@@ -20,7 +20,7 @@ import {
 import { getTriggerAssociationFailureReason } from '../docker-trigger.js';
 import { sendErrorResponse } from '../error-response.js';
 import { sanitizePreviewErrorReason } from '../preview-errors.js';
-import { enforceApiKeyScope } from '../route-scopes.js';
+import { enforceAccess } from '../route-scopes.js';
 import { doesTriggerMatchRoute } from '../trigger-identity.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -310,7 +310,7 @@ function createRunTriggerHandler({
     // key that holds neither scope a container-existence oracle.
     const requiredScope =
       getTriggerCategoryForType(triggerType) === 'action' ? 'containers:update' : 'triggers:test';
-    if (!enforceApiKeyScope(req, res, requiredScope)) {
+    if (!enforceAccess(req, res, requiredScope)) {
       return;
     }
 
@@ -350,7 +350,7 @@ function createRunTriggerHandler({
 
     // Scope and dispatch follow the component that was actually resolved.
     const isActionTrigger = getTriggerCategoryForType(triggerToRun.type) === 'action';
-    if (!enforceApiKeyScope(req, res, isActionTrigger ? 'containers:update' : 'triggers:test')) {
+    if (!enforceAccess(req, res, isActionTrigger ? 'containers:update' : 'triggers:test')) {
       return;
     }
     if (isActionTrigger && !areContainerActionsEnabled()) {

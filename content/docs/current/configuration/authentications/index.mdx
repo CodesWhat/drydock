@@ -69,6 +69,16 @@ environment:
   - DD_ANONYMOUS_AUTH_CONFIRM=true
 ```
 
+### `DD_ANONYMOUS_AUTH_ROLE`
+
+The [role](/docs/configuration/authentications/roles) an anonymous visitor holds: `admin`, `operator` or `viewer`. Unset is `admin`, which is what anonymous access has always granted. Set `viewer` for a read-only dashboard. An invalid value turns anonymous access off rather than guessing.
+
+```yaml
+environment:
+  - DD_ANONYMOUS_AUTH_CONFIRM=true
+  - DD_ANONYMOUS_AUTH_ROLE=viewer
+```
+
 ### Behavior matrix
 
 | Scenario | Result |

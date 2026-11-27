@@ -267,7 +267,10 @@ export function init() {
   router.get('/', scoped('read', getAgentsList));
   router.get('/roster', scoped('read', getAgentRoster));
   router.get('/:name/log/entries', scoped('read', getAgentLogEntries));
-  router.get('/:name/key-rotation', scoped(SESSION_ONLY, getSigningKeyRotation));
-  router.post('/:name/key-rotation', scoped(SESSION_ONLY, changeSigningKeyRotation));
+  router.get('/:name/key-rotation', scoped(SESSION_ONLY, getSigningKeyRotation, { role: 'admin' }));
+  router.post(
+    '/:name/key-rotation',
+    scoped(SESSION_ONLY, changeSigningKeyRotation, { role: 'admin' }),
+  );
   return router;
 }

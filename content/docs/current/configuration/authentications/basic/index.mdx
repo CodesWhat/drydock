@@ -12,6 +12,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | --- | :---: | --- | --- | --- |
 | `DD_AUTH_BASIC_{auth_name}_USER` | 🔴 | Username | | |
 | `DD_AUTH_BASIC_{auth_name}_HASH` | 🔴 | Argon2id password hash | `$argon2id$v=19$m=65536,t=3,p=4$salt$hash` (preferred) or `argon2id$memory$passes$parallelism$salt$hash` (compatible) | |
+| `DD_AUTH_BASIC_{auth_name}_ROLE` | ⚪ | What this user can do. See [Roles](/docs/configuration/authentications/roles) | `admin`, `operator`, `viewer` | `admin` |
 
 <Callout type="warn">Hash values contain `$` characters. In Docker Compose YAML, double each `$` as `$$`. In Bash, use single quotes around the value.</Callout>
 
@@ -36,6 +37,7 @@ services:
       - "DD_AUTH_BASIC_JANE_HASH=argon2id$$65536$$3$$4$$r6d4/pX/7fLvpz3xw7qvEZok4KSYwMRm71TjBlujwPI=$$OmI2vv0GCpP12SC0u6dL6Lz1OpRyBjTQGe+bBvF84hhQJB1iTaFd/S1NRQafvAHL02U61E5/eqvOaQ81vPzxvw=="
       - DD_AUTH_BASIC_BOB_USER=bob
       - "DD_AUTH_BASIC_BOB_HASH=argon2id$$65536$$3$$4$$shoWJqA1qg1Zen08/XIocsJUEFKgox8Glw0/EAkY5SY=$$toyn5NwytBXDTqQN94wJzjUT0tocDzhvvYii4YK279pDTbMDGoyqOhxxDi7lS0xEJAC7fRKfMAaZFfxmzD4GNw=="
+      - DD_AUTH_BASIC_BOB_ROLE=viewer
 ```
 
 </Tab>
@@ -48,6 +50,7 @@ docker run \
   -e 'DD_AUTH_BASIC_JANE_HASH=argon2id$65536$3$4$r6d4/pX/7fLvpz3xw7qvEZok4KSYwMRm71TjBlujwPI=$OmI2vv0GCpP12SC0u6dL6Lz1OpRyBjTQGe+bBvF84hhQJB1iTaFd/S1NRQafvAHL02U61E5/eqvOaQ81vPzxvw==' \
   -e DD_AUTH_BASIC_BOB_USER="bob" \
   -e 'DD_AUTH_BASIC_BOB_HASH=argon2id$65536$3$4$shoWJqA1qg1Zen08/XIocsJUEFKgox8Glw0/EAkY5SY=$toyn5NwytBXDTqQN94wJzjUT0tocDzhvvYii4YK279pDTbMDGoyqOhxxDi7lS0xEJAC7fRKfMAaZFfxmzD4GNw==' \
+  -e DD_AUTH_BASIC_BOB_ROLE="viewer" \
   ...
   codeswhat/drydock:1.9.0-rc.1
 ```

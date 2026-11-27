@@ -8,6 +8,7 @@
 import express from 'express';
 import { openApiDocument } from './openapi.js';
 import {
+  MIN_ROLE_EXTENSION,
   SCOPE_EXTENSION,
   securityForScope,
   toOpenApiPath,
@@ -71,6 +72,30 @@ describe('withRouteScopes', () => {
       [SCOPE_EXTENSION]: 'read',
       security: [{ apiKeyBearerAuth: [] }, { sessionAuth: [] }],
     });
+  });
+
+  test('annotates the least role a person needs, declared or derived', () => {
+    const router = routerWith((r) => {
+      r.get('/things', scoped('read', noop));
+      r.post('/things', scoped('containers:update', noop));
+      r.patch('/things', scoped(SESSION_ONLY, noop, { role: 'viewer' }));
+      r.put('/things', scoped(DYNAMIC_SCOPE, noop));
+    });
+    const document = {
+      paths: { '/api/v1/things': { get: {}, post: {}, patch: {}, put: {} } },
+    };
+
+    const annotated = withRouteScopes(document, router).paths['/api/v1/things'] as Record<
+      string,
+      Record<string, unknown>
+    >;
+
+    expect(annotated.get[MIN_ROLE_EXTENSION]).toBe('viewer');
+    expect(annotated.post[MIN_ROLE_EXTENSION]).toBe('operator');
+    expect(annotated.patch[MIN_ROLE_EXTENSION]).toBe('viewer');
+    // A dynamic operation's role follows the scope it resolves, so none is published.
+    expect(annotated.put).not.toHaveProperty(MIN_ROLE_EXTENSION);
+    expect(annotated.put[SCOPE_EXTENSION]).toBe(DYNAMIC_SCOPE);
   });
 
   test('converts express parameters to OpenAPI ones when matching', () => {

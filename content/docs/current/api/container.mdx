@@ -579,7 +579,7 @@ An override belongs to a container identity: the watcher, the agent and the cont
 | `GET /api/v1/label-overrides` | `read` | Every stored row, with the containers each one matches |
 | `DELETE /api/v1/label-overrides/{overrideId}?revision=N` | `admin` | Delete a row, including one with no matching container |
 
-Writes need `admin` rather than `containers:update` because a routing override can grant automatic execution and redirect notifications. Sessions are not limited by scopes.
+Writes need `admin` rather than `containers:update` because a routing override can grant automatic execution and redirect notifications. A signed-in user needs the `admin` [role](/docs/configuration/authentications/roles) for them.
 
 The snapshot lists all nine fields. Each has the `labelKey`, the raw `label` value, the `declared` value and its source, the `override` (with `updatedAt` and `updatedBy`) when there is one, and the `effective` value with its source. Sources are `override`, `label`, `compose`, `watcher`, `default` and `unset`. `revision` is `0` and `overrideId` is `null` while the scope has no stored override. `scope.appliesTo` lists the containers the override covers. `readOnlyReason` is `rollback-container` for a temporary rollback container, which answers `409` to writes. `agentEnforcedActionRouting` is `true` when the container runs on a traditional agent that re-checks action routing against its own labels. Container responses and events also carry `labelOwnedSources`, the `effective.source` of each field, so a client can show ownership without a second request.
 
@@ -811,7 +811,7 @@ Returns 200 with the env array on success, 404 if the container is not found, or
 
 ### Authentication
 
-Container action auth model: `/start`, `/stop`, `/restart`, and `/update` are authentication-gated only. In current single-operator deployments, any authenticated user can execute these actions for any container.
+`/start`, `/stop` and `/restart` need the `containers:control` scope and `/update` needs `containers:update`. A signed-in user needs at least the `operator` [role](/docs/configuration/authentications/roles) for any of them; a user with no role configured is `admin`.
 
 ## Start a container
 

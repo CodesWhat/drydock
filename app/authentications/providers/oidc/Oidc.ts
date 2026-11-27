@@ -9,6 +9,7 @@ import { v4 as uuid } from 'uuid';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
+import { DEFAULT_ROLE } from '../../../api/roles.js';
 import { writeSessionPrincipal } from '../../../api/session-principal.js';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
@@ -657,6 +658,8 @@ class Oidc extends Authentication<OidcConfiguration> {
     return {
       id: this.getId(),
       persistsSession: false,
+      // Every OIDC user is admin until group-to-role mapping is configured.
+      grantedRole: { role: DEFAULT_ROLE, explicit: false },
       authenticate: (req: AuthRequest) => this.authenticateBearer(req),
     };
   }

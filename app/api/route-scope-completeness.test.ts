@@ -4,8 +4,10 @@ import {
   collectRouteScopes,
   DYNAMIC_SCOPE,
   findUndeclaredRoutes,
+  findUnflooredSessionOnlyRoutes,
   formatRouteScope,
   type RouteScopeDeclaration,
+  SESSION_ONLY,
   scoped,
   UNRECORDED_MOUNT,
 } from './route-scopes.js';
@@ -151,11 +153,11 @@ const EXPECTED_ROUTE_SCOPES = [
   'POST /api/v1/config/validate → admin',
   'POST /api/v1/containers/:id/env/reveal → session-only',
   'POST /api/v1/containers/:id/preview → containers:watch',
-  'POST /api/v1/containers/:id/restart → admin',
+  'POST /api/v1/containers/:id/restart → containers:control',
   'POST /api/v1/containers/:id/rollback → containers:update',
   'POST /api/v1/containers/:id/scan → containers:watch',
-  'POST /api/v1/containers/:id/start → admin',
-  'POST /api/v1/containers/:id/stop → admin',
+  'POST /api/v1/containers/:id/start → containers:control',
+  'POST /api/v1/containers/:id/stop → containers:control',
   'POST /api/v1/containers/:id/triggers/:triggerType/:triggerName → dynamic',
   'POST /api/v1/containers/:id/triggers/:triggerType/:triggerName/:triggerAgent → dynamic',
   'POST /api/v1/containers/:id/update → containers:update',
@@ -217,6 +219,29 @@ describe('route scope completeness', () => {
 
   test('every route under /api/v1 declares the scope that reaches it', () => {
     expect(findUndeclaredRoutes(declarations).map(formatRouteScope)).toStrictEqual([]);
+  });
+
+  test('every session-only route declares the least role a person needs', () => {
+    // A session-only route has no scope to derive a role floor from, so
+    // leaving it out would hold every person to admin without anyone deciding
+    // that. The floor goes on the scoped() call, never an exclusion here.
+    expect(findUnflooredSessionOnlyRoutes(declarations).map(formatRouteScope)).toStrictEqual([]);
+  });
+
+  test('a session-only route registered without a floor fails the check', () => {
+    const router = express.Router();
+    router.get(
+      '/floored',
+      scoped(SESSION_ONLY, (_req, _res) => {}, { role: 'admin' }),
+    );
+    router.get(
+      '/unfloored',
+      scoped(SESSION_ONLY, (_req, _res) => {}),
+    );
+
+    expect(
+      findUnflooredSessionOnlyRoutes(collectRouteScopes(router, '/api/v1')).map(formatRouteScope),
+    ).toStrictEqual(['GET /api/v1/unfloored → session-only']);
   });
 
   test('every sub-router was mounted through mountRouter, so every path is real', () => {

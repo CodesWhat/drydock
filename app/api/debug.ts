@@ -74,7 +74,7 @@ export function init() {
       message: 'Debug dump rate limit exceeded. Max 5 per 60 seconds.',
       ...identityAwareRateLimitOptions,
     }),
-    scoped(SESSION_ONLY, getDebugDump),
+    scoped(SESSION_ONLY, getDebugDump, { role: 'admin' }),
   );
   return router;
 }

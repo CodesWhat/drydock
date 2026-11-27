@@ -1,0 +1,88 @@
+---
+title: "Roles"
+description: "Give each signed-in user a viewer, operator or admin role, and see exactly which API routes each role reaches."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+Every person who signs in holds one of three roles. The server enforces it on every API route, whatever client sent the request.
+
+| Role | Can |
+| --- | --- |
+| `viewer` | Read everything: containers, logs, stats, approvals, the audit log, registries, triggers, settings. Save their own UI preferences and manage their own two-factor setup. |
+| `operator` | Everything a viewer can, plus watch and scan, update and roll back, start, stop and restart, approve, reject and defer queued updates, cancel operations, fire triggers and retry queued notifications. |
+| `admin` | Everything, including settings, configuration, label overrides, group policies, notification rules and silences, image prune and cleanup, container deletion, the environment reveal, the debug dump, agent keys and API keys. |
+
+<Callout type="info">Nothing changes until you set a role. A user with no role configured is `admin`, which is what every signed-in user was before roles existed.</Callout>
+
+## Setting a role
+
+### Basic users
+
+Add `DD_AUTH_BASIC_{auth_name}_ROLE` next to the user's `_USER` and `_HASH`. Values are `admin`, `operator` and `viewer`, matched without regard to case.
+
+```yaml
+environment:
+  - DD_AUTH_BASIC_SCOTT_USER=scott
+  - "DD_AUTH_BASIC_SCOTT_HASH=argon2id$$65536$$3$$4$$..."
+  - DD_AUTH_BASIC_OPS_USER=ops
+  - "DD_AUTH_BASIC_OPS_HASH=argon2id$$65536$$3$$4$$..."
+  - DD_AUTH_BASIC_OPS_ROLE=operator
+  - DD_AUTH_BASIC_WALLBOARD_USER=wallboard
+  - "DD_AUTH_BASIC_WALLBOARD_HASH=argon2id$$65536$$3$$4$$..."
+  - DD_AUTH_BASIC_WALLBOARD_ROLE=viewer
+```
+
+Here `scott` has no role set, so he's `admin`.
+
+### Anonymous access
+
+With `DD_ANONYMOUS_AUTH_CONFIRM=true`, set `DD_ANONYMOUS_AUTH_ROLE` to choose what an anonymous visitor holds. Unset is `admin`, as before. `viewer` gives you a read-only dashboard.
+
+```yaml
+environment:
+  - DD_ANONYMOUS_AUTH_CONFIRM=true
+  - DD_ANONYMOUS_AUTH_ROLE=viewer
+```
+
+### OIDC users
+
+OIDC users are `admin` for now. Mapping identity-provider groups to roles is planned for a later 1.9 build.
+
+### API keys
+
+API keys don't have a role. A key's [scopes](/docs/configuration/authentications/api-keys#scopes) are its authority, and only an `admin` can create one.
+
+## How it's checked
+
+- **The role is read on every request.** It comes from the configuration the server is running with, not from the session, so a changed role takes effect on the next request after a restart. A session can't outlive a demotion.
+- **A role miss is a `403`** with `{"error": "Role does not permit this action", "details": {"requiredScope": "containers:update", "requiredRole": "operator"}}`. Routes that have no scope (the session-only ones) name only `requiredRole`.
+- **A bad role stops that user from signing in.** An invalid `DD_AUTH_BASIC_{auth_name}_ROLE` fails that user's registration, and an invalid `DD_ANONYMOUS_AUTH_ROLE` turns anonymous access off. Drydock never guesses a role from a typo.
+- **Startup fails if nobody would be admin.** If roles are configured and no Basic user, OIDC provider or anonymous access grants `admin`, Drydock refuses to start and says which variable to set.
+- **A session from a removed account loses admin.** Once any role is configured, a session whose account no longer exists is held to `viewer`.
+- **Startup logs the roles.** One line lists each authentication and its role. With two or more Basic users and no role set on any of them, a second line points out that they're all `admin`.
+
+The OpenAPI document (`GET /api/v1/openapi.json`) marks every operation with `x-drydock-min-role`, the least role it needs, next to `x-drydock-scope`.
+
+## Route matrix
+
+A route's role comes from the scope it declares: `read` needs `viewer`, `containers:watch`, `containers:update`, `containers:control` and `triggers:test` need `operator`, and `admin` and `api-keys:manage` need `admin`. A few routes set their own, and those are noted below. The test suite checks this table against every registered route.
+
+| Routes | Scope | Least role |
+| --- | --- | --- |
+| Every `GET` route not listed below: containers, logs, stats, SBOM, vulnerabilities, release notes, backups, approvals, audit log and export, registries, triggers, watchers, agents, settings, notifications, metrics, events | `read` | viewer |
+| `PATCH /preferences` (your own UI preferences) | `admin` for keys | viewer |
+| Two-factor enrollment, removal and recovery codes under `/auth/totp-*` | session-only | viewer |
+| `POST /containers/watch`, `/containers/:id/watch`, `/containers/scan-all`, `/containers/:id/scan`, `/containers/:id/preview`, `/containers/:id/update-chain-preview`, `/watchers/.../inventory` | `containers:watch` | operator |
+| `POST /containers/update`, `/containers/:id/update`, `/containers/:id/rollback`, `/dependency-groups/:rootId/update`, `/operations/:id/cancel`, `PATCH /containers/:id/update-policy`, approve, reject, defer and bulk-decide approvals | `containers:update` | operator |
+| `POST /containers/:id/start`, `/stop`, `/restart` | `containers:control` | operator |
+| `POST /notifications/:id/preview`, `/notifications/outbox/:id/retry`, `DELETE /notifications/outbox/:id` | `triggers:test` | operator |
+| Running a trigger (`/containers/:id/triggers/...`, `/actions/...`, `/notification-triggers/...`, `/triggers/...`) | `containers:update` for an action, `triggers:test` for a notification | operator |
+| `PATCH`/`PUT /settings`, config edits, validate and reload, label overrides and group policy writes, notification rule edits, silences, `DELETE /containers/:id`, image prune and prune preview, cleanup run, icon cache clear, scanner asset management, self-update acknowledgement | `admin` | admin |
+| `GET /config` and its sections and editors, `POST /containers/:id/env/reveal`, `GET /debug/dump`, agent key rotation, Portwing keys | session-only | admin |
+| API key list, create and revoke | `api-keys:manage` | admin |
+| Webhooks (`/webhook/...`, `/webhooks/registry/...`), the self-update status poll and finalize callback | session-only | none: these check their own credential |
+
+## What a role doesn't cover
+
+An `admin` is host-equivalent: they can configure a `command` action and reach the Docker socket through it, so only give it to people you'd give the host to. An `operator` can update and restart every watched container on every host, agents included. Use [approvals](/docs/configuration/actions/approvals) to put a person in front of updates if that matters. Roles don't isolate tenants or environments from each other, and they don't protect against a compromised reverse proxy or identity provider.

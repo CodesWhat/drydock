@@ -21,7 +21,7 @@ import {
 } from './container-update-dispatch.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizePreviewErrorReason } from './preview-errors.js';
-import { DYNAMIC_SCOPE, enforceApiKeyScope, scoped } from './route-scopes.js';
+import { DYNAMIC_SCOPE, enforceAccess, scoped } from './route-scopes.js';
 import { doesTriggerMatchRoute } from './trigger-identity.js';
 import { registerTriggerSkipRoutes } from './trigger-skips.js';
 
@@ -288,7 +288,7 @@ async function runLocalTrigger(
   // Ahead of body validation and every lookup below it, so a key that holds
   // neither scope cannot read a container id or a trigger name out of the
   // status code it gets back.
-  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerType))) {
+  if (!enforceAccess(req, res, requiredScopeForTriggerType(triggerType))) {
     return;
   }
 
@@ -331,7 +331,7 @@ async function runLocalTrigger(
 
   // Scope and dispatch follow the component that was actually resolved.
   const resolvedCategoryIsAction = getTriggerCategoryForType(triggerToRun.type) === 'action';
-  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerToRun.type))) {
+  if (!enforceAccess(req, res, requiredScopeForTriggerType(triggerToRun.type))) {
     return;
   }
   if (resolvedCategoryIsAction && !areContainerActionsEnabled()) {
@@ -443,7 +443,7 @@ export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res
 
   // Before the agent lookup, for the same reason: a 404 here would otherwise
   // tell an unauthorized caller which agents are enrolled.
-  if (!enforceApiKeyScope(req, res, requiredScopeForTriggerType(triggerType))) {
+  if (!enforceAccess(req, res, requiredScopeForTriggerType(triggerType))) {
     return;
   }
 
