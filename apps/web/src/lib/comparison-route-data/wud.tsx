@@ -27,7 +27,7 @@ Semver-aware updates|Yes|Yes|tie
 Container log viewer|None|Yes, with level filtering & auto-fetch|self
 Test framework|Jest|Vitest 4|self
 License|MIT|MIT|tie
-RBAC / multi-user roles|Yes (admin, read-write, read-only)|No, single-tier authenticated access|competitor
+RBAC / multi-user roles|Yes (admin, read-write, read-only)|Yes (viewer, operator, admin, with OIDC group mapping)|tie
 One-shot CI mode|Yes (--fail-on-update exit code)|No|competitor
 Swarm / Kubernetes / Nomad watchers|Partial (watch-only except Nomad)|No|competitor
 Scoped API tokens|Yes|Yes|tie
@@ -50,7 +50,7 @@ bell|Trigger Services|34 trigger integrations including Google Chat, Matrix, Mat
   },
   metadataTitle: "WUD Alternative: Drydock vs WUD",
   metadataDescription:
-    "Drydock and WUD compared. Drydock adds vulnerability scanning, image backup and rollback. WUD has RBAC and a one-shot CI mode.",
+    "Drydock and WUD compared. Drydock adds vulnerability scanning, image backup and rollback. WUD has a one-shot CI mode.",
   metadataKeywords: [
     "wud vs drydock",
     "what's up docker vs drydock",
@@ -74,7 +74,7 @@ bell|Trigger Services|34 trigger integrations including Google Chat, Matrix, Mat
       </strong>{" "}
       is the closest alternative to Drydock. Both watch your containers and update them on your
       terms. Drydock adds security scanning, distributed agents, audit logging, and rollback. WUD
-      has RBAC and a one-shot CI mode.
+      has a one-shot CI mode.
     </p>
   ),
   migrationTitle: "Coming from WUD?",

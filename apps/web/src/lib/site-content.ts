@@ -387,7 +387,7 @@ export const roadmap: Milestone[] = [
       "Swarm and Kubernetes watchers",
       "GitOps sync",
       "Health gates and canary deploys",
-      "RBAC and LDAP/AD",
+      "LDAP/AD",
     ],
   },
 ];

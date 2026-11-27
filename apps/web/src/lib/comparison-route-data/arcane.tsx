@@ -26,7 +26,7 @@ Pre/post update lifecycle hooks|No, only a pre-deploy hook for Git-synced projec
 Update review workflow|Updates page: apply now or ignore, per item|Dedicated Approval Queue: approve, reject, or defer with a full audit trail|self
 Notification threshold filtering|No, digest-only update detection|Yes, all/major/minor/patch/digest across 34 triggers|self
 Registry providers|Generic credential matching plus first-class ECR|27 named providers with per-provider auth|self
-RBAC / roles|Yes, six built-in roles plus custom roles and OIDC group mapping|No, single-tier authenticated access|competitor
+RBAC / roles|Yes, six built-in roles plus custom roles and OIDC group mapping|Three built-in roles (viewer, operator, admin) with OIDC group mapping, no custom roles|competitor
 Scoped API keys|Yes, per-resource:action permission catalog|Yes, coarse scopes (read, containers:watch, containers:update, admin, api-keys:manage)|tie
 `,
   highlightsTable: `
@@ -79,6 +79,6 @@ radio|27 Registry Providers|Dedicated auth per registry — Docker Hub, GHCR, EC
   ),
   migrationTitle: "Considering Arcane?",
   migrationDescription:
-    "Arcane and Drydock solve different problems. If you want a full Docker/Compose/Swarm management UI with RBAC, Git-based deployment, and mobile apps, Arcane is built for that — and it does not yet have drydock's rollback, maintenance windows, or lifecycle hooks. If you want an update-focused watcher with those safety features plus a deeper security-scanning stack, Drydock is purpose-built for that, though it has no RBAC, Compose editor, or Swarm support today. One Docker command to get started.",
+    "Arcane and Drydock solve different problems. If you want a full Docker/Compose/Swarm management UI with RBAC, Git-based deployment, and mobile apps, Arcane is built for that — and it does not yet have drydock's rollback, maintenance windows, or lifecycle hooks. If you want an update-focused watcher with those safety features plus a deeper security-scanning stack, Drydock is purpose-built for that, though it has three fixed roles rather than custom ones, and no Compose editor or Swarm support today. One Docker command to get started.",
   jsonLdName: "Arcane vs Drydock — Container Update Monitoring Comparison",
 } satisfies ComparisonRouteRawConfig;

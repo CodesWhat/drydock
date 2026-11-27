@@ -62,14 +62,15 @@ const featureRows: FeatureRow[] = [
     portainer: "no",
   },
   { label: "Audit log", drydock: "yes", wud: "no", arcane: "yes", portainer: "partial" },
-  // Where others win. Drydock has no RBAC yet (README matrix).
+  // Drydock has three fixed roles since v1.9 (README matrix).
   {
     label: "RBAC / multi-user roles",
-    drydock: "no",
+    drydock: "yes",
     wud: "yes",
     arcane: "yes",
     portainer: "partial",
   },
+  // Where others win.
   {
     label: "Swarm / Kubernetes / Nomad",
     drydock: "no",

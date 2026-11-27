@@ -121,7 +121,7 @@ test("homepage comparison is Drydock, WUD, Arcane and Portainer with sourced cel
   );
   assert.match(
     source,
-    /label: "RBAC \/ multi-user roles",\s*drydock: "no",\s*wud: "yes",\s*arcane: "yes",\s*portainer: "partial"/,
+    /label: "RBAC \/ multi-user roles",\s*drydock: "yes",\s*wud: "yes",\s*arcane: "yes",\s*portainer: "partial"/,
   );
   for (const label of [
     "Pending-approval queue",
@@ -207,7 +207,13 @@ test("competitor pages don't contradict the README matrix", () => {
   assert.match(wud, /Registry providers\|25\|27\|self/);
   assert.match(wud, /Trigger integrations\|33 triggers\|[^|]*\|self/);
   assert.match(wud, /Lifecycle hooks\|Yes[^|]*\|[^|]*\|tie/);
-  assert.match(wud, /RBAC \/ multi-user roles\|Yes[^|]*\|[^|]*\|competitor/);
+  assert.match(wud, /RBAC \/ multi-user roles\|Yes[^|]*\|Yes[^|]*\|tie/);
+  for (const page of ["wud", "arcane", "portainer", "dozzle"]) {
+    assert.doesNotMatch(
+      read(`../src/lib/comparison-route-data/${page}.tsx`),
+      /single-tier authenticated access|RBAC\|[^|]*\|Planned\||has no RBAC/,
+    );
+  }
   assert.doesNotMatch(wud, /11 more registries|None of these exist in WUD|Lifecycle hooks\|None/);
   const dozzle = read("../src/lib/comparison-route-data/dozzle.tsx");
   assert.doesNotMatch(

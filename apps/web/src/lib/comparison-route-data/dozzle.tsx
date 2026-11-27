@@ -23,7 +23,7 @@ Resource monitoring|Yes (CPU, memory, network — live)|Yes (CPU, memory, networ
 Multi-host agents|Yes|Yes (SSE-based)|tie
 Container start/stop/restart|Yes|Yes|tie
 OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Authelia, Auth0, Authentik)|self
-RBAC|Yes|Planned|competitor
+RBAC|Yes|Yes (viewer, operator, admin)|tie
 Docker Swarm|Yes|Planned|competitor
 Kubernetes|Yes (since v8.11)|Planned (v2.0.0)|competitor
 License|MIT|MIT|tie

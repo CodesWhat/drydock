@@ -19,7 +19,7 @@ Trigger integrations|Slack, Teams (BE only)|34 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Grafana dashboard|No|Yes, importable template|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
-RBAC|Yes (BE only)|Planned|competitor
+RBAC|Yes (BE only)|Yes, three built-in roles in the free edition|self
 Kubernetes support|Yes|Planned (v2.0.0)|competitor
 Docker Swarm|Yes|Planned (v2.0.0)|competitor
 Web terminal / shell|Yes|Planned|competitor
