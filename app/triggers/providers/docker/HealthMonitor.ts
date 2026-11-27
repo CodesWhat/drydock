@@ -158,7 +158,14 @@ interface RollbackContext {
   log: LoggerLike;
 }
 
+/** What the most recent poll saw, so the window-end log can report it. */
+interface WindowOutcome {
+  lastInspectError?: string;
+  lastHealthStatus?: string;
+}
+
 interface HealthPollContext {
+  outcome: WindowOutcome;
   dockerApi: DockerApiLike;
   containerId: string;
   containerName: string;
@@ -448,6 +455,7 @@ function getLivenessFailure(inspection: unknown, baselineRestartCount: number): 
 async function inspectLivenessAndHandle(context: HealthPollContext): Promise<void> {
   const { dockerApi, containerId, containerName, cleanup, onUnhealthy, log } = context;
   const inspection = await dockerApi.getContainer(containerId).inspect();
+  context.outcome.lastInspectError = undefined;
   const failure = getLivenessFailure(inspection, context.baselineRestartCount);
   if (!failure) {
     return;
@@ -463,12 +471,16 @@ async function inspectHealthAndHandle(context: HealthPollContext): Promise<void>
   const container = dockerApi.getContainer(containerId);
   const inspection = await container.inspect();
   const healthState = getInspectionHealthState(inspection);
+  context.outcome.lastInspectError = undefined;
 
   if (!healthState) {
     log.warn(`Container ${containerName} has no HEALTHCHECK defined — stopping health monitoring`);
     cleanup();
     return;
   }
+
+  context.outcome.lastHealthStatus =
+    typeof healthState.Status === 'string' ? healthState.Status : undefined;
 
   if (healthState.Status !== 'unhealthy') {
     return;
@@ -492,6 +504,7 @@ function createPollHandler(context: HealthPollContext): () => Promise<void> {
         : inspectHealthAndHandle(context));
     } catch (error: unknown) {
       const message = getErrorMessage(error);
+      context.outcome.lastInspectError = message;
       context.log.warn(
         `Error inspecting container ${context.containerName} during health monitoring: ${message}`,
       );
@@ -501,19 +514,38 @@ function createPollHandler(context: HealthPollContext): () => Promise<void> {
   };
 }
 
+function describeWindowOutcome(outcome: WindowOutcome, mode: MonitorMode): string {
+  if (outcome.lastInspectError !== undefined) {
+    return `could not be inspected at the end of the window (${outcome.lastInspectError})`;
+  }
+  if (mode === 'liveness') {
+    return 'stayed up';
+  }
+  if (outcome.lastHealthStatus === 'healthy') {
+    return 'is healthy';
+  }
+  if (outcome.lastHealthStatus === 'starting') {
+    return 'is still starting';
+  }
+  return 'never reported a health status';
+}
+
 function handleWindowExpiry(
   signal: AbortSignal,
   containerName: string,
   cleanup: () => void,
   log: LoggerLike,
   mode: MonitorMode,
+  outcome: WindowOutcome,
 ): void {
   if (signal.aborted) return;
-  log.info(
-    mode === 'liveness'
-      ? `Liveness watch window expired for container ${containerName} — container stayed up`
-      : `Health monitoring window expired for container ${containerName} — container is healthy`,
-  );
+  const label = mode === 'liveness' ? 'Liveness watch' : 'Health monitoring';
+  const message = `${label} window expired for container ${containerName} — container ${describeWindowOutcome(outcome, mode)}`;
+  if (outcome.lastInspectError !== undefined) {
+    log.warn(message);
+  } else {
+    log.info(message);
+  }
   cleanup();
 }
 
@@ -553,7 +585,9 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
   const cleanup = () => cleanupTimers(timers);
   signal.addEventListener('abort', cleanup);
 
+  const outcome: WindowOutcome = {};
   const checkHealth = createPollHandler({
+    outcome,
     dockerApi,
     containerId,
     containerName,
@@ -581,7 +615,7 @@ export function startHealthMonitor(options: HealthMonitorOptions): AbortControll
 
   timers.pollTimer = setInterval(checkHealth, interval);
   timers.windowTimer = setTimeout(
-    () => handleWindowExpiry(signal, containerName, cleanup, log, mode),
+    () => handleWindowExpiry(signal, containerName, cleanup, log, mode, outcome),
     monitorWindow,
   );
 

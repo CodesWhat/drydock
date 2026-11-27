@@ -133,6 +133,60 @@ describe('HealthMonitor', () => {
     abortController.abort();
   });
 
+  test('reports an inspect failure at window end instead of claiming healthy', async () => {
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({});
+    dockerApi.getContainer.mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(new Error('socket hang up')),
+    });
+
+    startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 30000,
+      interval: 10000,
+      triggerInstance: createMockTriggerInstance(),
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(30000);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('could not be inspected at the end of the window (socket hang up)'),
+    );
+    expect(log.info).not.toHaveBeenCalledWith(expect.stringContaining('container is healthy'));
+  });
+
+  test('reports that no health status was seen when the window ends before any poll', async () => {
+    var log = createMockLog();
+    var dockerApi = createMockDockerApi({
+      State: { Running: true, Health: { Status: 'healthy' } },
+    });
+
+    startHealthMonitor({
+      dockerApi,
+      container: createMonitoredContainer(),
+      containerId: 'container-123',
+      containerName: 'test-container',
+      backupImageTag: '1.0.0',
+      backupScope: { containerName: 'test-container' },
+      window: 5000,
+      interval: 10000,
+      triggerInstance: createMockTriggerInstance(),
+      log,
+    });
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(log.info).toHaveBeenCalledWith(
+      expect.stringContaining('container never reported a health status'),
+    );
+  });
+
   test('should stop monitoring after window expires when container stays healthy', async () => {
     var log = createMockLog();
     var dockerApi = createMockDockerApi({
@@ -158,6 +212,7 @@ describe('HealthMonitor', () => {
     await vi.advanceTimersByTimeAsync(10000);
 
     expect(log.info).toHaveBeenCalledWith(expect.stringContaining('window expired'));
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('container is healthy'));
     expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining('unhealthy'));
 
     abortController.abort();
@@ -187,7 +242,8 @@ describe('HealthMonitor', () => {
 
     const inspect = dockerApi.getContainer.mock.results[0].value.inspect;
     expect(inspect).toHaveBeenCalledTimes(3);
-    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('window expired'));
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('container is still starting'));
+    expect(log.info).not.toHaveBeenCalledWith(expect.stringContaining('container is healthy'));
     expect(triggerInstance.stopAndRemoveContainer).not.toHaveBeenCalled();
     expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
     expect(mockInsertAudit).not.toHaveBeenCalled();
@@ -218,9 +274,13 @@ describe('HealthMonitor', () => {
     await vi.advanceTimersByTimeAsync(30000);
 
     expect(inspect).toHaveBeenCalledTimes(3);
-    expect(log.warn).toHaveBeenCalledTimes(3);
+    // Three failed polls plus the window-end report of the real outcome.
+    expect(log.warn).toHaveBeenCalledTimes(4);
     expect(log.warn).toHaveBeenCalledWith(
       'Error inspecting container test-container during health monitoring: connection refused',
+    );
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('could not be inspected at the end of the window'),
     );
     expect(triggerInstance.recreateContainer).not.toHaveBeenCalled();
     expect(mockInsertAudit).not.toHaveBeenCalled();
@@ -1717,14 +1777,16 @@ describe('HealthMonitor', () => {
 
       // Every tick before the window closed tried and failed to inspect.
       expect(inspect).toHaveBeenCalledTimes(6);
-      expect(log.warn).toHaveBeenCalledTimes(6);
+      // Six failed polls plus the window-end report of the real outcome.
+      expect(log.warn).toHaveBeenCalledTimes(7);
       expect(log.warn).toHaveBeenCalledWith(
         'Error inspecting container test-container during health monitoring: No such container',
       );
       // Expiry closed the window and stopped the poll: nothing more is inspected.
-      expect(log.info).toHaveBeenCalledWith(
+      expect(log.warn).toHaveBeenCalledWith(
         expect.stringContaining('Liveness watch window expired'),
       );
+      expect(log.info).not.toHaveBeenCalledWith(expect.stringContaining('stayed up'));
       await vi.advanceTimersByTimeAsync(30_000);
       expect(inspect).toHaveBeenCalledTimes(6);
       // The failing inspects never produced a verdict, so no rollback ran.
