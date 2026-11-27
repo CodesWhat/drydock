@@ -9,6 +9,7 @@ import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
 import { resolveDockerSocketPath } from './docker-socket-resolution.js';
+import { buildDockerSshOptions, type DockerSshConfiguration } from './docker-ssh-options.js';
 import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {
   initializeRemoteOidcStateFromConfiguration,
@@ -30,12 +31,15 @@ interface DockerRemoteAuthWatcher {
     host?: string;
     socket: string;
     port: number;
-    protocol?: 'http' | 'https';
+    protocol?: 'http' | 'https' | 'ssh';
     cafile?: string;
     certfile?: string;
     keyfile?: string;
     auth?: DockerRemoteAuthConfiguration;
-  };
+  } & Pick<
+    DockerSshConfiguration,
+    'sshuser' | 'sshpassword' | 'sshkeyfile' | 'sshpassphrase' | 'sshagent' | 'sshhostkey'
+  >;
   log: {
     warn: (message: string) => void;
   };
@@ -111,9 +115,11 @@ function createSocketDockerApi(options: Dockerode.DockerOptions): Dockerode {
 }
 
 export async function initWatcherWithRemoteAuth(watcher: DockerRemoteAuthWatcher): Promise<void> {
-  const options: Dockerode.DockerOptions = {};
+  let options: Dockerode.DockerOptions = {};
   watcher.remoteAuthBlockedReason = undefined;
-  if (watcher.configuration.host) {
+  if (watcher.configuration.host && watcher.configuration.protocol === 'ssh') {
+    options = buildDockerSshOptions(watcher.name, watcher.configuration);
+  } else if (watcher.configuration.host) {
     options.host = watcher.configuration.host;
     options.port = watcher.configuration.port;
     if (watcher.configuration.protocol) {

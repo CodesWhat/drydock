@@ -6,6 +6,14 @@ describe('debug/redact', () => {
     expect(REDACTED_VALUE).toBe('[REDACTED]');
   });
 
+  test('redacts SSH key passphrases and passwords in watcher configuration', () => {
+    expect(redactDebugDump({ sshpassphrase: 'pp', sshpassword: 'pw', sshuser: 'u' })).toEqual({
+      sshpassphrase: '[REDACTED]',
+      sshpassword: '[REDACTED]',
+      sshuser: 'u',
+    });
+  });
+
   test('redacts values for sensitive keys recursively', () => {
     const source = {
       metadata: {

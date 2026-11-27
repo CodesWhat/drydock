@@ -186,7 +186,13 @@ export interface DockerWatcherConfiguration
     ContainerWatchFilterConfiguration {
   socket: string;
   host?: string;
-  protocol?: 'http' | 'https';
+  protocol?: 'http' | 'https' | 'ssh';
+  sshuser?: string;
+  sshpassword?: string;
+  sshkeyfile?: string;
+  sshpassphrase?: string;
+  sshagent?: string;
+  sshhostkey?: string;
   port: number;
   restartloop?: RestartLoopConfiguration;
   auth?: {
@@ -433,8 +439,25 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     return joi.object().keys({
       socket: this.joi.string().default('/var/run/docker.sock'),
       host: this.joi.string(),
-      protocol: this.joi.string().valid('http', 'https'),
-      port: this.joi.number().port().default(2375),
+      protocol: this.joi.string().valid('http', 'https', 'ssh'),
+      port: this.joi
+        .number()
+        .port()
+        .default((parent: { protocol?: string }) => (parent.protocol === 'ssh' ? 22 : 2375)),
+      sshuser: this.joi.string().when('protocol', {
+        is: 'ssh',
+        then: this.joi.required(),
+        otherwise: this.joi.forbidden(),
+      }),
+      sshhostkey: this.joi.string().when('protocol', {
+        is: 'ssh',
+        then: this.joi.required(),
+        otherwise: this.joi.forbidden(),
+      }),
+      sshpassword: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshkeyfile: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshpassphrase: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshagent: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
       auth: this.joi.object({
         type: this.joi.string().valid('basic', 'bearer', 'oidc').insensitive(),
         user: this.joi.string(),
@@ -442,10 +465,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         bearer: this.joi.string(),
         insecure: this.joi.boolean().default(false),
         oidc: this.joi.object().unknown(true),
-      }),
-      cafile: this.joi.string(),
-      certfile: this.joi.string(),
-      keyfile: this.joi.string(),
+      }).when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      cafile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      certfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      keyfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
       cron: joi.string().cron().default('0 */6 * * *'),
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),

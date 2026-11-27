@@ -7,6 +7,7 @@ export const REDACTED_VALUE = '[REDACTED]';
 // ACCESSTOKEN, AGENTSECRET — and a segment-exact rule never saw any of them.
 const SENSITIVE_KEY_SUBSTRINGS = [
   'password',
+  'passphrase',
   'passwd',
   'secret',
   'token',

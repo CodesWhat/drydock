@@ -358,6 +358,62 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).toThrow(message);
     });
 
+    describe('ssh protocol', () => {
+      const sshConfig = {
+        host: 'remote.example',
+        protocol: 'ssh',
+        sshuser: 'drydock',
+        sshhostkey: `SHA256:${'A'.repeat(43)}`,
+        sshkeyfile: '/keys/id_ed25519',
+      };
+
+      test('accepts ssh settings and defaults the port to 22', () => {
+        expect(docker.validateConfiguration(sshConfig)).toMatchObject({ port: 22 });
+      });
+
+      test('keeps an explicit port for ssh', () => {
+        expect(docker.validateConfiguration({ ...sshConfig, port: 2222 })).toMatchObject({
+          port: 2222,
+        });
+      });
+
+      test('keeps the 2375 default for http', () => {
+        expect(docker.validateConfiguration({ host: 'h', protocol: 'http' })).toMatchObject({
+          port: 2375,
+        });
+      });
+
+      test.each(['sshuser', 'sshhostkey'])('requires %s for ssh', (key) => {
+        const config: Record<string, unknown> = { ...sshConfig };
+        delete config[key];
+        expect(() => docker.validateConfiguration(config)).toThrow(new RegExp(key));
+      });
+
+      test.each([
+        ['auth', { auth: { type: 'basic', user: 'u', password: 'p' } }],
+        ['cafile', { cafile: '/ca.pem' }],
+        ['certfile', { certfile: '/cert.pem' }],
+        ['keyfile', { keyfile: '/key.pem' }],
+      ])('rejects %s with ssh', (key, extra) => {
+        expect(() => docker.validateConfiguration({ ...sshConfig, ...extra })).toThrow(
+          new RegExp(key),
+        );
+      });
+
+      test.each([
+        'sshuser',
+        'sshhostkey',
+        'sshpassword',
+        'sshkeyfile',
+        'sshpassphrase',
+        'sshagent',
+      ])('rejects %s without protocol=ssh', (key) => {
+        expect(() => docker.validateConfiguration({ host: 'h', [key]: 'x' })).toThrow(
+          new RegExp(key),
+        );
+      });
+    });
+
     test.each(['watchdigest', 'watchatstart'])('should reject removed %s configuration', (key) => {
       expect(() => docker.validateConfiguration({ [key]: false })).toThrow(
         new RegExp(`${key}.*not allowed`, 'i'),
