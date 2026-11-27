@@ -46,6 +46,20 @@ describe('v-can', () => {
     expect((wrapper.get('#u').element as HTMLElement).style.display).toBe('inline-flex');
   });
 
+  it('keeps the original inline display when a hidden element is denied again', async () => {
+    setCurrentAuthority({ role: 'viewer', scopes: ['read'] });
+    const { wrapper, bump } = mountWith(
+      `<button id="u" style="display: inline-flex" v-can="'admin'">u</button>`,
+    );
+    bump.value++;
+    await nextTick();
+    expect((wrapper.get('#u').element as HTMLElement).style.display).toBe('none');
+    setCurrentAuthority(undefined);
+    bump.value++;
+    await nextTick();
+    expect((wrapper.get('#u').element as HTMLElement).style.display).toBe('inline-flex');
+  });
+
   it('disables instead of hiding with the disable modifier, and re-enables', async () => {
     setCurrentAuthority({ role: 'viewer', scopes: ['read'] });
     const { wrapper, bump } = mountWith(`<button id="u" v-can.disable="'admin'">u</button>`);
