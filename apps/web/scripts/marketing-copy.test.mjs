@@ -14,15 +14,10 @@ test("hero scopes its 100% coverage claim to TypeScript", () => {
   assert.match(proofSource, /<b>100%<\/b> (?:TS|TypeScript) coverage/);
 });
 
-test("the coverage detail is visible text under the stats, not a hover title or a FAQ answer", () => {
+test("the coverage claim stays scoped and the long scope note is not on the homepage", () => {
   assert.doesNotMatch(proofSource, /<li title=/);
-  assert.match(proofSource, /<p className="website-proof-note">[\s\S]*\{COVERAGE_SCOPE\}/);
-  const tooltip = proofSource.match(/const COVERAGE_SCOPE =\s*"([^"]*)"/)?.[1];
-  assert.ok(tooltip, "the 100% stat needs visible text carrying the coverage scope");
-  assert.match(tooltip, /100%.*backend.*TypeScript/);
-  assert.match(tooltip, /Vue.*aggregate floors/);
-  assert.match(tooltip, /vue-tsc typechecks scripts and templates/);
-  assert.match(tooltip, /without establishing runtime coverage/);
+  assert.doesNotMatch(proofSource, /website-proof-note|COVERAGE_SCOPE|Coverage scope/);
+  assert.match(proofSource, /alt: "100% backend coverage"/);
   assert.doesNotMatch(faqSource, /question: "[^"]*coverage/i);
 });
 
