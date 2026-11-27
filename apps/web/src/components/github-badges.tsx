@@ -70,7 +70,7 @@ export async function GitHubBadges() {
           <b>23</b> registries
         </li>
         <li>
-          <b>23</b> triggers
+          <b>26</b> triggers
         </li>
         <li>
           <b>100%</b> TS coverage

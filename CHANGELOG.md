@@ -26,6 +26,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- Website: the homepage comparison table now compares Drydock with WUD, Arcane and Portainer (Diun and Watchtower leave the homepage; their /compare pages stay, and the Watchtower page doubles as a migration guide). It adds approval-queue, maintenance-window, audit-log, Swarm/Kubernetes/Nomad and one-shot CI rows. The trigger count shown on the site and docs now matches the README (26).
 - Website: archived docs versions (v1.3 to v1.8) now emit JSON-LD marked as archived (`creativeWorkStatus: "Archived"` plus an `isPartOf` pointing at the versioned docs root), while the current docs keep unversioned-status markup.
 - Internal cleanup: one shared `getErrorMessage` (the docker-helpers copy is gone), the session-lock waits in basic auth and OIDC now use abortable `sleep`, and the demo app no longer registers `DELETE /api/v1/icons/cache` twice.
 

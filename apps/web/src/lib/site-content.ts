@@ -79,7 +79,7 @@ export const features: Feature[] = [
   },
   {
     icon: Bell,
-    title: "23 Triggers",
+    title: "26 Triggers",
     color: "text-amber-500 dark:text-amber-400",
     bg: "bg-amber-100 dark:bg-amber-900/50",
     description:

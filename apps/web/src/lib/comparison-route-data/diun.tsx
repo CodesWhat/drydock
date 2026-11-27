@@ -10,7 +10,7 @@ Web UI|None (CLI / daemon)|Full dashboard|self
 Auto-update containers|No (notify only)|Yes (optional)|self
 Docker Compose updates|No|Yes, pull & recreate|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Trigger integrations|17 services|23 native trigger integrations|self
+Trigger integrations|17 services|26 native trigger integrations|self
 Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|None|Authelia, Auth0, Authentik|self
 REST API|Partial (gRPC CLI)|Full REST API|self

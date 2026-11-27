@@ -13,7 +13,7 @@ Auto-update containers|Yes, bulk and scheduled with safe swap and cleanup (v11)|
 Security scanning|No|Trivy + SBOM + cosign verification|self
 Automatic rollback|Yes, if the new container fails to start, restarts or turns unhealthy|Yes, on health check failure|tie
 Image backup|Old container removed once the new one is stable, replaced image kept as one spare|Pre-update backup with retention|self
-Trigger integrations|Slack, Discord, Ntfy, webhooks|23 native trigger integrations|self
+Trigger integrations|Slack, Discord, Ntfy, webhooks|26 native trigger integrations|self
 MQTT / Home Assistant|No|Yes|self
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|No|Yes, with REST API|self
@@ -32,7 +32,7 @@ License|MIT|MIT|tie
 eye|Image Update Detection|Dozzle v11 added digest update checks. Drydock checks 23 registries and tells you whether a new version is a major, minor, patch or digest change before anything updates.
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before updates are applied. Dozzle has no image security capabilities — no vulnerability scanning, SBOM generation, or signature verification.
 rotate|Safe Update Pipeline|Dozzle v11 has bulk and scheduled auto-update with safe swap, cleanup, and automatic rollback when the new container fails to start or turns unhealthy. Drydock adds dry-run preview, a retained pre-update image backup, and maintenance windows.
-bell|23 Trigger Integrations|Drydock notifies across 17 native channels, Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more, plus Docker, Docker Compose, Portainer, Command, GitHub dispatch, and GitLab pipeline actions. Dozzle sends runtime alerts (log patterns, CPU/memory spikes, container crashes) via webhooks to Slack, Discord, or ntfy.
+bell|26 Trigger Integrations|Drydock notifies across 17 native channels, Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more, plus Docker, Docker Compose, Portainer, Command, GitHub dispatch, and GitLab pipeline actions. Dozzle sends runtime alerts (log patterns, CPU/memory spikes, container crashes) via webhooks to Slack, Discord, or ntfy.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more.
 rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update monitoring — Dozzle is a log viewer first and Drydock is built around updates, so they can run side-by-side in your Docker stack.
 `,
