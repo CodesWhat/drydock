@@ -10,6 +10,7 @@
     "dhi",
     "docr",
     "ecr",
+    "elastic",
     "forgejo",
     "gar",
     "gcr",
@@ -19,11 +20,14 @@
     "harbor",
     "hub",
     "ibmcr",
+    "linode",
     "lscr",
     "mau",
     "nexus",
     "ocir",
+    "proget",
     "quay",
+    "scaleway",
     "trueforge"
   ]
 }

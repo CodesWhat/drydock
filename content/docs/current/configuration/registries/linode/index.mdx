@@ -1,0 +1,76 @@
+---
+title: "LINODE (Linode / Akamai Container Registry)"
+description: "The linode registry lets you configure Linode (Akamai) container registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `linode` registry lets you configure [Linode (Akamai)](https://www.linode.com/) container registry integration.
+
+Drydock automatically detects `linode.com` and its subdomains. Lookalike hosts such as `linode.com.attacker.com` or `evillinode.com` never match.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_LINODE_{REGISTRY_NAME}_LOGIN` | ⚪ | Linode registry username | `DD_REGISTRY_LINODE_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_LINODE_{REGISTRY_NAME}_PASSWORD` | ⚪ | Linode registry password | `DD_REGISTRY_LINODE_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_LINODE_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_LINODE_{REGISTRY_NAME}_LOGIN/PASSWORD` must not be defined | |
+
+## Examples
+
+### Configure for anonymous access
+
+Anonymous access needs no configuration. Public images are checked with an anonymous bearer token when the registry issues a token challenge.
+
+### Configure with login and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_REGISTRY_LINODE_PRIVATE_LOGIN=myuser
+      - DD_REGISTRY_LINODE_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_LINODE_PRIVATE_LOGIN=myuser" \
+  -e "DD_REGISTRY_LINODE_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
+
+### Configure with base64 auth
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_REGISTRY_LINODE_PRIVATE_AUTH=YOUR_BASE64_AUTH
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_LINODE_PRIVATE_AUTH=YOUR_BASE64_AUTH" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
