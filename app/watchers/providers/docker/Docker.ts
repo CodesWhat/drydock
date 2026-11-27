@@ -454,18 +454,26 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         then: this.joi.required(),
         otherwise: this.joi.forbidden(),
       }),
-      sshpassword: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
-      sshkeyfile: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
-      sshpassphrase: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshpassword: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshkeyfile: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
+      sshpassphrase: this.joi
+        .string()
+        .when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
       sshagent: this.joi.string().when('protocol', { is: 'ssh', otherwise: this.joi.forbidden() }),
-      auth: this.joi.object({
-        type: this.joi.string().valid('basic', 'bearer', 'oidc').insensitive(),
-        user: this.joi.string(),
-        password: this.joi.string(),
-        bearer: this.joi.string(),
-        insecure: this.joi.boolean().default(false),
-        oidc: this.joi.object().unknown(true),
-      }).when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
+      auth: this.joi
+        .object({
+          type: this.joi.string().valid('basic', 'bearer', 'oidc').insensitive(),
+          user: this.joi.string(),
+          password: this.joi.string(),
+          bearer: this.joi.string(),
+          insecure: this.joi.boolean().default(false),
+          oidc: this.joi.object().unknown(true),
+        })
+        .when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
       cafile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
       certfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),
       keyfile: this.joi.string().when('protocol', { is: 'ssh', then: this.joi.forbidden() }),

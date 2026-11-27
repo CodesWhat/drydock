@@ -62,7 +62,11 @@ describe('docker watcher over ssh (in-process sshd)', () => {
           const sameKey =
             ctx.key.algo === parsedClientPublic.type &&
             Buffer.compare(ctx.key.data, parsedClientPublic.getPublicSSH()) === 0;
-          if (sameKey && (!ctx.signature || parsedClientPublic.verify(ctx.blob as Buffer, ctx.signature, ctx.hashAlgo) === true)) {
+          if (
+            sameKey &&
+            (!ctx.signature ||
+              parsedClientPublic.verify(ctx.blob as Buffer, ctx.signature, ctx.hashAlgo) === true)
+          ) {
             return ctx.accept();
           }
         }
