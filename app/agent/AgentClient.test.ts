@@ -52,6 +52,12 @@ vi.mock('../store/container.js', () => ({
   deleteContainer: vi.fn(),
 }));
 vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
+// No saved signature v3 pin: the node:fs mock above would otherwise hand the
+// real pin file reader a fake certificate buffer.
+vi.mock('./portwing-audience.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./portwing-audience.js')>()),
+  getAudiencePinStore: () => ({ get: () => undefined, set: vi.fn() }),
+}));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),

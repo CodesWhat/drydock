@@ -305,4 +305,20 @@ describe('env → config → schema (regression: DD_AGENT_<NAME>_* must reach th
         .error,
     ).toBeDefined();
   });
+
+  test('audience is an optional agent ID that only applies to ed25519 mode', () => {
+    const schema = new Agent().getConfigurationSchema();
+    const base = {
+      host: 'remote',
+      authmode: 'ed25519',
+      signingkeyid: '0123456789abcdef',
+      signingkey: generateEd25519PrivateKeyPem(),
+    };
+    expect(schema.validate({ ...base, audience: 'agent-a-0123' }).error).toBeUndefined();
+    expect(schema.validate({ ...base }).error).toBeUndefined();
+    expect(schema.validate({ ...base, audience: 'Bad_ID' }).error).toBeDefined();
+    expect(
+      schema.validate({ host: 'remote', secret: 'example', audience: 'agent-a' }).error,
+    ).toBeDefined();
+  });
 });
