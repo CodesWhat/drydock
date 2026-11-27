@@ -16,6 +16,7 @@ import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/a
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
+import { sleep } from '../../../util/sleep.js';
 import Authentication from '../Authentication.js';
 import { enforceOidcAccessPolicy, OidcAccessDeniedError } from './access-policy.js';
 import { type BearerBindingContext, verifyBearerBinding } from './bearer-binding.js';
@@ -295,23 +296,16 @@ async function withOidcSessionLock<T>(sessionId: string, operation: () => Promis
   }, OIDC_SESSION_LOCK_STALE_TTL_MS);
   staleLockCleanupTimer.unref?.();
 
-  let previousLockWaitTimer: ReturnType<typeof setTimeout> | undefined;
+  const previousLockWait = new AbortController();
 
   try {
     await Promise.race([
       previousLock.catch(() => undefined),
-      new Promise<void>((resolve) => {
-        previousLockWaitTimer = setTimeout(resolve, OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS);
-        previousLockWaitTimer.unref?.();
-      }),
+      sleep(OIDC_SESSION_LOCK_WAIT_TIMEOUT_MS, previousLockWait.signal).catch(() => undefined),
     ]);
     return await operation();
   } finally {
-    /* v8 ignore start -- always assigned: Promise executor runs synchronously */
-    if (previousLockWaitTimer !== undefined) {
-      clearTimeout(previousLockWaitTimer);
-    }
-    /* v8 ignore stop */
+    previousLockWait.abort();
     clearTimeout(staleLockCleanupTimer);
     releaseLock?.();
     if (oidcSessionLocks.get(sessionId) === nextLock) {

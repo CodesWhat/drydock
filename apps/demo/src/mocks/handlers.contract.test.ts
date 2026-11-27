@@ -148,3 +148,21 @@ describe('demo mock contracts', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe('demo route table', () => {
+  test('registers every method and path exactly once', async () => {
+    const { handlers } = await import('./handlers');
+    const seen = new Map<string, number>();
+    for (const handler of handlers) {
+      const { method, path } = (handler as unknown as { info: { method: string; path: string } })
+        .info;
+      const key = `${String(method).toUpperCase()} ${String(path)}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    const duplicates = [...seen].filter(([, count]) => count > 1).map(([key]) => key);
+
+    expect(duplicates).toEqual([]);
+    expect(seen.get('DELETE /api/v1/icons/cache')).toBe(1);
+    expect(seen.get('GET /api/v1/agents/:name/log')).toBe(1);
+  }, 30_000);
+});

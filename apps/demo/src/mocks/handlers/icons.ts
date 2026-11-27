@@ -75,6 +75,4 @@ export const iconHandlers = [
       },
     });
   }),
-
-  http.delete('/api/v1/icons/cache', () => HttpResponse.json({ cleared: 0 })),
 ];

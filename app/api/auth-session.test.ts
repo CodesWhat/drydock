@@ -4,6 +4,7 @@ const {
   mockGetStoredSessionSecret,
   mockSetStoredSessionSecret,
   mockDdEnvVars,
+  mockSleep,
 } = vi.hoisted(() => ({
   mockLog: {
     info: vi.fn(),
@@ -14,6 +15,23 @@ const {
   mockGetStoredSessionSecret: vi.fn(() => null as string | null),
   mockSetStoredSessionSecret: vi.fn(),
   mockDdEnvVars: {} as Record<string, string | undefined>,
+  mockSleep: {
+    // util/sleep uses node:timers/promises with a signal; use the global
+    // setTimeout here so the wait deadline stays controllable.
+    failWith: undefined as Error | undefined,
+    impl(ms: number, signal?: AbortSignal) {
+      if (this.failWith) {
+        throw this.failWith;
+      }
+      return new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+        });
+      });
+    },
+  },
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -26,6 +44,10 @@ vi.mock('../configuration/index.js', () => ({
 
 vi.mock('../util/session-limit.js', () => ({
   enforceConcurrentSessionLimit: enforceConcurrentSessionLimitMock,
+}));
+
+vi.mock('../util/sleep.js', () => ({
+  sleep: (ms: number, signal?: AbortSignal) => mockSleep.impl(ms, signal),
 }));
 
 vi.mock('../store/secrets.js', () => ({
@@ -438,17 +460,7 @@ describe('auth-session', () => {
   });
 
   test('testable_withBasicSessionLock should release bookkeeping when wait timer setup throws', async () => {
-    const nativeSetTimeout = globalThis.setTimeout;
-    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      handler: TimerHandler,
-      timeout?: number,
-      ...args: unknown[]
-    ) => {
-      if (timeout === 10_000) {
-        throw new Error('wait timer unavailable');
-      }
-      return nativeSetTimeout(handler, timeout, ...args);
-    }) as typeof setTimeout);
+    mockSleep.failWith = new Error('wait timer unavailable');
 
     try {
       const operation = vi.fn().mockResolvedValue('ok');
@@ -458,7 +470,7 @@ describe('auth-session', () => {
       expect(testable_basicSessionLocks.has('alice')).toBe(false);
       expect(operation).not.toHaveBeenCalled();
     } finally {
-      setTimeoutSpy.mockRestore();
+      mockSleep.failWith = undefined;
     }
   });
 

@@ -35,6 +35,7 @@ import * as registry from '../../../registry/index.js';
 import { isObservationMode } from '../../../runtime/observation-mode.js';
 import { failClosedAuth } from '../../../security/auth.js';
 import * as storeContainer from '../../../store/container.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { sleep } from '../../../util/sleep.js';
 import {
   forgetControllerLocalEnumeration,
@@ -107,7 +108,6 @@ import {
   buildFallbackContainerReport,
   getContainerDisplayName,
   getContainerName,
-  getErrorMessage,
   getFirstConfigNumber,
   getFirstConfigString,
   getImageForRegistryLookup,
@@ -1520,7 +1520,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
-          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
+          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage})`,
         );
         return error instanceof Error ? error : new Error(String(error));
       }),

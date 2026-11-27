@@ -4,6 +4,7 @@ import log from '../log/index.js';
 import { getStoredSessionSecret, setStoredSessionSecret } from '../store/secrets.js';
 import { getErrorMessage } from '../util/error.js';
 import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
+import { sleep } from '../util/sleep.js';
 import type { AuthRequest } from './auth-types.js';
 
 export const DEFAULT_SESSION_DAYS = 7;
@@ -101,20 +102,15 @@ async function withBasicSessionLock<T>(lockKey: string, operation: () => Promise
   }, BASIC_SESSION_LOCK_STALE_TTL_MS);
   staleLockCleanupTimer.unref?.();
 
-  let previousLockWaitTimer: ReturnType<typeof setTimeout> | undefined;
+  const previousLockWait = new AbortController();
   try {
     await Promise.race([
       previousLock.catch(() => undefined),
-      new Promise<void>((resolve) => {
-        previousLockWaitTimer = setTimeout(resolve, BASIC_SESSION_LOCK_WAIT_TIMEOUT_MS);
-        previousLockWaitTimer.unref?.();
-      }),
+      sleep(BASIC_SESSION_LOCK_WAIT_TIMEOUT_MS, previousLockWait.signal).catch(() => undefined),
     ]);
     return await operation();
   } finally {
-    if (previousLockWaitTimer !== undefined) {
-      clearTimeout(previousLockWaitTimer);
-    }
+    previousLockWait.abort();
     clearTimeout(staleLockCleanupTimer);
     releaseLock?.();
     if (basicSessionLocks.get(lockKey) === nextLock) {

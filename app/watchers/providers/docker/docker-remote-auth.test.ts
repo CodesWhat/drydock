@@ -50,7 +50,7 @@ vi.mock('../../../configuration/index.js', () => ({
   isWatcherSocketExplicitlyConfigured: mockIsWatcherSocketExplicitlyConfigured,
 }));
 
-vi.mock('./docker-helpers.js', () => ({
+vi.mock('../../../util/error.js', () => ({
   getErrorMessage: mockGetErrorMessage,
 }));
 
