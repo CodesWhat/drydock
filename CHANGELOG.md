@@ -36,6 +36,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
 - Registries: manifests whose body omits `mediaType` no longer fail with "no manifest found". The type is inferred from the response Content-Type, then from the body shape (`manifests[]` is an index, `config` plus `layers` is a single manifest).
 - Compose file updates keep the file's mode and owner. Drydock now copies permissions and ownership onto the temp file before the atomic rename, and onto the `.back` copy. A chown failure (non-root) logs a warning and doesn't block the update.
+- Recreating a container now reconciles its Healthcheck against the new image field by field. A healthcheck inherited from the old image follows the new image (or is dropped if the new image has none), while fields you set yourself, including an explicit NONE, are kept. Rollback restores the old image's default the same way.
 
 ## [1.9.0-rc.1] - 2026-11-20
 
