@@ -1,10 +1,10 @@
-const mocks = vi.hoisted(() => ({
+const baseHistoryMocks = vi.hoisted(() => ({
   createWebHistory: vi.fn(() => ({ kind: 'history' })),
 }));
 
 vi.mock('vue-router', () => ({
   createRouter: vi.fn(() => ({ beforeEach: vi.fn(), onError: vi.fn(), afterEach: vi.fn() })),
-  createWebHistory: mocks.createWebHistory,
+  createWebHistory: baseHistoryMocks.createWebHistory,
 }));
 vi.mock('@/services/auth', () => ({ getUser: vi.fn(), acknowledgeApiKeyReview: vi.fn() }));
 vi.mock('@/preferences/sync', () => ({
@@ -28,6 +28,6 @@ describe('router history under a sub-path', () => {
     document.head.appendChild(meta);
     vi.resetModules();
     await import('@/router');
-    expect(mocks.createWebHistory).toHaveBeenCalledWith('/drydock/');
+    expect(baseHistoryMocks.createWebHistory).toHaveBeenCalledWith('/drydock/');
   });
 });
