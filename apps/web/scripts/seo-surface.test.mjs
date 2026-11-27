@@ -54,7 +54,7 @@ test("site title and description carry the search phrase and the README counts",
   assert.match(siteConfig.SITE_CONFIG.title, /Self-Hosted/);
   assert.match(siteConfig.SITE_CONFIG.description, /Docker/);
   assert.match(siteConfig.SITE_CONFIG.description, /23 registries/);
-  assert.match(siteConfig.SITE_CONFIG.description, /21 triggers/);
+  assert.match(siteConfig.SITE_CONFIG.description, /23 triggers/);
   assert.ok(siteConfig.SITE_CONFIG.description.length <= 160);
   const structured = read("../src/lib/structured-data.ts");
   assert.match(structured, /description: SITE_CONFIG\.description/);
@@ -106,16 +106,32 @@ test("hero shows stable first and links the RC to its migration warning", () => 
   assert.match(siteConfig.SITE_CONFIG.version, /rc/);
 });
 
-test("homepage comparison swaps Portainer for WUD and takes its cells from the README matrix", () => {
+test("homepage comparison is Drydock, WUD, Arcane and Portainer with sourced cells", () => {
   const source = read("../src/components/compare-section.tsx");
-  assert.match(source, /const tools = \[SITE_CONFIG\.name, "WUD", "Diun", "Watchtower"\]/);
-  assert.doesNotMatch(source, /Portainer/);
+  assert.match(source, /const tools = \[SITE_CONFIG\.name, "WUD", "Arcane", "Portainer"\]/);
+  assert.doesNotMatch(source, /Diun|diun/);
+  assert.doesNotMatch(source, /watchtower: "|Archived/);
   assert.match(
     source,
-    /label: "Distributed agents",\s*drydock: "yes",\s*wud: "partial",\s*diun: "no",\s*watchtower: "partial"/,
+    /label: "Distributed agents",\s*drydock: "yes",\s*wud: "partial",\s*arcane: "yes",\s*portainer: "yes"/,
   );
-  assert.match(source, /label: "RBAC \/ multi-user roles", drydock: "no", wud: "yes"/);
-  assert.match(source, /archived December 2025/);
+  assert.match(
+    source,
+    /label: "Vulnerability scanning",\s*drydock: "yes",\s*wud: "no",\s*arcane: "yes",\s*portainer: "partial"/,
+  );
+  assert.match(
+    source,
+    /label: "RBAC \/ multi-user roles",\s*drydock: "no",\s*wud: "yes",\s*arcane: "yes",\s*portainer: "partial"/,
+  );
+  for (const label of [
+    "Pending-approval queue",
+    "Maintenance windows",
+    "Audit log",
+    "Swarm / Kubernetes / Nomad",
+    "One-shot CI mode",
+  ]) {
+    assert.ok(source.includes(`label: "${label}"`), `${label} row`);
+  }
 });
 
 test("homepage comparison says what Drydock doesn't do and points WUD and Watchtower users somewhere", () => {

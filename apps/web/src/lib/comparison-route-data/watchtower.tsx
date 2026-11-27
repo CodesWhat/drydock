@@ -11,7 +11,7 @@ Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|self
 Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|self
 Dry-run preview|No|Yes|self
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
-Trigger integrations|Via Shoutrrr (~20 services)|21 native trigger integrations|tie
+Trigger integrations|Via Shoutrrr (~20 services)|23 native trigger integrations|tie
 Security scanning|None|Trivy + SBOM + cosign verification|self
 Per-container scheduling|No|Yes (per-watcher CRON)|self
 Include/exclude patterns|Labels only|Labels, regex, image sets|self
@@ -63,6 +63,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
   competitorName: "Watchtower",
   heroTitle: "Watchtower alternative: Drydock vs Watchtower",
   heroDescription: (
+    <>
     <p>
       Watchtower was{" "}
       <strong className="text-neutral-900 dark:text-neutral-200">archived in December 2025</strong>.
@@ -71,6 +72,13 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
       alternative with a web dashboard, dry-run preview, image backup and automatic rollback on
       health-check failure, and it checks 23 registries.
     </p>
+    <p>
+      Still running Watchtower? This page doubles as a migration guide. Drydock watches the same
+      Docker socket, so label the containers you want tracked with <code>dd.watch=true</code>, add
+      a <code>DD_NOTIFICATION_*</code> trigger for each service you used through Shoutrrr, and turn
+      on a <code>DD_ACTION_*</code> trigger only for the containers you want updated automatically.
+    </p>
+    </>
   ),
   competitorBadge: {
     icon: Archive,
