@@ -106,6 +106,30 @@ describe('registries/proxy', () => {
       expect(resolveProxyForUrl('https://r.test/', undefined, {})).toBeUndefined();
     });
 
+    test('falls back to ALL_PROXY like axios does, after the protocol specific variables', () => {
+      expect(resolveProxyForUrl('https://r.test/', undefined, { ALL_PROXY: 'http://all:1' })).toBe(
+        'http://all:1',
+      );
+      expect(resolveProxyForUrl('http://r.test/', undefined, { all_proxy: 'http://low:1' })).toBe(
+        'http://low:1',
+      );
+      expect(
+        resolveProxyForUrl('https://r.test/', undefined, {
+          HTTPS_PROXY: 'http://std:1',
+          ALL_PROXY: 'http://all:1',
+        }),
+      ).toBe('http://std:1');
+      expect(
+        resolveProxyForUrl('https://r.test/', undefined, {
+          ALL_PROXY: 'http://all:1',
+          NO_PROXY: 'localhost',
+        }),
+      ).toBe('http://all:1');
+      expect(
+        resolveProxyForUrl('https://r.test/', undefined, { ALL_PROXY: 'socks5://all:1' }),
+      ).toBeUndefined();
+    });
+
     test('NO_PROXY disables both configured and environment proxies', () => {
       expect(
         resolveProxyForUrl('https://r.internal/', 'http://reg:1', { NO_PROXY: '.internal' }),
@@ -124,6 +148,7 @@ describe('registries/proxy', () => {
     expect(hasProxyEnvironment({ NO_PROXY: ' ' })).toBe(false);
     expect(hasProxyEnvironment({ no_proxy: 'x' })).toBe(true);
     expect(hasProxyEnvironment({ DD_HTTPS_PROXY: 'http://p' })).toBe(true);
+    expect(hasProxyEnvironment({ ALL_PROXY: 'http://p' })).toBe(true);
     expect(typeof hasProxyEnvironment()).toBe('boolean');
   });
 
@@ -151,6 +176,22 @@ describe('registries/proxy', () => {
       expect(first.proxy).toBe(false);
       expect(first.httpsAgent).toBeInstanceOf(ConnectProxyAgent);
       expect(second.httpsAgent).toBe(first.httpsAgent);
+    });
+
+    test('keeps the ALL_PROXY route when NO_PROXY is also set', () => {
+      const result = withOutboundProxy({ url: 'https://r.test/' }, undefined, {
+        ALL_PROXY: 'http://all:1',
+        NO_PROXY: 'localhost',
+      });
+      expect(result.httpsAgent).toBeInstanceOf(ConnectProxyAgent);
+    });
+
+    test('bounds the CONNECT handshake by the request timeout', () => {
+      const timed = withOutboundProxy({ url: 'https://r.test/', timeout: 1234 }, 'http://t:1', {});
+      expect((timed.httpsAgent as ConnectProxyAgent).connectTimeoutMs).toBe(1234);
+      const untimed = withOutboundProxy({ url: 'https://r.test/' }, 'http://t:1', {});
+      expect((untimed.httpsAgent as ConnectProxyAgent).connectTimeoutMs).toBe(30_000);
+      expect(untimed.httpsAgent).not.toBe(timed.httpsAgent);
     });
 
     test('keeps TLS options from an existing agent and caches per agent', () => {
@@ -372,6 +413,24 @@ describe('registries/proxy', () => {
       expect((error as Error).message).toContain('refused CONNECT');
       expect((error as Error).message).toContain('407');
       expect((error as Error).message).not.toContain('hunter2');
+    });
+
+    test('fails the connection when the proxy accepts TCP but never answers CONNECT', async () => {
+      // Reads (so it sees the client hang up) but never answers.
+      const silent = net.createServer((socket) => socket.resume());
+      const silentPort = await listen(silent);
+      try {
+        const request = withOutboundProxy(
+          { url: `https://localhost:${originPort}/`, httpsAgent: insecureAgent(), timeout: 100 },
+          `http://alice:hunter2@127.0.0.1:${silentPort}`,
+          {},
+        );
+        const error = await axios(request).catch((e: Error) => e);
+        expect((error as Error).message).toContain('did not answer CONNECT');
+        expect((error as Error).message).not.toContain('hunter2');
+      } finally {
+        await close(silent);
+      }
     });
 
     test('rejects with a credential free message when the proxy is unreachable', async () => {

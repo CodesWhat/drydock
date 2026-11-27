@@ -15,7 +15,16 @@ const PROXY_ENV_KEYS = [
   'http_proxy',
   'https_proxy',
   'no_proxy',
+  'ALL_PROXY',
+  'all_proxy',
 ];
+
+/** How long a CONNECT handshake may take when the request names no timeout. */
+const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
+
+function isHttpProxyUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
 
 function readEnv(env: NodeJS.ProcessEnv, ...keys: string[]): string | undefined {
   for (const key of keys) {
@@ -85,8 +94,10 @@ export function hasProxyEnvironment(env: NodeJS.ProcessEnv = process.env): boole
 
 /**
  * Pick the proxy for a target URL: the per-registry `proxy` wins, then the
- * DD_* variables, then the standard HTTP(S)_PROXY variables. NO_PROXY is
- * honoured for every source.
+ * DD_* variables, then the standard HTTP(S)_PROXY variables, then ALL_PROXY,
+ * which is where axios' own environment handling ends too. An ALL_PROXY that
+ * is not http(s) (a SOCKS proxy) is not one this module can speak, so it is
+ * skipped. NO_PROXY is honoured for every source.
  */
 export function resolveProxyForUrl(
   targetUrl: string | undefined,
@@ -111,9 +122,15 @@ export function resolveProxyForUrl(
   if (configuredProxy) {
     return configuredProxy;
   }
-  return target.protocol === 'https:'
-    ? readEnv(env, 'DD_HTTPS_PROXY', 'HTTPS_PROXY', 'https_proxy')
-    : readEnv(env, 'DD_HTTP_PROXY', 'HTTP_PROXY', 'http_proxy');
+  const protocolProxy =
+    target.protocol === 'https:'
+      ? readEnv(env, 'DD_HTTPS_PROXY', 'HTTPS_PROXY', 'https_proxy')
+      : readEnv(env, 'DD_HTTP_PROXY', 'HTTP_PROXY', 'http_proxy');
+  if (protocolProxy) {
+    return protocolProxy;
+  }
+  const allProxy = readEnv(env, 'ALL_PROXY', 'all_proxy');
+  return allProxy && isHttpProxyUrl(allProxy) ? allProxy : undefined;
 }
 
 function decodeUserinfo(value: string): string {
@@ -135,9 +152,21 @@ type CreateConnectionCallback = (error: Error | null, socket?: net.Socket) => vo
 export class ConnectProxyAgent extends https.Agent {
   private readonly proxyUrl: URL;
 
-  constructor(proxyUrl: string, options: https.AgentOptions = {}) {
+  /**
+   * How long the proxy has to answer CONNECT. axios arms its own timeout only
+   * once a socket is assigned, which for this agent is after the tunnel is up,
+   * so a proxy that accepts TCP and never answers would otherwise hang forever.
+   */
+  readonly connectTimeoutMs: number;
+
+  constructor(
+    proxyUrl: string,
+    options: https.AgentOptions = {},
+    connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS,
+  ) {
     super({ keepAlive: true, ...options });
     this.proxyUrl = new URL(proxyUrl);
+    this.connectTimeoutMs = connectTimeoutMs;
   }
 
   // Node calls createConnection(options, callback) on the agent when opening a socket.
@@ -153,8 +182,16 @@ export class ConnectProxyAgent extends https.Agent {
     const isHttpsProxy = this.proxyUrl.protocol === 'https:';
     // Never include userinfo in anything that can be logged.
     const proxyLabel = `${this.proxyUrl.protocol}//${this.proxyUrl.host}`;
-    // Node's agent ignores a second callback, so no extra once-guard is needed.
-    const finish = callback;
+    let settled = false;
+    let timer: NodeJS.Timeout | undefined;
+    const finish: CreateConnectionCallback = (error, socket) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      callback(error, socket);
+    };
 
     const request = (isHttpsProxy ? https : http).request({
       host: this.proxyUrl.hostname.replace(/^\[|\]$/g, ''),
@@ -179,6 +216,14 @@ export class ConnectProxyAgent extends https.Agent {
     request.once('error', (error) => {
       finish(new Error(`Proxy ${proxyLabel} connection failed: ${error.message}`));
     });
+    timer = setTimeout(() => {
+      finish(
+        new Error(
+          `Proxy ${proxyLabel} did not answer CONNECT to ${authority} within ${this.connectTimeoutMs}ms`,
+        ),
+      );
+      request.destroy();
+    }, this.connectTimeoutMs);
     request.end();
     return undefined;
   }
@@ -187,22 +232,28 @@ export class ConnectProxyAgent extends https.Agent {
 const agentCache = new WeakMap<object, Map<string, ConnectProxyAgent>>();
 const NO_BASE_AGENT = {};
 
-function getConnectAgent(proxyUrl: string, baseAgent: unknown): ConnectProxyAgent {
+function getConnectAgent(
+  proxyUrl: string,
+  baseAgent: unknown,
+  timeoutMs: number | undefined,
+): ConnectProxyAgent {
+  const connectTimeoutMs = timeoutMs && timeoutMs > 0 ? timeoutMs : DEFAULT_CONNECT_TIMEOUT_MS;
+  const agentKey = `${connectTimeoutMs}|${proxyUrl}`;
   const cacheKey = baseAgent && typeof baseAgent === 'object' ? baseAgent : NO_BASE_AGENT;
   let byProxy = agentCache.get(cacheKey);
   if (!byProxy) {
     byProxy = new Map();
     agentCache.set(cacheKey, byProxy);
   }
-  let agent = byProxy.get(proxyUrl);
+  let agent = byProxy.get(agentKey);
   if (!agent) {
     // Carry the registry's TLS settings (CA, client cert, insecure) over the tunnel.
     const baseOptions =
       baseAgent instanceof https.Agent
         ? (baseAgent as unknown as { options?: https.AgentOptions }).options
         : undefined;
-    agent = new ConnectProxyAgent(proxyUrl, baseOptions);
-    byProxy.set(proxyUrl, agent);
+    agent = new ConnectProxyAgent(proxyUrl, baseOptions, connectTimeoutMs);
+    byProxy.set(agentKey, agent);
   }
   return agent;
 }
@@ -228,7 +279,7 @@ export function withOutboundProxy(
     return {
       ...requestOptions,
       proxy: false,
-      httpsAgent: getConnectAgent(proxyUrl, requestOptions.httpsAgent),
+      httpsAgent: getConnectAgent(proxyUrl, requestOptions.httpsAgent, requestOptions.timeout),
     };
   }
   return { ...requestOptions, proxy: parseProxyConfiguration(proxyUrl, 'registry') };
