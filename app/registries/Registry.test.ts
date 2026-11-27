@@ -1419,6 +1419,136 @@ describe('getImageManifestDigest', () => {
     );
   });
 
+  describe('manifest bodies without mediaType', () => {
+    const DOCKER_V2 = 'application/vnd.docker.distribution.manifest.v2+json';
+    const envelope = (data, contentType?) => ({
+      status: 200,
+      headers: contentType ? { 'Content-Type': contentType } : {},
+      data,
+    });
+    const singleBody = (configMediaType) => ({
+      schemaVersion: 2,
+      config: { digest: 'cfg', mediaType: configMediaType },
+      layers: [{ digest: 'l1' }],
+    });
+    const resolveWith = async (getBody) => {
+      const registryMocked = createMockedRegistry();
+      registryMocked.callRegistry = vi.fn((options) => {
+        if (options.method === 'head') {
+          return { headers: { 'docker-content-digest': 'head_digest' } };
+        }
+        return getBody(options);
+      });
+      const result = await registryMocked.getImageManifestDigest(imageInput());
+      return { result, registryMocked };
+    };
+
+    test('infers a single manifest from the Content-Type header', async () => {
+      const { result, registryMocked } = await resolveWith(() =>
+        envelope({ schemaVersion: 2 }, `${DOCKER_V2}; charset=utf-8`),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+      expect(registryMocked.callRegistry).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ headers: { Accept: DOCKER_V2 } }),
+      );
+    });
+
+    test('reads the Content-Type header case-insensitively from an array value', async () => {
+      const { result } = await resolveWith(() => ({
+        status: 200,
+        headers: { 'CONTENT-TYPE': [DOCKER_V2] },
+        data: { schemaVersion: 2 },
+      }));
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+    });
+
+    test('infers a manifest index from the Content-Type header', async () => {
+      const { result } = await resolveWith((options) =>
+        options.url.endsWith('/manifests/tag')
+          ? envelope(
+              {
+                schemaVersion: 2,
+                manifests: [platformManifest('amd64', 'linux', 'digest_x', DOCKER_V2)],
+              },
+              'application/vnd.oci.image.index.v1+json',
+            )
+          : undefined,
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+    });
+
+    test('infers an index from the body shape when there is no Content-Type', async () => {
+      const { result } = await resolveWith(() =>
+        envelope({
+          schemaVersion: 2,
+          manifests: [platformManifest('amd64', 'linux', 'digest_x', DOCKER_V2)],
+        }),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+    });
+
+    test('infers a docker single manifest from the body shape', async () => {
+      const { result, registryMocked } = await resolveWith(() =>
+        envelope(singleBody('application/vnd.docker.container.image.v1+json')),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+      expect(registryMocked.callRegistry).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ headers: { Accept: DOCKER_V2 } }),
+      );
+    });
+
+    test('infers an OCI single manifest from the body shape', async () => {
+      const { result, registryMocked } = await resolveWith(() =>
+        envelope(singleBody('application/vnd.oci.image.config.v1+json')),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+      expect(registryMocked.callRegistry).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          headers: { Accept: 'application/vnd.oci.image.manifest.v1+json' },
+        }),
+      );
+    });
+
+    test('treats a manifest with config and layers but no config mediaType as OCI', async () => {
+      const { result } = await resolveWith(() =>
+        envelope({ schemaVersion: 2, config: { digest: 'cfg' }, layers: [] }),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+    });
+
+    test('ignores an unrelated Content-Type and falls back to the body shape', async () => {
+      const { result } = await resolveWith(() =>
+        envelope(singleBody('application/vnd.oci.image.config.v1+json'), 'application/json'),
+      );
+      expect(result).toStrictEqual({ version: 2, digest: 'head_digest' });
+    });
+
+    test('still throws when neither header nor shape identify a manifest', async () => {
+      await expect(
+        resolveWith(() => envelope({ schemaVersion: 2 }, 'application/json')),
+      ).rejects.toThrow('Unexpected error; no manifest found');
+    });
+
+    test('ignores a non-string Content-Type value', async () => {
+      await expect(
+        resolveWith(() => ({
+          status: 200,
+          headers: { 'content-type': 42 },
+          data: { schemaVersion: 2 },
+        })),
+      ).rejects.toThrow('Unexpected error; no manifest found');
+    });
+
+    test('still throws when the response has no headers object', async () => {
+      await expect(
+        resolveWith(() => ({ status: 200, data: { schemaVersion: 2 } })),
+      ).rejects.toThrow('Unexpected error; no manifest found');
+    });
+  });
+
   test('should include created date from schemaVersion 2 manifest config blob', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = vi.fn((options) => {

@@ -87,6 +87,51 @@ function isLegacyImageConfig(mediaType: string | undefined): boolean {
   );
 }
 
+const MANIFEST_ACCEPT =
+  'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json';
+
+/** Media type of a Content-Type header value, without parameters. */
+function getContentTypeMediaType(headers: unknown): string | undefined {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+  const key = Object.keys(headers).find((name) => name.toLowerCase() === 'content-type');
+  if (!key) {
+    return undefined;
+  }
+  const raw = (headers as Record<string, unknown>)[key];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return typeof value === 'string' ? value.split(';')[0].trim().toLowerCase() : undefined;
+}
+
+/**
+ * Some registries omit `mediaType` from the manifest body. Infer it from the response
+ * Content-Type, then from the body shape (`manifests[]` is an index, `config` plus `layers`
+ * is a single manifest). Approach adapted from WUD (MIT, Copyright (c) 2019 Manfred Martin).
+ */
+function inferManifestMediaType(
+  body: RegistryManifestResponse,
+  contentType: string | undefined,
+): string | undefined {
+  if (
+    contentType &&
+    (isManifestList(contentType) ||
+      isSingleManifest(contentType) ||
+      isLegacyImageConfig(contentType))
+  ) {
+    return contentType;
+  }
+  if (Array.isArray(body.manifests)) {
+    return 'application/vnd.oci.image.index.v1+json';
+  }
+  if (body.config && Array.isArray((body as { layers?: unknown }).layers)) {
+    return body.config.mediaType?.startsWith('application/vnd.docker.')
+      ? 'application/vnd.docker.distribution.manifest.v2+json'
+      : 'application/vnd.oci.image.manifest.v1+json';
+  }
+  return undefined;
+}
+
 /**
  * Depth bound for following nested manifest indexes. Buildx with attestations
  * produces exactly one level of nesting; this leaves headroom without letting a
@@ -534,14 +579,10 @@ class Registry<
   ): Promise<RegistryManifest> {
     const tagOrDigest = digest || image.tag.value;
     this.log.debug(`${this.getId()} - Get ${image.name}:${tagOrDigest} manifest`);
-    const responseManifests = await this.callRegistry<RegistryManifestResponse>({
+    const responseManifests = await this.fetchManifestBody(
       image,
-      url: `${image.registry.url}/${image.name}/manifests/${tagOrDigest}`,
-      headers: {
-        Accept:
-          'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
-      },
-    });
+      `${image.registry.url}/${image.name}/manifests/${tagOrDigest}`,
+    );
     if (responseManifests) {
       this.log.debug(`${image.name} - Found manifests [${JSON.stringify(responseManifests)}]`);
       if (responseManifests.schemaVersion === 1) {
@@ -558,6 +599,32 @@ class Registry<
     }
     // Empty result...
     throw new Error('Unexpected error; no manifest found');
+  }
+
+  /**
+   * Fetch a manifest or index body and fill in `mediaType` when the registry left it out.
+   */
+  private async fetchManifestBody(
+    image: ContainerImage,
+    url: string,
+  ): Promise<RegistryManifestResponse> {
+    const raw = await this.callRegistry<RegistryManifestResponse>({
+      image,
+      url,
+      headers: { Accept: MANIFEST_ACCEPT },
+      resolveWithFullResponse: true,
+    });
+    // A full response carries the body under `data`; accept a bare body too.
+    const isEnvelope = typeof raw?.status === 'number' && raw.data !== undefined;
+    const body = (isEnvelope ? raw.data : raw) as RegistryManifestResponse;
+    if (!body || typeof body !== 'object' || body.mediaType) {
+      return body;
+    }
+    const mediaType = inferManifestMediaType(
+      body,
+      isEnvelope ? getContentTypeMediaType(raw.headers) : undefined,
+    );
+    return mediaType ? { ...body, mediaType } : body;
   }
 
   /**
@@ -634,14 +701,10 @@ class Registry<
           this.log.debug(
             `${image.name} - Matched entry [digest=${matched.digest}] is itself a manifest index, following [depth=${depth + 1}]`,
           );
-          const nested = await this.callRegistry<RegistryManifestResponse>({
+          const nested = await this.fetchManifestBody(
             image,
-            url: `${image.registry.url}/${image.name}/manifests/${matched.digest}`,
-            headers: {
-              Accept:
-                'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
-            },
-          });
+            `${image.registry.url}/${image.name}/manifests/${matched.digest}`,
+          );
           return this.handleSchemaV2(image, nested, matched.digest, depth + 1, outerListRef);
         }
         this.log.debug(
