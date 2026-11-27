@@ -14,6 +14,7 @@
 
 import joi from 'joi';
 import type { SessionUser } from './auth-types.js';
+import { ROLES, type Role } from './roles.js';
 
 const SUBJECT_ID_PATTERN = /^[0-9a-f]{64}$/;
 
@@ -45,6 +46,8 @@ const v2OidcSchema = joi
     v: joi.number().valid(2).required(),
     kind: joi.string().valid('oidc').required(),
     username: joi.string().required(),
+    // Absent on a session minted before group-to-role mapping, or while none is configured.
+    role: joi.string().valid(...ROLES),
   })
   .required()
   .unknown(false);
@@ -70,9 +73,11 @@ function parseSessionUserValue(value: unknown): SessionUser {
 
   const kind = (value as ParsedObject).kind;
   if (kind === 'oidc') {
+    const oidc = validate(v2OidcSchema, value);
+    const role = oidc.role as Role | undefined;
     return {
-      username: validate(v2OidcSchema, value).username as string,
-      identity: { type: 'oidc' },
+      username: oidc.username as string,
+      identity: role === undefined ? { type: 'oidc' } : { type: 'oidc', role },
     };
   }
 
@@ -115,7 +120,12 @@ export function serializeSessionUser(user: SessionUser): string {
     return JSON.stringify({ username: user.username });
   }
   if (identity.type === 'oidc') {
-    return JSON.stringify({ v: 2, kind: 'oidc', username: user.username });
+    return JSON.stringify({
+      v: 2,
+      kind: 'oidc',
+      username: user.username,
+      ...(identity.role === undefined ? {} : { role: identity.role }),
+    });
   }
   return JSON.stringify({
     v: 2,

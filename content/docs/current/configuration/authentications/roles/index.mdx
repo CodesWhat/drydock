@@ -47,7 +47,17 @@ environment:
 
 ### OIDC users
 
-OIDC users are `admin` for now. Mapping identity-provider groups to roles is planned for a later 1.9 build.
+OIDC users are `admin` until you map groups. Set `DD_AUTH_OIDC_{auth_name}_ADMINGROUP`, `_OPERATORGROUP` and `_VIEWERGROUP` to the group names in your IdP's groups claim, and `_DEFAULTROLE` for everyone else. The highest matching role wins.
+
+```yaml
+environment:
+  - DD_AUTH_OIDC_KEYCLOAK_ADMINGROUP=drydock-admins
+  - DD_AUTH_OIDC_KEYCLOAK_OPERATORGROUP=drydock-ops
+  - DD_AUTH_OIDC_KEYCLOAK_VIEWERGROUP=drydock-viewers
+  - DD_AUTH_OIDC_KEYCLOAK_DEFAULTROLE=viewer
+```
+
+`DEFAULTROLE` is `admin`, `operator`, `viewer` or `none`; `none` refuses the login of anyone who matches no group. The full rules are on the [OIDC page](/docs/configuration/authentications/oidc#roles-from-groups).
 
 ### API keys
 
@@ -57,8 +67,9 @@ API keys don't have a role. A key's [scopes](/docs/configuration/authentications
 
 - **The role is read on every request.** It comes from the configuration the server is running with, not from the session, so a changed role takes effect on the next request after a restart. A session can't outlive a demotion.
 - **A role miss is a `403`** with `{"error": "Role does not permit this action", "details": {"requiredScope": "containers:update", "requiredRole": "operator"}}`. Routes that have no scope (the session-only ones) name only `requiredRole`.
-- **A bad role stops that user from signing in.** An invalid `DD_AUTH_BASIC_{auth_name}_ROLE` fails that user's registration, and an invalid `DD_ANONYMOUS_AUTH_ROLE` turns anonymous access off. Drydock never guesses a role from a typo.
+- **A bad role stops that user from signing in.** An invalid `DD_AUTH_BASIC_{auth_name}_ROLE` fails that user's registration, an invalid `DD_AUTH_OIDC_{auth_name}_DEFAULTROLE` fails that OIDC provider's registration, and an invalid `DD_ANONYMOUS_AUTH_ROLE` turns anonymous access off. Drydock never guesses a role from a typo.
 - **Startup fails if nobody would be admin.** If roles are configured and no Basic user, OIDC provider or anonymous access grants `admin`, Drydock refuses to start and says which variable to set.
+- **An OIDC role is stored in the session at login.** It's worked out again every time the person signs in. OIDC sessions from before a group mapping was set are signed out.
 - **A session from a removed account loses admin.** Once any role is configured, a session whose account no longer exists is held to `viewer`.
 - **Startup logs the roles.** One line lists each authentication and its role. With two or more Basic users and no role set on any of them, a second line points out that they're all `admin`.
 

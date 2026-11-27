@@ -33,7 +33,7 @@ interface HumanPrincipalBase extends PrincipalBase {
  * legacy `{ username }` session, whose origin was never recorded.
  */
 export type SessionIdentity =
-  | { readonly type: 'oidc' }
+  | { readonly type: 'oidc'; readonly role?: Role }
   | ({ readonly type: 'local' } & LocalIdentityFields);
 
 /** Identity restored from an existing express-session cookie. */

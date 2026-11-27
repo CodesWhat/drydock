@@ -72,6 +72,18 @@ describe('session user schema v2', () => {
     });
   });
 
+  test('deserializes an OIDC identity carrying a mapped role', () => {
+    expect(
+      deserializeSessionUser('{"v":2,"kind":"oidc","username":"alice","role":"operator"}'),
+    ).toEqual({ username: 'alice', identity: { type: 'oidc', role: 'operator' } });
+  });
+
+  test('rejects an OIDC identity with a role that does not exist', () => {
+    expect(() =>
+      deserializeSessionUser('{"v":2,"kind":"oidc","username":"alice","role":"root"}'),
+    ).toThrow();
+  });
+
   test('deserializes an OIDC identity', () => {
     expect(deserializeSessionUser('{"v":2,"kind":"oidc","username":"alice"}')).toEqual({
       username: 'alice',
@@ -134,6 +146,17 @@ describe('serializeSessionUser', () => {
     };
 
     expect(serializeSessionUser(user)).toBe(v2Local());
+    expect(deserializeSessionUser(serializeSessionUser(user))).toEqual(user);
+  });
+
+  test('writes the mapped role into a v2 OIDC payload', () => {
+    const user = {
+      username: 'alice',
+      identity: { type: 'oidc' as const, role: 'viewer' as const },
+    };
+    expect(serializeSessionUser(user)).toBe(
+      '{"v":2,"kind":"oidc","username":"alice","role":"viewer"}',
+    );
     expect(deserializeSessionUser(serializeSessionUser(user))).toEqual(user);
   });
 

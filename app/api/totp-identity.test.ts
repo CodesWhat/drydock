@@ -21,6 +21,14 @@ vi.mock('../store/totp.js', () => ({
   getSessionsNotBefore: mockGetSessionsNotBefore,
 }));
 
+const { mockIsOidcRoleMappingActive } = vi.hoisted(() => ({
+  mockIsOidcRoleMappingActive: vi.fn(() => false),
+}));
+
+vi.mock('./principal-role.js', () => ({
+  isOidcRoleMappingActive: mockIsOidcRoleMappingActive,
+}));
+
 vi.mock('../log/index.js', () => ({
   default: { warn: mockWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
@@ -94,6 +102,20 @@ describe('totp-identity', () => {
   });
 
   describe('checkSessionIdentity', () => {
+    test('a role-less OIDC session is stale once a role mapping is configured', () => {
+      mockIsOidcRoleMappingActive.mockReturnValue(true);
+      expect(checkSessionIdentity({ username: 'alice', identity: { type: 'oidc' } })).toBe('stale');
+      mockIsOidcRoleMappingActive.mockReturnValue(false);
+    });
+
+    test('an OIDC session that carries a role stays valid under a mapping', () => {
+      mockIsOidcRoleMappingActive.mockReturnValue(true);
+      expect(
+        checkSessionIdentity({ username: 'alice', identity: { type: 'oidc', role: 'viewer' } }),
+      ).toBe('valid');
+      mockIsOidcRoleMappingActive.mockReturnValue(false);
+    });
+
     test('an OIDC session is valid and never touches the store', () => {
       expect(checkSessionIdentity({ username: 'alice', identity: { type: 'oidc' } })).toBe('valid');
       expect(mockGetSubjectVersion).not.toHaveBeenCalled();

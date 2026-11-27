@@ -9,7 +9,7 @@ import { v4 as uuid } from 'uuid';
 import type { AuthRequest } from '../../../api/auth-types.js';
 import type { Authenticator } from '../../../api/authenticator-chain.js';
 import type { AuthenticatedPrincipal } from '../../../api/principal.js';
-import { DEFAULT_ROLE } from '../../../api/roles.js';
+import type { Role } from '../../../api/roles.js';
 import { writeSessionPrincipal } from '../../../api/session-principal.js';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
@@ -21,6 +21,12 @@ import { sleep } from '../../../util/sleep.js';
 import Authentication from '../Authentication.js';
 import { enforceOidcAccessPolicy, OidcAccessDeniedError } from './access-policy.js';
 import { type BearerBindingContext, verifyBearerBinding } from './bearer-binding.js';
+import {
+  highestConfiguredOidcRole,
+  isOidcRoleMappingConfigured,
+  OIDC_DEFAULT_ROLE_VALUES,
+  resolveOidcRole,
+} from './role-mapping.js';
 
 const OIDC_CHECKS_TTL_MS = 5 * 60 * 1000;
 const OIDC_MAX_PENDING_CHECKS = 5;
@@ -91,6 +97,8 @@ interface OidcSessionLike {
 
 interface OidcAuthenticatedUser {
   username: string;
+  /** Set only when group-to-role mapping is configured. */
+  role?: Role;
 }
 
 type OidcVerifyDone = (error: unknown, user?: OidcAuthenticatedUser | false) => void;
@@ -135,6 +143,10 @@ interface OidcConfiguration {
   requireemailverified?: boolean;
   requiredgroup?: string;
   groupclaim?: string;
+  admingroup?: string;
+  operatorgroup?: string;
+  viewergroup?: string;
+  defaultrole?: Role | 'none';
   idtokensignedalg?: string;
 }
 
@@ -447,6 +459,18 @@ class Oidc extends Authentication<OidcConfiguration> {
       requireemailverified: this.joi.boolean(),
       requiredgroup: this.joi.string().allow(''),
       groupclaim: this.joi.string(),
+      admingroup: this.joi.string().allow(''),
+      operatorgroup: this.joi.string().allow(''),
+      viewergroup: this.joi.string().allow(''),
+      // Fails registration on anything else: a typo must not guess a role.
+      defaultrole: this.joi
+        .string()
+        .trim()
+        .lowercase()
+        .valid(...OIDC_DEFAULT_ROLE_VALUES)
+        .messages({
+          'any.only': `"defaultrole" must be one of ${OIDC_DEFAULT_ROLE_VALUES.join(', ')}`,
+        }),
       idtokensignedalg: this.joi.string().valid(...ID_TOKEN_SIGNED_ALGORITHMS),
     });
   }
@@ -492,6 +516,12 @@ class Oidc extends Authentication<OidcConfiguration> {
         ? { requiredgroup: this.configuration.requiredgroup }
         : {}),
       ...(this.configuration.groupclaim ? { groupclaim: this.configuration.groupclaim } : {}),
+      ...(this.configuration.admingroup ? { admingroup: this.configuration.admingroup } : {}),
+      ...(this.configuration.operatorgroup
+        ? { operatorgroup: this.configuration.operatorgroup }
+        : {}),
+      ...(this.configuration.viewergroup ? { viewergroup: this.configuration.viewergroup } : {}),
+      ...(this.configuration.defaultrole ? { defaultrole: this.configuration.defaultrole } : {}),
       ...(this.configuration.idtokensignedalg
         ? { idtokensignedalg: this.configuration.idtokensignedalg }
         : {}),
@@ -659,7 +689,11 @@ class Oidc extends Authentication<OidcConfiguration> {
       id: this.getId(),
       persistsSession: false,
       // Every OIDC user is admin until group-to-role mapping is configured.
-      grantedRole: { role: DEFAULT_ROLE, explicit: false },
+      grantedRole: {
+        role: highestConfiguredOidcRole(this.configuration) ?? 'viewer',
+        explicit: isOidcRoleMappingConfigured(this.configuration),
+      },
+      mapsRolesFromClaims: isOidcRoleMappingConfigured(this.configuration),
       authenticate: (req: AuthRequest) => this.authenticateBearer(req),
     };
   }
@@ -692,7 +726,11 @@ class Oidc extends Authentication<OidcConfiguration> {
           return;
         }
         this.log.debug('Bearer token validated');
-        resolve({ kind: 'oidc', username: user.username });
+        resolve({
+          kind: 'oidc',
+          username: user.username,
+          ...(user.role === undefined ? {} : { role: user.role }),
+        });
       });
     });
   }
@@ -1047,7 +1085,11 @@ class Oidc extends Authentication<OidcConfiguration> {
     loginVerificationStartedAt: bigint,
   ): void {
     this.log.debug('Persist the authenticated session');
-    const principal: AuthenticatedPrincipal = { kind: 'oidc', username: user.username };
+    const principal: AuthenticatedPrincipal = {
+      kind: 'oidc',
+      username: user.username,
+      ...(user.role === undefined ? {} : { role: user.role }),
+    };
     writeSessionPrincipal(req as unknown as AuthRequest, principal);
     req.principal = principal;
 
@@ -1136,9 +1178,12 @@ class Oidc extends Authentication<OidcConfiguration> {
       accessToken,
       subjectCheck,
     );
-    enforceOidcAccessPolicy(this.configuration, { ...idTokenClaims, ...userInfo });
+    const claims = { ...idTokenClaims, ...userInfo };
+    enforceOidcAccessPolicy(this.configuration, claims);
+    const role = resolveOidcRole(this.configuration, claims);
     return {
       username: userInfo.email || userInfo.sub || 'unknown',
+      ...(role === undefined ? {} : { role }),
     };
   }
 }

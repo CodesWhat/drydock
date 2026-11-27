@@ -27,6 +27,10 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_AUTH_OIDC_{auth_name}_REQUIREEMAILVERIFIED` | ⚪ | With an email or domain list, also deny users whose IdP sends no `email_verified` claim (see [Restricting who can sign in](#restricting-who-can-sign-in)) | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_REQUIREDGROUP` | ⚪ | The user must belong to this group | Group name, exact match | empty (no restriction) |
 | `DD_AUTH_OIDC_{auth_name}_GROUPCLAIM` | ⚪ | Claim that carries the user's groups | Claim name | `groups` |
+| `DD_AUTH_OIDC_{auth_name}_ADMINGROUP` | ⚪ | Members get the `admin` role (see [Roles from groups](#roles-from-groups)) | Group name, or comma-separated list, exact match | empty |
+| `DD_AUTH_OIDC_{auth_name}_OPERATORGROUP` | ⚪ | Members get the `operator` role | Group name, or comma-separated list, exact match | empty |
+| `DD_AUTH_OIDC_{auth_name}_VIEWERGROUP` | ⚪ | Members get the `viewer` role | Group name, or comma-separated list, exact match | empty |
+| `DD_AUTH_OIDC_{auth_name}_DEFAULTROLE` | ⚪ | Role for a user who matches none of the group variables | `admin`, `operator`, `viewer`, `none` | `viewer` when a group variable is set, otherwise `admin` |
 | `DD_AUTH_OIDC_{auth_name}_IDTOKENSIGNEDALG` | ⚪ | Signing algorithm your IdP uses for ID tokens (`id_token_signed_response_alg`). Set it when the IdP signs with something other than RS256, for example ES256 | `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`, `ES256`, `ES384`, `ES512`, `EdDSA`, `HS256`, `HS384`, `HS512` | `RS256` |
 | `DD_PUBLIC_URL` | 🔴 | Public URL of your drydock instance (used to build the OIDC callback URL) | URL | |
 
@@ -65,6 +69,26 @@ DD_AUTH_OIDC_KEYCLOAK_REQUIREDGROUP=drydock-users
 - **Bearer tokens** are held to the same rules, because the same userinfo claims are checked.
 
 A denied user gets a `403` with `Access denied` and no session. Drydock logs the reason (for example `required group is missing`) as a warning, without the user's email, groups or any token. If everyone is denied, check that your IdP actually releases the `groups` claim to the drydock client, usually through a scope or claim mapping.
+
+## Roles from groups
+
+By default every OIDC user is `admin`. Map your IdP's groups to [roles](/docs/configuration/authentications/roles) to limit that. The groups come from the same claim as `REQUIREDGROUP`, named by `GROUPCLAIM` (default `groups`), as an array or a single string.
+
+```bash
+DD_AUTH_OIDC_KEYCLOAK_ADMINGROUP=drydock-admins
+DD_AUTH_OIDC_KEYCLOAK_OPERATORGROUP=drydock-ops,sre
+DD_AUTH_OIDC_KEYCLOAK_VIEWERGROUP=drydock-viewers
+DD_AUTH_OIDC_KEYCLOAK_DEFAULTROLE=none
+```
+
+- **The highest matching role wins.** A user in both an operator and an admin group is an `admin`.
+- **No match.** A user in none of the groups gets `DEFAULTROLE`. If you set a group variable and no default, that's `viewer`. If you set no group variable at all, it's `admin`, as before. Set `DEFAULTROLE=none` to refuse the login: the user gets a `403` with `Access denied` and no session.
+- **Group names match exactly,** including case. Each variable takes one name or a comma-separated list.
+- **`REQUIREDGROUP` and the email allowlists run first.** A user they deny never reaches the role mapping.
+- **Setting only `DEFAULTROLE`** gives every OIDC user that role.
+- **The role is worked out on every login** and stored in the session, so a group change applies the next time the person signs in. Bearer requests work it out from the same claims on every request.
+- **Sessions from before you set a mapping are signed out.** A session with no stored role would otherwise keep admin, so those users sign in again.
+- **Startup fails if nobody can be admin.** If roles are configured and no Basic user, OIDC group or anonymous setting grants `admin`, Drydock refuses to start.
 
 ## Bearer tokens
 

@@ -367,6 +367,22 @@ describe('getAuthenticator / authenticateBearer', () => {
     expect(authenticator.persistsSession).toBe(false);
     // Every OIDC user is admin until group-to-role mapping exists.
     expect(authenticator.grantedRole).toStrictEqual({ role: 'admin', explicit: false });
+    expect(authenticator.mapsRolesFromClaims).toBe(false);
+  });
+
+  test('declares the highest role its group mapping can grant', () => {
+    oidc.configuration = { ...configurationValid, bearer: true, operatorgroup: 'ops' };
+    const authenticator = oidc.getAuthenticator(createAuthenticatorApp());
+
+    expect(authenticator.grantedRole).toStrictEqual({ role: 'operator', explicit: true });
+    expect(authenticator.mapsRolesFromClaims).toBe(true);
+  });
+
+  test('a mapping that grants no role at all declares viewer so startup still checks admin', () => {
+    oidc.configuration = { ...configurationValid, bearer: true, defaultrole: 'none' };
+    const authenticator = oidc.getAuthenticator(createAuthenticatorApp());
+
+    expect(authenticator.grantedRole).toStrictEqual({ role: 'viewer', explicit: true });
   });
 
   test('wires the redirect and callback routes exactly as the strategy did', () => {
@@ -4392,6 +4408,190 @@ describe('callback access policy', () => {
     const done = vi.fn();
     await oidc.verify('access-token', done);
     expect(done).toHaveBeenCalledWith(null, false);
+  });
+});
+
+describe('group-to-role mapping', () => {
+  function runLogin(
+    config: Record<string, unknown>,
+    userInfo: Record<string, unknown>,
+    idClaims?: Record<string, unknown>,
+  ) {
+    oidc.configuration = { ...configurationValid, ...config };
+    openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+      access_token: 'access-token',
+      claims: () => ({ sub: 'sub-1', ...idClaims }),
+    });
+    openidClientMock.fetchUserInfo = vi
+      .fn()
+      .mockResolvedValue({ sub: 'sub-1', email: 'user@example.com', ...userInfo });
+    const session: any = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    session.regenerate = vi.fn((done) => done());
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    const res = createRes();
+    return oidc.callback(req, res).then(() => ({ req, res, session }));
+  }
+
+  function storedRole(session: any): unknown {
+    return JSON.parse(session.passport.user).role;
+  }
+
+  test('stores no role when nothing is mapped, so the user stays admin', async () => {
+    const { session } = await runLogin({}, { groups: ['anything'] });
+    expectPersistedUser(session, 'user@example.com');
+  });
+
+  test('the highest matching role wins', async () => {
+    const config = { admingroup: 'dd-admins', operatorgroup: 'dd-ops', viewergroup: 'dd-view' };
+    expect(
+      storedRole((await runLogin(config, { groups: ['dd-view', 'dd-ops', 'dd-admins'] })).session),
+    ).toBe('admin');
+    expect(storedRole((await runLogin(config, { groups: ['dd-view', 'dd-ops'] })).session)).toBe(
+      'operator',
+    );
+    expect(storedRole((await runLogin(config, { groups: ['dd-view'] })).session)).toBe('viewer');
+  });
+
+  test('an unmatched user gets viewer when groups are mapped and no default is set', async () => {
+    const { session } = await runLogin({ admingroup: 'dd-admins' }, { groups: ['other'] });
+    expect(storedRole(session)).toBe('viewer');
+  });
+
+  test('an unmatched user gets the configured default role', async () => {
+    const { session } = await runLogin(
+      { admingroup: 'dd-admins', defaultrole: 'operator' },
+      { groups: ['other'] },
+    );
+    expect(storedRole(session)).toBe('operator');
+  });
+
+  test('a default role alone applies to everyone', async () => {
+    const { session } = await runLogin({ defaultrole: 'viewer' }, { groups: ['dd-admins'] });
+    expect(storedRole(session)).toBe('viewer');
+  });
+
+  test('a default role of none denies an unmatched user without a session', async () => {
+    const { res, session } = await runLogin(
+      { admingroup: 'dd-admins', defaultrole: 'none' },
+      { groups: ['other'] },
+    );
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.redirect).not.toHaveBeenCalled();
+    expect(session.regenerate).not.toHaveBeenCalled();
+    expect(session.passport).toBeUndefined();
+  });
+
+  test('a default role of none still admits a matching user', async () => {
+    const { session } = await runLogin(
+      { operatorgroup: 'dd-ops', defaultrole: 'none' },
+      { groups: ['dd-ops'] },
+    );
+    expect(storedRole(session)).toBe('operator');
+  });
+
+  test('group names are case sensitive', async () => {
+    const { session } = await runLogin({ admingroup: 'DD-Admins' }, { groups: ['dd-admins'] });
+    expect(storedRole(session)).toBe('viewer');
+  });
+
+  test('a group claim can be a string and a variable can list several groups', async () => {
+    const { session } = await runLogin({ operatorgroup: 'ops, sre' }, { groups: 'dev sre' });
+    expect(storedRole(session)).toBe('operator');
+  });
+
+  test('reads the claim named by groupclaim, from the ID token too', async () => {
+    const { session } = await runLogin(
+      { admingroup: 'dd-admins', groupclaim: 'roles' },
+      {},
+      { roles: ['dd-admins'] },
+    );
+    expect(storedRole(session)).toBe('admin');
+  });
+
+  test('a role change shows up on the next login', async () => {
+    const config = { admingroup: 'dd-admins' };
+    expect(storedRole((await runLogin(config, { groups: ['dd-admins'] })).session)).toBe('admin');
+    expect(storedRole((await runLogin(config, { groups: [] })).session)).toBe('viewer');
+  });
+
+  test('puts the role on the principal of the login', async () => {
+    const { req } = await runLogin({ admingroup: 'dd-admins' }, { groups: [] });
+    expect(req.principal).toEqual({ kind: 'oidc', username: 'user@example.com', role: 'viewer' });
+  });
+
+  test('a bearer token carries the mapped role', async () => {
+    oidc.configuration = { ...configurationValid, bearer: true, operatorgroup: 'ops' };
+    vi.spyOn(oidc, 'verifyBearerAccessToken').mockResolvedValue({ subject: 'sub-1' } as never);
+    openidClientMock.fetchUserInfo = vi
+      .fn()
+      .mockResolvedValue({ sub: 'sub-1', email: 'user@example.com', groups: ['ops'] });
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: 'Bearer abc' } }),
+    ).resolves.toEqual({ kind: 'oidc', username: 'user@example.com', role: 'operator' });
+  });
+
+  test('a bearer token with no matching group and a default of none is rejected', async () => {
+    oidc.configuration = {
+      ...configurationValid,
+      bearer: true,
+      operatorgroup: 'ops',
+      defaultrole: 'none',
+    };
+    vi.spyOn(oidc, 'verifyBearerAccessToken').mockResolvedValue({ subject: 'sub-1' } as never);
+    openidClientMock.fetchUserInfo = vi
+      .fn()
+      .mockResolvedValue({ sub: 'sub-1', email: 'user@example.com', groups: [] });
+
+    await expect(
+      oidc.authenticateBearer({ headers: { authorization: 'Bearer abc' } }),
+    ).resolves.toBeUndefined();
+  });
+
+  test('requiredgroup still runs before the mapping', async () => {
+    const { res } = await runLogin(
+      { requiredgroup: 'dd', admingroup: 'dd-admins' },
+      { groups: ['dd-admins'] },
+    );
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  test('the schema accepts the mapping, in any case for the default role', () => {
+    const result = oidc.getConfigurationSchema().validate({
+      ...configurationValid,
+      admingroup: 'a',
+      operatorgroup: 'b',
+      viewergroup: 'c',
+      defaultrole: ' None ',
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.value.defaultrole).toBe('none');
+  });
+
+  test('the schema rejects a default role that is not a role', () => {
+    const result = oidc.getConfigurationSchema().validate({
+      ...configurationValid,
+      defaultrole: 'root',
+    });
+    expect(result.error?.message).toContain('"defaultrole" must be one of');
+  });
+
+  test('maskConfiguration reports the mapping', () => {
+    oidc.configuration = {
+      ...configurationValid,
+      admingroup: 'a',
+      operatorgroup: 'b',
+      viewergroup: 'c',
+      defaultrole: 'viewer',
+    };
+    expect(oidc.maskConfiguration()).toEqual(
+      expect.objectContaining({
+        admingroup: 'a',
+        operatorgroup: 'b',
+        viewergroup: 'c',
+        defaultrole: 'viewer',
+      }),
+    );
   });
 });
 

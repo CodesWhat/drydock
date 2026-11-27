@@ -126,6 +126,14 @@ export interface Authenticator {
   readonly grantedRole?: { readonly role: Role; readonly explicit: boolean };
 
   /**
+   * True when this authenticator derives the role from the identity
+   * provider's group claims. A session it minted without a role can no longer
+   * be trusted as admin once that is configured, so it is dropped and the
+   * user signs in again.
+   */
+  readonly mapsRolesFromClaims?: boolean;
+
+  /**
    * True for the authenticator that reads `Authorization: Basic` headers. A
    * Basic header only counts as a password guess when one is in the chain;
    * without it (OIDC-only, say) the header is just a header.
