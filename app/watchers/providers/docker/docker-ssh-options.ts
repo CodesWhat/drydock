@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import type Dockerode from 'dockerode';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
 
-export const DEFAULT_SSH_PORT = 22;
-
 export interface DockerSshConfiguration {
   host?: string;
   port: number;
