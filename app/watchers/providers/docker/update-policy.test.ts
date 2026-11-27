@@ -2,7 +2,6 @@ import { createContainerFixture } from '../../../test/helpers.js';
 import {
   applyDockerDeclarativeUpdatePolicy,
   resolveDockerDeclarativeUpdatePolicy,
-  withStoredSkipTags,
 } from './update-policy.js';
 
 describe('Docker declarative update policy', () => {
@@ -145,36 +144,5 @@ describe('Docker declarative update policy', () => {
       maturityMode: 'override',
       maturityMinAgeDays: 'label',
     });
-  });
-});
-
-describe('withStoredSkipTags', () => {
-  test('returns the same container when the store has no skip entries', () => {
-    const container = createContainerFixture();
-
-    expect(withStoredSkipTags(container, undefined)).toBe(container);
-    expect(withStoredSkipTags(container, [])).toBe(container);
-  });
-
-  test('builds the policy from the stored entries when the container has none', () => {
-    const container = createContainerFixture({ updatePolicy: undefined });
-
-    expect(withStoredSkipTags(container, ['major:3']).updatePolicy).toEqual({
-      skipTags: ['major:3'],
-    });
-  });
-
-  test('unions stored entries into the label skip list without duplicates', () => {
-    const container = createContainerFixture({
-      updatePolicy: { skipTags: ['2.0.0', 'minor:1.1'], maturityMode: 'all' },
-    });
-
-    const result = withStoredSkipTags(container, ['major:3', '2.0.0']);
-
-    expect(result.updatePolicy).toEqual({
-      maturityMode: 'all',
-      skipTags: ['2.0.0', 'minor:1.1', 'major:3'],
-    });
-    expect(container.updatePolicy?.skipTags).toEqual(['2.0.0', 'minor:1.1']);
   });
 });

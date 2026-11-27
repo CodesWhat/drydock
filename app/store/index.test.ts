@@ -230,7 +230,6 @@ const {
     vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
-    vi.doMock('./notification-silence', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./session', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
@@ -286,7 +285,6 @@ vi.mock('./notification-history', createCollectionsMock);
 vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./api-key', createCollectionsMock);
 vi.mock('./notification-outbox', createCollectionsMock);
-vi.mock('./notification-silence', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./session', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
@@ -1418,7 +1416,6 @@ describe('Store Module', () => {
     vi.doMock('./notification', createNotificationMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
-    vi.doMock('./notification-silence', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./update-lifecycle-cache', createCollectionsMock);

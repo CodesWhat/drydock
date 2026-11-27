@@ -42,7 +42,6 @@ describe('recordLoginAuditEvent', () => {
       status: 'success',
       containerName: 'authentication',
       details: `${details}; user=${sanitizeLogParam('alice')}`,
-      actor: 'alice',
     });
   });
 
@@ -127,7 +126,6 @@ describe('recordLoginAuditEvent', () => {
       status: 'success',
       containerName: 'authentication',
       details: `${details}; user=${sanitizeLogParam('dave')}`,
-      actor: 'dave',
     });
   });
 

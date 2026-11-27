@@ -101,40 +101,6 @@ describe('image-comparison', () => {
     expect(current.image).toHaveProperty('softwareVersion', '2026.7.5');
   });
 
-  test('records the manifest list digest beside the platform digest, and drops it when the registry gives none', async () => {
-    const indexDigest = `sha256:${'1'.repeat(64)}`;
-    const stateFor = (lookup: ReturnType<typeof vi.fn>) => ({
-      registry: {
-        hub: {
-          getTags: vi.fn().mockResolvedValue(['latest']),
-          getImageManifestDigest: lookup,
-          normalizeImage: identityNormalizeImage,
-        },
-      },
-    });
-    mockGetState.mockReturnValue(
-      stateFor(vi.fn().mockResolvedValue({ digest: 'sha256:remote', indexDigest, version: 2 })),
-    );
-    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
-    const current = createFloatingAliasContainer();
-    current.image.tag.value = 'latest';
-    current.image.tag.semver = false;
-
-    const first = await findNewVersion(current as never, log);
-    expect(first).toMatchObject({ digest: 'sha256:remote', indexDigest });
-
-    // A new platform digest never inherits the previous cycle's index digest.
-    mockGetState.mockReturnValue(
-      stateFor(vi.fn().mockResolvedValue({ digest: 'sha256:remote-2', version: 2 })),
-    );
-    const next = createFloatingAliasContainer();
-    next.image.tag.value = 'latest';
-    next.image.tag.semver = false;
-    const second = await findNewVersion(next as never, log);
-    expect(second.digest).toBe('sha256:remote-2');
-    expect(second.indexDigest).toBeUndefined();
-  });
-
   test.each([
     {
       tag: 'latest',
@@ -570,56 +536,6 @@ describe('image-comparison', () => {
     expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
   });
 
-  describe('digest filter pattern length boundary', () => {
-    async function run(filters: { includeTags?: string; excludeTags?: string }) {
-      const getImageManifestDigest = createManifestLookup();
-      mockGetState.mockReturnValue({
-        registry: {
-          hub: {
-            getTags: vi.fn().mockResolvedValue(['latest', 'stable']),
-            getImageManifestDigest,
-            normalizeImage: identityNormalizeImage,
-          },
-        },
-      });
-      const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
-      await findNewVersion(createDigestOnlyContainer(filters) as never, log);
-      return { getImageManifestDigest, log };
-    }
-
-    test('applies a 1024-character include pattern without a warning', async () => {
-      const { getImageManifestDigest, log } = await run({ includeTags: 'a'.repeat(1024) });
-
-      expect(getImageManifestDigest).not.toHaveBeenCalled();
-      expect(log.warn).not.toHaveBeenCalled();
-    });
-
-    test('ignores a 1025-character include pattern with a warning', async () => {
-      const { getImageManifestDigest, log } = await run({ includeTags: 'a'.repeat(1025) });
-
-      expect(log.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Regex pattern exceeds maximum length of 1024'),
-      );
-      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
-    });
-
-    test('applies a 1024-character exclude pattern without a warning', async () => {
-      const { getImageManifestDigest, log } = await run({ excludeTags: 'a'.repeat(1024) });
-
-      expect(log.warn).not.toHaveBeenCalled();
-      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
-    });
-
-    test('ignores a 1025-character exclude pattern with a warning', async () => {
-      const { getImageManifestDigest, log } = await run({ excludeTags: 'a'.repeat(1025) });
-
-      expect(log.warn).toHaveBeenCalledWith(
-        expect.stringContaining('Regex pattern exceeds maximum length of 1024'),
-      );
-      expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('latest');
-    });
-  });
-
   test('applies digest exclude filters before choosing a comparison tag', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({
@@ -812,40 +728,21 @@ describe('image-comparison', () => {
     expect(result.publishedAtTrusted).toBeUndefined();
   });
 
-  test('returns current tag with a lookup error when registry is unsupported (#1591)', async () => {
+  test('returns current tag when registry is unsupported', async () => {
     mockGetState.mockReturnValue({ registry: {} });
     const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
     const container = {
       image: {
         id: 'image-1',
-        registry: { name: 'unknown-registry', url: 'registry.example.com' },
+        registry: { name: 'unknown-registry' },
         name: 'library/nginx',
         tag: { value: '1.0.0', semver: false },
         digest: { watch: false },
       },
     };
     const result = await findNewVersion(container as never, log);
-    expect(result).toEqual({
-      tag: '1.0.0',
-      lookupError: 'no configured registry matches registry.example.com',
-    });
+    expect(result).toEqual({ tag: '1.0.0' });
     expect(log.error).toHaveBeenCalledWith(expect.stringContaining('Unsupported registry'));
-  });
-
-  test('names the registry in the lookup error when it has no url (#1591)', async () => {
-    mockGetState.mockReturnValue({ registry: {} });
-    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
-    const container = {
-      image: {
-        id: 'image-1',
-        registry: { name: 'unknown' },
-        name: 'library/nginx',
-        tag: { value: '1.0.0', semver: false },
-        digest: { watch: false },
-      },
-    };
-    const result = await findNewVersion(container as never, log);
-    expect(result.lookupError).toBe('no configured registry matches unknown');
   });
 
   test('returns early with no-update reason when tag is "unknown"', async () => {
@@ -1210,7 +1107,9 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(getImageManifestDigest).toHaveBeenCalledTimes(3);
-      expect(result.lookupError).toContain('anchor-b manifest unknown');
+      expect((container as { error?: { message: string } }).error?.message).toContain(
+        'anchor-b manifest unknown',
+      );
       // getTags only returns the container's own current tag, so there is no
       // newer tag to fabricate — the tag-based result stands unchanged.
       expect(result.tag).toBe(container.image.tag.value);
@@ -1290,7 +1189,7 @@ describe('image-comparison', () => {
   });
 
   describe('digest watch failure degrades to container.error instead of erasing the tag result (#814, #808)', () => {
-    test('digest lookup throws, a newer tag was found — findNewVersion resolves with the new tag and returns the lookup error', async () => {
+    test('digest lookup throws, a newer tag was found — findNewVersion resolves with the new tag and records container.error', async () => {
       const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
       mockGetState.mockReturnValue({
         registry: {
@@ -1315,11 +1214,13 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(result.tag).toBe('2.0.0');
-      expect(result.lookupError).toBe('registry unavailable');
+      expect((container as { error?: { message: string } }).error?.message).toBe(
+        'registry unavailable',
+      );
       expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('registry unavailable'));
     });
 
-    test('digest lookup throws, no newer tag available — findNewVersion resolves with the tag unchanged and returns the lookup error', async () => {
+    test('digest lookup throws, no newer tag available — findNewVersion resolves with the tag unchanged and records container.error', async () => {
       const getImageManifestDigest = vi.fn().mockRejectedValue(new Error('registry unavailable'));
       mockGetState.mockReturnValue({
         registry: {
@@ -1344,7 +1245,9 @@ describe('image-comparison', () => {
       const result = await findNewVersion(container as never, log);
 
       expect(result.tag).toBe('2.0.0');
-      expect(result.lookupError).toBe('registry unavailable');
+      expect((container as { error?: { message: string } }).error?.message).toBe(
+        'registry unavailable',
+      );
     });
 
     test('regression: a digest-only (sha256-pinned) container still rejects when its digest lookup fails', async () => {
@@ -1445,66 +1348,6 @@ describe('image-comparison', () => {
       'Locally-built image (no repository digest) — registry not queried',
     );
     expect(result.tag).toBe('0.3.0-qa');
-  });
-
-  test('looks up the declared upstream base for a locally-built image with an explicit lookup label', async () => {
-    const getTags = vi.fn().mockResolvedValue(['1.25.0', '1.26.0']);
-    mockGetState.mockReturnValue({
-      registry: {
-        hub: {
-          getTags,
-          getImageManifestDigest: createManifestLookup(),
-          normalizeImage: identityNormalizeImage,
-        },
-      },
-    });
-    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
-    const container = {
-      image: {
-        id: 'image-1',
-        registry: { name: 'hub', lookupImage: 'library/nginx' },
-        name: 'myapp',
-        tag: { value: '1.25.0', semver: true, tagPrecision: 'specific' },
-        digest: { watch: false },
-        isLocalImage: true,
-      },
-    };
-
-    const result = await findNewVersion(container as never, log);
-
-    expect(getTags).toHaveBeenCalledTimes(1);
-    expect(getTags.mock.calls[0][0].name).toBe('library/nginx');
-    expect(result.tag).toBe('1.26.0');
-    expect(result.noUpdateReason).toBeUndefined();
-  });
-
-  test('keeps the local-image short circuit when the lookup label is blank', async () => {
-    const getTags = vi.fn().mockResolvedValue(['1.0.0']);
-    mockGetState.mockReturnValue({
-      registry: {
-        hub: {
-          getTags,
-          getImageManifestDigest: createManifestLookup(),
-          normalizeImage: identityNormalizeImage,
-        },
-      },
-    });
-    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
-    const container = {
-      image: {
-        id: 'image-1',
-        registry: { name: 'hub', lookupImage: '   ' },
-        name: 'myapp',
-        tag: { value: '1.0.0', semver: true },
-        digest: { watch: false },
-        isLocalImage: true,
-      },
-    };
-
-    const result = await findNewVersion(container as never, log);
-
-    expect(getTags).not.toHaveBeenCalled();
-    expect(result.noUpdateReason).toContain('Locally-built image');
   });
 
   test('does not short-circuit a registry-backed container that merely lacks digest.repo', async () => {
@@ -2239,168 +2082,6 @@ describe('image-comparison', () => {
 
         expect(result.image.registry.name).toBe('ecr.creds');
       });
-    });
-  });
-
-  describe('per-type update candidates', () => {
-    function mockTags(tags: string[], manifestDigest = 'sha256:primary') {
-      mockGetState.mockReturnValue({
-        registry: {
-          hub: {
-            getTags: vi.fn().mockResolvedValue(tags),
-            getImageManifestDigest: vi.fn().mockResolvedValue({
-              digest: manifestDigest,
-              created: '2026-04-01T00:00:00.000Z',
-              version: 2,
-            }),
-            normalizeImage: identityNormalizeImage,
-          },
-        },
-      });
-    }
-
-    function createSemverContainer(overrides: Record<string, unknown> = {}, tag = '1.2.3') {
-      return {
-        image: {
-          id: 'image-1',
-          registry: { name: 'hub' },
-          name: 'library/app',
-          tag: { value: tag, semver: true, tagPrecision: 'specific' },
-          digest: { watch: false },
-        },
-        tagFamily: 'loose',
-        ...overrides,
-      };
-    }
-
-    const log = () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() });
-
-    test('records the best candidate per type and keeps the highest as the primary', async () => {
-      mockTags(['1.2.4', '1.2.5', '1.3.0', '1.4.2', '2.0.0', '3.1.0']);
-      const result = await findNewVersion(createSemverContainer() as never, log());
-      expect(result.tag).toBe('3.1.0');
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.5', semverDiff: 'patch' },
-        minor: { tag: '1.4.2', semverDiff: 'minor' },
-        major: { tag: '3.1.0', semverDiff: 'major' },
-      });
-    });
-
-    test('respects the running-version ceiling', async () => {
-      mockTags(['1.2.5', '1.4.2', '2.0.0']);
-      const result = await findNewVersion(
-        createSemverContainer({ tagCeiling: 'major' }) as never,
-        log(),
-      );
-      expect(result.tag).toBe('1.4.2');
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.5', semverDiff: 'patch' },
-        minor: { tag: '1.4.2', semverDiff: 'minor' },
-      });
-    });
-
-    test('respects running-version variables in the include filter', async () => {
-      mockTags(['1.2.5', '1.4.2', '2.0.0']);
-      const result = await findNewVersion(
-        createSemverContainer({ includeTags: '^${major}\\.' }) as never,
-        log(),
-      );
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.5', semverDiff: 'patch' },
-        minor: { tag: '1.4.2', semverDiff: 'minor' },
-      });
-    });
-
-    test('respects the include and exclude filters', async () => {
-      mockTags(['1.2.5-alpine', '1.2.6', '1.5.0', '2.0.0']);
-      const result = await findNewVersion(
-        createSemverContainer({ excludeTags: '^2\\.' }) as never,
-        log(),
-      );
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.6', semverDiff: 'patch' },
-        minor: { tag: '1.5.0', semverDiff: 'minor' },
-      });
-    });
-
-    test('keeps the tag family: strict family drops other suffix families', async () => {
-      mockTags(['1.2.4-alpine', '1.2.5', '1.3.0-alpine', '2.0.0']);
-      const result = await findNewVersion(
-        createSemverContainer({ tagFamily: 'strict', includeTags: '.*' }, '1.2.3-alpine') as never,
-        log(),
-      );
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.4-alpine', semverDiff: 'patch' },
-        minor: { tag: '1.3.0-alpine', semverDiff: 'minor' },
-      });
-    });
-
-    test('classifies against the transformed running tag', async () => {
-      mockTags(['release-1.2.4', 'release-1.3.0']);
-      const result = await findNewVersion(
-        createSemverContainer(
-          { transformTags: '^release-(\\d+\\.\\d+\\.\\d+) => $1' },
-          'release-1.2.3',
-        ) as never,
-        log(),
-      );
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: 'release-1.2.4', semverDiff: 'patch' },
-        minor: { tag: 'release-1.3.0', semverDiff: 'minor' },
-      });
-    });
-
-    test('skips rejected release lines so the next eligible tag is offered', async () => {
-      mockTags(['1.2.5', '1.3.0', '1.4.0', '2.0.0', '2.1.0']);
-      const result = await findNewVersion(
-        createSemverContainer({ updatePolicy: { skipTags: ['major:2', 'minor:1.4'] } }) as never,
-        log(),
-      );
-      expect(result.updateCandidates).toEqual({
-        patch: { tag: '1.2.5', semverDiff: 'patch' },
-        minor: { tag: '1.3.0', semverDiff: 'minor' },
-      });
-    });
-
-    test('attaches the resolved digest to the primary candidate only', async () => {
-      mockTags(['1.2.4', '2.0.0']);
-      const container = createSemverContainer();
-      container.image.digest = { watch: true, repo: 'sha256:local' } as never;
-      const result = await findNewVersion(container as never, log());
-      expect(result.updateCandidates?.major).toEqual({
-        tag: '2.0.0',
-        digest: 'sha256:primary',
-        semverDiff: 'major',
-      });
-      expect(result.updateCandidates?.patch).toEqual({ tag: '1.2.4', semverDiff: 'patch' });
-    });
-
-    test('records no candidates for a non-semver running tag', async () => {
-      mockTags(['1.0.0', '2.0.0']);
-      const container = createSemverContainer({ includeTags: '^\\d' }, 'latest');
-      container.image.tag.semver = false;
-      const result = await findNewVersion(container as never, log());
-      expect(result.updateCandidates).toBeUndefined();
-    });
-
-    test('records no candidates when only the primary update is on offer', async () => {
-      mockTags(['1.2.4', '1.2.5']);
-      const result = await findNewVersion(createSemverContainer() as never, log());
-      expect(result.tag).toBe('1.2.5');
-      expect(result.updateCandidates).toBeUndefined();
-    });
-
-    test('records no candidates when nothing is newer', async () => {
-      mockTags(['1.0.0', '1.2.3']);
-      const result = await findNewVersion(createSemverContainer() as never, log());
-      expect(result.updateCandidates).toBeUndefined();
-    });
-
-    test('records no candidates when the running tag has no numeric version', async () => {
-      mockTags(['1.2.3']);
-      const container = createSemverContainer({}, 'stable');
-      const result = await findNewVersion(container as never, log());
-      expect(result.updateCandidates).toBeUndefined();
     });
   });
 });

@@ -121,7 +121,7 @@ export const VIEW_TABLE_COLUMN_KEYS = {
   security: ['image', 'critical', 'high', 'medium', 'low', 'fixable', 'total'],
   watchers: ['name', 'status', 'containers', 'cron', 'nextRun', 'lastRun'],
   servers: ['name', 'host', 'status', 'containers', 'lastSeen'],
-  audit: ['timestamp', 'action', 'actor', 'containerName', 'status', 'details'],
+  audit: ['timestamp', 'action', 'containerName', 'status', 'details'],
   agents: ['name', 'status', 'containers', 'os', 'version', 'lastSeen'],
   images: ['repository', 'tag', 'imageId', 'size', 'containers', 'created', 'lastSeen', 'host'],
 } as const;

@@ -8,8 +8,6 @@
     "docker",
     "docker-compose",
     "portainer",
-    "githubdispatch",
-    "gitlabpipeline",
     "google-chat",
     "gotify",
     "http",

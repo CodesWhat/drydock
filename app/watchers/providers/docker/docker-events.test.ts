@@ -369,7 +369,6 @@ describe('docker events helpers extraction', () => {
           'pause',
           'unpause',
           'die',
-          'oom',
           'update',
           'rename',
           'health_status',

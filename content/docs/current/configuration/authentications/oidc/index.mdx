@@ -22,10 +22,6 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_AUTH_OIDC_{auth_name}_TIMEOUT` | ⚪ | Timeout (in ms) when calling the OIDC provider | Must be greater than 500 | `5000` |
 | `DD_AUTH_OIDC_{auth_name}_BEARER` | ⚪ | Accept OIDC access tokens as `Authorization: Bearer` on API requests (see [Bearer tokens](#bearer-tokens)) | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_BEARERAUDIENCES` | ⚪ | Extra `aud` values accepted on bearer access tokens, besides the client ID (see [Bearer tokens](#bearer-tokens)) | Comma-separated list | empty |
-| `DD_AUTH_OIDC_{auth_name}_ALLOWEDEMAILS` | ⚪ | Only these email addresses may sign in (see [Restricting who can sign in](#restricting-who-can-sign-in)) | Comma-separated list, case-insensitive | empty (no restriction) |
-| `DD_AUTH_OIDC_{auth_name}_ALLOWEDEMAILDOMAINS` | ⚪ | Only addresses at these domains may sign in | Comma-separated list, case-insensitive | empty (no restriction) |
-| `DD_AUTH_OIDC_{auth_name}_REQUIREDGROUP` | ⚪ | The user must belong to this group | Group name, exact match | empty (no restriction) |
-| `DD_AUTH_OIDC_{auth_name}_GROUPCLAIM` | ⚪ | Claim that carries the user's groups | Claim name | `groups` |
 | `DD_PUBLIC_URL` | 🔴 | Public URL of your drydock instance (used to build the OIDC callback URL) | URL | |
 
 The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oidc/${auth_name}/cb`.
@@ -46,23 +42,6 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 - **Redirect URL validation** — Post-login redirects are validated against the backend's endpoint allowlist. OIDC flows cannot be hijacked into landing on arbitrary paths. No configuration is needed.
 - **OIDC error log redaction** — OIDC warn logs redact RFC-1918 IP addresses (`[internal-addr]`) and absolute filesystem paths (`[path]`) from error cause chains so private network addresses and CA certificate file paths do not appear in centralized log aggregators.
 - **OIDC logout URL resolution** — drydock first tries the provider discovery `end_session_endpoint`. If it is missing, you can set `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` when your provider (or proxy) exposes a logout URL outside discovery metadata. If neither is available, `POST /auth/logout` only destroys the local drydock session.
-
-## Restricting who can sign in
-
-By default every user your IdP authenticates can sign in. Set any of these options to narrow that:
-
-```bash
-DD_AUTH_OIDC_KEYCLOAK_ALLOWEDEMAILDOMAINS=example.com
-DD_AUTH_OIDC_KEYCLOAK_REQUIREDGROUP=drydock-users
-```
-
-- **Email and domain lists** are alternatives. A user is admitted when their email is in `ALLOWEDEMAILS` or its domain is in `ALLOWEDEMAILDOMAINS`. Matching is case-insensitive. A domain matches exactly, so `example.com` does not admit `sub.example.com`.
-- **Verified email.** When an email list is set, the IdP must supply an `email` claim, and if it also supplies `email_verified` that value must be true. An unverified address is denied. If the IdP sends no `email_verified` claim at all, the email is accepted as is.
-- **Required group.** The user's groups are read from the claim named by `GROUPCLAIM` (default `groups`), in the userinfo response or the ID token. The claim can be an array of strings or a single string; a string is split on commas and whitespace. The group name must match exactly, including case.
-- **Both together.** If an email or domain list and a required group are set, the user must pass both.
-- **Bearer tokens** are held to the same rules, because the same userinfo claims are checked.
-
-A denied user gets a `403` with `Access denied` and no session. Drydock logs the reason (for example `required group is missing`) as a warning, without the user's email, groups or any token. If everyone is denied, check that your IdP actually releases the `groups` claim to the drydock client, usually through a scope or claim mapping.
 
 ## Bearer tokens
 
@@ -141,7 +120,7 @@ identity_providers:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -159,7 +138,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHELIA_CLIENTSECRET="this-is-a-very-secure-secret" \
   -e DD_AUTH_OIDC_AUTHELIA_DISCOVERY="https://<your_authelia_public_domain>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 
 </Tab>
@@ -185,7 +164,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -203,7 +182,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTH0_CLIENTSECRET="<paste the Client Secret from auth0 application settings>" \
   -e DD_AUTH_OIDC_AUTH0_DISCOVERY="https://<paste the domain from auth0 application settings>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 
 </Tab>
@@ -241,7 +220,7 @@ docker run \
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -260,7 +239,7 @@ docker run \
   -e DD_AUTH_OIDC_AUTHENTIK_CLIENTSECRET="<paste the Client Secret from authentik drydock_oidc provider>" \
   -e DD_AUTH_OIDC_AUTHENTIK_DISCOVERY="<authentik_url>/application/o/<authentik_application_name>/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 
 Opt in to direct Authentik redirect only when you intentionally want to skip the internal login page. Add this option before the `...` line in the Docker command above:
@@ -286,7 +265,7 @@ Opt in to direct Authentik redirect only when you intentionally want to skip the
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_PUBLIC_URL=https://<your_drydock_public_domain>
@@ -306,7 +285,7 @@ docker run \
   -e DD_AUTH_OIDC_DEX_CLIENTSECRET="<dex_client_secret>" \
   -e DD_AUTH_OIDC_DEX_DISCOVERY="https://<your_dex_public_domain>/dex/.well-known/openid-configuration" \
   ...
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 
 Opt in to a real Dex logout endpoint only when your IdP or auth proxy provides one. Add this option before the `...` line in the Docker command above:

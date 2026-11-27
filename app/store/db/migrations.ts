@@ -11,7 +11,6 @@
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
 import {
-  AUDIT_ACTOR_SQL,
   INITIAL_SCHEMA_SQL,
   SCHEMA_MIGRATIONS_TABLE_SQL,
   TOTP_ENROLLMENT_FAILURES_SQL,
@@ -54,12 +53,6 @@ export const TOTP_SUBJECT_STATE_MIGRATION_VERSION = 12;
 export const TOTP_ENROLLMENT_FAILURES_MIGRATION_VERSION = 13;
 
 export const AGENT_KEY_ROTATION_MIGRATION_VERSION = 14;
-
-/** Nullable audit.actor column and its index (RBAC 14.4 audit attribution). */
-export const AUDIT_ACTOR_MIGRATION_VERSION = 15;
-
-/** Index on update_operations.new_container_id so the list endpoint's lookup stops scanning the table. */
-export const UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION = 16;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -244,16 +237,6 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
       CREATE UNIQUE INDEX agent_keys_pending_rotation ON agent_keys(rotation_parent_id)
         WHERE rotation_parent_id IS NOT NULL AND revoked_at IS NULL;
     `,
-  },
-  {
-    version: AUDIT_ACTOR_MIGRATION_VERSION,
-    note: 'add audit.actor and index it (RBAC 14.4 audit attribution)',
-    sql: AUDIT_ACTOR_SQL,
-  },
-  {
-    version: UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION,
-    note: 'index update_operations.new_container_id',
-    sql: 'CREATE INDEX update_operations_new_container_id ON update_operations(new_container_id);',
   },
 ];
 

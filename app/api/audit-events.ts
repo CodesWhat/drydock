@@ -13,8 +13,6 @@ type RecordAuditEventArgs = {
   toVersion?: AuditEntry['toVersion'];
   /** Overrides the key derived from `container`, for scopes that are not one container. */
   containerIdentityKey?: AuditEntry['containerIdentityKey'];
-  /** Overrides the request principal, for events recorded before one exists (failed login). */
-  actor?: AuditEntry['actor'];
 } & (
   | {
       container: {
@@ -49,7 +47,6 @@ export function recordAuditEvent({
   details,
   fromVersion,
   toVersion,
-  actor,
 }: RecordAuditEventArgs) {
   const entry: AuditEntry = {
     id: '',
@@ -62,7 +59,6 @@ export function recordAuditEvent({
     ...(details !== undefined ? { details } : {}),
     ...(fromVersion !== undefined ? { fromVersion } : {}),
     ...(toVersion !== undefined ? { toVersion } : {}),
-    ...(actor !== undefined ? { actor } : {}),
   };
 
   auditStore.insertAudit(entry);

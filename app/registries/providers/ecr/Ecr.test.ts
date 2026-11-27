@@ -521,7 +521,6 @@ test('authenticate should fetch public ECR gallery token for public images', asy
     method: 'GET',
     url: 'https://public.ecr.aws/token/',
     maxRedirects: 0,
-    timeout: 30000,
     headers: {
       Accept: 'application/json',
     },

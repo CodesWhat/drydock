@@ -17,6 +17,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { cleanupFleetAgents } from './lib/cleanup-fleet-agents.mjs';
+import {
+  observedWriteTimeout,
+  observeSlowConsumerReconnect,
+} from './lib/slow-consumer-reconnect.mjs';
 
 const DEFAULTS = {
   agents: 8,
@@ -33,7 +37,6 @@ const DEFAULTS = {
 // reconnects, which is the slow-consumer eviction path.
 const BACKPRESSURE_PAUSE_MS = 3500;
 const BACKPRESSURE_RESUME_WAIT_MS = 20_000;
-const EVICTION_PAUSE_MS = 15_000;
 const EVICTION_RECONNECT_WAIT_MS = 45_000;
 
 function fail(message) {
@@ -451,10 +454,15 @@ async function run() {
     fail(`missing ${slowAgentName}`);
   }
   const slowAdapter = slowAgent.edgeAdapter;
-  const serverSocket = slowAdapter?.ws?._socket;
-  if (!serverSocket?.pause || !serverSocket?.resume) {
-    fail('production EdgeAgentAdapter WebSocket does not expose a pausable socket');
+  // Pause through the websocket: ws 8.x receiverOnDrain resumes the raw socket
+  // unless ws.pause() set isPaused, which would undo a raw socket pause.
+  if (!slowAdapter?.ws?.pause || !slowAdapter?.ws?.resume) {
+    fail('production EdgeAgentAdapter WebSocket does not expose pause/resume');
   }
+  const serverSocket = {
+    pause: () => slowAdapter.ws.pause(),
+    resume: () => slowAdapter.ws.resume(),
+  };
   const startFollowStream = (onChunk) =>
     slowAdapter.streamContainerLogs(
       'c0000000001',
@@ -484,19 +492,22 @@ async function run() {
   }
   backpressureStream?.cancel?.();
 
-  // Phase 2: a pause longer than writeWait must evict and reconnect.
-  serverSocket.pause();
-  startFollowStream(() => {});
-  await sleep(EVICTION_PAUSE_MS);
-  serverSocket.resume();
-  const reconnectedSlowAgent = await waitFor(
-    'slow-consumer eviction and reconnect',
-    () => {
+  // Keep the stream paused until a write timeout actually evicts it. Startup
+  // and socket-buffer fill must not consume a fixed pause's writeWait budget.
+  const slowAgentLog = join(runDirectory, `${slowAgentName}.log`);
+  const logOffset = statSync(slowAgentLog).size;
+  const reconnectedSlowAgent = await observeSlowConsumerReconnect({
+    socket: serverSocket,
+    startStream: startFollowStream,
+    waitFor,
+    findReplacement: () => {
       const candidate = getAgents().find((agent) => agent.name === slowAgentName);
       return candidate && candidate !== slowAgent ? candidate : undefined;
     },
-    EVICTION_RECONNECT_WAIT_MS,
-  );
+    hasWriteTimeout: () =>
+      observedWriteTimeout(readFileSync(slowAgentLog).subarray(logOffset).toString('utf8')),
+    timeoutMs: EVICTION_RECONNECT_WAIT_MS,
+  });
   evidence.phases.slowConsumerReconnects = reconnectedSlowAgent ? 1 : 0;
   evidence.phases.reconnectsObserved += 1;
 

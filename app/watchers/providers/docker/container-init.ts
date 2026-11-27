@@ -3,7 +3,6 @@ import log from '../../../log/index.js';
 import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import * as registry from '../../../registry/index.js';
-import { isObservationMode } from '../../../runtime/observation-mode.js';
 import * as storeContainer from '../../../store/container.js';
 import type { DockerApiBindMountInspector } from '../../../triggers/providers/dockercompose/ComposePathBindMounts.js';
 import { getTriggerCategoryForType } from '../../../triggers/trigger-category.js';
@@ -37,7 +36,6 @@ import {
   ddPortLabel,
   ddRegistryLookupImage,
   ddRegistryLookupUrl,
-  ddTagCeiling,
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
@@ -81,7 +79,6 @@ interface ResolvedContainerLabelOverrides {
   transformTags?: string;
   tagFamily?: string;
   tagPinInfo?: string;
-  tagCeiling?: string;
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
@@ -153,7 +150,6 @@ interface DockerWatcherSourceLike {
 
 interface WatcherTagDefaults {
   family?: string;
-  ceiling?: string;
   pin?: { info?: boolean };
 }
 
@@ -184,11 +180,6 @@ const containerLabelOverrideMappings = [
     key: 'tagPinInfo',
     ddKey: ddTagPinInfo,
     overrideKey: 'tagPinInfo',
-  },
-  {
-    key: 'tagCeiling',
-    ddKey: ddTagCeiling,
-    overrideKey: 'tagCeiling',
   },
   {
     key: 'inspectTagPath',
@@ -1011,15 +1002,8 @@ export function getSettledContainersToWatch<T extends DockerContainerSummaryLike
   containersFromTheStore: Container[],
   watcher: DiscoverySettlingWatcher,
 ): T[] {
-  // A one-shot observation (`drydock scan`) starts from an empty in-memory
-  // store, so every container is "new" and would be held back until the
-  // process had already exited. Settling debounces containers appearing and
-  // disappearing in a long-running daemon, which doesn't apply there.
-  const settleMs = isObservationMode()
-    ? 0
-    : (watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS);
   return filterPendingDiscoveries(containers, containersFromTheStore, {
-    settleMs,
+    settleMs: watcher.configuration.discoverysettlems ?? DEFAULT_DISCOVERY_SETTLE_MS,
     pendingDiscoveries: watcher.pendingDiscoveries,
     debug: (message) => watcher.log.debug(message),
   }).containersToWatch;
@@ -1083,7 +1067,7 @@ export function resolveLabelsFromContainer(
 export function applyDerivedLabelFieldsToContainer(
   container: Container,
   labels: Record<string, string>,
-  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean; tagCeiling?: string } = {},
+  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean } = {},
 ): void {
   const resolved = resolveLabelsFromContainer(labels);
   container.includeTags = resolved.includeTags;
@@ -1092,7 +1076,6 @@ export function applyDerivedLabelFieldsToContainer(
   container.tagFamily = resolved.tagFamily ?? tagPolicyFallbacks.tagFamily;
   const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
   container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
-  container.tagCeiling = resolved.tagCeiling ?? tagPolicyFallbacks.tagCeiling;
   container.linkTemplate = resolved.linkTemplate;
   container.portLabel = resolved.portLabel;
   container.actionTriggerInclude = resolved.actionTriggerInclude;
@@ -1146,7 +1129,6 @@ export function resolveEffectiveContainerTagPolicy(
   const usePersistedFallbacks = container.labels === undefined;
   const persistedFallbacks = {
     family: (usePersistedFallbacks ? container.tagFamily : undefined) ?? watcherDefaults.family,
-    ceiling: (usePersistedFallbacks ? container.tagCeiling : undefined) ?? watcherDefaults.ceiling,
     pin: {
       info: (usePersistedFallbacks ? container.tagPinInfo : undefined) ?? watcherDefaults.pin?.info,
     },
@@ -1176,7 +1158,6 @@ function applyEffectiveTagPolicyFromLabels(
   applyDerivedLabelFieldsToContainer(container, labels, {
     tagFamily: tagPolicy.tagFamily,
     tagPinInfo: tagPolicy.tagPinInfo,
-    tagCeiling: tagPolicy.tagCeiling,
   });
 }
 
@@ -1390,10 +1371,6 @@ export function mergeConfigWithImgset(
       getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily) ||
       getContainerConfigValue(undefined, watcherTagDefaults.family) ||
       'strict',
-    tagCeiling:
-      getContainerConfigValue(labelOverrides.tagCeiling, matchingImgset?.tagCeiling) ||
-      getContainerConfigValue(undefined, watcherTagDefaults.ceiling) ||
-      undefined,
     tagPinInfo:
       getContainerConfigBooleanValue(
         labelOverrides.tagPinInfo,

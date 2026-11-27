@@ -266,31 +266,6 @@ describe('Docker Watcher', () => {
       expect(result).toHaveLength(1);
     });
 
-    test('should apply container name and label filters before image lookups', async () => {
-      const containers = [
-        { Id: '1', Labels: {}, Names: ['/web-1'] },
-        { Id: '2', Labels: {}, Names: ['/web-canary'] },
-        { Id: '3', Labels: { tier: 'api' }, Names: ['/api'] },
-        { Id: '4', Labels: {}, Names: ['/db'] },
-        { Id: '5', Labels: { 'dd.watch': 'true' }, Names: ['/db-forced'] },
-        { Id: '6', Labels: { 'dd.watch': 'false' }, Names: ['/web-off'] },
-      ];
-      mockDockerApi.listContainers.mockResolvedValue(containers);
-      docker.addImageDetailsToContainer = vi
-        .fn()
-        .mockImplementation(async (container) => ({ id: container.Id }));
-
-      await docker.register('watcher', 'docker', 'test', {
-        watchbydefault: true,
-        containers: { include: '^web', exclude: 'canary$' },
-        labels: { include: 'tier=api' },
-      });
-      const result = await docker.getContainers();
-
-      expect(result.map((c) => c.id).sort()).toEqual(['1', '3', '5']);
-      expect(docker.addImageDetailsToContainer).toHaveBeenCalledTimes(3);
-    });
-
     test('should apply swarm service deploy labels to container filtering and tag include', async () => {
       const containers = [
         {

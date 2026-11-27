@@ -26,12 +26,7 @@ import {
   getHassUpdateProgress,
   HASS_UPDATE_STATE_KEY,
 } from './hass-progress.js';
-import {
-  getAvailabilityTopic,
-  getContainerStateTopic,
-  HASS_AVAILABILITY_OFFLINE,
-  HASS_AVAILABILITY_ONLINE,
-} from './topics.js';
+import { getContainerStateTopic } from './topics.js';
 
 const containerDefaultTopic = 'dd/container';
 const hassDefaultPrefix = 'homeassistant';
@@ -59,7 +54,6 @@ interface MqttConfiguration extends TriggerConfiguration {
     discovery: boolean;
     agenttopicsegment: boolean;
     commands: boolean;
-    buttons: boolean;
     devicepercontainer: boolean;
     attributes: HassAttributePreset;
     filter: {
@@ -107,7 +101,6 @@ class Mqtt extends Trigger<MqttConfiguration> {
       discovery: false,
       agenttopicsegment: hassAgentTopicSegmentDefault,
       commands: false,
-      buttons: false,
       devicepercontainer: hassDevicePerContainerDefault,
       attributes: 'short',
       filter: {
@@ -124,23 +117,6 @@ class Mqtt extends Trigger<MqttConfiguration> {
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterUpdateOperationChanged?: () => void;
-  private connectListener?: () => void;
-
-  /**
-   * Force-close the connection to the previous broker so a re-init (broker
-   * URL change, replaced broker) or a deregister doesn't leave the old client
-   * reconnecting in the background next to the new one. Forced because a
-   * replaced broker may never answer a graceful disconnect.
-   */
-  private endClient(): Promise<void> | undefined {
-    if (this.connectListener) {
-      this.client?.removeListener?.('connect', this.connectListener);
-      this.connectListener = undefined;
-    }
-    return this.client?.endAsync?.(true).catch((error: unknown) => {
-      this.log.warn(`Failed to close the previous MQTT connection (${getErrorMessage(error)})`);
-    });
-  }
 
   private clearContainerEventSubscriptions() {
     this.unregisterContainerAdded?.();
@@ -273,7 +249,6 @@ class Mqtt extends Trigger<MqttConfiguration> {
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
           agenttopicsegment: this.joi.boolean().default(hassAgentTopicSegmentDefault),
           commands: this.joi.boolean().default(false),
-          buttons: this.joi.boolean().default(false),
           devicepercontainer: this.joi.boolean().default(hassDevicePerContainerDefault),
           attributes: this.joi
             .string()
@@ -295,7 +270,6 @@ class Mqtt extends Trigger<MqttConfiguration> {
           discovery: false,
           agenttopicsegment: hassAgentTopicSegmentDefault,
           commands: false,
-          buttons: false,
           devicepercontainer: hassDevicePerContainerDefault,
           attributes: 'short',
           filter: {
@@ -347,10 +321,6 @@ class Mqtt extends Trigger<MqttConfiguration> {
     this.clearContainerEventSubscriptions();
     await this.hass?.deregister();
     this.hass = undefined;
-    const endingClient = this.endClient();
-    if (endingClient) {
-      await endingClient;
-    }
 
     // Enforce simple mode
     this.configuration.mode = 'simple';
@@ -388,29 +358,10 @@ class Mqtt extends Trigger<MqttConfiguration> {
       ];
     }
     options.rejectUnauthorized = this.configuration.tls.rejectunauthorized;
-    if (this.configuration.hass.enabled) {
-      // Last Will: the broker flips every Home Assistant entity to unavailable
-      // when this client drops without a clean disconnect.
-      options.will = {
-        topic: getAvailabilityTopic(this.configuration.topic),
-        payload: Buffer.from(HASS_AVAILABILITY_OFFLINE),
-        qos: 1,
-        retain: true,
-      };
-    }
 
     this.client = await mqtt.connectAsync(this.configuration.url, options);
 
     if (this.configuration.hass.enabled) {
-      // Birth message: connectAsync resolved on the first connect, so publish it
-      // here and listen for later (re)connects, which need it again because the
-      // Will fired when the previous connection dropped. mqtt.js resubscribes
-      // the command topics itself on reconnect, so nothing is subscribed twice.
-      void this.publishBirth();
-      this.connectListener = () => {
-        void this.publishBirth();
-      };
-      this.client.on?.('connect', this.connectListener);
       this.hass = new Hass({
         client: this.client,
         configuration: this.configuration,
@@ -433,26 +384,10 @@ class Mqtt extends Trigger<MqttConfiguration> {
     }
   }
 
-  private async publishBirth(): Promise<void> {
-    try {
-      await this.client.publish(
-        getAvailabilityTopic(this.configuration.topic),
-        HASS_AVAILABILITY_ONLINE,
-        { retain: true, qos: 1 },
-      );
-    } catch (error: unknown) {
-      this.log.warn(`Failed to publish MQTT birth message (${getErrorMessage(error)})`);
-    }
-  }
-
   async deregisterComponent(): Promise<void> {
     this.clearContainerEventSubscriptions();
     await this.hass?.deregister();
     this.hass = undefined;
-    const endingClient = this.endClient();
-    if (endingClient) {
-      await endingClient;
-    }
     await super.deregisterComponent();
   }
 

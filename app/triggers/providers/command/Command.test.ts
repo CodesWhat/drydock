@@ -54,9 +54,9 @@ const configurationValid = {
   auto: 'all',
   order: 100,
   simpletitle:
-    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + updateKindLabel + " found for container " + container.name + container.notificationWatcherSuffix}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "New image available for container " + container.name + container.notificationWatcherSuffix + " (tag " + currentTag + ")" : container.notificationAgentPrefix + "New " + container.updateKind.kind + " found for container " + container.name + container.notificationWatcherSuffix}',
   simplebody:
-    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue + updateKindNote}${container.securityFastLane ? " (security fast lane: fixes " + container.securityFastLane.fixedCount + " critical or high vulnerabilities)" : ""}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
+    '${isDigestUpdate ? container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running tag " + currentTag + " has a newer image available" : container.notificationAgentPrefix + "Container " + container.name + container.notificationWatcherSuffix + " running with " + container.updateKind.kind + " " + container.updateKind.localValue + " can be updated to " + container.updateKind.kind + " " + container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}',
   batchtitle: '${containers.length} updates available',
   resolvenotifications: false,
   securitymode: 'simple',
@@ -140,12 +140,12 @@ test('should handle command execution error', async () => {
   const logSpy = vi.spyOn(cmd.log, 'warn');
 
   const container = { name: 'test' };
-  await expect(cmd.trigger(container)).rejects.toThrow('Command execution failed');
+  await cmd.trigger(container);
 
   expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
-test('runCommand should log execFile callback errors and reject', async () => {
+test('runCommand should log execFile callback errors without rejecting', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', {
     cmd: 'exit 1',
@@ -155,7 +155,7 @@ test('runCommand should log execFile callback errors and reject', async () => {
     error: new Error('command failed'),
   });
 
-  await expect(cmd.trigger({ name: 'test' })).rejects.toThrow('Command execution failed');
+  await expect(cmd.trigger({ name: 'test' })).resolves.toBeUndefined();
   expect(logSpy).toHaveBeenCalledWith('Command execution failed');
 });
 
@@ -216,40 +216,9 @@ test('should not include a failed configured command in execution logs', async (
     error: new Error(`Command failed: /bin/sh -c ${secretCommand}`),
   });
 
-  const failure = await cmd.trigger({ name: 'test' }).catch((error: Error) => error);
+  await cmd.trigger({ name: 'test' });
 
-  expect(failure).toBeInstanceOf(Error);
-  expect((failure as Error).message).not.toContain(secretCommand);
-  expect((failure as Error).cause).toBeUndefined();
   expect(JSON.stringify(warnSpy.mock.calls)).not.toContain(secretCommand);
-});
-
-test.each([
-  [{ code: 2 }, 'Command execution failed (exit code 2)'],
-  [{ killed: true }, 'Command execution failed (timed out)'],
-  [{ signal: 'SIGTERM' }, 'Command execution failed (timed out)'],
-  [{ code: 'ENOENT' }, 'Command execution failed'],
-  [undefined, 'Command execution failed'],
-])('runCommand rejects with a sanitized message for %j', async (error, message) => {
-  const cmd = new Command();
-  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
-  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
-    error: Object.assign(new Error('Command failed: /bin/sh -c echo test'), error),
-  });
-
-  await expect(cmd.runCommand({})).rejects.toThrow(new Error(message));
-});
-
-test('triggerBatch rejects with a sanitized error so the batch retry path runs', async () => {
-  const cmd = new Command();
-  await cmd.register('trigger', 'command', 'test', { cmd: 'echo secret' });
-  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
-    error: Object.assign(new Error('Command failed: /bin/sh -c echo secret'), { code: 1 }),
-  });
-
-  await expect(cmd.triggerBatch([{ name: 'a' }, { name: 'b' }])).rejects.toThrow(
-    new Error('Command execution failed (exit code 1)'),
-  );
 });
 
 test('runCommand should use execFile with shell and -c arguments', async () => {
@@ -845,7 +814,7 @@ test('a failing command releases its slot so a queued command still runs', async
     error: new Error('command failed'),
   });
 
-  await expect(cmd.runCommand({})).rejects.toThrow('Command execution failed');
+  await cmd.runCommand({});
   expect(warnSpy).toHaveBeenCalledWith('Command execution failed');
 
   childProcessMockControl.execFileImpl = createChildProcessCallbackMock({ stdout: 'ok' });

@@ -1,14 +1,8 @@
 import {
-  buildHassReleaseSummary,
-  getHassButtonCommandTopic,
-  getHassButtonCommandTopicFilters,
-  getHassButtonResultTopic,
   getHassCommandTopicFilters,
   getHassCommandTopicFromStateTopic,
   getStateTopicFromCommandTopic,
-  isHassButtonPressPayload,
   isHassInstallPayload,
-  parseHassButtonCommandTopic,
   resolveHassCommandContainer,
 } from './hass-commands.js';
 
@@ -126,69 +120,5 @@ describe('resolveHassCommandContainer', () => {
       getStateTopicForContainer,
     );
     expect(resolution).toEqual({ status: 'ambiguous', containers: [matchA, matchB] });
-  });
-});
-
-describe('hass button topics', () => {
-  test('filters are fixed-depth and cannot match the install filters', () => {
-    expect(getHassButtonCommandTopicFilters('dd/container')).toEqual([
-      'dd/container/+/+/cmd/+',
-      'dd/container/agent/+/+/+/cmd/+',
-    ]);
-  });
-
-  test('command and result topics hang off the state topic', () => {
-    expect(getHassButtonCommandTopic('dd/container/local/nginx', 'check')).toBe(
-      'dd/container/local/nginx/cmd/check',
-    );
-    expect(getHassButtonResultTopic('dd/container/local/nginx', 'update')).toBe(
-      'dd/container/local/nginx/cmd/update/result',
-    );
-  });
-
-  test('isHassButtonPressPayload accepts PRESS (string or Buffer, trimmed) only', () => {
-    expect(isHassButtonPressPayload('PRESS')).toBe(true);
-    expect(isHassButtonPressPayload(Buffer.from(' PRESS\n'))).toBe(true);
-    expect(isHassButtonPressPayload('press')).toBe(false);
-    expect(isHassButtonPressPayload('')).toBe(false);
-  });
-
-  test.each([
-    ['dd/container/local/nginx/cmd/check', 'dd/container/local/nginx', 'check'],
-    ['dd/container/agent/ml/local/nginx/cmd/update', 'dd/container/agent/ml/local/nginx', 'update'],
-  ])('parses %s', (topic, stateTopic, action) => {
-    expect(parseHassButtonCommandTopic(topic, 'dd/container')).toEqual({ stateTopic, action });
-  });
-
-  test.each([
-    'other/local/nginx/cmd/check',
-    'dd/container/local/nginx/cmd/reboot',
-    'dd/container/local/nginx/cmd',
-    'dd/container/cmd/check',
-    'dd/container/local/nginx/cmd/check/result',
-  ])('rejects %s', (topic) => {
-    expect(parseHassButtonCommandTopic(topic, 'dd/container')).toBeUndefined();
-  });
-});
-
-describe('buildHassReleaseSummary', () => {
-  test('returns undefined without usable text', () => {
-    expect(buildHassReleaseSummary(undefined)).toBeUndefined();
-    expect(buildHassReleaseSummary({ title: '  ', body: 5 })).toBeUndefined();
-  });
-
-  test('joins title and body and collapses whitespace', () => {
-    expect(buildHassReleaseSummary({ title: 'v2', body: 'a\n\nb   c' })).toBe('v2: a b c');
-    expect(buildHassReleaseSummary({ body: 'only body' })).toBe('only body');
-  });
-
-  test('keeps text of exactly 255 characters untouched', () => {
-    expect(buildHassReleaseSummary({ body: 'x'.repeat(255) })).toBe('x'.repeat(255));
-  });
-
-  test('truncates to 255 code points with an ellipsis without splitting a pair', () => {
-    const summary = buildHassReleaseSummary({ body: '😀'.repeat(300) }) as string;
-    expect(Array.from(summary)).toHaveLength(255);
-    expect(summary.endsWith('…')).toBe(true);
   });
 });

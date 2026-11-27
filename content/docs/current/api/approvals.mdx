@@ -103,15 +103,9 @@ curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f
 
 Writes the container's `skipTags` / `skipDigests` policy — the same effect as the container panel's **Skip** action, and undoable from the same **Update policy** menu.
 
-The optional `scope` field chooses how much to skip. `tag` (the default) skips the exact tag or digest. `minor` skips every tag in that tag's `X.Y` line and `major` every tag in its `X` line, so a patch in a line you did not reject, or a later line, is still offered. Lines are read from the tag after any `dd.tag.transform`. `minor` and `major` apply only to a tag update with a semver version; on a digest update or a non-semver tag the call answers `400` and the row stays pending. An unknown `scope` also answers `400`.
-
 ```bash
-curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c/reject \
-  -H "Content-Type: application/json" \
-  -d '{"scope": "major"}'
+curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f6a7b8c/reject
 ```
-
-A line rejection is stored as a `major:3` or `minor:3.4` entry in the container's `skipTags`, so it survives restarts and shows in the **Update policy** menu. Undo it with `PATCH /containers/:id/update-policy` and `{"action":"remove-skip","kind":"tag","value":"major:3"}`, or clear the skip list. The audit entry records the `scope` when it is not `tag`.
 
 ### Defer
 
@@ -125,7 +119,7 @@ curl -X POST http://drydock:3000/api/v1/approvals/6f2a1e3c-9b7d-4a2e-8c1f-3d4e5f
 
 ### Bulk
 
-Decides up to 200 rows in one call. The body is `{ "ids": [...], "action": "approve" | "reject" | "defer" }` plus the optional `note`, for `reject` only the optional `scope` (applied to every row), and, for `defer` only, `until` or `days` (resolved once, so every row is held to the same instant). Duplicate ids are collapsed.
+Decides up to 200 rows in one call. The body is `{ "ids": [...], "action": "approve" | "reject" | "defer" }` plus the optional `note`, and, for `defer` only, `until` or `days` (resolved once, so every row is held to the same instant). Duplicate ids are collapsed.
 
 Like `POST /containers/update`, the call answers `200` with an `accepted` and a `rejected` list, one entry per id, so one row failing never hides the others. Each id runs through the same decision as its per-row route, with the same reservation, candidate binding and admission path, so a row that would `409` on its own `409`s here with the same message. Each decided row writes its own audit entry and `dd:approval-decided` event. Rows are processed one at a time. Requires the same `containers:update` scope as the single decisions.
 

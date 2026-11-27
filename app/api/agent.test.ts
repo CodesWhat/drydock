@@ -282,7 +282,6 @@ describe('Agent Router', () => {
           uptimeSeconds: 3600,
           lastSeen: '2026-02-28T10:00:00.000Z',
           warnings: ['hook-labels-trusted'],
-          portwing: false,
           containers: { total: 3, running: 2, stopped: 1, updatesAvailable: 0 },
           images: 2,
         },
@@ -291,7 +290,6 @@ describe('Agent Router', () => {
           host: 'remote',
           port: 4000,
           connected: false,
-          portwing: false,
           containers: { total: 0, running: 0, stopped: 0, updatesAvailable: 0 },
           images: 0,
         },
@@ -547,20 +545,6 @@ describe('Agent Log Entries Route', () => {
 
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ error: 'Agent not found' });
-  });
-
-  test('should return 501 for Portwing agents, which have no Drydock log route', async () => {
-    mockGetAgent.mockReturnValue({ isConnected: true, isPortwing: true, getLogEntries: vi.fn() });
-
-    const req = createMockRequest({ params: { name: 'agent-1' } });
-    const res = createResponse();
-
-    await handler(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(501);
-    expect(res.json).toHaveBeenCalledWith({
-      error: 'Agent log entries are not supported for Portwing agents',
-    });
   });
 
   test('should return 503 when agent is not connected', async () => {

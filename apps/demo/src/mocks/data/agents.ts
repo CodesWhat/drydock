@@ -14,7 +14,7 @@ export const agents = [
     host: '192.168.1.50',
     port: 3001,
     connected: true,
-    version: '1.9.0-rc.1',
+    version: '1.8.0-rc.17',
     os: 'linux',
     arch: 'amd64',
     cpus: 4,

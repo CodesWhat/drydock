@@ -157,19 +157,6 @@ describe('validateConfiguration', () => {
     expect(result.errors).toEqual([]);
   });
 
-  test('watchersOnly validates watcher schemas and skips every other kind and section', async () => {
-    const result = await validateConfiguration(
-      {
-        DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD: '1',
-        DD_ACTION_DOCKER_DEPLOY_PULLTIMEOUT: 'not-a-number',
-        DD_SECURITY_SCANNER: 'bogus',
-      },
-      { watchersOnly: true },
-    );
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD');
-  });
-
   test('a valid discord trigger, ghcr registry (string form) and basic auth produce no errors', async () => {
     const result = await validateConfiguration({
       DD_NOTIFICATION_DISCORD_MYHOOK_URL: 'https://discord.example/hook',
@@ -202,31 +189,6 @@ describe('validateConfiguration', () => {
     });
     expect(result.errors[0].message).toMatch(/Unknown trigger provider: 'bogusprovider'/);
     expect(result.errors[0].message).toMatch(/Available trigger providers:/);
-  });
-
-  test('validates a watcher against the provider named by its provider key', async () => {
-    const valid = await validateConfiguration({
-      DD_WATCHER_STAGING_PROVIDER: 'file',
-      DD_WATCHER_STAGING_PATH: '/config/images.yml',
-    });
-    expect(valid.errors).toEqual([]);
-
-    const missingPath = await validateConfiguration({ DD_WATCHER_STAGING_PROVIDER: 'file' });
-    expect(missingPath.errors).toHaveLength(1);
-    expect(missingPath.errors[0].message).toMatch(/path/);
-
-    const dockerOption = await validateConfiguration({
-      DD_WATCHER_STAGING_PROVIDER: 'file',
-      DD_WATCHER_STAGING_PATH: '/config/images.yml',
-      DD_WATCHER_STAGING_SOCKET: '/var/run/docker.sock',
-    });
-    expect(dockerOption.errors).toHaveLength(1);
-  });
-
-  test('a watcher without a provider key is still validated as a docker watcher', async () => {
-    const result = await validateConfiguration({ DD_WATCHER_LOCAL_SOCKET: '/var/run/docker.sock' });
-
-    expect(result.errors).toEqual([]);
   });
 
   test('an unknown registry provider names the provider in both the path and the envKey', async () => {

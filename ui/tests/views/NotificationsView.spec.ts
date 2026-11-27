@@ -179,8 +179,6 @@ describe('NotificationsView', () => {
       { id: 'slack.alerts', name: 'alerts', type: 'slack' },
       { id: 'smtp.ops', name: 'ops', type: 'smtp' },
       { id: 'edge.slack.team', name: 'team', type: 'slack' },
-      { id: 'portainer.prod', name: 'prod', type: 'portainer' },
-      { id: 'edge.portainer.prod', name: 'prod', type: 'Portainer' },
     ];
 
     async function openRule(ruleTriggers: string[]) {
@@ -201,14 +199,6 @@ describe('NotificationsView', () => {
         trigger: { type: 'smtp', name: 'ops' },
         label: 'ops',
       });
-    });
-
-    it('never offers Portainer action triggers as notification skip panels', async () => {
-      const wrapper = await openRule(['portainer.prod', 'edge.portainer.prod', 'smtp.ops']);
-
-      expect(
-        wrapper.findAllComponents(TriggerSkipsPanel).map((panel) => panel.props('label')),
-      ).toEqual(['ops']);
     });
 
     it('covers every local notification trigger when the rule has no explicit list', async () => {

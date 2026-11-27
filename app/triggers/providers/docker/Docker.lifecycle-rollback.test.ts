@@ -8,7 +8,6 @@ import {
   registerCommonDockerBeforeEach,
   stubTriggerFlow,
 } from './Docker.test.helpers.js';
-import { registerRollbackMonitor } from './rollback-monitor-registry.js';
 
 registerCommonDockerBeforeEach();
 const {
@@ -1353,22 +1352,5 @@ describe('executeContainerUpdate', () => {
 
     expect(result).toBe(false);
     expect(context.currentContainer.rename).not.toHaveBeenCalled();
-  });
-});
-
-describe('rollback monitor cancellation', () => {
-  beforeEach(() => {
-    docker.configuration = { ...configurationValid, dryrun: false, prune: false };
-    docker.log = log;
-    stubTriggerFlow({ running: true });
-  });
-
-  test('a new update cancels the monitor armed by the previous update', async () => {
-    const controller = new AbortController();
-    registerRollbackMonitor({ name: 'container-name', watcher: 'test' }, controller);
-
-    await docker.trigger(createTriggerContainer());
-
-    expect(controller.signal.aborted).toBe(true);
   });
 });

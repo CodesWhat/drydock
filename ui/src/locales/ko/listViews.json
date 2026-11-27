@@ -5,8 +5,6 @@
     "filterPlaceholder": "대상 또는 이벤트로 필터...",
     "onThisPage": "이 페이지에서",
     "containerFilterPlaceholder": "컨테이너 이름...",
-    "actorFilterPlaceholder": "사용자...",
-    "actorFilterLabel": "사용자별 필터",
     "allEvents": "전체 이벤트",
     "eventsSelected": "{count}개 이벤트 선택됨",
     "clear": "초기화",
@@ -18,19 +16,12 @@
       "nextPage": "다음 페이지"
     },
     "emptyFiltered": "필터와 일치하는 감사 항목이 없습니다",
-    "systemActor": "시스템",
-    "exportError": "감사 로그를 내보내지 못했습니다",
-    "export": {
-      "csv": "CSV 내보내기",
-      "json": "JSON 내보내기"
-    },
     "columns": {
       "time": "시간",
       "event": "이벤트",
       "target": "대상",
       "status": "상태",
-      "details": "상세 정보",
-      "actor": "수행자"
+      "details": "상세 정보"
     },
     "card": {
       "time": "시간",
@@ -43,8 +34,7 @@
       "fromVersion": "이전 버전",
       "toVersion": "새 버전",
       "trigger": "트리거",
-      "details": "상세 정보",
-      "actor": "수행자"
+      "details": "상세 정보"
     },
     "status": {
       "success": "성공",
@@ -105,7 +95,6 @@
       "update-applied-dryrun": "업데이트 미리보기됨(드라이런)",
       "update-failed": "업데이트 실패",
       "auto-update-blocked": "자동 업데이트 차단됨",
-      "security-fast-lane": "보안 패스트 레인",
       "update-policy-override-set": "업데이트 정책 재정의 설정됨",
       "update-policy-override-cleared": "업데이트 정책 재정의 해제됨",
       "group-policy-set": "그룹 정책 설정됨",
@@ -119,10 +108,7 @@
       "notification-delivery-failed": "알림 전송 실패",
       "security-alert": "보안 경고",
       "maturity-cleared": "대기 기간 종료",
-      "image-prune": "이미지 정리",
-      "cleanup": "정리",
-      "notification-silence-set": "알림 음소거 설정됨",
-      "notification-silence-cleared": "알림 음소거 해제됨"
+      "image-prune": "이미지 정리"
     },
     "target": {
       "container": "컨테이너",

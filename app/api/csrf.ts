@@ -86,12 +86,6 @@ function isSessionCookieRequest(req: Request): boolean {
   return typeof cookieHeader === 'string' && cookieHeader.trim() !== '';
 }
 
-// Presence is judged on the raw headers, never on whether they parse, so an empty,
-// malformed or `null` Origin cannot masquerade as a header-free CLI request.
-function hasBrowserOriginMetadata(req: Request): boolean {
-  return ['origin', 'referer', 'sec-fetch-site'].some((name) => req.get(name) !== undefined);
-}
-
 function isCrossSiteFetch(req: Request): boolean {
   const secFetchSite = req.get('sec-fetch-site');
   return typeof secFetchSite === 'string' && secFetchSite.trim().toLowerCase() === 'cross-site';
@@ -112,25 +106,14 @@ function isLikelyReverseProxyMismatch(req: Request): boolean {
 }
 
 /**
- * Enforce same-origin checks for browser-originated state-changing requests.
- *
- * Cookie-authenticated requests always need a matching origin. Cookie-free
- * requests (anonymous-auth installs, where the browser sends no session
- * cookie) get the same check whenever they carry Origin, Referer or
- * Sec-Fetch-Site, so a hostile page cannot fire body-less POSTs at the API.
- * Only requests with none of those headers (CLI and integration clients) pass.
+ * Enforce same-origin checks for cookie-authenticated state-changing requests.
  */
 export function requireSameOriginForMutations(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  if (!isUnsafeMethod(req.method)) {
-    next();
-    return;
-  }
-
-  if (!isSessionCookieRequest(req) && !hasBrowserOriginMetadata(req)) {
+  if (!isUnsafeMethod(req.method) || !isSessionCookieRequest(req)) {
     next();
     return;
   }

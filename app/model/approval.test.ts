@@ -10,14 +10,12 @@ import {
   APPROVAL_SCHEMA_VERSION,
   type ApprovalRecord,
   buildApprovalRecordInput,
-  chooseApprovalCandidate,
   classifyApprovalCandidate,
   getApprovalCandidateRef,
   isApprovalDeferred,
   isApprovalPending,
   isApprovalResolved,
   isAutoDispatchable,
-  isSameApprovalCandidate,
   shouldQueueForApproval,
 } from './approval.js';
 import type { Container } from './container.js';
@@ -46,7 +44,6 @@ type TriggerFixtureOptions = {
   type?: string;
   agent?: string;
   threshold?: string;
-  separateupdatetypes?: boolean;
 };
 
 function createTrigger(options: TriggerFixtureOptions = {}): Record<string, ActionPolicyTrigger> {
@@ -58,9 +55,6 @@ function createTrigger(options: TriggerFixtureOptions = {}): Record<string, Acti
       configuration: {
         auto: options.auto ?? 'none',
         ...(options.threshold !== undefined ? { threshold: options.threshold } : {}),
-        ...(options.separateupdatetypes !== undefined
-          ? { separateupdatetypes: options.separateupdatetypes }
-          : {}),
       },
       getId: () => id,
     } as unknown as ActionPolicyTrigger,
@@ -738,80 +732,5 @@ describe('approval state predicates', () => {
 
     expect(isApprovalDeferred(record, now)).toBe(false);
     expect(isApprovalPending(record, now)).toBe(false);
-  });
-});
-
-describe('isSameApprovalCandidate', () => {
-  const tagOnly = { candidateRef: '1.2.4', toRef: '1.2.4', updateKind: 'tag' } as const;
-  const digestA = { candidateRef: 'sha256:aaa', toRef: '1.2.4', updateKind: 'tag' } as const;
-  const digestB = { candidateRef: 'sha256:bbb', toRef: '1.2.4', updateKind: 'tag' } as const;
-
-  test('matches equal refs', () => {
-    expect(isSameApprovalCandidate(digestA, digestA)).toBe(true);
-  });
-
-  test('matches a tag-only identity against a digest-backed one for the same tag, either way', () => {
-    expect(isSameApprovalCandidate(tagOnly, digestA)).toBe(true);
-    expect(isSameApprovalCandidate(digestA, tagOnly)).toBe(true);
-  });
-
-  test('never matches two different known digests', () => {
-    expect(isSameApprovalCandidate(digestA, digestB)).toBe(false);
-  });
-
-  test('does not match a different target tag', () => {
-    expect(isSameApprovalCandidate(tagOnly, { ...digestA, toRef: '1.2.5' })).toBe(false);
-  });
-
-  test('does not match across update kinds', () => {
-    expect(isSameApprovalCandidate(tagOnly, { ...digestA, updateKind: 'digest' })).toBe(false);
-    expect(isSameApprovalCandidate({ ...tagOnly, updateKind: 'digest' }, digestA)).toBe(false);
-  });
-});
-
-describe('chooseApprovalCandidate', () => {
-  const updateCandidates = {
-    patch: { tag: '1.2.9', semverDiff: 'patch' as const },
-    minor: { tag: '1.5.0', semverDiff: 'minor' as const },
-    major: { tag: '3.0.0', semverDiff: 'major' as const },
-  };
-
-  function majorContainer(): Container {
-    return createContainer({
-      result: { tag: '3.0.0', updateCandidates },
-      updateKind: {
-        kind: 'tag',
-        localValue: '1.2.3',
-        remoteValue: '3.0.0',
-        semverDiff: 'major',
-      },
-    });
-  }
-
-  test('names the candidate the opted-in trigger will apply', () => {
-    const triggers = createTrigger({
-      auto: 'all',
-      threshold: 'minor',
-      separateupdatetypes: true,
-    });
-    const chosen = chooseApprovalCandidate(majorContainer(), triggers);
-    expect(getApprovalCandidateRef(chosen)).toBe('1.5.0');
-    expect(buildApprovalRecordInput(chosen)).toMatchObject({
-      toRef: '1.5.0',
-      semverDiff: 'minor',
-    });
-    // The trigger applies it on its own, so no approval row is queued under auto mode.
-    expect(classifyApprovalCandidate(chosen, triggers, 'auto')).toBe('auto-dispatch');
-  });
-
-  test('keeps the primary when the trigger did not opt in', () => {
-    const container = majorContainer();
-    const triggers = createTrigger({ auto: 'all', threshold: 'minor' });
-    expect(chooseApprovalCandidate(container, triggers)).toBe(container);
-  });
-
-  test('keeps a container without per-type candidates and resolves no trigger', () => {
-    const container = createContainer();
-    expect(chooseApprovalCandidate(container, undefined)).toBe(container);
   });
 });

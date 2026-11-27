@@ -14,19 +14,11 @@
  * background regardless of insert volume.
  */
 import crypto from 'node:crypto';
-import logger from '../log/index.js';
 import type { AuditEntry } from '../model/audit.js';
 import { daysToMs } from '../model/maturity-policy.js';
-import { toPositiveInteger } from '../util/parse.js';
-import { getAuditActor } from './audit-actor.js';
 import type { Database, Row, SqlBinding } from './db/driver.js';
 
-const log = logger.child({ component: 'store.audit' });
-
-const DEFAULT_AUDIT_RETENTION_DAYS = 30;
-const MAX_AUDIT_RETENTION_DAYS = 3650;
-/** Query value that selects rows with no human or key behind them. */
-const SYSTEM_ACTOR = 'system';
+const AUDIT_RETENTION_DAYS = 30;
 const AUDIT_PRUNE_INSERT_INTERVAL = 100;
 const AUDIT_PRUNE_TIMER_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -38,33 +30,11 @@ type GetAuditEntriesQuery = {
   action?: string;
   actions?: string[];
   container?: string;
-  actor?: string;
   from?: string;
   to?: string;
   skip?: number;
   limit?: number;
 };
-
-/**
- * Days to keep audit rows, from DD_AUDIT_RETENTION_DAYS. Anything that is not a
- * whole number from 1 to 3650 falls back to the 30-day default, so a typo can't
- * silently disable pruning or wipe the log. `invalid` lets startup say so once.
- */
-function readRetention(): { days: number; invalid: boolean } {
-  const rawValue = process.env.DD_AUDIT_RETENTION_DAYS;
-  if (rawValue === undefined || rawValue.trim() === '') {
-    return { days: DEFAULT_AUDIT_RETENTION_DAYS, invalid: false };
-  }
-  const days = toPositiveInteger(rawValue, Number.NaN);
-  if (Number.isNaN(days) || days > MAX_AUDIT_RETENTION_DAYS) {
-    return { days: DEFAULT_AUDIT_RETENTION_DAYS, invalid: true };
-  }
-  return { days, invalid: false };
-}
-
-function getAuditRetentionDays(): number {
-  return readRetention().days;
-}
 
 function toTimestampMs(timestamp: string): number {
   const parsed = Date.parse(timestamp);
@@ -101,7 +71,6 @@ function rowToEntry(row: Row): AuditEntry {
     triggerName: optionalString(row.trigger_name),
     status: row.status as AuditEntry['status'],
     details: optionalString(row.details),
-    actor: optionalString(row.actor),
   };
 }
 
@@ -131,13 +100,6 @@ function buildWhereClause(
     conditions.push('container_name = ?');
     params.push(query.container);
   }
-  if (query.actor === SYSTEM_ACTOR) {
-    conditions.push('(actor IS NULL OR actor = ?)');
-    params.push(SYSTEM_ACTOR);
-  } else if (query.actor) {
-    conditions.push('actor = ?');
-    params.push(query.actor);
-  }
   if (fromDate !== undefined) {
     conditions.push('timestamp_ms >= ?');
     params.push(fromDate);
@@ -163,7 +125,7 @@ function stopPeriodicPruneTimer() {
 function startPeriodicPruneTimer() {
   stopPeriodicPruneTimer();
   auditPruneTimer = setInterval(() => {
-    pruneOldEntries(getAuditRetentionDays());
+    pruneOldEntries(AUDIT_RETENTION_DAYS);
     auditInsertsSincePrune = 0;
   }, AUDIT_PRUNE_TIMER_INTERVAL_MS);
 
@@ -181,12 +143,7 @@ function startPeriodicPruneTimer() {
 export function createCollections(database: Database): void {
   db = database;
   auditInsertsSincePrune = 0;
-  if (readRetention().invalid) {
-    log.warn(
-      `Invalid DD_AUDIT_RETENTION_DAYS value; expected a whole number of days from 1 to ${MAX_AUDIT_RETENTION_DAYS}, using ${DEFAULT_AUDIT_RETENTION_DAYS}`,
-    );
-  }
-  pruneOldEntries(getAuditRetentionDays());
+  pruneOldEntries(AUDIT_RETENTION_DAYS);
   startPeriodicPruneTimer();
 }
 
@@ -196,19 +153,17 @@ export function createCollections(database: Database): void {
  */
 export function insertAudit(entry: AuditEntry): AuditEntry {
   const timestamp = entry.timestamp || new Date().toISOString();
-  const actor = entry.actor ?? getAuditActor();
   const entryToSave: AuditEntry = {
     ...entry,
     id: entry.id || crypto.randomUUID(),
     timestamp,
-    ...(actor !== undefined ? { actor } : {}),
   };
 
   if (db) {
     db.prepare(
       `INSERT INTO audit
-         (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details, actor)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       entryToSave.id,
       entryToSave.timestamp,
@@ -224,11 +179,10 @@ export function insertAudit(entry: AuditEntry): AuditEntry {
       entryToSave.triggerName ?? null,
       entryToSave.status,
       entryToSave.details ?? null,
-      entryToSave.actor ?? null,
     );
     auditInsertsSincePrune += 1;
     if (auditInsertsSincePrune >= AUDIT_PRUNE_INSERT_INTERVAL) {
-      pruneOldEntries(getAuditRetentionDays());
+      pruneOldEntries(AUDIT_RETENTION_DAYS);
       auditInsertsSincePrune = 0;
     }
   }

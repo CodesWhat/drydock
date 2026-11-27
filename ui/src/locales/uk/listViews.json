@@ -5,8 +5,6 @@
     "filterPlaceholder": "Фільтр за цільовим об'єктом або подією...",
     "onThisPage": "на цій сторінці",
     "containerFilterPlaceholder": "Назва контейнера...",
-    "actorFilterPlaceholder": "Користувач...",
-    "actorFilterLabel": "Фільтр за користувачем",
     "allEvents": "Всі події",
     "eventsSelected": "{count} подій вибрано",
     "clear": "Очистити",
@@ -18,19 +16,12 @@
       "nextPage": "Наступна сторінка"
     },
     "emptyFiltered": "Записи аудиту не відповідають вашим фільтрам",
-    "systemActor": "Система",
-    "exportError": "Не вдалося експортувати журнал аудиту",
-    "export": {
-      "csv": "Експорт CSV",
-      "json": "Експорт JSON"
-    },
     "columns": {
       "time": "Час",
       "event": "Подія",
       "target": "Об'єкт",
       "status": "Статус",
-      "details": "Деталі",
-      "actor": "Виконавець"
+      "details": "Деталі"
     },
     "card": {
       "time": "Час",
@@ -43,8 +34,7 @@
       "fromVersion": "З версії",
       "toVersion": "До версії",
       "trigger": "Тригер",
-      "details": "Деталі",
-      "actor": "Виконавець"
+      "details": "Деталі"
     },
     "status": {
       "success": "Успіх",
@@ -105,7 +95,6 @@
       "update-applied-dryrun": "Оновлення попередньо переглянуто (dry run)",
       "update-failed": "Помилка оновлення",
       "auto-update-blocked": "Автооновлення заблоковано",
-      "security-fast-lane": "Швидка смуга безпеки",
       "update-policy-override-set": "Перевизначення політики оновлення встановлено",
       "update-policy-override-cleared": "Перевизначення політики оновлення очищено",
       "group-policy-set": "Політику групи встановлено",
@@ -119,10 +108,7 @@
       "notification-delivery-failed": "Помилка доставки сповіщення",
       "security-alert": "Попередження безпеки",
       "maturity-cleared": "Період очікування завершено",
-      "image-prune": "Очищення образу",
-      "cleanup": "Очищення",
-      "notification-silence-set": "Сповіщення заглушено",
-      "notification-silence-cleared": "Заглушення сповіщень знято"
+      "image-prune": "Очищення образу"
     },
     "target": {
       "container": "Контейнер",

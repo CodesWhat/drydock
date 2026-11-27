@@ -8,9 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as configuration from '../configuration/index.js';
 import * as prometheusWatcher from '../prometheus/watcher.js';
-import { getAuditActor, runWithAuditActor } from '../store/audit-actor.js';
 import * as store from '../store/index.js';
-import Trigger from '../triggers/providers/Trigger.js';
 import Component from './Component.js';
 import { constructComponent } from './component-resolution.js';
 
@@ -754,33 +752,6 @@ test('registerWatchers should register all watchers', async () => {
   ]);
 });
 
-test('registerWatchers should register the provider named by the watcher provider key', async () => {
-  watchers = {
-    staging: { provider: 'FILE', path: '/nonexistent/images.yml', watchfile: false },
-    other: { host: 'host2' },
-  };
-  await registry.testable_registerWatchers();
-
-  expect(Object.keys(registry.getState().watcher).sort()).toEqual(['docker.other', 'file.staging']);
-  const fileWatcher = registry.getState().watcher['file.staging'];
-  expect(fileWatcher.type).toBe('file');
-  expect(fileWatcher.configuration).toEqual(
-    expect.objectContaining({ path: '/nonexistent/images.yml' }),
-  );
-  expect(fileWatcher.configuration).not.toHaveProperty('provider');
-});
-
-test('reconcile registers a file watcher under its own provider id', async () => {
-  watchers = {};
-  await registry.testable_registerWatchers();
-
-  watchers = { staging: { provider: 'file', path: '/nonexistent/images.yml', watchfile: false } };
-  const result = await registry.reconcileComponentsWithConfiguration();
-
-  expect(result.added).toContain('watcher:file.staging');
-  expect(registry.getState().watcher['file.staging']).toBeDefined();
-});
-
 test('registerWatchers should keep remote watcher registered when auth configuration is incomplete', async () => {
   watchers = {
     local: {
@@ -1091,28 +1062,6 @@ test('registerAuthentications should log startup health guidance when DD_AUTH va
       'Validate DD_AUTH_* values (for basic auth: DD_AUTH_BASIC_<NAME>_USER and DD_AUTH_BASIC_<NAME>_HASH).',
     ),
   );
-});
-
-test('initObservationOnly registers registries and watchers but no triggers, authentications or agents', async () => {
-  registries = { hub: { private: { login: 'login', token: 'token' } } };
-  triggers = { mock: { mock1: {} } };
-  watchers = { watcher1: { host: 'host1' } };
-  authentications = { basic: { john: { user: 'john', hash: TEST_BASIC_HASH } } };
-  const onceSpy = vi.spyOn(process, 'once');
-
-  await registry.initObservationOnly();
-
-  expect(Object.keys(registry.getState().watcher)).toEqual(['docker.watcher1']);
-  expect(Object.keys(registry.getState().registry)).toContain('hub.private');
-  expect(registry.getState().trigger).toEqual({});
-  expect(registry.getState().authentication).toEqual({});
-  expect(registry.getState().agent).toEqual({});
-  expect(onceSpy).not.toHaveBeenCalledWith('SIGINT', expect.anything());
-
-  await registry.deregisterObservationOnly();
-
-  expect(registry.getState().watcher).toEqual({});
-  expect(registry.getState().registry).toEqual({});
 });
 
 test('init should register all components', async () => {
@@ -2087,29 +2036,6 @@ describe('reconcileComponentsWithConfiguration', () => {
 
     expect(result.added).toContain('trigger:mock.mock1');
     expect(registry.getState().trigger['mock.mock1']).toBeDefined();
-  });
-
-  test('registers components outside the request audit actor so armed timers stay actor-free', async () => {
-    triggers = {};
-    await registerBaseline();
-    let timerActor: string | undefined = 'unset';
-    const timerFired = new Promise<void>((resolve) => {
-      vi.spyOn(Trigger.prototype, 'initTrigger').mockImplementation(async () => {
-        // Stands in for a watcher's cron.schedule: the callback runs later and
-        // inherits whatever async context was active when it was armed.
-        setTimeout(() => {
-          timerActor = getAuditActor();
-          resolve();
-        }, 0);
-      });
-    });
-
-    triggers = { mock: { mock1: { mock: 'a' } } };
-    await runWithAuditActor('admin', () => registry.reconcileComponentsWithConfiguration());
-    await timerFired;
-
-    expect(timerActor).toBeUndefined();
-    vi.restoreAllMocks();
   });
 
   test('deregisters a removed trigger', async () => {

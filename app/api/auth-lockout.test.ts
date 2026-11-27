@@ -13,12 +13,8 @@ const {
   mockGetFactorFailureState,
   mockRecordFactorFailure,
   mockClearFactorFailures,
-  mockEmitAuthAbuse,
-  mockLogDebug,
 } = vi.hoisted(() => {
   return {
-    mockLogDebug: vi.fn(),
-    mockEmitAuthAbuse: vi.fn(() => Promise.resolve()),
     mockGetFactorBySubject: vi.fn(),
     mockIssueLoginChallenge: vi.fn(),
     mockGetFactorFailureState: vi.fn(),
@@ -79,13 +75,9 @@ vi.mock('../store/index.js', () => ({
 vi.mock('../log/index.js', () => ({
   default: {
     warn: vi.fn(),
-    debug: mockLogDebug,
   },
 }));
 
-vi.mock('../event/index.js', () => ({
-  emitAuthAbuse: mockEmitAuthAbuse,
-}));
 vi.mock('../store/totp.js', () => ({
   getFactorBySubject: mockGetFactorBySubject,
   getFactorFailureState: mockGetFactorFailureState,
@@ -1816,75 +1808,6 @@ describe('auth-lockout', () => {
 
     expect(mockRecordAuthIpLockout).toHaveBeenCalledTimes(1);
     expect(mockRecordAuthIpLockout).toHaveBeenCalledWith('basic');
-  });
-
-  test('raises one auth abuse event per account lockout episode, without secrets', async () => {
-    makeAuthenticatorInvalidCredentials();
-    const req = {
-      body: { username: 'abuse-user\u001b[31m', password: 'hunter2' },
-      ip: '203.0.113.88',
-    } as any;
-    const next = vi.fn();
-
-    for (let index = 0; index < 4; index += 1) {
-      await authenticateLogin(req, createResponse() as any, next);
-    }
-    expect(mockEmitAuthAbuse).not.toHaveBeenCalled();
-
-    await authenticateLogin(req, createResponse() as any, next);
-    expect(mockEmitAuthAbuse).toHaveBeenCalledTimes(1);
-    const payload = (mockEmitAuthAbuse.mock.calls[0] as any[])[0];
-    expect(payload).toEqual({
-      scope: 'account',
-      username: expect.stringContaining('abuse-user'),
-      failedAttempts: 5,
-      windowSeconds: 900,
-      lockoutSeconds: 900,
-    });
-    expect(JSON.stringify(payload)).not.toContain('hunter2');
-    expect(payload.username).not.toContain('\u001b');
-
-    // Attempts while the lock holds are the same episode.
-    await authenticateLogin(req, createResponse() as any, next);
-    expect(mockEmitAuthAbuse).toHaveBeenCalledTimes(1);
-  });
-
-  test('raises an ip scoped auth abuse event when many usernames fail from one address', async () => {
-    makeAuthenticatorInvalidCredentials();
-    const next = vi.fn();
-
-    for (let index = 0; index < 60 && mockEmitAuthAbuse.mock.calls.length === 0; index += 1) {
-      await authenticateLogin(
-        { body: { username: `spray-event-${index}` }, ip: '198.51.100.10' } as any,
-        createResponse() as any,
-        next,
-      );
-    }
-
-    expect(mockEmitAuthAbuse).toHaveBeenCalledTimes(1);
-    expect(mockEmitAuthAbuse).toHaveBeenCalledWith({
-      scope: 'ip',
-      source: '198.51.100.10',
-      failedAttempts: 25,
-      windowSeconds: 900,
-      lockoutSeconds: 900,
-    });
-  });
-
-  test('a failing auth abuse emit never breaks the login response', async () => {
-    makeAuthenticatorInvalidCredentials();
-    mockEmitAuthAbuse.mockRejectedValue(new Error('handler down'));
-    const req = { body: { username: 'emit-fail-user' }, ip: '203.0.113.99' } as any;
-    const next = vi.fn();
-
-    for (let index = 0; index < 5; index += 1) {
-      await authenticateLogin(req, createResponse() as any, next);
-    }
-    expect(mockEmitAuthAbuse).toHaveBeenCalledTimes(1);
-    await Promise.resolve();
-    expect(mockLogDebug).toHaveBeenCalledWith(expect.stringContaining('handler down'));
-    expect(next).not.toHaveBeenCalled();
-    mockEmitAuthAbuse.mockImplementation(() => Promise.resolve());
   });
 
   test('registerFailedLoginAttempt does not lock account before maxAttempts threshold', async () => {

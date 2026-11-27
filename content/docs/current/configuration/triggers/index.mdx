@@ -18,7 +18,7 @@ You just need to give them different names.</Callout>
 
 ## Route notifications to a group
 
-On the v1.9.0-rc.1 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
+On the v1.8.0-rc.17 candidate, set `DD_NOTIFICATION_<TYPE>_<NAME>_GROUP` to restrict one notification instance to one named group. For example, `DD_NOTIFICATION_SLACK_PAYMENTS_GROUP=payments` restricts the existing Slack instance named `payments`. Its destination and credentials are configured as usual. In `drydock.yml`, set the equivalent `notification.slack.payments.group: payments` field; environment values override the file.
 
 The server resolves the container's group from `dd.group`, then `com.docker.compose.project`, then `com.docker.stack.namespace`. Names match exactly, including case, whitespace and punctuation. Empty or whitespace-only configured names are invalid. An empty higher-priority label does not fall through to a lower-priority label. Containers without a named group never match; the UI's ungrouped bucket is not a selectable routing identity. Browser grouping preferences, arbitrary label views and shared grouping URLs do not change notification routing.
 
@@ -30,7 +30,7 @@ Use separate notification instances for different groups or destinations. This s
 
 ## Per-container routing overrides
 
-On the v1.9.0-rc.1 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
+On the v1.8.0-rc.17 candidate, `dd.notification.include`, `dd.notification.exclude`, `dd.action.include`, `dd.action.exclude` and `dd.action.auto` can each be overridden per container through the [label override API](/docs/api/container#label-overrides), without editing the container's labels. An override replaces that label's list whole, and an empty list is an explicit "none". Routing resolves in this order for each field: the Drydock override, then the Docker label, then watcher or image set configuration.
 
 An override changes which triggers a container reaches, nothing else. These limits still apply on top of it:
 
@@ -43,7 +43,7 @@ Trigger references in an override are checked when you save: each must match a r
 
 ## Edit notification delivery policy in the UI
 
-The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.9.0-rc.1 builds. They require a writable [configuration file](/docs/configuration/config-file).
+The notification and action policy editors were introduced in v1.8.0-rc.1 and remain available in v1.8.0-rc.17 builds. They require a writable [configuration file](/docs/configuration/config-file).
 
 Open a notification provider in **Triggers**, then choose **Edit notification policy**. The editor fetches a fresh configuration snapshot only when you open it or explicitly reload it. It edits `threshold`, `once`, `mode`, `securitymode`, `digestcron`, and `resolvenotifications`, plus `securitydigesttitle` and `securitydigestbody` when the server provides them. The two boolean fields use Yes/No choices and are saved as booleans, including `false`. Older servers retain the six-field editor with template controls unavailable.
 
@@ -146,8 +146,6 @@ Portainer is also an update-action provider and uses the `DD_ACTION_PORTAINER_*`
 
 - [**Apprise**](/docs/configuration/triggers/apprise) -- Multi-provider notification relay
 - [**Discord**](/docs/configuration/triggers/discord) -- Discord webhook
-- [**GitHub Dispatch**](/docs/configuration/triggers/githubdispatch) -- Ask a GitHub workflow to rebuild a locally built image
-- [**GitLab Pipeline**](/docs/configuration/triggers/gitlabpipeline) -- Start a GitLab pipeline to rebuild a locally built image
 - [**Google Chat**](/docs/configuration/triggers/google-chat) -- Google Chat webhook
 - [**Gotify**](/docs/configuration/triggers/gotify) -- Gotify push notification
 - [**HTTP**](/docs/configuration/triggers/http) -- Generic HTTP request
@@ -170,7 +168,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 ### Manual updates by default
 
-On the **v1.9.0-rc.1 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
+On the **v1.8.0-rc.17 candidate**, Docker, Docker Compose and Portainer actions can keep every unlabeled container manually updatable while requiring a label for automatic updates:
 
 ```text
 DD_ACTION_DOCKER_DATAVAULT_AUTO=onauto
@@ -201,7 +199,6 @@ The same setting works with `AUTO=oninclude`: unlabeled containers stay manual, 
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | Agent-prefixed update body with watcher suffix; digest updates say the current tag has a newer image, tag/semver updates show local and remote values, and result links are appended when present |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | Agent-prefixed update title with watcher suffix; digest updates use `New image available for container ... (tag currentTag)`, other updates use `New {kind} found for container ...` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SEPARATEUPDATETYPES` | ⚪ | When the `THRESHOLD` rules out the highest update, act on the best candidate inside the threshold instead of doing nothing. Works the same for `DD_ACTION_*` triggers. See [Candidates per update type](/docs/configuration/watchers#candidates-per-update-type) | `true`, `false` | `false` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_GROUP` | ⚪ | Restrict this notification instance to containers in one named group. Notification triggers only; action triggers reject it. See [Route notifications to a group](#route-notifications-to-a-group). | Non-empty string | unset (no group restriction) |
 
@@ -255,12 +252,6 @@ Notification rules control which events fire which triggers. Each rule correspon
 | `agent-disconnect` | No | A remote agent lost its connection |
 | `agent-reconnect` | No | A remote agent reconnected after losing connection |
 | `container-unhealthy` | No | A container's Docker health check entered the unhealthy state |
-| `container-stopped` | No | A watched container stopped (an explicit stop, or a clean exit with code 0) |
-| `container-exited` | No | A watched container exited with a non-zero exit code |
-| `container-oom-killed` | No | A watched container was killed for running out of memory |
-| `container-restart-loop` | No | A watched container crashed repeatedly within a short window |
-| `auth-abuse` | No | Failed logins locked out an account or a source address |
-| `agent-version-mismatch` | No | A remote agent connected on a different version than the controller |
 | `maturity-cleared` | Yes | An update previously withheld by the maturity policy (`maturityMode: mature`) has become applicable |
 | `update-pending-approval` | No | A manual-mode update entered the [approval queue](/docs/configuration/actions/approvals) |
 
@@ -271,9 +262,7 @@ The in-app bell has audit-backed controls for `update-available`, `update-applie
 - **`update-available`** -- when its trigger list is empty, all notification triggers fire (legacy default). Once you assign specific triggers, only those fire.
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- when their trigger list is empty, all notification triggers fire (same permissive default as `update-available`). Once you assign specific triggers, only those fire.
 - **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting.
-- **`container-unhealthy`** -- disabled by default. Enable it and assign triggers to receive container health alerts. When its trigger list is empty, all notification triggers fire, and Command triggers run as well. This event always fires regardless of the threshold setting.
-- **`container-stopped`**, **`container-exited`**, **`container-oom-killed`**, **`container-restart-loop`** -- disabled by default, so upgrading never starts sending alerts you did not ask for. Enable the ones you want and assign triggers. When their trigger list is empty, all notification triggers fire. Command and the update actions never run for them. These events always fire regardless of the threshold setting. See [Container state alerts](#container-state-alerts).
-- **`auth-abuse`**, **`agent-version-mismatch`** -- disabled by default. Enable them and assign triggers. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting. See [Auth abuse and agent version alerts](#auth-abuse-and-agent-version-alerts).
+- **`container-unhealthy`** -- disabled by default. Enable it and assign triggers to receive container health alerts. When its trigger list is empty, all notification triggers fire. This event always fires regardless of the threshold setting.
 - **`maturity-cleared`** -- enabled by default. When its trigger list is empty, all notification triggers fire. Unlike the events above, it respects `THRESHOLD` and `AUTO` the same way `update-available` does -- a trigger that would never have announced an update also won't announce its maturity, and `AUTO=false` disables it too.
 - **`update-pending-approval`** -- disabled by default. When its trigger list is empty, all notification triggers fire. It respects `THRESHOLD` and `AUTO` the same way `update-available` does, and fires once per queue row, so a re-seen pending candidate never repeats.
 
@@ -285,7 +274,7 @@ Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notificatio
 
 Overrides are keyed by canonical trigger ID, so the same event can use different copy for Slack, SMTP, ntfy, or any other configured notification provider. They use the same sandboxed `${...}` syntax and variables documented in [Template variable reference](#template-variable-reference). The preview API is `POST /api/v1/notifications/:id/preview`; see the [Notification rules API](/docs/api#notification-rules) for its request shape.
 
-<Callout type="warn">Command, Docker, Docker Compose, and Portainer triggers cannot be assigned to notification rules or template overrides. These are update-action triggers, not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned. Because of this, a rule's trigger list only scopes which notification channels receive messages. One exception: when the trigger list is empty on `container-unhealthy` and the container state alerts (`container-stopped`, `container-exited`, `container-oom-killed`, `container-restart-loop`), Command triggers run too, since an empty list means every trigger. Docker, Docker Compose, and Portainer triggers never run for these alerts. To keep a Command trigger out, assign specific notification triggers to the rule, disable the rule, or exclude the Command trigger on the container with `dd.action.exclude` (or a group's `actions.exclude`). Action triggers are exempt from that list and keep executing updates no matter how it's scoped, including when the trigger runs on a remote agent. Disabling a notification rule silences that notification only. Automatic action execution is controlled by the update mode and action policy, including group limits, maintenance windows, maturity and approvals.</Callout>
+<Callout type="warn">Command, Docker, Docker Compose, and Portainer triggers cannot be assigned to notification rules or template overrides. These are update-action triggers, not notification triggers. Only messaging/alerting triggers (Slack, SMTP, Discord, ntfy, etc.) can be assigned. Because of this, a rule's trigger list only scopes which notification channels receive messages. Action triggers are exempt from that list and keep executing updates no matter how it's scoped, including when the trigger runs on a remote agent. Disabling a notification rule silences that notification only. Automatic action execution is controlled by the update mode and action policy, including group limits, maintenance windows, maturity and approvals.</Callout>
 
 ## Event Types
 
@@ -297,97 +286,10 @@ Beyond the classic `update-available` event, triggers can fire on additional eve
 - **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
 - **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
 - **`container-unhealthy`** -- fires when a container's Docker health check transitions into the `unhealthy` state. Does not fire for containers with no `HEALTHCHECK` configured, and does not fire again while the container remains continuously unhealthy -- except when the container restarts (new boot) while unhealthy, which counts as a new episode and fires again. This event **skips threshold checks** (always fires).
-- **`container-stopped`**, **`container-exited`**, **`container-oom-killed`**, **`container-restart-loop`** -- fire when a watched container stops, crashes, runs out of memory or keeps restarting. They **skip threshold checks** (always fire). Details in [Container state alerts](#container-state-alerts).
-- **`auth-abuse`**, **`agent-version-mismatch`** -- fire when failed logins lock out an account or address, or an agent runs a different version than the controller. They **skip threshold checks** (always fire). Details in [Auth abuse and agent version alerts](#auth-abuse-and-agent-version-alerts).
 - **`maturity-cleared`** -- fires when an update previously withheld by the [maturity gate](/docs/configuration/actions/update-eligibility) (`maturityMode: mature`) becomes applicable -- the soak window elapses, an override lifts the gate, or the policy changes. Default title: `Update ready for container <name>`. Default body: `Container <name> can now be updated to <tag or digest>: the maturity period has passed`, with a trailing `(N day minimum)` clause when the resolved policy's `maturityMinAgeDays` is known. Default batch title: `<N> updates ready to apply`. Detected both at the container's next watch-cycle scan and, independently and typically sooner, by the [maturity gate sweep](#maturity-gate-sweep). Deduplicated against the generic `update-available` notification for the same result, so the same update is never announced twice. **Action triggers are unaffected** -- Docker, Docker Compose, and Command triggers keep applying the update on their normal watch/scan cadence; this event only affects notification delivery.
 - **`update-pending-approval`** -- fires when an update candidate enters the [approval queue](/docs/configuration/actions/approvals). Default title: `Update awaiting approval for container <name>`. Default body: `Container <name> has an update awaiting approval: <from> to <to>`, followed by the queue link when `DD_PUBLIC_URL` is set. Default batch title: `<N> updates awaiting approval`. Deduplicated on the approval row, so it survives a restart without re-notifying. **Action triggers are unaffected.**
 
 <Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
-
-## Container state alerts
-
-Four rules report on a container's runtime state, using Docker `die`, `oom` and `stop` events. They are all **disabled by default**. They share routing, per-rule trigger lists, template overrides and the per-container `dd.notification.exclude` opt-out with every other notification rule.
-
-| Rule | Fires when | Default title |
-| --- | --- | --- |
-| `container-stopped` | The container was stopped explicitly (`docker stop`, any exit code) or exited with code 0 | `Container <name> stopped` |
-| `container-exited` | The container exited with a non-zero exit code and was not stopped explicitly | `Container <name> exited unexpectedly` |
-| `container-oom-killed` | The kernel killed the container for running out of memory (`oom` event or `State.OOMKilled`) | `Container <name> was OOM killed` |
-| `container-restart-loop` | The container crashed N times within the window (default 3 in 300 seconds) | `Container <name> is in a restart loop` |
-
-Behavior worth knowing:
-
-- **One crash, one alert.** Docker sends `oom`, `die` and `stop` within milliseconds of each other. Drydock waits briefly and reports the crash once, as OOM-killed when memory was the cause.
-- **Restart loops replace per-crash alerts.** When the Nth crash lands inside the window, you get one `container-restart-loop` alert and the per-crash alerts for that container pause until the window passes. A restart loop counts crashes and clean exits, but not explicit stops.
-- **Drydock's own work is never reported.** Stops and recreates during an update or rollback, including the minute after one ends, raise no alert, and do not count toward a restart loop.
-- **Only watched containers alert.** Containers Drydock does not watch (`dd.watch=false`) never produce these events.
-- **Agents raise them too.** A Drydock agent classifies the Docker events on its own host, with the same one-crash-one-alert, restart loop and update suppression rules, and sends the finished alert to the controller. The `RESTARTLOOP_THRESHOLD` and `RESTARTLOOP_WINDOW` settings are read on the agent, so set them on each agent. The controller then routes it like any other alert, so triggers and templates work the same. An agent from before this release sends nothing, so its containers raise no state alerts until it is upgraded.
-- **Portwing agents too.** A Portwing agent that advertises the `dd:container-event` capability forwards raw die, oom and stop events over both the Standard and Edge connections, and Drydock classifies them on the controller with the same rules and the default restart loop settings (3 crashes in 300 seconds). Only containers Drydock watches alert. Edge can drop these events under load and nothing is replayed after a Docker reconnect, so an alert can occasionally be missed.
-- **Requires Docker events.** `DD_WATCHER_{name}_WATCHEVENTS` must stay `true` (the default).
-
-The restart loop thresholds are per-watcher settings:
-
-| Env var | Required | Description | Supported values | Default value when missing |
-| --- | :---: | --- | --- | --- |
-| `DD_WATCHER_{watcher_name}_RESTARTLOOP_THRESHOLD` | ⚪ | Crashes inside the window that count as a restart loop | Integer, 2 or more | `3` |
-| `DD_WATCHER_{watcher_name}_RESTARTLOOP_WINDOW` | ⚪ | Window length in seconds (the liveness window, `LIVENESSWINDOW`, is in milliseconds) | Integer, 1 or more | `300` |
-
-In templates, `event.exitCode` and `event.reason` describe the exit. `event.restartCount` and `event.windowSeconds` are set for `container-restart-loop`.
-
-## Auth abuse and agent version alerts
-
-Two more rules, both **disabled by default**.
-
-| Rule | Fires when | Default title |
-| --- | --- | --- |
-| `auth-abuse` | An account or a source address crosses the login lockout threshold | `Repeated failed logins` (with `from <address>` for an address) |
-| `agent-version-mismatch` | An agent connects on a different major or minor version than the controller | `Agent <name> version mismatch` |
-
-**`auth-abuse`** reuses the existing login lockout, so it needs no threshold of its own. Failed passwords and failed second-factor codes both count toward it. Tune it with `DD_AUTH_ACCOUNT_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS`, `DD_AUTH_LOCKOUT_WINDOW_MS` and `DD_AUTH_LOCKOUT_DURATION_MS` (see [authentication](/docs/configuration/authentications)). You get one alert when a lockout starts, not one per attempt while it holds. An account lockout names the username the same way the failed-login entry in the audit log does, and an address lockout names the address. Passwords and codes are never included. In templates, `event.scope` is `account` or `ip`, and `event.username`, `event.source`, `event.failedAttempts`, `event.windowSeconds` and `event.lockoutSeconds` describe it.
-
-**`agent-version-mismatch`** compares base releases, so `1.9.0-rc.2` matches `1.9.0`. An agent alerts once per mismatching version. It alerts again if it comes back on a different wrong version, and the state clears when it reconnects on a matching version. A patch-only difference is ignored unless you set `DD_ALERTS_AGENTVERSIONPATCH=true`. A version that is not valid semver (`unknown`, `local`) is skipped. In templates, `event.agentName`, `event.agentVersion`, `event.controllerVersion` and `event.difference` (`major`, `minor` or `patch`) are set.
-
-| Env var | Required | Description | Supported values | Default value when missing |
-| --- | :---: | --- | --- | --- |
-| `DD_ALERTS_AGENTVERSIONPATCH` | ⚪ | Also alert when only the patch version differs | `true`, `false` | `false` |
-
-## Quiet hours and silences
-
-Quiet hours and silences hold back notifications without turning rules off. They apply to notification triggers only. Action triggers (Docker, Docker Compose, Command) keep running.
-
-**Held notifications are dropped, not queued.** A flush-at-the-end summary would need a durable queue and one message format per provider, and a stale "container stopped" alert delivered at 07:00 is rarely what you want. Each drop is counted per rule instead (`GET /api/v1/notifications/silences`). An `update-available` notification that is dropped is not recorded as delivered, so the next scan after the window sends it. One-off events such as a container stopping or an agent disconnecting are not re-sent.
-
-**Exempt rules.** `security-alert` and `update-failed` are never held back by quiet hours or by a silence that covers every rule. A silence that names the rule always applies, because you asked for it by name.
-
-### Quiet hours
-
-| Env var | Required | Description | Supported values | Default value when missing |
-| --- | :---: | --- | --- | --- |
-| `DD_ALERTS_QUIETHOURS_SCHEDULE` | ⚪ | Comma-separated `HH:MM-HH:MM` ranges. The start is inclusive and the end exclusive, and a range that ends before it starts crosses midnight. `24:00` is allowed as an end | `22:00-07:00`, `12:00-13:00,23:00-24:00` | unset (no quiet hours) |
-| `DD_ALERTS_QUIETHOURS_TZ` | ⚪ | IANA timezone the ranges are read in | `Europe/Berlin` | `UTC` |
-| `DD_ALERTS_QUIETHOURS_RULES` | ⚪ | Comma-separated rule ids quiet hours applies to. Empty means every rule that is not exempt | `container-stopped,container-exited` | every non-exempt rule |
-| `DD_ALERTS_QUIETHOURS_EXEMPT` | ⚪ | Comma-separated rule ids never held back by quiet hours or a global silence. Set it empty to exempt nothing | `security-alert,update-failed,agent-disconnect` | `security-alert,update-failed` |
-
-An invalid schedule or timezone is logged once and ignored, so a typo never silently drops notifications for a reason you cannot see.
-
-### Silences
-
-A silence mutes one rule, or every rule, until it expires. Silences survive a restart and are managed through the API:
-
-```bash
-# Mute container-stopped for two hours
-curl -X POST http://drydock:3000/api/v1/notifications/silences \
-  -H 'Content-Type: application/json' \
-  -d '{"ruleId":"container-stopped","durationMinutes":120,"reason":"host maintenance"}'
-
-# List active silences, the quiet hours state and what has been dropped
-curl http://drydock:3000/api/v1/notifications/silences
-
-# Remove one early
-curl -X DELETE http://drydock:3000/api/v1/notifications/silences/<id>
-```
-
-Send exactly one of `durationMinutes` (1 to 43200) or `expiresAt` (an ISO 8601 time in the future). Omit `ruleId` to mute every non-exempt rule. Creating and removing a silence need the `admin` scope and are recorded in the [audit trail](/docs/api#audit-trail) as `notification-silence-set` and `notification-silence-cleared`. There is no UI for silences yet.
 
 ## Maturity Gate Sweep
 
@@ -529,17 +431,11 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `currentTag` | Current image tag (top-level shortcut for `container.image.tag.value`) | `1.24.0` |
 | `suggestedTag` | Suggested new tag from the registry (top-level shortcut for `container.result.tag`) | `1.25.0` |
 | `isDigestUpdate` | Whether this update is digest-only rather than a tag change | `false` |
-| `updateKindLabel` | `base image update` for a locally built image whose upstream base has a newer tag, otherwise the update kind (`tag` or `digest`) | `base image update` |
-| `updateKindNote` | Extra note the default body appends for a base image update, empty otherwise | `(base image of a locally built image, notification only)` |
-| `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `container-stopped`, `container-exited`, `container-oom-killed`, `container-restart-loop`, `auth-abuse`, `agent-version-mismatch`, `maturity-cleared`, `update-pending-approval`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
+| `event.kind` | Event kind for a non-baseline notification: `update-failed`, `security-alert`, `container-unhealthy`, `maturity-cleared`, `update-pending-approval`, `agent-disconnect`, or `agent-reconnect`; unset for an ordinary update | `security-alert` |
 | `event.error` | Error message (`event.kind` = `update-failed`) | `Pull failed: 401 Unauthorized` |
 | `event.selfUpdate` | `true` when an `update-applied` or `update-failed` event reports an update of Drydock itself; unset otherwise | `true` |
 | `event.details`, `event.status`, `event.blockingCount` | Alert details, status, and blocking-finding count (`event.kind` = `security-alert`) | `12` |
 | `event.previousHealth` | Health status before the container went unhealthy (`event.kind` = `container-unhealthy`) | `healthy` |
-| `event.scope`, `event.username`, `event.source`, `event.failedAttempts`, `event.windowSeconds`, `event.lockoutSeconds` | Lockout details (`event.kind` = `auth-abuse`); `event.scope` is `account` or `ip` | `account` |
-| `event.agentName`, `event.agentVersion`, `event.controllerVersion`, `event.difference` | Agent and controller versions and the size of the gap (`event.kind` = `agent-version-mismatch`) | `1.8.0` |
-| `event.exitCode`, `event.reason` | Exit code and a short reason such as `exit code 1` or `out of memory` (`event.kind` = `container-stopped` / `container-exited` / `container-oom-killed` / `container-restart-loop`) | `137` |
-| `event.restartCount`, `event.windowSeconds` | Crashes counted and window length in seconds (`event.kind` = `container-restart-loop`) | `3` |
 | `event.minAgeDays`, `event.pendingSince` | Configured maturity window and when the gate started waiting (`event.kind` = `maturity-cleared`) | `7` |
 | `event.approvalId`, `event.approvalUrl`, `event.fromRef`, `event.toRef` | Queue row id, deep link (empty without `DD_PUBLIC_URL`), and the version change (`event.kind` = `update-pending-approval`) | `1.0.0` |
 | `event.agentName`, `event.reason` | Agent name and disconnect reason (`event.kind` = `agent-disconnect` / `agent-reconnect`) | `remote-1` |
@@ -572,7 +468,7 @@ Inside `${...}` you can use:
 ```yaml
 services:
   drydock:
-    image: codeswhat/drydock:1.9.0-rc.1
+    image: codeswhat/drydock:1.8.0-rc.17
     ...
     environment:
       - DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container $${container.name} can be updated
@@ -585,7 +481,7 @@ services:
 docker run \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLETITLE=Container ${container.name} can be updated' \
   -e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=Container ${container.name} can be updated from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}' \
-  codeswhat/drydock:1.9.0-rc.1
+  codeswhat/drydock:1.8.0-rc.17
 ```
 </Tab>
 </Tabs>

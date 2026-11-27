@@ -549,51 +549,6 @@ describe('LoginView', () => {
       wrapper.unmount();
     });
 
-    it('shows a rate-limit message with the Retry-After wait instead of Connection Lost on 429', async () => {
-      mockGetStrategies
-        .mockRejectedValueOnce(
-          Object.assign(new Error('rate limited'), { status: 429, retryAfterSeconds: 90 }),
-        )
-        .mockResolvedValueOnce({ providers: [{ type: 'basic', name: 'basic' }], errors: [] });
-
-      const wrapper = trackWrapper(mountWithPlugins(LoginView));
-      await flushPromises();
-      expect(wrapper.text()).toContain('Too many requests. Try again in 2 minutes.');
-      expect(wrapper.text()).not.toContain('Connection Lost');
-
-      await vi.advanceTimersByTimeAsync(89_999);
-      await flushPromises();
-      expect(mockGetStrategies).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1);
-      await flushPromises();
-      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
-      expect(wrapper.text()).not.toContain('Too many requests');
-      wrapper.unmount();
-    });
-
-    it('shows a generic rate-limit message without Retry-After and keeps the backoff retry', async () => {
-      mockGetStrategies
-        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { status: 429 }))
-        .mockRejectedValueOnce(Object.assign(new Error('rate limited'), { status: 429 }))
-        .mockRejectedValueOnce(new Error('offline'));
-
-      const wrapper = trackWrapper(mountWithPlugins(LoginView));
-      await flushPromises();
-      expect(wrapper.text()).toContain('Too many requests. Try again later.');
-      expect(wrapper.text()).not.toContain('Connection Lost');
-
-      await vi.advanceTimersByTimeAsync(5_000);
-      await flushPromises();
-      expect(mockGetStrategies).toHaveBeenCalledTimes(2);
-      expect(wrapper.text()).toContain('Too many requests. Try again later.');
-      expect(wrapper.text()).not.toContain('Connection Lost');
-
-      await vi.advanceTimersByTimeAsync(10_000);
-      await flushPromises();
-      expect(wrapper.text()).toContain('Connection Lost');
-      wrapper.unmount();
-    });
-
     it('polls with backoff only after initial failure and stops after success', async () => {
       mockGetStrategies
         .mockRejectedValueOnce(new Error('offline'))

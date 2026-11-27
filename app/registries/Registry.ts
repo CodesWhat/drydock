@@ -4,7 +4,6 @@ import axios, { type AxiosRequestConfig, type AxiosResponse, type Method } from 
 import type { ContainerImage } from '../model/container.js';
 import { getSummaryTags } from '../prometheus/registry.js';
 import Component, { type ComponentConfiguration } from '../registry/Component.js';
-import { isImmutableDigest } from '../security/digest.js';
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 import { withRetry } from './http-retry.js';
@@ -15,12 +14,6 @@ type RegistryRequestOptions = AxiosRequestConfig;
 
 interface RegistryManifest {
   digest?: string;
-  /**
-   * Digest of the manifest list (image index) the platform manifest was picked from. A pull by
-   * tag records this one locally, not the per-platform `digest`. Only set when the tag
-   * resolved through a list and the registry returned a valid content digest for it.
-   */
-  indexDigest?: string;
   version?: number;
   created?: string;
   softwareVersion?: string;
@@ -600,20 +593,14 @@ class Registry<
     response: RegistryManifestResponse,
     tagOrDigest: string,
     depth = 0,
-    listRef?: string,
   ): Promise<RegistryManifest> {
     this.log.debug(`${image.name} - Manifests found with schemaVersion = 2`);
     this.log.debug(`${image.name} - Manifests media type detected [${response.mediaType}]`);
 
     let manifestDigest: string | undefined;
     let manifestMediaType: string | undefined;
-    // The reference of the outermost manifest list this lookup went through, if any. Its
-    // digest is read last, so it never changes the order of the requests that find the platform
-    // manifest.
-    let outerListRef = listRef;
 
     if (isManifestList(response.mediaType)) {
-      outerListRef = depth === 0 ? tagOrDigest : listRef;
       this.log.debug(
         `${image.name} - Filter manifest for [arch=${image.architecture}, os=${image.os}, variant=${image.variant}]`,
       );
@@ -642,7 +629,7 @@ class Registry<
                 'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.manifest.v1+json',
             },
           });
-          return this.handleSchemaV2(image, nested, matched.digest, depth + 1, outerListRef);
+          return this.handleSchemaV2(image, nested, matched.digest, depth + 1);
         }
         this.log.debug(
           `${image.name} - Manifest found with [digest=${matched.digest}, mediaType=${matched.mediaType}]`,
@@ -660,21 +647,13 @@ class Registry<
     }
 
     if (manifestDigest && isSingleManifest(manifestMediaType)) {
-      const manifest = await this.fetchManifestDigestFromHead(
-        image,
-        manifestDigest,
-        manifestMediaType,
-      );
-      const indexDigest = await this.resolveOuterListDigest(image, outerListRef);
-      return indexDigest ? { ...manifest, indexDigest } : manifest;
+      return this.fetchManifestDigestFromHead(image, manifestDigest, manifestMediaType);
     }
     if (manifestDigest && isLegacyImageConfig(manifestMediaType)) {
       const metadata = await this.fetchImageMetadataFromBlob(image, manifestDigest);
-      const indexDigest = await this.resolveOuterListDigest(image, outerListRef);
       const result = {
         digest: manifestDigest,
         version: 1,
-        ...(indexDigest ? { indexDigest } : {}),
         ...metadata,
       };
       this.log.debug(
@@ -683,46 +662,6 @@ class Registry<
       return result;
     }
     throw new Error('Unexpected error; no manifest found');
-  }
-
-  /**
-   * The content digest of the manifest list a tag resolves to. A digest reference is its own
-   * answer; a tag needs the Docker-Content-Digest header of the list itself. Best effort: a
-   * registry that does not return a valid one just leaves the index digest unknown.
-   */
-  private async resolveOuterListDigest(
-    image: ContainerImage,
-    listRef: string | undefined,
-  ): Promise<string | undefined> {
-    return listRef === undefined ? undefined : this.resolveManifestListDigest(image, listRef);
-  }
-
-  private async resolveManifestListDigest(
-    image: ContainerImage,
-    tagOrDigest: string,
-  ): Promise<string | undefined> {
-    if (isImmutableDigest(tagOrDigest)) {
-      return tagOrDigest;
-    }
-    try {
-      const response = await this.callRegistry<RegistryManifestResponse>({
-        image,
-        method: 'head',
-        url: `${image.registry.url}/${image.name}/manifests/${tagOrDigest}`,
-        headers: {
-          Accept:
-            'application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json',
-        },
-        resolveWithFullResponse: true,
-      });
-      const digest = response.headers?.['docker-content-digest'];
-      return isImmutableDigest(digest) ? digest : undefined;
-    } catch (error: unknown) {
-      this.log.debug(
-        `${image.name} - Unable to read the manifest list digest (${getErrorMessage(error)})`,
-      );
-      return undefined;
-    }
   }
 
   /**

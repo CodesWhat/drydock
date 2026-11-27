@@ -51,7 +51,7 @@ test("features section leads with the lifecycle and lists Update Bouncer and app
 });
 
 test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
-  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.16",([\s\S]*?)(?=\n {2}\},)/)?.[1];
+  const milestone = siteContent.match(/version: "v1\.8\.0-rc\.17",([\s\S]*?)(?=\n {2}\},)/)?.[1];
   assert.ok(milestone, "v1.8 must have a roadmap entry");
   assert.match(milestone, /title: "[^"]*RC[^"]*testing only/i);
   assert.match(milestone, /Landed:.*drydock\.yml/);
@@ -61,18 +61,9 @@ test("v1.8 roadmap identifies an opt-in candidate without claiming GA", () => {
   assert.doesNotMatch(milestone, /status: "released"|Config file and API foundation/);
 });
 
-test("v1.9 roadmap identifies an opt-in candidate without claiming GA", () => {
-  const milestone = siteContent.match(/version: "v1\.9\.0-rc\.1",([\s\S]*?)(?=\n {2}\},)/)?.[1];
-  assert.ok(milestone, "v1.9 must have a roadmap entry");
-  assert.match(milestone, /title: "[^"]*RC[^"]*testing only/i);
-  assert.match(milestone, /Landed:.*ceilings/);
-  assert.match(milestone, /Landed:.*file watcher/);
-  assert.doesNotMatch(milestone, /status: "released"/);
-});
-
 test("roadmap HEAD follows the active RC while retaining older candidates", () => {
   assert.equal(typeof marketing.getRoadmapHead, "function");
-  assert.equal(marketing.getRoadmapHead().version, "v1.9.0-rc.1");
+  assert.equal(marketing.getRoadmapHead().version, "v1.8.0-rc.17");
   assert.equal(marketing.roadmap.find((item) => item.version === "v1.7.0").status, "released");
   assert.equal(
     marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))

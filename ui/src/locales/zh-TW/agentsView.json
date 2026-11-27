@@ -87,60 +87,6 @@
         "lastSeen": "最後活躍",
         "never": "從未"
       }
-    },
-    "edgeKeys": {
-      "toggle": "邊緣代理金鑰",
-      "hide": "隱藏邊緣代理金鑰",
-      "title": "邊緣代理金鑰",
-      "description": "註冊 Portwing 邊緣代理的公開金鑰，讓它能連線到此控制器。只會儲存公開金鑰，所以這裡不會顯示任何機密內容。",
-      "registerButton": "註冊金鑰",
-      "loading": "正在載入金鑰...",
-      "empty": "尚未註冊邊緣代理金鑰",
-      "loadError": "載入邊緣代理金鑰失敗",
-      "forbidden": "管理邊緣代理金鑰需要已登入的管理員工作階段。API 金鑰和復原登入無法執行此操作。",
-      "registered": "已將 {label} 註冊為金鑰 {keyId}。",
-      "revokeButton": "撤銷",
-      "errors": {
-        "register": "註冊金鑰失敗",
-        "revoke": "撤銷金鑰失敗"
-      },
-      "columns": {
-        "label": "標籤",
-        "keyId": "金鑰 ID",
-        "created": "建立時間",
-        "status": "狀態"
-      },
-      "status": {
-        "active": "有效",
-        "revoked": "已撤銷"
-      },
-      "form": {
-        "title": "註冊邊緣代理金鑰",
-        "label": "標籤",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "公開金鑰",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "貼上 44 個字元的 base64 金鑰，或 portwing keygen -pub-from 輸出的完整一行。",
-        "submit": "註冊",
-        "invalidKey": "公開金鑰必須是 base64，且解碼後剛好為 32 位元組。"
-      },
-      "revoke": {
-        "header": "撤銷金鑰",
-        "message": "確定撤銷 {label}？其代理會立即中斷，且無法重新連線。",
-        "accept": "撤銷"
-      },
-      "snippet": {
-        "show": "顯示代理程式碼片段",
-        "hide": "隱藏代理程式碼片段",
-        "title": "代理設定",
-        "description": "在代理主機上用 portwing keygen 產生金鑰對，在此註冊其公開金鑰，然後用下列任一方式啟動代理。",
-        "controllerUrl": "控制器 URL",
-        "agentName": "代理名稱",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "複製",
-        "copied": "已複製"
-      }
     }
   }
 }

@@ -2,8 +2,6 @@ import axios from 'axios';
 import { toPositiveInteger } from '../../../util/parse.js';
 import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 import { getRegistryRequestTimeoutMs } from '../../configuration.js';
-import type { RegistryLookupOptions } from '../../Registry.js';
-import { acquireToken, getBucketForUrl } from '../../token-bucket.js';
 
 interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
   username?: string;
@@ -168,7 +166,6 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     let pagesFetched = 0;
 
     while (url && pagesFetched < GHCR_VERSIONS_MAX_PAGES) {
-      await acquireToken(getBucketForUrl(url));
       const response = await axios({
         method: 'GET',
         url,
@@ -214,21 +211,12 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     return undefined;
   }
 
-  async getImagePublishedAt(
-    image,
-    tag?: string,
-    options?: RegistryLookupOptions,
-  ): Promise<string | undefined> {
+  async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : image.tag?.value;
     if (!tagToLookup || typeof image.name !== 'string' || image.name.length === 0) {
       return undefined;
     }
-    return this.memoizePublishedAt(image, tagToLookup, options, () =>
-      this.fetchImagePublishedAt(image, tagToLookup),
-    );
-  }
 
-  private async fetchImagePublishedAt(image, tagToLookup: string): Promise<string | undefined> {
     const [owner, ...packageNameParts] = image.name.split('/');
     if (!owner || packageNameParts.length === 0) {
       return undefined;

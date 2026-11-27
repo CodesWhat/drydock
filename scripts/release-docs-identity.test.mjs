@@ -3,10 +3,10 @@ import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parse as parseYaml } from 'yaml';
 
-const RC_VERSION = '1.9.0-rc.1';
-const PREV_RC_VERSION = '1.8.0-rc.15';
-const RC_DATE = '2026-11-20';
-const RC_DISPLAY_DATE = 'November 20, 2026';
+const RC_VERSION = '1.8.0-rc.17';
+const PREV_RC_VERSION = '1.8.0-rc.16';
+const RC_DATE = '2026-11-21';
+const RC_DISPLAY_DATE = 'November 21, 2026';
 const DOC_ROOTS = [
   'content/docs/current',
   'content/docs/v1.7',
@@ -17,16 +17,16 @@ const RELEASE_REDIRECT_STATUSES = [301, 302, 303, 307, 308];
 const BROAD_401_CLAIM =
   /(?:all|every) API (?:call|request)s?(?: (?:is|are) rejected with| returns?) `401`/iu;
 
-test('the current self-tracking example stays on the v1.9 release-candidate train', () => {
+test('the current self-tracking example stays on the v1.8 release-candidate train', () => {
   const configuration = read('content/docs/current/configuration/index.mdx');
   const selfTracking = configuration.slice(configuration.indexOf('# drydock self tracking'));
   const includePattern = selfTracking.match(/dd\.tag\.include=([^'\n]+)/u)?.[1];
   assert.ok(includePattern, 'self-tracking must declare its candidate filter');
   const filter = new RegExp(includePattern.replaceAll('$$', '$'), 'u');
-  for (const candidate of [RC_VERSION, '1.9.0-rc.2', '1.9.0-rc.10']) {
+  for (const candidate of [RC_VERSION, '1.8.0-rc.2', '1.8.0-rc.10']) {
     assert.ok(filter.test(candidate), `self-tracking must accept ${candidate}`);
   }
-  for (const candidate of ['latest', '1.6.1', '1.7.0-rc.24', '1.8.0-rc.15', '1.9.0']) {
+  for (const candidate of ['latest', '1.6.1', '1.7.0-rc.24', '1.8.0', '1.9.0-rc.1']) {
     assert.ok(!filter.test(candidate), `self-tracking must stay off ${candidate}`);
   }
 });
@@ -45,9 +45,9 @@ test('self-update examples allow manual updates within the candidate train', () 
     const pattern = example.labels.find((label) => label.startsWith('dd.tag.include='));
     assert.ok(pattern, 'self-update must opt into candidate tag discovery');
     const filter = new RegExp(pattern.slice('dd.tag.include='.length).replaceAll('$$', '$'), 'u');
-    assert.ok(filter.test('1.9.0-rc.2'));
-    assert.ok(!filter.test('1.9.0'));
-    assert.ok(!filter.test('1.8.0-rc.15'));
+    assert.ok(filter.test('1.8.0-rc.14'));
+    assert.ok(!filter.test('1.8.0'));
+    assert.ok(!filter.test('1.9.0-rc.1'));
   }
 });
 
@@ -78,7 +78,7 @@ function assertReleaseRedirectAllowlist(name, section) {
   }
 }
 
-test('public release surfaces identify the v1.9 release candidate', () => {
+test('public release surfaces identify the v1.8 release candidate', () => {
   const readme = read('README.md');
   const siteConfig = read('apps/web/src/lib/site-config.ts');
   const updates = read('content/docs/current/updates/index.mdx');
@@ -262,7 +262,7 @@ test('historical rc.10 notes preserve its post-promotion fixes', () => {
   }
 });
 
-test('stable 1.6 and retained 1.7 docs remain available when current advances to 1.9', () => {
+test('stable 1.6 and retained 1.7 docs remain available when current advances to 1.8', () => {
   const siteContent = read('apps/web/src/lib/site-content.ts');
   const docsVersions = read('apps/web/scripts/docs-versions.mjs');
   const v16Changelog = read('content/docs/v1.6/changelog/index.mdx');
@@ -282,7 +282,7 @@ test('stable 1.6 and retained 1.7 docs remain available when current advances to
   );
   assert.match(
     docsVersions,
-    /\{ slug: "v1\.9", source: "current", title: "v1\.9" \},\s+\{ slug: "v1\.8", source: "v1\.8", title: "v1\.8" \},\s+\{ slug: "v1\.7", source: "v1\.7", title: "v1\.7" \},\s+\{ slug: "v1\.6", source: "v1\.6", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
+    /\{ slug: "v1\.8", source: "current", title: "v1\.8" \},\s+\{ slug: "v1\.7", source: "v1\.7", title: "v1\.7" \},\s+\{ slug: "v1\.6", source: "v1\.6", title: "v1\.6" \},\s+\{ slug: "v1\.5", source: "v1\.5", title: "v1\.5" \}/u,
   );
   assert.match(v16Changelog, /^## \[1\.6\.0\] — 2026-08-11$/mu);
   assert.doesNotMatch(v16Changelog, /^## \[Unreleased\]$/mu);
@@ -429,7 +429,7 @@ test('current and archived registry and trigger examples remain operational', ()
     assert.doesNotMatch(logApi, /"component": "(?:registry:hub|api:websocket)"/u);
     assert.match(
       triggers,
-      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.9\.0-rc\.1|:v1\.5\.2)?$/mu,
+      /^ {2}-e 'DD_NOTIFICATION_SMTP_GMAIL_SIMPLEBODY=[^'\n]+' \\\n {2}codeswhat\/drydock(?::1\.8\.0-rc\.17|:v1\.5\.2)?$/mu,
     );
     assert.doesNotMatch(triggers, /^ {2}\.\.\.$/mu);
   }

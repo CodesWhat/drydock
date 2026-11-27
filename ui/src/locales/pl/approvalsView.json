@@ -32,10 +32,6 @@
       "prerelease": "Wersja wstępna",
       "unknown": "Nieznana"
     },
-    "securityFastLane": {
-      "badge": "Poprawka bezpieczeństwa",
-      "tooltip": "Naprawia krytyczne lub wysokie podatności w działającym obrazie. Nadal wymaga zatwierdzenia."
-    },
     "actions": {
       "notesAriaLabel": "Pokaż informacje o wydaniu i powody wstrzymania",
       "approve": "Zatwierdź",
@@ -43,14 +39,8 @@
       "approveDisabledNotify": "Tryb aktualizacji to notify; zatwierdzanie jest wyłączone",
       "reject": "Odrzuć",
       "rejectAriaLabel": "Odrzuć aktualizację",
-      "rejectScopeAriaLabel": "Zakres odrzucenia",
       "defer": "Odrocz",
       "deferAriaLabel": "Odrocz aktualizację"
-    },
-    "rejectScope": {
-      "tag": "Tylko ta wersja",
-      "minor": "Cała linia minor",
-      "major": "Cała linia major"
     },
     "detail": {
       "loading": "Ładowanie szczegółów…",
@@ -75,7 +65,6 @@
       "reject": {
         "header": "Odrzuć aktualizację",
         "message": "Odrzucić aktualizację {name} do {toRef}? Nie zostanie zastosowana automatycznie.",
-        "messageLine": "Odrzucić aktualizację {name} do {toRef} i pominąć wszystkie wersje {line}.x? Nowsze linie nadal będą proponowane.",
         "acceptLabel": "Odrzuć"
       },
       "defer": {

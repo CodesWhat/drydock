@@ -13,8 +13,6 @@ import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import * as registry from '../registry/index.js';
 import * as ids from '../util/uuid.js';
 import { AgentClient } from './AgentClient.js';
-import { AgentResponseTooLargeError } from './AgentResponseTooLargeError.js';
-import { checkAgentVersion } from './agent-version-alerts.js';
 import {
   buildEdgeSentinelConfig,
   EdgeAgentAdapter,
@@ -29,7 +27,6 @@ vi.mock('../log/index.js', () => ({
     child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
   },
 }));
-vi.mock('./agent-version-alerts.js', () => ({ checkAgentVersion: vi.fn() }));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
@@ -528,20 +525,6 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     ).toHaveBeenCalledWith('dd:container-added', container);
   });
 
-  test('dd:container_event reaches handleEvent with hyphenated name', async () => {
-    const { adapter, ws, client } = createAdapter();
-    adapter.activate();
-
-    const payload = { containerId: 'c1', name: 'test', action: 'die', exitCode: 1, time: 1 };
-    sendFrame(ws, 'dd:container_event', payload);
-
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(
-      (client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent,
-    ).toHaveBeenCalledWith('dd:container-event', payload);
-  });
-
   test('dd:container_updated reaches handleEvent with hyphenated name', async () => {
     const { adapter, ws, client } = createAdapter();
     adapter.activate();
@@ -903,19 +886,6 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     expect(emitAgentConnected).toHaveBeenCalledWith(expect.objectContaining({ reconnected: true }));
   });
 
-  test('never checks the agent version, since Portwing versions on its own line', async () => {
-    const { adapter, ws, client } = createAdapter();
-    client.info = { ...client.info, version: '1.8.0' };
-    adapter.activate();
-
-    sendFrame(ws, 'dd:container_sync', { containers: [] });
-    await new Promise((r) => setTimeout(r, 0));
-    sendFrame(ws, 'dd:container_sync', { containers: [] });
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(checkAgentVersion).not.toHaveBeenCalled();
-  });
-
   test('does not emit agentConnected twice', async () => {
     const { adapter, ws } = createAdapter();
     adapter.activate();
@@ -1239,114 +1209,6 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
     expect(result).toBe('line1\nline2\n');
   });
 
-  test('rejects with AgentResponseTooLargeError when the legacy log response carries response_too_large', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const logPromise = adapter.requestContainerLogs('c-big', { tail: 100 });
-    const rejection = logPromise.catch((e: unknown) => e);
-    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
-      data: { requestId: string };
-    };
-    sendFrame(ws, 'dd:container_log_response', {
-      requestId: sentFrame.data.requestId,
-      containerId: 'c-big',
-      logs: 'error: logs exceed 16777216 bytes; use a streaming log request',
-      code: 'response_too_large',
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const error = await rejection;
-    expect(error).toBeInstanceOf(AgentResponseTooLargeError);
-    expect((error as AgentResponseTooLargeError).code).toBe('response_too_large');
-    expect((error as Error).message).toBe(
-      'error: logs exceed 16777216 bytes; use a streaming log request',
-    );
-  });
-
-  test('a log response with a different code still resolves as logs', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const logPromise = adapter.requestContainerLogs('c-other', { tail: 100 });
-    sendFrame(ws, 'dd:container_log_response', {
-      containerId: 'c-other',
-      logs: 'hello',
-      code: 'something_else',
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    expect(await logPromise).toBe('hello');
-  });
-
-  test('a response_too_large log response without text falls back to a default message', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const rejection = adapter.requestContainerLogs('c-big2').catch((e: unknown) => e);
-    sendFrame(ws, 'dd:container_log_response', {
-      containerId: 'c-big2',
-      code: 'response_too_large',
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const error = await rejection;
-    expect(error).toBeInstanceOf(AgentResponseTooLargeError);
-    expect((error as Error).message).toMatch(/16 MiB/);
-  });
-
-  test('error frame with response_too_large rejects a non-stream request with AgentResponseTooLargeError', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const rejection = adapter.sendRequest('GET', '/images/json').catch((e: unknown) => e);
-    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
-      data: { requestId: string };
-    };
-    sendFrame(ws, 'error', {
-      requestId: sentFrame.data.requestId,
-      message: 'response body exceeds 16 MiB; use streaming',
-      code: 'response_too_large',
-    });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const error = await rejection;
-    expect(error).toBeInstanceOf(AgentResponseTooLargeError);
-    expect((error as Error).message).toBe('response body exceeds 16 MiB; use streaming');
-  });
-
-  test('error frame with response_too_large and no message uses a clear default', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const rejection = adapter.sendRequest('GET', '/images/json').catch((e: unknown) => e);
-    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
-      data: { requestId: string };
-    };
-    sendFrame(ws, 'error', { requestId: sentFrame.data.requestId, code: 'response_too_large' });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const error = await rejection;
-    expect(error).toBeInstanceOf(AgentResponseTooLargeError);
-    expect((error as Error).message).toMatch(/16 MiB/);
-  });
-
-  test('error frame without a code keeps rejecting with a plain Error', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-
-    const rejection = adapter.sendRequest('GET', '/images/json').catch((e: unknown) => e);
-    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
-      data: { requestId: string };
-    };
-    sendFrame(ws, 'error', { requestId: sentFrame.data.requestId, message: 'boom' });
-    await new Promise((r) => setTimeout(r, 0));
-
-    const error = await rejection;
-    expect(error).not.toBeInstanceOf(AgentResponseTooLargeError);
-    expect((error as Error).message).toBe('boom');
-  });
-
   test('requestContainerLogs rejects after 30s timeout', async () => {
     vi.useFakeTimers();
     const { adapter } = createAdapter();
@@ -1526,57 +1388,6 @@ describe('EdgeAgentAdapter — continuous container log streams', () => {
 
     expect(chunks).toEqual(['legacy buffered logs\n']);
     expect(ended).toHaveBeenCalledWith('legacy-response');
-  });
-
-  test('surfaces a response_too_large legacy fallback as a stream error, not log text', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-    const chunked = vi.fn();
-    const ended = vi.fn();
-    const errored = vi.fn();
-    adapter.streamContainerLogs(
-      'legacy-big',
-      {},
-      { onChunk: chunked, onEnd: ended, onError: errored },
-    );
-    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
-      data: { requestId: string };
-    };
-
-    sendFrame(ws, 'dd:container_log_response', {
-      requestId: request.data.requestId,
-      containerId: 'legacy-big',
-      logs: 'error: logs exceed 16777216 bytes',
-      code: 'response_too_large',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(chunked).not.toHaveBeenCalled();
-    expect(ended).not.toHaveBeenCalled();
-    expect(errored).toHaveBeenCalledWith(expect.any(AgentResponseTooLargeError));
-  });
-
-  test('a response_too_large legacy fallback without text still errors with a default message', async () => {
-    const { adapter, ws } = createAdapter();
-    adapter.activate();
-    const errored = vi.fn();
-    adapter.streamContainerLogs(
-      'legacy-big2',
-      {},
-      { onChunk: vi.fn(), onEnd: vi.fn(), onError: errored },
-    );
-    const request = JSON.parse(ws.sentMessages.at(-1) ?? '{}') as {
-      data: { requestId: string };
-    };
-
-    sendFrame(ws, 'dd:container_log_response', {
-      requestId: request.data.requestId,
-      containerId: 'legacy-big2',
-      code: 'response_too_large',
-    });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(errored.mock.calls[0][0].message).toMatch(/16 MiB/);
   });
 
   test('ends an empty legacy fallback without emitting an empty chunk', async () => {

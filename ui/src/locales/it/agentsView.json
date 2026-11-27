@@ -87,60 +87,6 @@
         "lastSeen": "Ultima attività",
         "never": "mai"
       }
-    },
-    "edgeKeys": {
-      "toggle": "Chiavi degli agenti edge",
-      "hide": "Nascondi le chiavi degli agenti edge",
-      "title": "Chiavi degli agenti edge",
-      "description": "Registra la chiave pubblica di un agente edge Portwing perché possa collegarsi a questo controller. Vengono salvate solo chiavi pubbliche, quindi qui non compare nulla di segreto.",
-      "registerButton": "Registra chiave",
-      "loading": "Caricamento delle chiavi...",
-      "empty": "Nessuna chiave di agente edge registrata",
-      "loadError": "Impossibile caricare le chiavi degli agenti edge",
-      "forbidden": "Gestire le chiavi degli agenti edge richiede una sessione amministratore attiva. Le chiavi API e gli accessi di recupero non possono farlo.",
-      "registered": "{label} registrata come chiave {keyId}.",
-      "revokeButton": "Revoca",
-      "errors": {
-        "register": "Impossibile registrare la chiave",
-        "revoke": "Impossibile revocare la chiave"
-      },
-      "columns": {
-        "label": "Etichetta",
-        "keyId": "ID chiave",
-        "created": "Creata",
-        "status": "Stato"
-      },
-      "status": {
-        "active": "Attiva",
-        "revoked": "Revocata"
-      },
-      "form": {
-        "title": "Registra una chiave di agente edge",
-        "label": "Etichetta",
-        "labelPlaceholder": "edge-host-01",
-        "pubkey": "Chiave pubblica",
-        "pubkeyPlaceholder": "ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= edge-host-01",
-        "pubkeyHint": "Incolla la chiave base64 di 44 caratteri o la riga completa stampata da portwing keygen -pub-from.",
-        "submit": "Registra",
-        "invalidKey": "La chiave pubblica deve essere in base64 e decodificarsi in esattamente 32 byte."
-      },
-      "revoke": {
-        "header": "Revoca chiave",
-        "message": "Revocare {label}? Il suo agente viene disconnesso subito e non potrà riconnettersi.",
-        "accept": "Revoca"
-      },
-      "snippet": {
-        "show": "Mostra lo snippet dell'agente",
-        "hide": "Nascondi lo snippet dell'agente",
-        "title": "Configurazione dell'agente",
-        "description": "Genera la coppia di chiavi sull'host dell'agente con portwing keygen, registra qui la chiave pubblica e avvia l'agente con uno di questi snippet.",
-        "controllerUrl": "URL del controller",
-        "agentName": "Nome dell'agente",
-        "compose": "Compose",
-        "dockerRun": "docker run",
-        "copy": "Copia",
-        "copied": "Copiato"
-      }
     }
   }
 }

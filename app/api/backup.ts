@@ -1,6 +1,5 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
-import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as storeBackup from '../store/backup.js';
@@ -9,22 +8,11 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from '../triggers/providers/docker/created-container-candidate.js';
-import { cancelRollbackMonitor } from '../triggers/providers/docker/rollback-monitor-registry.js';
-import {
-  finishRollbackOperation,
-  startRollbackOperation,
-} from '../triggers/providers/docker/rollback-operation.js';
-import {
-  getRollbackCandidateTarget,
-  recordUpdateRollback,
-} from '../triggers/providers/docker/rollback-state.js';
-import { buildContainerLockKey, withContainerUpdateLocks } from '../updates/update-locks.js';
 import {
   createContainerBackupScope,
   RollbackDigestRequiredError,
   resolveRollbackImageReference,
 } from '../util/backup.js';
-import { getErrorMessage } from '../util/error.js';
 import { recordAuditEvent } from './audit-events.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
 import {
@@ -89,13 +77,6 @@ function getContainerBackups(req: Request, res: Response) {
  * Rollback a container to its latest backup image.
  */
 async function rollbackContainer(req: Request, res: Response) {
-  // A rollback stops and recreates the container, so it is gated like every
-  // other container write.
-  if (!getServerConfiguration().feature.containeractions) {
-    sendErrorResponse(res, 403, 'Container actions are disabled');
-    return;
-  }
-
   const id = req.params.id as string;
 
   const container = storeContainer.getContainer(id);
@@ -149,7 +130,6 @@ async function rollbackContainer(req: Request, res: Response) {
   }
 
   const latestBackup = backup;
-  let operationId: string | undefined;
 
   try {
     const watcher = trigger.getWatcher(container);
@@ -171,75 +151,28 @@ async function rollbackContainer(req: Request, res: Response) {
     // Pull the backup image
     await trigger.pullImage(dockerApi, auth, backupImage, log);
 
-    // Same per-container lock updates take, so the rollback can't interleave
-    // with an update. A health or liveness monitor still watching this
-    // container is cancelled first: it would otherwise roll back again once
-    // this rollback releases the lock.
-    cancelRollbackMonitor(container);
-    const lockKeys = trigger.getUpdateLockKeys?.(container) ?? [buildContainerLockKey(container)];
-    const restored = await withContainerUpdateLocks(
-      lockKeys,
-      async () => {
-        // Get current container (look up by name since the Docker ID may have
-        // changed after the most recent update recreated the container)
-        const currentContainer = await trigger.getCurrentContainer(dockerApi, {
-          id: container.name,
-        });
-        if (!currentContainer) {
-          return false;
-        }
-
-        const currentContainerSpec = await trigger.inspectContainer(currentContainer, log);
-
-        // Recorded like an update so container state alerts hold off while the
-        // container is stopped and recreated on purpose.
-        operationId = startRollbackOperation(container, {
-          fromVersion: container.image?.tag?.value,
-          toVersion: latestBackup.imageTag,
-          triggerName: trigger.getId?.(),
-          reason: 'manual-rollback',
-        });
-
-        // Stop and remove current container
-        await trigger.stopAndRemoveContainer(
-          currentContainer,
-          currentContainerSpec,
-          container,
-          log,
-        );
-
-        // Recreate with backup image
-        await trigger.recreateContainer(
-          dockerApi,
-          currentContainerSpec,
-          backupImage,
-          container,
-          log,
-        );
-        await trigger.recreateSharedNamespaceDependents?.(
-          dockerApi,
-          currentContainerSpec.Id,
-          container.name,
-          log,
-          container,
-        );
-        return true;
-      },
-      { bypassGlobalCap: true },
-    );
-    if (!restored) {
+    // Get current container (look up by name since the Docker ID may have
+    // changed after the most recent update recreated the container)
+    const currentContainer = await trigger.getCurrentContainer(dockerApi, { id: container.name });
+    if (!currentContainer) {
       sendErrorResponse(res, 500, 'Container not found in Docker');
       return;
     }
-    finishRollbackOperation(operationId, {});
 
-    // The gate blocks re-applying the candidate this rollback undid, the same
-    // as an in-update rollback does. The container being rolled back is the
-    // one running that candidate.
-    recordUpdateRollback(container, {
-      targetDigest: getRollbackCandidateTarget(container, container.image?.tag?.value),
-      reason: 'manual-rollback',
-    });
+    const currentContainerSpec = await trigger.inspectContainer(currentContainer, log);
+
+    // Stop and remove current container
+    await trigger.stopAndRemoveContainer(currentContainer, currentContainerSpec, container, log);
+
+    // Recreate with backup image
+    await trigger.recreateContainer(dockerApi, currentContainerSpec, backupImage, container, log);
+    await trigger.recreateSharedNamespaceDependents?.(
+      dockerApi,
+      currentContainerSpec.Id,
+      container.name,
+      log,
+      container,
+    );
 
     recordAuditEvent({
       action: 'rollback',
@@ -254,7 +187,6 @@ async function rollbackContainer(req: Request, res: Response) {
       backup: latestBackup,
     });
   } catch (e: unknown) {
-    finishRollbackOperation(operationId, { error: getErrorMessage(e) });
     if (e instanceof RollbackDigestRequiredError) {
       sendErrorResponse(res, 409, e.message);
       return;

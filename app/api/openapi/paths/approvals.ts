@@ -26,31 +26,6 @@ const decisionRequestBody = {
   },
 };
 
-const rejectRequestBody = {
-  required: false,
-  content: {
-    'application/json': {
-      schema: {
-        type: 'object',
-        properties: {
-          ...decisionNoteProperty,
-          scope: {
-            type: 'string',
-            enum: ['tag', 'minor', 'major'],
-            default: 'tag',
-            description:
-              'How much to skip. tag skips only the rejected tag. minor skips every tag in ' +
-              "that tag's X.Y line and major every tag in its X line, so a later line or a " +
-              'patch in an unrejected line is still offered. minor and major only apply to a ' +
-              'tag update with a semver version, never to a digest update.',
-          },
-        },
-        additionalProperties: false,
-      },
-    },
-  },
-};
-
 const approvalIdPathParam = {
   name: 'id',
   in: 'path',
@@ -235,20 +210,15 @@ export const approvalPaths = {
       description:
         "Adds the candidate to the container's skipTags or skipDigests — the same " +
         "operation as the container detail panel's Skip button, undoable from the " +
-        'update-policy panel — and resolves the row as rejected. With scope minor or major ' +
-        'the whole line is skipped (stored as a major:N or minor:N.M skipTags entry); ' +
-        'remove-skip with that value undoes it.',
+        'update-policy panel — and resolves the row as rejected.',
       operationId: 'rejectApproval',
       parameters: [approvalIdPathParam],
-      requestBody: rejectRequestBody,
+      requestBody: decisionRequestBody,
       responses: {
         200: jsonResponse('Approval rejected', {
           $ref: '#/components/schemas/ApprovalDecisionResult',
         }),
-        400: errorResponse(
-          'Invalid request body, note or scope, no current update available to skip, or a ' +
-            'minor/major scope on a digest update or non-semver tag',
-        ),
+        400: errorResponse('Invalid request body or note, or no current update available to skip'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Approval or container not found'),
         409: errorResponse('Approval already decided, or its candidate was superseded'),

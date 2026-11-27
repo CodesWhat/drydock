@@ -130,12 +130,6 @@ test.each([{}, [], true, 'v'.repeat(257)])(
   },
 );
 
-test('validate round-trips effective tagCeiling', () => {
-  expect(container.validate(createValidContainer({ tagCeiling: 'minor' })).tagCeiling).toBe(
-    'minor',
-  );
-});
-
 test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
   expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
 });
@@ -388,30 +382,6 @@ test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-dige
 
   expect(
     container.testable_isUpdateSuppressed(
-      { updatePolicy: { skipTags: ['major:1'] } },
-      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
-    ),
-  ).toBe(true);
-
-  expect(
-    container.testable_isUpdateSuppressed(
-      { updatePolicy: { skipTags: ['minor:1.1'] } },
-      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
-    ),
-  ).toBe(false);
-
-  expect(
-    container.testable_isUpdateSuppressed(
-      {
-        transformTags: '^rel-(.*)$ => $1',
-        updatePolicy: { skipTags: ['major:3'] },
-      },
-      { kind: 'tag', remoteValue: 'rel-3.0.1', semverDiff: 'patch' },
-    ),
-  ).toBe(true);
-
-  expect(
-    container.testable_isUpdateSuppressed(
       {
         updatePolicy: {
           skipDigests: ['sha256:next'],
@@ -424,17 +394,6 @@ test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-dige
       },
     ),
   ).toBe(true);
-});
-
-test('testable_isUpdateSuppressed ignores skipTags for a same-tag digest update', () => {
-  for (const entry of ['1.0.0', 'minor:1.0', 'major:1']) {
-    expect(
-      container.testable_isUpdateSuppressed(
-        { updatePolicy: { skipTags: [entry] }, result: { tag: '1.0.0', digest: 'sha256:next' } },
-        { kind: 'digest', remoteValue: 'sha256:next', semverDiff: 'unknown' },
-      ),
-    ).toBe(false);
-  }
 });
 
 test('testable_isUpdateSuppressed should return false when no suppression rule applies', () => {
@@ -1536,43 +1495,6 @@ test('model should reject an invalid result.updateInsight.kind value (#498)', as
         updateInsight: { tag: 'v1.46.1', kind: 'prerelease' },
       },
     }),
-  ).toThrow();
-});
-
-function createContainerWithCandidates(updateCandidates) {
-  return {
-    id: 'container-123456789',
-    name: 'test',
-    watcher: 'test',
-    image: {
-      id: 'image-123456789',
-      registry: { name: 'hub', url: 'https://hub' },
-      name: 'organization/image',
-      tag: { value: '1.2.3', semver: true },
-      digest: { watch: false },
-      architecture: 'arch',
-      os: 'os',
-    },
-    result: { tag: '2.0.0', updateCandidates },
-  };
-}
-
-test('model should keep result.updateCandidates per update type', async () => {
-  const updateCandidates = {
-    patch: { tag: '1.2.4', semverDiff: 'patch' },
-    minor: { tag: '1.3.0', digest: 'sha256:abc', semverDiff: 'minor' },
-    major: { tag: '2.0.0', semverDiff: 'major' },
-  };
-  const containerValidated = container.validate(createContainerWithCandidates(updateCandidates));
-  expect(containerValidated.result?.updateCandidates).toEqual(updateCandidates);
-  expect(containerValidated.updateKind.semverDiff).toBe('major');
-});
-
-test('model should reject an invalid result.updateCandidates entry', async () => {
-  expect(() =>
-    container.validate(
-      createContainerWithCandidates({ patch: { tag: '1.2.4', semverDiff: 'prerelease' } }),
-    ),
   ).toThrow();
 });
 
@@ -3778,64 +3700,4 @@ test('deriveContainerIdRetentionKey keys on the Docker id so an identity change 
 
 test('deriveContainerIdRetentionKey returns undefined when the id is missing', () => {
   expect(container.deriveContainerIdRetentionKey({ id: '' } as never)).toBeUndefined();
-});
-
-describe('locally built image base image updates', () => {
-  function localBuild(isLocalImage: boolean | undefined) {
-    const input = createValidContainer({ result: { tag: '1.26.0' } });
-    Object.assign(input.image, { isLocalImage });
-    input.image.tag.value = '1.25.0';
-    return container.validate(input);
-  }
-
-  test('flags a tag update on a locally built image as a base image update', () => {
-    const validated = localBuild(true);
-    expect(validated.updateKind).toEqual({
-      kind: 'tag',
-      baseImage: true,
-      localValue: '1.25.0',
-      remoteValue: '1.26.0',
-      semverDiff: 'minor',
-    });
-    expect(container.isLocalBuildContainer(validated)).toBe(true);
-  });
-
-  test('leaves the update kind of a registry-backed image unchanged', () => {
-    const validated = localBuild(false);
-    expect(validated.updateKind).toEqual({
-      kind: 'tag',
-      localValue: '1.25.0',
-      remoteValue: '1.26.0',
-      semverDiff: 'minor',
-    });
-    expect(container.isLocalBuildContainer(validated)).toBe(false);
-    expect(container.isLocalBuildContainer(undefined)).toBe(false);
-  });
-});
-
-describe('file-sourced containers', () => {
-  function validateWithId(id: string, extra: Record<string, unknown> = {}) {
-    return container.validate({ ...createContainerWithError('x'), id, ...extra });
-  }
-
-  test('derives source from the synthetic id prefix', () => {
-    const fileContainer = validateWithId(`${container.FILE_CONTAINER_ID_PREFIX}0123456789abcdef`);
-
-    expect(fileContainer.source).toBe('file');
-    expect(container.isFileSourcedContainer(fileContainer)).toBe(true);
-  });
-
-  test('leaves a Docker container without a source, even when one is supplied', () => {
-    const dockerContainer = validateWithId('0123456789abcdef', { source: 'file' });
-
-    expect(dockerContainer.source).toBeUndefined();
-    expect(Object.hasOwn(dockerContainer, 'source')).toBe(false);
-    expect(container.isFileSourcedContainer(dockerContainer)).toBe(false);
-  });
-
-  test('isFileSourcedContainer tolerates missing and non-string ids', () => {
-    expect(container.isFileSourcedContainer(undefined)).toBe(false);
-    expect(container.isFileSourcedContainer(null)).toBe(false);
-    expect(container.isFileSourcedContainer({ id: 42 })).toBe(false);
-  });
 });

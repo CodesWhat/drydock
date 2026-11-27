@@ -13,12 +13,7 @@ import {
   emitSecurityAlert,
   emitSelfUpdateStarting,
 } from '../../../event/index.js';
-import {
-  deriveContainerIdentityKey,
-  fullName,
-  isLocalBuildContainer,
-  LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE,
-} from '../../../model/container.js';
+import { deriveContainerIdentityKey, fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { buildImageReference, cleanRegistryUrl } from '../../../registries/image-reference.js';
@@ -58,21 +53,10 @@ import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from './created-container-candidate.js';
-import { assertFastLaneDigest } from './fast-lane-guard.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
-import {
-  acquirePullSlot,
-  DEFAULT_PULL_CONCURRENCY,
-  detectPullThrottle,
-  getPullPacingState,
-  normalizePullRegistryHost,
-  reportPullSuccess,
-  reportPullThrottle,
-} from './pull-pacing.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
-import { cancelRollbackMonitor } from './rollback-monitor-registry.js';
 import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator, { type SelfUpdateClassification } from './SelfUpdateOrchestrator.js';
 import { RetainSelfUpdateLifecycleError } from './SelfUpdateTransitionShared.js';
@@ -123,7 +107,6 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   dryrun: boolean;
   autoremovetimeout: number;
   pulltimeout: number;
-  pullconcurrency: number;
   helpercompletiontimeout: number;
   backupcount: number;
 }
@@ -363,7 +346,6 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'prepareSelfUpdateOperation',
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
-  'pullAndBindSpecialUpdateImage',
   'markSelfUpdateOperationFailed',
   'markSelfUpdateOperationSkipped',
   'runPreRuntimeUpdateLifecycle',
@@ -756,7 +738,6 @@ class Docker<
         prepareSelfUpdateOperation: updateLifecycleCallbacks.prepareSelfUpdateOperation,
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
-        pullAndBindSpecialUpdateImage: updateLifecycleCallbacks.pullAndBindSpecialUpdateImage,
         markSelfUpdateOperationFailed: updateLifecycleCallbacks.markSelfUpdateOperationFailed,
         markSelfUpdateOperationSkipped: updateLifecycleCallbacks.markSelfUpdateOperationSkipped,
       },
@@ -857,7 +838,6 @@ class Docker<
         .positive()
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
-      pullconcurrency: this.joi.number().integer().positive().default(DEFAULT_PULL_CONCURRENCY),
       helpercompletiontimeout: this.joi
         .number()
         .integer()
@@ -865,12 +845,6 @@ class Docker<
         .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
         .default(DEFAULT_PULL_TIMEOUT_MS),
       backupcount: this.joi.number().default(3),
-      livenesswindow: this.joi
-        .number()
-        .integer()
-        .min(0)
-        .max(MAX_SIGNED_32_BIT_TIMEOUT_MS)
-        .optional(),
       concurrency: this.joi.number().integer().positive().optional(),
     });
   }
@@ -1055,13 +1029,6 @@ class Docker<
    */
 
   async pullImage(dockerApi, auth, newImage, logContainer) {
-    const registryHost = normalizePullRegistryHost(newImage);
-    const pullConcurrency = this.configuration.pullconcurrency ?? DEFAULT_PULL_CONCURRENCY;
-    const pacing = getPullPacingState(registryHost);
-    if (pacing.blockedUntil !== undefined || pacing.active >= pullConcurrency) {
-      logContainer.info(`Pull image ${newImage} is waiting for a ${registryHost} pull slot`);
-    }
-    const releasePullSlot = await acquirePullSlot(registryHost, { limit: pullConcurrency });
     logContainer.info(`Pull image ${newImage}`);
     try {
       const pullProgressLogger = this.createPullProgressLogger(logContainer, newImage);
@@ -1137,17 +1104,10 @@ class Docker<
             (error) => settle(error),
           );
       });
-      reportPullSuccess(registryHost);
       logContainer.info(`Image ${newImage} pulled with success`);
     } catch (e: unknown) {
-      const throttle = detectPullThrottle(e);
-      if (throttle) {
-        reportPullThrottle(registryHost, throttle.retryAfterMs, logContainer);
-      }
       logContainer.warn(`Error when pulling image ${newImage} (${getErrorMessage(e)})`);
       throw e;
-    } finally {
-      releasePullSlot();
     }
   }
 
@@ -1302,25 +1262,17 @@ class Docker<
           endpointNetworkNames,
         );
 
-        const secondaryNetworkNames = endpointNetworkNames.filter(
-          (networkName) => networkName !== primaryNetworkName,
-        );
-        // Network connect ignores an endpoint MAC below API 1.54, so when a
-        // secondary endpoint pins one, create every endpoint at once (API 1.44+).
-        const secondaryPinsMac = secondaryNetworkNames.some((networkName) =>
-          Boolean(endpointsConfig[networkName]?.MacAddress),
-        );
-        if (!secondaryPinsMac) {
-          containerToCreatePayload = {
-            ...containerToCreate,
-            NetworkingConfig: {
-              EndpointsConfig: {
-                [primaryNetworkName]: endpointsConfig[primaryNetworkName],
-              },
+        containerToCreatePayload = {
+          ...containerToCreate,
+          NetworkingConfig: {
+            EndpointsConfig: {
+              [primaryNetworkName]: endpointsConfig[primaryNetworkName],
             },
-          };
-          additionalNetworkNames.push(...secondaryNetworkNames);
-        }
+          },
+        };
+        additionalNetworkNames.push(
+          ...endpointNetworkNames.filter((networkName) => networkName !== primaryNetworkName),
+        );
       }
 
       newContainer = await dockerApi.createContainer(containerToCreatePayload);
@@ -1400,7 +1352,6 @@ class Docker<
       runtimeFieldOrigins,
       defaultRuntime,
       hookLabelProvenance,
-      explicitEndpointMacAddresses,
       logContainer,
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
@@ -1427,14 +1378,6 @@ class Docker<
       },
       {},
     );
-    // Explicit operator intent (Compose `mac_address`) is the one signal that
-    // can pin a MAC on any endpoint, never a MAC copied from inspect.
-    for (const [networkName, macAddress] of Object.entries(explicitEndpointMacAddresses || {})) {
-      const endpointConfig = endpointsConfig[networkName] as Record<string, unknown> | undefined;
-      if (endpointConfig && macAddress) {
-        endpointConfig.MacAddress = macAddress;
-      }
-    }
     const sanitizedContainerConfig = this.runtimeConfigManager.sanitizeClonedRuntimeConfig(
       currentContainer.Config,
       sourceImageConfig,
@@ -1766,14 +1709,7 @@ class Docker<
    * Create a new container from the cloned spec and start it if
    * the previous container was running.
    */
-  async recreateContainer(
-    dockerApi,
-    currentContainerSpec,
-    newImage,
-    container,
-    logContainer,
-    explicitEndpointMacAddresses?: Record<string, string>,
-  ) {
+  async recreateContainer(dockerApi, currentContainerSpec, newImage, container, logContainer) {
     // DR-126: resolve clone options through the same helper the update path
     // uses (ContainerUpdateExecutor.prepareContainerUpdateExecution) instead
     // of passing logContainer as the runtime-config options. Without this,
@@ -1793,9 +1729,7 @@ class Docker<
     const containerToCreateInspect = this.cloneContainer(
       currentContainerSpec,
       newImage,
-      explicitEndpointMacAddresses
-        ? { ...cloneRuntimeConfigOptions, explicitEndpointMacAddresses }
-        : cloneRuntimeConfigOptions,
+      cloneRuntimeConfigOptions,
     );
 
     const newContainer = await this.createContainer(
@@ -2228,16 +2162,6 @@ class Docker<
     return this.selfUpdateOrchestrator.execute(context, container, logContainer, operationId);
   }
 
-  async pullAndBindSpecialUpdateImage(context, container, logContainer) {
-    await this.pullImage(context.dockerApi, context.auth, context.newImage, logContainer);
-    return this.bindPulledImageIdentity(
-      context.dockerApi,
-      context.newImage,
-      container,
-      logContainer,
-    );
-  }
-
   async maybeNotifySelfUpdate(container, logContainer, operationId?: string) {
     await this.selfUpdateOrchestrator.maybeNotify(container, logContainer, operationId);
   }
@@ -2324,27 +2248,6 @@ class Docker<
   }
 
   protected async capturePulledImageIdentity(
-    dockerApi: PulledImageInspectApi,
-    imageReference: string,
-    container,
-    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
-    options?: PulledImageIdentityOptions,
-    bindingPolicyOverride?: 'required' | 'optional' | 'disabled',
-  ): Promise<PulledImageIdentityOutcome> {
-    const outcome = await this.resolvePulledImageIdentity(
-      dockerApi,
-      imageReference,
-      container,
-      logContainer,
-      options,
-      bindingPolicyOverride,
-    );
-    // A fast-laned update qualified one candidate digest but pulls by tag.
-    assertFastLaneDigest(container, outcome.imageIdentity, options !== undefined);
-    return outcome;
-  }
-
-  private async resolvePulledImageIdentity(
     dockerApi: PulledImageInspectApi,
     imageReference: string,
     container,
@@ -2823,10 +2726,7 @@ class Docker<
   }
 
   getRollbackConfig(container) {
-    return this.rollbackMonitor.getConfig(
-      container,
-      (this.configuration as { livenesswindow?: number } | undefined)?.livenesswindow,
-    );
+    return this.rollbackMonitor.getConfig(container);
   }
 
   async maybeStartAutoRollbackMonitor(dockerApi, container, rollbackConfig, logContainer) {
@@ -2857,10 +2757,6 @@ class Docker<
       onSelfUpdateOperationId?: (operationId: string, updated: boolean) => void;
     },
   ) {
-    // Never replace a locally built image with the pulled upstream base.
-    if (isLocalBuildContainer(container)) {
-      throw new Error(LOCAL_BUILD_UPDATE_REFUSAL_MESSAGE);
-    }
     const selfUpdateClassification =
       options?.selfUpdateClassification ?? (await this.classifySelfUpdate(container));
     if (selfUpdateClassification === 'indeterminate') {
@@ -2873,9 +2769,6 @@ class Docker<
     const lifecycle = withContainerUpdateLocks(
       this.getUpdateLockKeys(container),
       async () => {
-        // The update replaces the container a health or liveness monitor is
-        // watching; a rollback queued behind this lock would undo this update.
-        cancelRollbackMonitor(container);
         const requestedOperationId = getRequestedOperationId(container, runtimeContext);
         try {
           const lifecycleResult: unknown = await this.updateLifecycleExecutor.run(

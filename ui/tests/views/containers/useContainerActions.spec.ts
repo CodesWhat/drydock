@@ -5199,22 +5199,6 @@ describe('useContainerActions', () => {
     await updatePromise;
   });
 
-  it('isContainerScanInProgress follows the server securityScanState flag without a local scan', async () => {
-    const container = makeContainer({ id: 'container-9', name: 'api' });
-    const { composable } = await mountActionsHarness({
-      containers: [container],
-      containerIdMap: { api: 'container-9' },
-    });
-
-    expect(composable.isContainerScanInProgress(container)).toBe(false);
-    expect(
-      composable.isContainerScanInProgress({ ...container, securityScanState: 'scanning' }),
-    ).toBe(true);
-    expect(
-      composable.isContainerScanInProgress({ ...container, securityScanState: 'scanned' }),
-    ).toBe(false);
-  });
-
   it('shows soft-blocker policy list and override label in update confirmation', async () => {
     const container = makeContainer({
       id: 'container-1',

@@ -3,11 +3,6 @@ import { ref } from 'vue';
 import ContainerFullPageEnvironmentTab from '@/components/containers/ContainerFullPageEnvironmentTab.vue';
 
 const mockRevealContainerEnv = vi.hoisted(() => vi.fn());
-const mockIsPortwingAgent = vi.hoisted(() => vi.fn(() => false));
-
-vi.mock('@/composables/useAgentHosts', () => ({
-  useAgentHosts: () => ({ isPortwingAgent: mockIsPortwingAgent }),
-}));
 
 interface EnvEntry {
   key: string;
@@ -50,8 +45,6 @@ function mountComponent() {
 describe('ContainerFullPageEnvironmentTab', () => {
   beforeEach(() => {
     mockRevealContainerEnv.mockReset();
-    mockIsPortwingAgent.mockReset();
-    mockIsPortwingAgent.mockReturnValue(false);
     selectedContainer.value = makeContainer();
   });
 
@@ -76,18 +69,6 @@ describe('ContainerFullPageEnvironmentTab', () => {
     expect(wrapper.text()).toContain('/cfg:/etc/cfg');
     const counts = wrapper.findAll('.badge.ml-auto').map((badge) => badge.text());
     expect(counts).toEqual(['1', '2']);
-    expect(wrapper.find('.reveal-stub').exists()).toBe(false);
-  });
-
-  it('hides the reveal control for containers on Portwing agents', () => {
-    mockIsPortwingAgent.mockReturnValue(true);
-    selectedContainer.value = makeContainer({
-      env: [{ key: 'API_KEY', value: '***', sensitive: true }],
-    });
-
-    const wrapper = mountComponent();
-
-    expect(wrapper.text()).toContain('API_KEY');
     expect(wrapper.find('.reveal-stub').exists()).toBe(false);
   });
 

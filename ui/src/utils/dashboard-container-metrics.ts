@@ -112,11 +112,7 @@ function updateImageSecurityAggregate(
   container: Container,
   hasContainerSecurityIssue: boolean,
 ) {
-  // A container mid-scan only counts as scanned when an earlier result is still on it.
-  if (
-    container.securityScanState !== 'not-scanned' &&
-    (container.securityScanState !== 'scanning' || container.securitySummary)
-  ) {
+  if (container.securityScanState !== 'not-scanned') {
     aggregate.scanned = true;
   }
 

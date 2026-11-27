@@ -5,8 +5,6 @@
     "filterPlaceholder": "Lọc theo mục tiêu hoặc sự kiện...",
     "onThisPage": "trên trang này",
     "containerFilterPlaceholder": "Tên container...",
-    "actorFilterPlaceholder": "Người dùng...",
-    "actorFilterLabel": "Lọc theo người dùng",
     "allEvents": "Tất cả sự kiện",
     "eventsSelected": "{count} sự kiện đã chọn",
     "clear": "Xóa",
@@ -18,19 +16,12 @@
       "nextPage": "Trang tiếp"
     },
     "emptyFiltered": "Không có mục kiểm tra nào khớp với bộ lọc của bạn",
-    "systemActor": "Hệ thống",
-    "exportError": "Không thể xuất nhật ký kiểm tra",
-    "export": {
-      "csv": "Xuất CSV",
-      "json": "Xuất JSON"
-    },
     "columns": {
       "time": "Thời gian",
       "event": "Sự kiện",
       "target": "Mục tiêu",
       "status": "Trạng thái",
-      "details": "Chi tiết",
-      "actor": "Người thực hiện"
+      "details": "Chi tiết"
     },
     "card": {
       "time": "Thời gian",
@@ -43,8 +34,7 @@
       "fromVersion": "Từ phiên bản",
       "toVersion": "Đến phiên bản",
       "trigger": "Trigger",
-      "details": "Chi tiết",
-      "actor": "Người thực hiện"
+      "details": "Chi tiết"
     },
     "status": {
       "success": "Thành công",
@@ -105,7 +95,6 @@
       "update-applied-dryrun": "Đã xem trước cập nhật (Dry Run)",
       "update-failed": "Cập nhật thất bại",
       "auto-update-blocked": "Tự động cập nhật bị chặn",
-      "security-fast-lane": "Làn nhanh bảo mật",
       "update-policy-override-set": "Đã đặt ghi đè chính sách cập nhật",
       "update-policy-override-cleared": "Đã xóa ghi đè chính sách cập nhật",
       "group-policy-set": "Đã đặt chính sách nhóm",
@@ -119,10 +108,7 @@
       "notification-delivery-failed": "Gửi thông báo thất bại",
       "security-alert": "Cảnh báo bảo mật",
       "maturity-cleared": "Đã hết thời gian chờ",
-      "image-prune": "Dọn dẹp Image",
-      "cleanup": "Dọn dẹp",
-      "notification-silence-set": "Đã tắt tiếng thông báo",
-      "notification-silence-cleared": "Đã bật lại tiếng thông báo"
+      "image-prune": "Dọn dẹp Image"
     },
     "target": {
       "container": "Container",

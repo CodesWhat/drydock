@@ -827,47 +827,6 @@ test('getMaturitySweepConfiguration should throw when the cron value is invalid'
   delete configuration.ddEnvVars.DD_MATURITY_SWEEP_CRON_EXTRA;
 });
 
-test('getNotificationAlertsConfiguration defaults to no quiet hours and no patch alerts', () => {
-  expect(configuration.getNotificationAlertsConfiguration()).toStrictEqual({
-    agentversionpatch: false,
-    quiethours: { schedule: '', tz: 'UTC', rules: '', exempt: 'security-alert,update-failed' },
-  });
-});
-
-test('getNotificationAlertsConfiguration reads the DD_ALERTS_* variables', () => {
-  configuration.ddEnvVars.DD_ALERTS_AGENTVERSIONPATCH = 'true';
-  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE = '22:00-07:00';
-  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_TZ = 'Europe/Berlin';
-  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_RULES = 'container-stopped';
-  configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_EXEMPT = '';
-  try {
-    expect(configuration.getNotificationAlertsConfiguration()).toStrictEqual({
-      agentversionpatch: true,
-      quiethours: {
-        schedule: '22:00-07:00',
-        tz: 'Europe/Berlin',
-        rules: 'container-stopped',
-        exempt: '',
-      },
-    });
-  } finally {
-    delete configuration.ddEnvVars.DD_ALERTS_AGENTVERSIONPATCH;
-    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_SCHEDULE;
-    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_TZ;
-    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_RULES;
-    delete configuration.ddEnvVars.DD_ALERTS_QUIETHOURS_EXEMPT;
-  }
-});
-
-test('getNotificationAlertsConfiguration throws on an unknown key', () => {
-  configuration.ddEnvVars.DD_ALERTS_NOPE = 'x';
-  try {
-    expect(() => configuration.getNotificationAlertsConfiguration()).toThrow();
-  } finally {
-    delete configuration.ddEnvVars.DD_ALERTS_NOPE;
-  }
-});
-
 test('replaceSecrets must read secret in file', async () => {
   const vars = {
     DD_SERVER_X__FILE: `${TEST_DIRECTORY}/secret.txt`,
@@ -3894,7 +3853,7 @@ describe('drydock.yml loading', () => {
   });
 });
 
-// The file layer only reaches ddEnvVars/get() consumers. These 23 files read
+// The file layer only reaches ddEnvVars/get() consumers. These 22 files read
 // process.env.DD_* directly and are not covered by drydock.yml in v1.8.
 // Shared between the enumeration test below and the UNSUPPORTED_FILE_KEYS
 // recompute test after it, so the two can't drift into disagreement about
@@ -3912,7 +3871,6 @@ const DIRECT_ENV_READER_FILES = [
   'registries/providers/ghcr/Ghcr.ts',
   'security/scan.ts',
   'stats/config.ts',
-  'store/audit.ts',
   'store/container.ts',
   'store/update-operation.ts',
   'triggers/hooks/HookRunner.ts',
@@ -4087,61 +4045,14 @@ describe('validateStartupConfiguration (roadmap 7.1 slice 2)', () => {
     }
   }
 
-  test('with no config file present and a valid environment, resolves to no errors', async () => {
-    // A fresh module so ddEnvVars reflects this process's real environment, not
-    // keys earlier tests left on the shared singleton.
-    const fresh = await importFreshConfiguration();
-    await expect(fresh.validateStartupConfiguration()).resolves.toStrictEqual({ errors: [] });
-  }, 30_000);
-
-  async function withEnv<T>(env: Record<string, string>, run: () => Promise<T>): Promise<T> {
-    Object.assign(process.env, env);
-    try {
-      vi.resetModules();
-      return await run();
-    } finally {
-      for (const key of Object.keys(env)) {
-        delete process.env[key];
-      }
-    }
-  }
-
-  test('env-only: an invalid watcher filter regex is reported so startup stops', async () => {
-    await withEnv({ DD_WATCHER_LOCAL_CONTAINERS_INCLUDE: '(' }, async () => {
-      const fresh = await importFreshConfiguration();
-      const result = await fresh.validateStartupConfiguration();
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].path).toBe('watcher.local.containers.include');
-      expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_CONTAINERS_INCLUDE');
+  test('with no config file present, resolves to no errors without walking a single component (env-only gate)', async () => {
+    // No DD_CONFIG_FILE at all in this process's real environment, so every
+    // key in configFileSources (if any) is 'env' — the hasFileSourcedValue
+    // gate short-circuits before the dynamic import of file/validate.js.
+    await expect(configuration.validateStartupConfiguration()).resolves.toStrictEqual({
+      errors: [],
     });
-  }, 30_000);
-
-  test('env-only: a restart-loop threshold below 2 is reported so startup stops', async () => {
-    await withEnv({ DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD: '1' }, async () => {
-      const fresh = await importFreshConfiguration();
-      const result = await fresh.validateStartupConfiguration();
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_RESTARTLOOP_THRESHOLD');
-    });
-  }, 30_000);
-
-  test('env-only: an invalid non-watcher component still degrades instead of failing the gate', async () => {
-    await withEnv({ DD_ACTION_DOCKER_DEPLOY_PULLTIMEOUT: 'not-a-number' }, async () => {
-      const fresh = await importFreshConfiguration();
-      await expect(fresh.validateStartupConfiguration()).resolves.toStrictEqual({ errors: [] });
-    });
-  }, 30_000);
-
-  test('file-sourced: an invalid watcher filter regex is reported with its YAML path', async () => {
-    await withConfigFile(
-      'watcher:\n  local:\n    containers:\n      include: "("\n',
-      async (fresh) => {
-        const result = await fresh.validateStartupConfiguration();
-        expect(result.errors).toHaveLength(1);
-        expect(result.errors[0].envKey).toBe('DD_WATCHER_LOCAL_CONTAINERS_INCLUDE');
-      },
-    );
-  }, 30_000);
+  });
 
   test('a valid config file produces no errors', async () => {
     await withConfigFile('server:\n  port: 3000\n', async (freshConfiguration) => {
@@ -4243,7 +4154,7 @@ describe('applyConfigurationReload', () => {
 });
 
 describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)', () => {
-  // This test enumerates the 23 files so a new direct reader shows up as a
+  // This test enumerates the 22 files so a new direct reader shows up as a
   // failing assertion instead of a silent coverage gap.
   const DIRECT_ENV_PATTERN = /process\.env(?:\.DD_|\[['"]DD_)/;
   const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'coverage']);
@@ -4264,7 +4175,7 @@ describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)',
     return results;
   }
 
-  test('is exactly these 23 files, verified against the tree rather than trusted', () => {
+  test('is exactly these 22 files, verified against the tree rather than trusted', () => {
     const appRoot = path.resolve(TEST_DIRECTORY, '..');
     const actual = listProductionTsFiles(appRoot)
       .filter((filePath) => DIRECT_ENV_PATTERN.test(fs.readFileSync(filePath, 'utf-8')))
@@ -4277,7 +4188,7 @@ describe('direct process.env.DD_ readers (spec-7.1-config-file.md section 1.2)',
 
 describe('UNSUPPORTED_FILE_KEYS (spec-7.1-config-file.md section 1.2)', () => {
   // Every DD_* variable actually read via process.env(.DD_ / ['DD_...']) in
-  // the 23 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
+  // the 22 direct-reader files above, minus DD_SELF_UPDATE_*: every one of
   // those is a handoff value the app writes itself as environment for a
   // helper container it spawns (SelfUpdateTransitionShared.ts and
   // self-update-controller.ts's own `-e` argument lists), never something an

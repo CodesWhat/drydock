@@ -16,18 +16,12 @@ describe('getTriggerCategoryForType', () => {
     },
   );
 
-  test.each([
-    'slack',
-    'smtp',
-    'ntfy',
-    'mqtt',
-    'discord',
-    'http',
-    'githubdispatch',
-    'gitlabpipeline',
-  ])('classifies %s as a notification trigger', (type) => {
-    expect(getTriggerCategoryForType(type)).toBe('notification');
-  });
+  test.each(['slack', 'smtp', 'ntfy', 'mqtt', 'discord', 'http'])(
+    'classifies %s as a notification trigger',
+    (type) => {
+      expect(getTriggerCategoryForType(type)).toBe('notification');
+    },
+  );
 
   test('is case insensitive', () => {
     expect(getTriggerCategoryForType('DockerCompose')).toBe('action');

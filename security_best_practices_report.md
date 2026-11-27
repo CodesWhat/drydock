@@ -1,4 +1,4 @@
-# Drydock security best practices review
+# Drydock Security Best-Practices Review
 
 Date: 2026-08-13
 

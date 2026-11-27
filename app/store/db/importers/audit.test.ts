@@ -81,7 +81,6 @@ describe('store/db/importers/audit', () => {
       trigger_name: 'docker.default',
       status: 'success',
       details: 'plain details text',
-      actor: null,
     });
   });
 

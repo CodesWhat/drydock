@@ -30,11 +30,6 @@ export const ddTagFamily = 'dd.tag.family';
  */
 export const ddTagPinInfo = 'dd.tag.pin.info';
 
-/**
- * Running-version ceiling: 'major' stays inside the running major, 'minor' inside the running major.minor.
- */
-export const ddTagCeiling = 'dd.tag.ceiling';
-
 export const ddUpdatePolicyMaturityMode = 'dd.updatePolicy.maturityMode';
 export const ddUpdatePolicyMaturityMinAgeDays = 'dd.updatePolicy.maturityMinAgeDays';
 export const ddUpdatePolicyMaturitySkipReleases = 'dd.updatePolicy.maturitySkipReleases';

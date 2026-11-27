@@ -9,7 +9,6 @@ import {
   parseMaturitySkipReleases,
   resolveMaturityMinAgeDays,
 } from '../../model/maturity-policy.js';
-import { buildLineSkipEntry, isRejectScope } from '../../model/skip-scope.js';
 import {
   applyUpdatePolicyOverrides,
   DECLARATIVE_UPDATE_POLICY_FIELDS,
@@ -131,13 +130,8 @@ function applyLayeredPolicyAction(
         return { error: 'No current update available to skip' };
       }
       if (!value) return { error: 'No update value available to skip' };
-      const skipEntry = resolveSkipEntry(container, kind, value, body);
-      if ('error' in skipEntry) return skipEntry;
       const field = kind === 'tag' ? 'skipTags' : 'skipDigests';
-      overrides[field] = uniqStrings([
-        ...(overrides[field] ?? effective[field] ?? []),
-        skipEntry.entry,
-      ]);
+      overrides[field] = uniqStrings([...(overrides[field] ?? effective[field] ?? []), value]);
       return { policy: overrides };
     }
     case 'remove-skip': {
@@ -258,38 +252,9 @@ function applyReleaseMaturityFields(policy: ContainerUpdatePolicy, body: Record<
   }
 }
 
-/**
- * The skip entry for the current update at the requested scope. `tag` (the default) skips
- * the exact value; `minor` and `major` skip the whole line the tag belongs to and only make
- * sense for a tag update with a semver line, never for a digest or a non-semver tag.
- */
-function resolveSkipEntry(
-  container: Container,
-  kind: 'tag' | 'digest',
-  value: string,
-  body: Record<string, unknown>,
-): { entry: string } | { error: string } {
-  const scope = body.scope ?? 'tag';
-  if (!isRejectScope(scope)) {
-    return { error: 'Invalid skip scope; expected "tag", "minor" or "major"' };
-  }
-  if (scope === 'tag') {
-    return { entry: value };
-  }
-  if (kind !== 'tag') {
-    return { error: `Only a tag update can be skipped by ${scope} line` };
-  }
-  const entry = buildLineSkipEntry(scope, value, container.transformTags);
-  if (!entry) {
-    return { error: `Tag ${value} has no semver ${scope} line to skip` };
-  }
-  return { entry };
-}
-
 function applySkipCurrentAction(
   container: Container,
   updatePolicy: ContainerUpdatePolicy,
-  body: Record<string, unknown>,
   uniqStrings: UniqStringsFn,
 ): UpdatePolicyActionResult {
   const updateKind = container.updateKind?.kind;
@@ -300,14 +265,10 @@ function applySkipCurrentAction(
   if (!updateValue) {
     return { error: 'No update value available to skip' };
   }
-  const skipEntry = resolveSkipEntry(container, updateKind, updateValue, body);
-  if ('error' in skipEntry) {
-    return skipEntry;
-  }
   if (updateKind === 'tag') {
-    updatePolicy.skipTags = uniqStrings([...(updatePolicy.skipTags || []), skipEntry.entry]);
+    updatePolicy.skipTags = uniqStrings([...(updatePolicy.skipTags || []), updateValue]);
   } else {
-    updatePolicy.skipDigests = uniqStrings([...(updatePolicy.skipDigests || []), skipEntry.entry]);
+    updatePolicy.skipDigests = uniqStrings([...(updatePolicy.skipDigests || []), updateValue]);
   }
   return { policy: updatePolicy };
 }
@@ -355,7 +316,7 @@ function applyPolicyAction(
 ): UpdatePolicyActionResult {
   switch (action) {
     case 'skip-current':
-      return applySkipCurrentAction(container, updatePolicy, body, uniqStrings);
+      return applySkipCurrentAction(container, updatePolicy, uniqStrings);
     case 'remove-skip':
       return applyRemoveSkipAction(updatePolicy, body, uniqStrings);
     case 'clear-skips':

@@ -31,11 +31,6 @@ describe('containerPaths', () => {
       ],
       description: 'Override field to revert; omit to revert all declarative policy overrides.',
     });
-    expect(schema.properties.scope).toMatchObject({
-      type: 'string',
-      enum: ['tag', 'minor', 'major'],
-      default: 'tag',
-    });
     expect(schema.properties.minAgeDays).toEqual({
       type: 'integer',
       minimum: 1,

@@ -22,8 +22,5 @@ export function recordLoginAuditEvent(
     status,
     containerName: 'authentication',
     details: `${details}; user=${sanitizeLogParam(auditUser)}`,
-    // Only a verified login names an actor. A failed attempt carries a name the
-    // caller typed, which is evidence for the details line but not an identity.
-    ...(status === 'success' ? { actor: auditUser } : {}),
   });
 }

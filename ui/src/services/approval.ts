@@ -1,5 +1,5 @@
 import { i18n } from '../boot/i18n';
-import type { SecurityFastLane, UpdateEligibility } from '../types/container';
+import type { UpdateEligibility } from '../types/container';
 import { readJsonResponse } from '../utils/api';
 
 const APPROVALS_API_BASE = '/api/v1/approvals';
@@ -13,8 +13,6 @@ type ApprovalResolution =
 type ApprovalOutcome = 'applied' | 'rolled-back' | 'failed';
 type ApprovalUpdateKind = 'tag' | 'digest' | 'unknown';
 type ApprovalSemverDiff = 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
-/** How much a rejection skips: the exact tag, its whole X.Y line, or its whole X line. */
-export type RejectScope = 'tag' | 'minor' | 'major';
 export type ApprovalStatusFilter = 'pending' | 'deferred' | 'decided' | 'all';
 
 export interface ApprovalRecord {
@@ -38,8 +36,6 @@ export interface ApprovalRecord {
   scanLow?: number;
   scanUnknown?: number;
   scanAt?: string;
-  /** Set live by the server when the candidate fixes critical/high findings of the running image. */
-  securityFastLane?: SecurityFastLane;
   createdAt: string;
   createdAtMs: number;
   decision: ApprovalDecision;
@@ -247,15 +243,12 @@ async function approveApproval(
 
 async function rejectApproval(
   id: string,
-  options: { note?: string; scope?: RejectScope } = {},
+  options: { note?: string } = {},
 ): Promise<ApprovalDecisionResponse> {
-  const body: Record<string, unknown> = {};
-  if (options.note !== undefined) body.note = options.note;
-  if (options.scope !== undefined) body.scope = options.scope;
   return postDecision<ApprovalDecisionResponse>(
     id,
     'reject',
-    Object.keys(body).length > 0 ? body : undefined,
+    options.note !== undefined ? { note: options.note } : undefined,
     'Reject approval API',
     'approvalsView.httpErrors.rejectFailed',
   );

@@ -29,7 +29,6 @@ import * as nameBindings from './name-bindings.js';
 import * as notification from './notification.js';
 import * as notificationHistory from './notification-history.js';
 import * as notificationOutbox from './notification-outbox.js';
-import * as notificationSilence from './notification-silence.js';
 import * as secrets from './secrets.js';
 import * as sessionStore from './session.js';
 import * as settings from './settings.js';
@@ -244,7 +243,6 @@ function createCollections(): void {
   notification.createCollections(sqliteDb as Database);
   notificationHistory.createCollections(sqliteDb as Database);
   notificationOutbox.createCollections(sqliteDb as Database);
-  notificationSilence.createCollections(sqliteDb as Database);
   secrets.createCollections(sqliteDb as Database);
   sessionStore.createCollections(sqliteDb as Database);
   totp.createCollections(sqliteDb as Database);

@@ -23,7 +23,6 @@ const configurationValid = {
   order: 100,
   autoremovetimeout: 10000,
   pulltimeout: 600000,
-  pullconcurrency: 2,
   helpercompletiontimeout: 600000,
   backupcount: 3,
   simpletitle:
@@ -537,32 +536,6 @@ test('validateConfiguration should return validated configuration when valid', a
   expect(validatedConfiguration).toStrictEqual(configurationValid);
 });
 
-test('validateConfiguration accepts a liveness window and rejects a negative one', async () => {
-  expect(
-    docker.validateConfiguration({ ...configurationValid, livenesswindow: 30000 }).livenesswindow,
-  ).toBe(30000);
-  expect(() => docker.validateConfiguration({ ...configurationValid, livenesswindow: -1 })).toThrow(
-    joi.ValidationError,
-  );
-});
-
-test('getRollbackConfig passes the action liveness window to the rollback monitor', () => {
-  const originalRollbackMonitor = docker.rollbackMonitor;
-  const originalConfiguration = docker.configuration;
-  const getConfig = vi.fn().mockReturnValue({});
-  docker.rollbackMonitor = { getConfig };
-  docker.configuration = { ...originalConfiguration, livenesswindow: 20000 };
-  const container = createTriggerContainer();
-
-  try {
-    docker.getRollbackConfig(container);
-    expect(getConfig).toHaveBeenCalledWith(container, 20000);
-  } finally {
-    docker.rollbackMonitor = originalRollbackMonitor;
-    docker.configuration = originalConfiguration;
-  }
-});
-
 test('validateConfiguration should throw error when invalid', async () => {
   const configuration = {
     url: 'git://xxx.com',
@@ -793,28 +766,6 @@ test('createContainer should connect additional networks after create', async ()
     Container: 'container-name',
     EndpointConfig: { Aliases: ['container-name'] },
   });
-});
-
-test('pullAndBindSpecialUpdateImage pulls the image then binds its identity', async () => {
-  const pull = vi.spyOn(docker, 'pullImage').mockResolvedValue(undefined);
-  const bind = vi
-    .spyOn(docker, 'bindPulledImageIdentity')
-    .mockResolvedValue({ imageIdentity: 'test/test:1.2.3@sha256:abc' });
-  const dockerApi = {};
-  const container = { name: 'drydock' };
-  const log = { info: vi.fn(), warn: vi.fn() };
-
-  const result = await docker.pullAndBindSpecialUpdateImage(
-    { dockerApi, auth: 'a', newImage: 'test/test:1.2.3' },
-    container,
-    log,
-  );
-
-  expect(pull).toHaveBeenCalledWith(dockerApi, 'a', 'test/test:1.2.3', log);
-  expect(bind).toHaveBeenCalledWith(dockerApi, 'test/test:1.2.3', container, log);
-  expect(result).toEqual({ imageIdentity: 'test/test:1.2.3@sha256:abc' });
-  pull.mockRestore();
-  bind.mockRestore();
 });
 
 // --- pullImage ---
@@ -1263,88 +1214,6 @@ test('cloneContainer should drop the auto-assigned endpoint MacAddress when Conf
   expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
 });
 
-test('cloneContainer should pin explicit per-network MACs and never copy generated ones', () => {
-  const clone = docker.cloneContainer(
-    {
-      Name: '/macvlan-app',
-      Id: 'abc123',
-      HostConfig: { NetworkMode: 'internal' },
-      Config: { configA: 'a' },
-      NetworkSettings: {
-        Networks: {
-          internal: { MacAddress: '02:42:c0:a8:01:01' },
-          macvlan_net: {
-            IPAMConfig: { IPv4Address: '192.168.1.50' },
-            MacAddress: '02:42:c0:a8:01:32',
-          },
-          generated: { MacAddress: '02:42:c0:a8:01:77' },
-        },
-      },
-    },
-    'test/test:2.0.0',
-    {
-      explicitEndpointMacAddresses: {
-        macvlan_net: '02:42:ac:11:00:aa',
-        missing: '02:42:ac:11:00:bb',
-        empty: '',
-      },
-    },
-  );
-
-  const endpoints = clone.NetworkingConfig.EndpointsConfig;
-  expect(endpoints.macvlan_net.MacAddress).toBe('02:42:ac:11:00:aa');
-  expect(endpoints.macvlan_net.IPAMConfig).toEqual({ IPv4Address: '192.168.1.50' });
-  expect(endpoints.internal).not.toHaveProperty('MacAddress');
-  expect(endpoints.generated).not.toHaveProperty('MacAddress');
-  expect(endpoints).not.toHaveProperty('missing');
-  expect(clone).not.toHaveProperty('MacAddress');
-});
-
-test('createContainer should create every endpoint at once when a secondary network pins a MAC', async () => {
-  const connect = vi.fn().mockResolvedValue(undefined);
-  const getNetwork = vi.fn().mockReturnValue({ connect });
-  const createContainer = vi.fn().mockResolvedValue({ start: () => Promise.resolve() });
-  const containerToCreate = {
-    name: 'container-name',
-    HostConfig: { NetworkMode: 'cloud_default' },
-    NetworkingConfig: {
-      EndpointsConfig: {
-        cloud_default: {},
-        macvlan_net: { MacAddress: '02:42:ac:11:00:aa' },
-      },
-    },
-  };
-
-  await docker.createContainer(
-    { createContainer, getNetwork },
-    containerToCreate,
-    'container-name',
-    createMockLog('info', 'warn'),
-  );
-
-  expect(createContainer).toHaveBeenCalledWith(containerToCreate);
-  expect(getNetwork).not.toHaveBeenCalled();
-  expect(connect).not.toHaveBeenCalled();
-});
-
-test('recreateContainer should hand explicit MAC addresses to the clone', async () => {
-  const cloneSpy = vi.spyOn(docker, 'cloneContainer').mockReturnValue({ name: 'c' } as any);
-  vi.spyOn(docker.runtimeConfigManager, 'getCloneRuntimeConfigOptions').mockResolvedValue({
-    defaultRuntime: 'runc',
-  });
-  vi.spyOn(docker, 'createContainer').mockResolvedValue({ start: vi.fn() } as any);
-  const spec = { Name: '/c', Id: 'id', State: { Running: false } };
-
-  await docker.recreateContainer({}, spec, 'img:1', { name: 'c' }, createMockLog('info', 'warn'), {
-    net: '02:42:ac:11:00:aa',
-  });
-
-  expect(cloneSpy).toHaveBeenCalledWith(spec, 'img:1', {
-    defaultRuntime: 'runc',
-    explicitEndpointMacAddresses: { net: '02:42:ac:11:00:aa' },
-  });
-});
-
 test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config and retain the root field for API < 1.44 back-compat', () => {
   const clone = docker.cloneContainer(
     {
@@ -1751,32 +1620,20 @@ test('trigger should catch error when removing digest image fails', async () => 
   docker.configuration = { ...configurationValid, dryrun: false, prune: true };
   docker.log = log;
   stubTriggerFlow();
-  const removeImageSpy = vi
-    .spyOn(docker, 'removeImage')
-    .mockRejectedValue(new Error('remove failed'));
-  const warn = vi.fn();
-  docker.log = {
-    ...log,
-    child: vi.fn(() => ({ info: vi.fn(), warn, debug: vi.fn(), error: vi.fn() })),
-  };
+  vi.spyOn(docker, 'removeImage').mockRejectedValue(new Error('remove failed'));
 
-  // The prune failure is swallowed: the update itself still completes.
-  await expect(
-    docker.trigger(
-      createTriggerContainer({
-        image: {
-          name: 'test/test',
-          registry: { name: 'hub', url: 'my-registry' },
-          tag: { value: 'latest' },
-          digest: { repo: 'sha256:olddigest' },
-        },
-        updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
-      }),
-    ),
-  ).resolves.toBeUndefined();
-
-  expect(removeImageSpy).toHaveBeenCalledTimes(1);
-  expect(warn).toHaveBeenCalledWith('Unable to remove previous digest image (remove failed)');
+  // Should not throw
+  await docker.trigger(
+    createTriggerContainer({
+      image: {
+        name: 'test/test',
+        registry: { name: 'hub', url: 'my-registry' },
+        tag: { value: 'latest' },
+        digest: { repo: 'sha256:olddigest' },
+      },
+      updateKind: { kind: 'digest', remoteValue: 'sha256:newdigest' },
+    }),
+  );
 });
 
 test('trigger should not throw when container does not exist', async () => {
@@ -1845,7 +1702,7 @@ test('trigger should use anonymous registry mode when registry URL is provided',
   expect(maybeNotifySelfUpdateSpy).toHaveBeenCalled();
   expect(executeSelfUpdateSpy).toHaveBeenCalled();
   const [contextArg] = executeSelfUpdateSpy.mock.calls[0];
-  expect(contextArg.newImage).toMatch(/^localhost:5000\/drydock:bad@sha256:/);
+  expect(contextArg.newImage).toBe('localhost:5000/drydock:bad');
   expect(contextArg.auth).toBeUndefined();
 });
 
@@ -2154,15 +2011,6 @@ test('triggerBatch should call trigger for each container', async () => {
   expect(triggerSpy).toHaveBeenCalledTimes(2);
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c1' });
   expect(triggerSpy).toHaveBeenCalledWith({ name: 'c2' });
-});
-
-test('trigger refuses a locally built image instead of replacing it with the upstream base', async () => {
-  const createTriggerContext = vi.spyOn(docker, 'createTriggerContext');
-
-  await expect(
-    docker.trigger({ name: 'myapp', image: { isLocalImage: true }, updateAvailable: true }),
-  ).rejects.toThrow('locally built image');
-  expect(createTriggerContext).not.toHaveBeenCalled();
 });
 
 test('triggerBatch defaults to concurrency 1 (serialises) when nothing is configured', async () => {
@@ -4500,22 +4348,11 @@ describe('scheduleDeferredReconciliation', () => {
     const storeContainer = await import('../../../store/container.js');
     (storeContainer.getContainers as any).mockReturnValue([]);
 
-    const originalReconcile =
-      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
-    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
-    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
-    mockMarkOperationTerminal.mockReset();
-
     const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
     callback('nonexistent', 'op-2', 5_000);
 
     await vi.advanceTimersByTimeAsync(5_000);
 
-    // Nothing to reconcile and nothing to fail: no reconcile attempt, no terminal write.
-    expect(reconcileSpy).not.toHaveBeenCalled();
-    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
-
-    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
     vi.useRealTimers();
   });
 
@@ -6225,7 +6062,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = docker.getRollbackConfig(container);
 
-      expect(getConfig).toHaveBeenCalledWith(container, undefined);
+      expect(getConfig).toHaveBeenCalledWith(container);
       expect(result).toEqual({
         autoRollback: true,
         rollbackWindow: 45_000,

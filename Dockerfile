@@ -24,7 +24,7 @@ RUN apk add --no-cache \
     git=2.54.1-r0 \
     jq=1.8.2-r0 \
     libcurl=8.23.0-r0 \
-    libexpat=2.10.0-r0 \
+    libexpat=2.11.0-r0 \
     openssl=3.5.9-r1 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
@@ -57,11 +57,8 @@ COPY app/ ./
 RUN npm run build \
     && npm prune --omit=dev
 
-# Build stage for frontend UI. Runs on the build host's own platform: the output
-# (ui/dist) is static assets, identical for every target arch, so emulating it
-# under QEMU for arm64 only made vite hang (v1.9.0-rc.1 release-cut timeout).
-# Keep the same digest pin as base (#1021).
-FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS ui-build
+# Build stage for frontend UI
+FROM base AS ui-build
 WORKDIR /home/node/ui
 
 # Copy ui package.json

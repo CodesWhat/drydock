@@ -372,22 +372,6 @@ describe('Auth Service', () => {
       expect(readLastKnown('containers')).toBeUndefined();
     });
 
-    it.each([
-      ['user', 'pässword'],
-      ['user', '秘密'],
-      ['testuser', 'testpass'],
-    ])('encodes %s:%s credentials as UTF-8 base64', async (username, password) => {
-      const { loginBasic } = await loadAuthService();
-      fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ username }) });
-
-      await loginBasic(username, password);
-
-      const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
-      expect(headers.Authorization).toBe(
-        `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`,
-      );
-    });
-
     it('performs basic authentication successfully', async () => {
       const { loginBasic } = await loadAuthService();
       const mockUser = { username: 'testuser' };
@@ -565,25 +549,6 @@ describe('Auth Service', () => {
       await expect(getStrategies()).rejects.toThrow(
         'Failed to get auth strategies: Internal Server Error',
       );
-    });
-  });
-
-  describe('getStrategies rate limiting', () => {
-    it('keeps the status and Retry-After of a 429 response', async () => {
-      const { getStrategies } = await loadAuthService();
-      fetchMock.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        statusText: 'Too Many Requests',
-        headers: new Headers({ 'Retry-After': '42' }),
-        json: async () => ({}),
-      });
-
-      await expect(getStrategies()).rejects.toMatchObject({
-        name: 'AuthRequestError',
-        status: 429,
-        retryAfterSeconds: 42,
-      });
     });
   });
 

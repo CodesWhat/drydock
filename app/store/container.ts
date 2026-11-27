@@ -1126,7 +1126,6 @@ function containerToRow(c: container.Container, securityHash: string): Container
     transformTags: c.transformTags,
     tagFamily: c.tagFamily,
     tagPinInfo: c.tagPinInfo,
-    tagCeiling: c.tagCeiling,
   };
   const triggerConfig = {
     actionTriggerInclude: c.actionTriggerInclude,
@@ -1274,7 +1273,6 @@ function rowToContainer(row: Row): container.Container {
       transformTags?: string;
       tagFamily?: string;
       tagPinInfo?: boolean;
-      tagCeiling?: string;
     }>(typedRow.tag_config) ?? {};
   const triggerConfig =
     fromStoredJson<{
@@ -1354,7 +1352,6 @@ function rowToContainer(row: Row): container.Container {
     transformTags: tagConfig.transformTags,
     tagFamily: tagConfig.tagFamily,
     tagPinInfo: tagConfig.tagPinInfo,
-    tagCeiling: tagConfig.tagCeiling,
     actionTriggerInclude: triggerConfig.actionTriggerInclude,
     actionTriggerExclude: triggerConfig.actionTriggerExclude,
     notificationTriggerInclude: triggerConfig.notificationTriggerInclude,
@@ -1381,7 +1378,6 @@ function rowToContainer(row: Row): container.Container {
  */
 export function createCollections(database: Database) {
   db = database;
-  parsedContainerRowCache = new Map();
   invalidateContainersCache();
 }
 
@@ -2236,38 +2232,6 @@ export function updateContainerFields(
   });
 }
 
-/**
- * Parsed-and-validated containers by id, with the raw row they were built from.
- * Every query-cache miss re-reads the whole table, but a row whose columns are
- * byte-identical to the last read maps to the same container, so only rows that
- * changed (or were never seen, e.g. written by an older version) pay for the
- * JSON parse and Joi validation. Comparing the stored row's columns, rather than
- * tracking writes, means a write path can never leave a stale entry behind.
- */
-let parsedContainerRowCache = new Map<string, { row: Row; container: container.Container }>();
-
-function isSameStoredRow(previous: Row, next: Row): boolean {
-  // Both rows come from the same SELECT, so they carry the same columns.
-  return Object.keys(previous).every((key) => previous[key] === next[key]);
-}
-
-function rowsToContainersReusingUnchanged(rows: Row[]): container.Container[] {
-  const nextCache = new Map<string, { row: Row; container: container.Container }>();
-  const containers = rows.map((row) => {
-    const rowId = String(row.id);
-    const cached = parsedContainerRowCache.get(rowId);
-    if (cached && isSameStoredRow(cached.row, row)) {
-      nextCache.set(rowId, cached);
-      return cached.container;
-    }
-    const parsed = rowToContainer(row);
-    nextCache.set(rowId, { row, container: parsed });
-    return parsed;
-  });
-  parsedContainerRowCache = nextCache;
-  return containers;
-}
-
 function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {}) {
   if (!db) {
     return [];
@@ -2292,7 +2256,10 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
   // path like the ones LokiJS's `{'data.foo.bar': value}` filters used to
   // accept keeps matching identically instead of drifting from a
   // hand-written SQL equivalent.
-  let containerList = rowsToContainersReusingUnchanged(db.prepare(CONTAINER_SELECT_ALL_SQL).all());
+  let containerList = db
+    .prepare(CONTAINER_SELECT_ALL_SQL)
+    .all()
+    .map((row) => rowToContainer(row));
   if (exactMatchEntries.length > 0) {
     containerList = containerList.filter((containerItem) =>
       exactMatchEntries.every(
@@ -3064,7 +3031,6 @@ export function rehydrateUpdatePolicyRetentionCacheFromStore(): void {
 
 export function _resetContainerStoreStateForTests() {
   clearContainersQueryCacheState();
-  parsedContainerRowCache = new Map();
   securityStateCache.clear();
   updateLifecycleCache.clear();
   updatePolicyRetentionCache.clear();

@@ -300,7 +300,6 @@ describe('docker event orchestration helpers', () => {
             'pause',
             'unpause',
             'die',
-            'oom',
             'update',
             'rename',
             'health_status',

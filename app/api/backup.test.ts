@@ -15,10 +15,6 @@ const {
   mockIsBackupInScope,
   mockGetState,
   mockGetAgent,
-  mockUpdateContainer,
-  mockServerConfiguration,
-  mockInsertOperation,
-  mockMarkOperationTerminal,
 } = vi.hoisted(() => {
   const getBackupsByName = vi.fn();
   return {
@@ -36,23 +32,8 @@ const {
     ),
     mockGetState: vi.fn(),
     mockGetAgent: vi.fn(),
-    mockUpdateContainer: vi.fn(),
-    mockServerConfiguration: vi.fn(),
-    mockInsertOperation: vi.fn(),
-    mockMarkOperationTerminal: vi.fn(),
   };
 });
-
-vi.mock('../configuration/index.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../configuration/index.js')>()),
-  getServerConfiguration: mockServerConfiguration,
-}));
-
-vi.mock('../store/update-operation.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../store/update-operation.js')>()),
-  insertOperation: mockInsertOperation,
-  markOperationTerminal: mockMarkOperationTerminal,
-}));
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -65,7 +46,7 @@ vi.mock('../store/container', () => ({
   getContainers: mockGetContainers,
   // Read lazily by the security gate the compose action builds on its first
   // post-pull identity check, so the rollback path reaches them.
-  updateContainer: mockUpdateContainer,
+  updateContainer: vi.fn(),
   cacheSecurityState: vi.fn(),
 }));
 
@@ -93,8 +74,6 @@ vi.mock('../log', () => ({
   default: { child: vi.fn(() => mockBackupLog) },
 }));
 
-import { registerRollbackMonitor } from '../triggers/providers/docker/rollback-monitor-registry.js';
-import { withContainerUpdateLocks } from '../updates/update-locks.js';
 import * as backupRouter from './backup.js';
 
 function getHandler(method, path) {
@@ -106,8 +85,6 @@ function getHandler(method, path) {
 describe('Backup Router', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockServerConfiguration.mockReturnValue({ feature: { containeractions: true } });
-    mockInsertOperation.mockReturnValue({ id: 'rollback-op-1' });
   });
 
   describe('init', () => {
@@ -838,170 +815,6 @@ describe('Backup Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         message: 'Container rolled back successfully',
         backup: latestBackup,
-      });
-    });
-
-    test('refuses the rollback when container actions are disabled', async () => {
-      mockServerConfiguration.mockReturnValue({ feature: { containeractions: false } });
-      const res = createMockResponse();
-      await getHandler('post', '/:id/rollback')(createMockRequest({ params: { id: 'c1' } }), res);
-
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Container actions are disabled' });
-      expect(mockGetContainer).not.toHaveBeenCalled();
-      expect(mockInsertOperation).not.toHaveBeenCalled();
-    });
-
-    describe('rollback safety', () => {
-      const container = {
-        id: 'c1',
-        name: 'nginx-safety',
-        watcher: 'local',
-        image: { registry: { name: 'hub' }, tag: { value: '2.0.0' } },
-        result: { tag: '2.0.0', digest: 'sha256:bad' },
-      };
-      const latestBackup = {
-        id: 'b1',
-        containerId: 'c1',
-        containerName: 'nginx-safety',
-        containerIdentityKey: '::local::nginx-safety',
-        imageName: 'library/nginx',
-        imageTag: '1.24',
-        imageDigest: 'sha256:old',
-      };
-
-      function setup(overrides = {}) {
-        mockGetContainer.mockReturnValue(container);
-        mockGetBackupsByName.mockReturnValue([latestBackup]);
-        const mockTrigger = {
-          type: 'docker',
-          getWatcher: vi.fn(() => ({ dockerApi: {} })),
-          pullImage: vi.fn().mockResolvedValue(undefined),
-          getCurrentContainer: vi.fn().mockResolvedValue({}),
-          inspectContainer: vi.fn().mockResolvedValue({ Id: 'old-id', State: { Running: true } }),
-          stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
-          recreateContainer: vi.fn().mockResolvedValue(undefined),
-          recreateSharedNamespaceDependents: vi.fn().mockResolvedValue([]),
-          ...overrides,
-        };
-        mockGetState.mockReturnValue({
-          trigger: { 'docker.default': mockTrigger },
-          registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
-        });
-        return mockTrigger;
-      }
-
-      test('records a rollback operation so state alerts hold off, and closes it as rolled-back', async () => {
-        const trigger = setup({ getId: vi.fn(() => 'docker.default') });
-        await getHandler('post', '/:id/rollback')(
-          createMockRequest({ params: { id: 'c1' } }),
-          createMockResponse(),
-        );
-
-        expect(mockInsertOperation).toHaveBeenCalledWith(
-          expect.objectContaining({
-            kind: 'rollback',
-            status: 'in-progress',
-            containerId: 'c1',
-            containerName: 'nginx-safety',
-            fromVersion: '2.0.0',
-            toVersion: '1.24',
-            triggerName: 'docker.default',
-          }),
-        );
-        // Opened before the container is stopped, closed after it is back.
-        expect(mockInsertOperation.mock.invocationCallOrder[0]).toBeLessThan(
-          trigger.stopAndRemoveContainer.mock.invocationCallOrder[0],
-        );
-        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('rollback-op-1', {
-          status: 'rolled-back',
-          phase: 'rolled-back',
-        });
-      });
-
-      test('closes the rollback operation as failed when the recreate throws', async () => {
-        setup({ recreateContainer: vi.fn().mockRejectedValue(new Error('create failed')) });
-        await getHandler('post', '/:id/rollback')(
-          createMockRequest({ params: { id: 'c1' } }),
-          createMockResponse(),
-        );
-
-        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('rollback-op-1', {
-          status: 'failed',
-          phase: 'rollback-failed',
-          lastError: 'create failed',
-        });
-      });
-
-      test('records updateRollback for the candidate that was rolled back', async () => {
-        setup();
-        const res = createMockResponse();
-        await getHandler('post', '/:id/rollback')(createMockRequest({ params: { id: 'c1' } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(200);
-        expect(mockUpdateContainer).toHaveBeenCalledWith(
-          expect.objectContaining({
-            updateRollback: {
-              recordedAt: expect.any(String),
-              targetDigest: 'sha256:bad',
-              reason: 'manual-rollback',
-              lastError: '',
-            },
-          }),
-        );
-      });
-
-      test('falls back to the running tag when the container carries no registry result', async () => {
-        setup();
-        mockGetContainer.mockReturnValue({ ...container, result: undefined });
-        await getHandler('post', '/:id/rollback')(
-          createMockRequest({ params: { id: 'c1' } }),
-          createMockResponse(),
-        );
-
-        expect(mockUpdateContainer).toHaveBeenCalledWith(
-          expect.objectContaining({
-            updateRollback: expect.objectContaining({ targetDigest: '2.0.0' }),
-          }),
-        );
-      });
-
-      test('does not record updateRollback when the container is missing from Docker', async () => {
-        setup({ getCurrentContainer: vi.fn().mockResolvedValue(undefined) });
-        const res = createMockResponse();
-        await getHandler('post', '/:id/rollback')(createMockRequest({ params: { id: 'c1' } }), res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(mockUpdateContainer).not.toHaveBeenCalled();
-      });
-
-      test('waits for the container update lock and cancels the active monitor', async () => {
-        const trigger = setup({ getUpdateLockKeys: vi.fn(() => ['container:local:nginx-safety']) });
-        const monitor = new AbortController();
-        registerRollbackMonitor(container, monitor);
-        let release: () => void = () => {};
-        const held = new Promise<void>((resolve) => {
-          release = resolve;
-        });
-        const update = withContainerUpdateLocks(['container:local:nginx-safety'], () => held);
-
-        const res = createMockResponse();
-        const rollback = getHandler('post', '/:id/rollback')(
-          createMockRequest({ params: { id: 'c1' } }),
-          res,
-        );
-        await new Promise((resolve) => setTimeout(resolve, 20));
-
-        expect(monitor.signal.aborted).toBe(true);
-        expect(trigger.stopAndRemoveContainer).not.toHaveBeenCalled();
-
-        release();
-        await update;
-        await rollback;
-
-        expect(trigger.getUpdateLockKeys).toHaveBeenCalledWith(container);
-        expect(trigger.stopAndRemoveContainer).toHaveBeenCalledTimes(1);
-        expect(res.status).toHaveBeenCalledWith(200);
       });
     });
 

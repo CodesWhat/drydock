@@ -23,7 +23,6 @@ describe('ConfigProfileTab', () => {
     vi.mocked(service.getTotpFactor).mockResolvedValue({
       status: 'unenrolled',
       recoveryCodesRemaining: 0,
-      managementAllowed: true,
     });
 
     const wrapper = mountWithPlugins(ConfigProfileTab, {

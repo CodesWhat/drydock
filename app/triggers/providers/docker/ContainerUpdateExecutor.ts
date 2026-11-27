@@ -787,7 +787,7 @@ class ContainerUpdateExecutor {
   private resolveOrCreateOperation(
     requestedOperationId: string | undefined,
     operationFields: ContainerUpdateOperationStartFields,
-  ): ContainerUpdateOperation | undefined {
+  ): ContainerUpdateOperation {
     if (!requestedOperationId) {
       return updateOperationStore.insertOperation(operationFields);
     }
@@ -808,12 +808,6 @@ class ContainerUpdateExecutor {
         newContainerId: undefined,
         completedAt: undefined,
       })!;
-    }
-
-    // An operator-cancelled row stays cancelled. Only other terminal rows
-    // (for example TTL-expired queued ops) are reopened.
-    if (existingOperation.cancelRequested) {
-      return undefined;
     }
 
     return updateOperationStore.reopenTerminalOperation(requestedOperationId, {
@@ -866,12 +860,6 @@ class ContainerUpdateExecutor {
     // so the original operationId stays stable even if queued TTL expiry
     // already transitioned it to a terminal state before execution begins.
     const operation = this.resolveOrCreateOperation(requestedOperationId, operationFields);
-    if (!operation) {
-      logContainer.info(
-        `Update for ${oldName} was cancelled before it started; skipping without rollback`,
-      );
-      return undefined;
-    }
 
     // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
     // rename suffix, meaning a previous update attempt failed mid-recreate and

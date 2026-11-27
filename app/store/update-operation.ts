@@ -824,11 +824,6 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
   if (operation.kind === 'self-update') {
     return;
   }
-  // A rollback is announced by its own auto-rollback or rollback audit entry.
-  // Telling subscribers an update was applied or failed would mislabel it.
-  if (operation.kind === 'rollback') {
-    return;
-  }
   dispatchTerminalLifecycleEvent(operation, batchId, {});
 }
 
@@ -1585,12 +1580,9 @@ export function getActiveOperationByContainerIdentity(
     return undefined;
   }
 
-  const database = db;
-  // Only the active statuses are candidates, so query those through the
-  // (identity, status) index instead of hydrating every historical operation.
-  const operations = ACTIVE_STATUSES.flatMap((status) =>
-    database.prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_STATUS_SQL).all(identityKey, status),
-  )
+  const operations = db
+    .prepare(UPDATE_OPERATION_SELECT_BY_IDENTITY_SQL)
+    .all(identityKey)
     .map(rowToOperation)
     .map((operation) => getFreshActiveOperation(operation))
     .filter((item): item is ActiveUpdateOperation => Boolean(item))
@@ -1844,7 +1836,6 @@ export function requestOperationCancellation(
       status: 'failed',
       phase: 'failed',
       lastError: 'Cancelled by operator',
-      cancelRequested: true,
     });
     return cancelled ? { outcome: 'cancelled', operation: cancelled } : undefined;
   }

@@ -32,31 +32,3 @@ test('should redact a top-level bearer credential', () => {
     mode: 'simple',
   });
 });
-
-test('should redact a proxy URL that carries credentials', () => {
-  const sanitized = redactTriggerConfigurationInfrastructureDetails({
-    proxy: 'http://user:p%40ss@proxy.local:3128',
-    mode: 'simple',
-  });
-
-  expect(sanitized).toEqual({ proxy: '[REDACTED]', mode: 'simple' });
-});
-
-test('should redact CI rebuild trigger coordinates, credential and variables', () => {
-  const sanitized = redactTriggerConfigurationInfrastructureDetails({
-    repository: 'acme/app',
-    project: 'group/app',
-    url: 'https://ghe.example.com/api/v3',
-    token: 'sekret-trigger-value',
-    variables: { REGISTRY_PASSWORD: 'sekret-variable-value' },
-    ref: 'main',
-  });
-  expect(sanitized).toEqual({
-    repository: '[REDACTED]',
-    project: '[REDACTED]',
-    url: '[REDACTED]',
-    token: '[REDACTED]',
-    variables: '[REDACTED]',
-    ref: 'main',
-  });
-});

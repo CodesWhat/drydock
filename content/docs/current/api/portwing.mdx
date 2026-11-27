@@ -221,7 +221,7 @@ A name collision with an already-connected agent under the same key (or the in-f
   "data": {
     "pollInterval": 300,
     "config": {
-      "drydockVersion": "1.9.0-rc.1",
+      "drydockVersion": "1.8.0-rc.17",
       "supportedProtocols": "portwing/1.0",
       "serverCompatLevel": "1.4.0"
     }
@@ -387,7 +387,7 @@ Error codes: `parse-error`, `expected-hello`, `invalid-agent-name`, `protocol-mi
 
    The last command prints the 44-character base64 public key to register.
 
-2. **Register the public key** with drydock from the UI (Agents view, **Edge agent keys**, **Register key**), using `POST /api/v1/portwing/keys`, or by adding it to the file pointed at by `DD_PORTWING_AUTHORIZED_KEYS`. Save the returned `keyId` — the agent needs it in its configuration.
+2. **Register the public key** with drydock using `POST /api/v1/portwing/keys` (or add it to the file pointed at by `DD_PORTWING_AUTHORIZED_KEYS`). Save the returned `keyId` — the agent needs it in its configuration.
 
 3. **Configure and start the agent.** Point `portwing` at:
 
@@ -396,15 +396,6 @@ Error codes: `parse-error`, `expected-hello`, `invalid-agent-name`, `protocol-mi
    ```
 
    and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.
-
-### Registering and revoking keys from the UI
-
-The Agents view has an **Edge agent keys** panel that wraps the key registry API above. It needs a signed-in session. API keys and sessions that signed in with a two-factor recovery code get a `403`, and the panel then shows a notice and hides its write controls.
-
-- **Register key** takes a label and the public key. Paste the 44-character base64 key or the full `ed25519 <key> <comment>` line that `portwing keygen -pub-from` prints. If you leave the label empty, the line's comment fills it in.
-- The key list shows the label, key ID, creation time and status. A key is either active or revoked. Keys have no expiry and are not single-use, and a key stays registered until you revoke it.
-- **Revoke** asks for confirmation, then disconnects any live session on that key and releases its agent names, the same as `DELETE /api/v1/portwing/keys/:keyId`.
-- **Show agent snippet** prints a Compose file and a `docker run` command for the edge agent with the controller URL filled in from your browser address. Edit the controller URL and agent name before copying if the agent reaches drydock at a different address. Only the public key is ever registered, so neither snippet contains a secret. The private key stays in `portwing_ed25519.pem` on the agent host.
 
 ## Binary Docker request bodies
 

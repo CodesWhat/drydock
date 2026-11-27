@@ -38,13 +38,12 @@ describe('totp-factor service', () => {
   describe('getTotpFactor', () => {
     it('reads an unenrolled status', async () => {
       fetchMock.mockResolvedValueOnce(
-        reply(200, { status: 'unenrolled', recoveryCodesRemaining: 0, managementAllowed: true }),
+        reply(200, { status: 'unenrolled', recoveryCodesRemaining: 0 }),
       );
 
       await expect(getTotpFactor()).resolves.toEqual({
         status: 'unenrolled',
         recoveryCodesRemaining: 0,
-        managementAllowed: true,
       });
       const { url, init } = lastCall();
       expect(url).toBe('/api/v1/auth/totp-factor');
@@ -58,7 +57,6 @@ describe('totp-factor service', () => {
           status: 'active',
           activatedAt: '2026-10-01T00:00:00.000Z',
           recoveryCodesRemaining: 7,
-          managementAllowed: true,
           pendingEnrollment: {
             id: 'e1',
             expiresAt: '2026-10-01T00:10:00.000Z',
@@ -71,7 +69,6 @@ describe('totp-factor service', () => {
         status: 'active',
         activatedAt: '2026-10-01T00:00:00.000Z',
         recoveryCodesRemaining: 7,
-        managementAllowed: true,
         pendingEnrollment: {
           id: 'e1',
           expiresAt: '2026-10-01T00:10:00.000Z',
@@ -80,54 +77,15 @@ describe('totp-factor service', () => {
       });
     });
 
-    it('reads the refusal reason when management is not allowed', async () => {
-      fetchMock.mockResolvedValueOnce(
-        reply(200, {
-          status: 'unenrolled',
-          recoveryCodesRemaining: 0,
-          managementAllowed: false,
-          reason: 'https-required',
-        }),
-      );
-
-      await expect(getTotpFactor()).resolves.toEqual({
-        status: 'unenrolled',
-        recoveryCodesRemaining: 0,
-        managementAllowed: false,
-        reason: 'https-required',
-      });
-    });
-
     it.each([
       ['not an object', 'nope'],
       ['null', null],
-      [
-        'an unknown status',
-        { status: 'weird', recoveryCodesRemaining: 0, managementAllowed: true },
-      ],
-      ['no count', { status: 'active', managementAllowed: true }],
-      ['no management flag', { status: 'unenrolled', recoveryCodesRemaining: 0 }],
-      [
-        'an unknown reason',
-        {
-          status: 'unenrolled',
-          recoveryCodesRemaining: 0,
-          managementAllowed: false,
-          reason: 'other',
-        },
-      ],
-      [
-        'an active status with no date',
-        { status: 'active', recoveryCodesRemaining: 1, managementAllowed: true },
-      ],
+      ['an unknown status', { status: 'weird', recoveryCodesRemaining: 0 }],
+      ['no count', { status: 'active' }],
+      ['an active status with no date', { status: 'active', recoveryCodesRemaining: 1 }],
       [
         'a malformed pending enrollment',
-        {
-          status: 'unenrolled',
-          recoveryCodesRemaining: 0,
-          managementAllowed: true,
-          pendingEnrollment: { id: 4 },
-        },
+        { status: 'unenrolled', recoveryCodesRemaining: 0, pendingEnrollment: { id: 4 } },
       ],
     ])('rejects a response that is %s', async (_label, body) => {
       fetchMock.mockResolvedValueOnce(reply(200, body));

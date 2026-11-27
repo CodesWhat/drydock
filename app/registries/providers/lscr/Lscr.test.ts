@@ -143,7 +143,6 @@ test('should authenticate against ghcr.io token endpoint for lscr.io images', as
     method: 'GET',
     url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Alinuxserver%2Fsonarr%3Apull',
     maxRedirects: 0,
-    timeout: 30000,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${expectedBasic}`,
