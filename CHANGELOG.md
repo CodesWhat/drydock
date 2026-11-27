@@ -11,6 +11,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Added
 
 - Audit log: settings updates, notification rule edits, notification outbox retry/delete, update-operation cancels and agent key add/revoke/rotate now write audit rows, and a route inventory test fails when any new POST/PUT/PATCH/DELETE endpoint has neither an audit row nor a justified exemption.
+- Container state alerts (stopped, exited, OOM killed, restart loop) now appear in the audit log and can show in the notification bell, and the notification editor shows translated names and descriptions for them.
 
 ### Security
 
