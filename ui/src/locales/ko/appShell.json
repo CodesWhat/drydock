@@ -98,7 +98,10 @@
         "userMenu": "사용자 메뉴",
         "profile": "프로필",
         "signOut": "로그아웃",
-        "userFallback": "사용자"
+        "userFallback": "사용자",
+        "roleViewer": "뷰어",
+        "roleOperator": "운영자",
+        "roleAdmin": "관리자"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "검색 닫기 또는 대화상자 닫기",
         "showHelp": "도움말 표시",
         "toggleSearch": "검색 열기/닫기"
+      },
+      "permissionDenied": {
+        "title": "허용되지 않음",
+        "body": "현재 역할로는 이 작업을 수행할 수 없습니다."
       }
     },
     "announcementBanner": {

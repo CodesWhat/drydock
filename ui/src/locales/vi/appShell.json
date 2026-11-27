@@ -98,7 +98,10 @@
         "userMenu": "Menu người dùng",
         "profile": "Hồ sơ",
         "signOut": "Đăng xuất",
-        "userFallback": "Người dùng"
+        "userFallback": "Người dùng",
+        "roleViewer": "Người xem",
+        "roleOperator": "Người vận hành",
+        "roleAdmin": "Quản trị viên"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Đóng tìm kiếm hoặc đóng hộp thoại",
         "showHelp": "Hiển thị trợ giúp này",
         "toggleSearch": "Bật/tắt tìm kiếm"
+      },
+      "permissionDenied": {
+        "title": "Không được phép",
+        "body": "Vai trò của bạn không cho phép thao tác này."
       }
     },
     "announcementBanner": {

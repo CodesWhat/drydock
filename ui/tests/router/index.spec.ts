@@ -51,6 +51,7 @@ vi.mock('@/bootstrap/stale-chunk-recovery', () => ({
 }));
 
 import { useApiKeyReview } from '@/composables/useApiKeyReview';
+import { can, setCurrentAuthority } from '@/composables/useCan';
 import router from '@/router';
 
 describe('router auth guard', () => {
@@ -271,6 +272,42 @@ describe('router auth guard', () => {
 
       await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
       expect(useApiKeyReview().pending.value).toBe(false);
+    });
+  });
+
+  describe('role gating', () => {
+    const viewer = { username: 'v', role: 'viewer', scopes: ['read'] };
+    const admin = { username: 'a', role: 'admin', scopes: ['read', 'admin'] };
+    const config = (query: Record<string, unknown> = {}) => ({
+      name: 'config',
+      query,
+      path: '/config',
+    });
+
+    afterEach(() => setCurrentAuthority(undefined));
+
+    it('records the role and scopes from /auth/user', async () => {
+      mocks.getUser.mockResolvedValue(viewer);
+      await mocks.getGuard()?.({ name: 'containers', query: {}, path: '/containers' });
+      expect(can('read')).toBe(true);
+      expect(can('containers:update')).toBe(false);
+    });
+
+    it('sends a viewer away from settings but not from profile or appearance', async () => {
+      const guard = mocks.getGuard();
+      mocks.getUser.mockResolvedValue(viewer);
+      expect(await guard?.(config())).toEqual({ path: '/' });
+      expect(await guard?.(config({ tab: ['apiKeys'] }))).toEqual({ path: '/' });
+      expect(await guard?.(config({ tab: 'profile' }))).not.toEqual({ path: '/' });
+      expect(await guard?.(config({ tab: 'appearance' }))).not.toEqual({ path: '/' });
+    });
+
+    it('lets an admin, and a server that sends no role, into settings', async () => {
+      const guard = mocks.getGuard();
+      mocks.getUser.mockResolvedValue(admin);
+      expect(await guard?.(config())).not.toEqual({ path: '/' });
+      mocks.getUser.mockResolvedValue({ username: 'old' });
+      expect(await guard?.(config())).not.toEqual({ path: '/' });
     });
   });
 });

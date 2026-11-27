@@ -98,7 +98,10 @@
         "userMenu": "Меню користувача",
         "profile": "Профіль",
         "signOut": "Вийти",
-        "userFallback": "Користувач"
+        "userFallback": "Користувач",
+        "roleViewer": "Спостерігач",
+        "roleOperator": "Оператор",
+        "roleAdmin": "Адміністратор"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Закрити пошук або закрити діалогові вікна",
         "showHelp": "Показати цю довідку",
         "toggleSearch": "Перемкнути пошук"
+      },
+      "permissionDenied": {
+        "title": "Не дозволено",
+        "body": "Ваша роль не дозволяє цю дію."
       }
     },
     "announcementBanner": {

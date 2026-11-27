@@ -144,6 +144,7 @@ import * as authSession from './auth-session.js';
 import { getAuthenticators, markVerifiedCredentialsDeclined } from './authenticator-chain.js';
 import { requireSameOriginForMutations } from './csrf.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
+import { ROLE_SCOPES } from './roles.js';
 import * as sessionPrincipal from './session-principal.js';
 import { restoreSessionPrincipal } from './session-principal.js';
 
@@ -2137,7 +2138,11 @@ describe('Auth Router', () => {
       const res = createResponse();
       handler({ principal: { kind: 'session', username: 'john' } }, res);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith({
+        username: 'john',
+        role: 'admin',
+        scopes: ROLE_SCOPES.admin,
+      });
       const contractValidation = validateOpenApiJsonResponse({
         path: '/auth/user',
         method: 'get',
@@ -2168,6 +2173,43 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ username: 'anonymous' });
     });
 
+    test('getUser reports the role and role scopes of a person', () => {
+      const handler = getRouteHandler('get', '/user');
+      const res = createResponse();
+      handler({ principal: { kind: 'anonymous', username: 'anonymous', role: 'viewer' } }, res);
+      expect(res.json).toHaveBeenCalledWith({
+        username: 'anonymous',
+        role: 'viewer',
+        scopes: ['read'],
+      });
+      expect(
+        validateOpenApiJsonResponse({
+          path: '/auth/user',
+          method: 'get',
+          statusCode: '200',
+          payload: res.json.mock.calls[0][0],
+        }).valid,
+      ).toBe(true);
+    });
+
+    test('getUser reports the scopes of an API key and no role', () => {
+      const handler = getRouteHandler('get', '/user');
+      const res = createResponse();
+      handler(
+        {
+          principal: {
+            kind: 'api-key',
+            username: 'ci',
+            keyId: 'k1',
+            scopes: ['read'],
+            parentKeyId: null,
+          },
+        },
+        res,
+      );
+      expect(res.json).toHaveBeenCalledWith({ username: 'ci', scopes: ['read'] });
+    });
+
     test('getUser reports apiKeyReviewPending only while a session owes the review', () => {
       const handler = getRouteHandler('get', '/user');
       const pending = createResponse();
@@ -2178,7 +2220,12 @@ describe('Auth Router', () => {
         },
         pending,
       );
-      expect(pending.json).toHaveBeenCalledWith({ username: 'john', apiKeyReviewPending: true });
+      expect(pending.json).toHaveBeenCalledWith({
+        username: 'john',
+        role: 'admin',
+        scopes: ROLE_SCOPES.admin,
+        apiKeyReviewPending: true,
+      });
       const contractValidation = validateOpenApiJsonResponse({
         path: '/auth/user',
         method: 'get',
@@ -2189,7 +2236,11 @@ describe('Auth Router', () => {
 
       const clear = createResponse();
       handler({ principal: { kind: 'session', username: 'john' }, session: {} }, clear);
-      expect(clear.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(clear.json).toHaveBeenCalledWith({
+        username: 'john',
+        role: 'admin',
+        scopes: ROLE_SCOPES.admin,
+      });
     });
 
     test('POST /api-key-review/acknowledge is registered behind authentication and same-origin', () => {
@@ -2233,7 +2284,7 @@ describe('Auth Router', () => {
         mockListApiKeys.mockReturnValue(ACTIVE_KEY);
         const { req, res } = await loginWithAssurance('recovery');
         expect(req.session).toMatchObject({ apiKeyReviewPending: true });
-        expect(res.json).toHaveBeenCalledWith({ username: 'john', apiKeyReviewPending: true });
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john', apiKeyReviewPending: true }));
       });
 
       test('does not flag a recovery login when no active key exists', async () => {
@@ -2242,7 +2293,7 @@ describe('Auth Router', () => {
         ]);
         const { req, res } = await loginWithAssurance('recovery');
         expect(req.session).not.toHaveProperty('apiKeyReviewPending');
-        expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
       });
 
       test.each(['totp', 'password'])(
@@ -2264,7 +2315,7 @@ describe('Auth Router', () => {
       };
       await handler(req, res);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
       expect(mockRecordAuditEvent).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'auth-login',
@@ -2288,7 +2339,7 @@ describe('Auth Router', () => {
       expect(req.session.regenerate).toHaveBeenCalledTimes(1);
       expect(req.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should refuse a request that only carries a session principal and mint nothing', async () => {
@@ -2383,7 +2434,7 @@ describe('Auth Router', () => {
       expect(req.sessionStore.all).not.toHaveBeenCalled();
       expect(req.sessionStore.destroy).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: '   ' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: '   ' }));
     });
 
     test('login should continue without session-limit enforcement when username is missing', async () => {
@@ -2403,7 +2454,7 @@ describe('Auth Router', () => {
       expect(req.sessionStore.all).not.toHaveBeenCalled();
       expect(req.sessionStore.destroy).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'anonymous' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'anonymous' }));
     });
 
     test('setRememberMe should persist preference on session', () => {
@@ -2466,7 +2517,7 @@ describe('Auth Router', () => {
       expect(req.session.rememberMe).toBe(true);
       expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should convert remember-me cookie to a session cookie when remember is false', async () => {
@@ -2488,7 +2539,7 @@ describe('Auth Router', () => {
       expect(req.session.cookie.expires).toBe(false);
       expect(req.session.cookie.maxAge).toBeNull();
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should evict oldest sessions when concurrent session cap is reached', async () => {
@@ -2545,7 +2596,7 @@ describe('Auth Router', () => {
       expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-oldest', expect.any(Function));
       expect(req.session.passport).toEqual({ user: persistedBasicUser('john') });
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should serialize concurrent session enforcement per user', async () => {
@@ -2627,9 +2678,9 @@ describe('Auth Router', () => {
       expect(sessionStore.destroy).toHaveBeenCalledWith('session-existing', expect.any(Function));
       expect(userSessions).toHaveLength(2);
       expect(res1.status).toHaveBeenCalledWith(200);
-      expect(res1.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res1.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
       expect(res2.status).toHaveBeenCalledWith(200);
-      expect(res2.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res2.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should keep max=1 cap under concurrent logins that both require eviction', async () => {
@@ -2720,9 +2771,9 @@ describe('Auth Router', () => {
       );
       expect(userSessionIds).toEqual(['new-session-2']);
       expect(res1.status).toHaveBeenCalledWith(200);
-      expect(res1.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res1.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
       expect(res2.status).toHaveBeenCalledWith(200);
-      expect(res2.json).toHaveBeenCalledWith({ username: 'john' });
+      expect(res2.json).toHaveBeenCalledWith(expect.objectContaining({ username: 'john' }));
     });
 
     test('login should return 500 when concurrent session enforcement fails', async () => {

@@ -98,7 +98,10 @@
         "userMenu": "Gebruikersmenu",
         "profile": "Profiel",
         "signOut": "Meld u af",
-        "userFallback": "Gebruiker"
+        "userFallback": "Gebruiker",
+        "roleViewer": "Kijker",
+        "roleOperator": "Operator",
+        "roleAdmin": "Beheerder"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Zoeken sluiten of dialoogvensters sluiten",
         "showHelp": "Deze hulp weergeven",
         "toggleSearch": "Zoeken schakelen"
+      },
+      "permissionDenied": {
+        "title": "Niet toegestaan",
+        "body": "Je rol staat die actie niet toe."
       }
     },
     "announcementBanner": {

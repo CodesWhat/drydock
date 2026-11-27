@@ -64,6 +64,12 @@ API keys don't have a role. A key's [scopes](/docs/configuration/authentications
 
 The OpenAPI document (`GET /api/v1/openapi.json`) marks every operation with `x-drydock-min-role`, the least role it needs, next to `x-drydock-scope`.
 
+## What the UI shows
+
+The UI hides what your role can't do, so a `viewer` sees no update, rollback, scan, snooze, approve or reject buttons, and no Settings entry in the sidebar. An `operator` keeps those but doesn't see Settings. Your role is shown in the user menu. Profile and appearance stay open to everyone.
+
+This is a convenience, not the check. The server still refuses a request your role can't make, and the UI shows a "Not allowed" toast when that happens. `GET /auth/user` returns your `role` and `scopes` for the UI to read. An API key gets `scopes` and no `role`.
+
 ## Route matrix
 
 A route's role comes from the scope it declares: `read` needs `viewer`, `containers:watch`, `containers:update`, `containers:control` and `triggers:test` need `operator`, and `admin` and `api-keys:manage` need `admin`. A few routes set their own, and those are noted below. The test suite checks this table against every registered route.

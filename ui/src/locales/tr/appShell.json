@@ -98,7 +98,10 @@
         "userMenu": "Kullanıcı menüsü",
         "profile": "Profil",
         "signOut": "Oturumu kapat",
-        "userFallback": "Kullanıcı"
+        "userFallback": "Kullanıcı",
+        "roleViewer": "Görüntüleyici",
+        "roleOperator": "Operatör",
+        "roleAdmin": "Yönetici"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Aramayı kapat veya iletişim kutularını kapat",
         "showHelp": "Bu yardımı göster",
         "toggleSearch": "Aramayı aç/kapat"
+      },
+      "permissionDenied": {
+        "title": "İzin verilmedi",
+        "body": "Rolünüz bu eyleme izin vermiyor."
       }
     },
     "announcementBanner": {

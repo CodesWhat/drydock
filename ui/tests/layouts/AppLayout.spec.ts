@@ -1,5 +1,6 @@
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import { i18n, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
+import { setCurrentAuthority } from '@/composables/useCan';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -601,6 +602,41 @@ describe('AppLayout', () => {
       setIntervalSpy.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  describe('role gating', () => {
+    const navRoutes = (wrapper: VueWrapper) =>
+      (
+        wrapper.vm as unknown as { navGroups: Array<{ items: Array<{ route: string }> }> }
+      ).navGroups.flatMap((group) => group.items.map((item) => item.route));
+
+    afterEach(() => setCurrentAuthority(undefined));
+
+    it('hides the general settings entry and names the role for a viewer', async () => {
+      setCurrentAuthority({ role: 'viewer', scopes: ['read'] });
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      expect(navRoutes(wrapper)).not.toContain('/config');
+      expect(navRoutes(wrapper)).toContain('/containers');
+      expect((wrapper.vm as unknown as { roleLabel: string }).roleLabel).toBe('Viewer');
+    });
+
+    it('keeps the settings entry for an admin and when the role is unknown', async () => {
+      setCurrentAuthority({ role: 'admin', scopes: ['admin'] });
+      const admin = mountLayout();
+      mountedWrappers.push(admin);
+      await flushPromises();
+      expect(navRoutes(admin)).toContain('/config');
+      expect((admin.vm as unknown as { roleLabel: string }).roleLabel).toBe('Admin');
+
+      setCurrentAuthority(undefined);
+      const unknown = mountLayout();
+      mountedWrappers.push(unknown);
+      await flushPromises();
+      expect(navRoutes(unknown)).toContain('/config');
+      expect((unknown.vm as unknown as { roleLabel: string }).roleLabel).toBe('');
+    });
   });
 
   describe('approvals sidebar badge', () => {

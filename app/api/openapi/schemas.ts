@@ -275,6 +275,18 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       username: { type: 'string' },
+      role: {
+        type: 'string',
+        enum: ['viewer', 'operator', 'admin'],
+        description:
+          'The role a signed-in person holds. Absent for an API key, which has scopes instead. For the UI to hide controls; the server enforces the role on every route.',
+      },
+      scopes: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'The scopes the caller holds: the role scopes for a person, the key scopes for an API key.',
+      },
       apiKeyReviewPending: {
         type: 'boolean',
         description:

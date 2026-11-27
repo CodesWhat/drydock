@@ -98,7 +98,10 @@
         "userMenu": "Меню пользователя",
         "profile": "Профиль",
         "signOut": "Выйти",
-        "userFallback": "Пользователь"
+        "userFallback": "Пользователь",
+        "roleViewer": "Наблюдатель",
+        "roleOperator": "Оператор",
+        "roleAdmin": "Администратор"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "Закрыть поиск или диалоговые окна",
         "showHelp": "Показать эту справку",
         "toggleSearch": "Переключить поиск"
+      },
+      "permissionDenied": {
+        "title": "Не разрешено",
+        "body": "Ваша роль не позволяет это действие."
       }
     },
     "announcementBanner": {

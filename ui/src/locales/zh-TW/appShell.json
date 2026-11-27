@@ -98,7 +98,10 @@
         "userMenu": "使用者選單",
         "profile": "個人資料",
         "signOut": "登出",
-        "userFallback": "使用者"
+        "userFallback": "使用者",
+        "roleViewer": "檢視者",
+        "roleOperator": "操作員",
+        "roleAdmin": "管理員"
       },
       "about": {
         "title": "Drydock",
@@ -170,6 +173,10 @@
         "closeSearch": "關閉搜尋或關閉對話方塊",
         "showHelp": "顯示此說明",
         "toggleSearch": "切換搜尋"
+      },
+      "permissionDenied": {
+        "title": "不允許",
+        "body": "你的角色無權執行此操作。"
       }
     },
     "announcementBanner": {

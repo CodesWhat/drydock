@@ -10,6 +10,7 @@ import InstallBanner from '@/components/InstallBanner.vue';
 import OfflineBanner from '@/components/OfflineBanner.vue';
 import NotificationBell from '@/components/NotificationBell.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
+import { useCan } from '@/composables/useCan';
 import { useConnectivity } from '@/composables/useConnectivity';
 import { useDeprecationBanner } from '@/composables/useDeprecationBanner';
 import { useIcons } from '@/composables/useIcons';
@@ -126,7 +127,25 @@ interface SearchResultItem {
   searchable: string;
 }
 
-const navGroups = computed<NavGroup[]>(() => [
+const { role: currentRole, isAdmin: currentIsAdmin } = useCan();
+
+// Settings belong to admins; everyone else keeps Profile in the user menu.
+const navGroups = computed<NavGroup[]>(() =>
+  baseNavGroups.value.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => item.route !== ROUTES.CONFIG || currentIsAdmin.value),
+  })),
+);
+
+const roleLabel = computed(() => {
+  const role = currentRole.value;
+  if (role === undefined) {
+    return '';
+  }
+  return t(`appShell.layout.topbar.role${role[0].toUpperCase()}${role.slice(1)}`);
+});
+
+const baseNavGroups = computed<NavGroup[]>(() => [
   {
     label: '',
     items: [
@@ -1701,6 +1720,7 @@ onUnmounted(() => {
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
                   {{ currentUser?.username || currentUser?.displayName || t('appShell.layout.topbar.userFallback') }}
                 </div>
+                <div v-if="roleLabel" class="px-3 py-1 text-2xs dd-text-muted" data-testid="user-role-chip">{{ roleLabel }}</div>
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-start flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
                   {{ t('appShell.layout.topbar.profile') }}
