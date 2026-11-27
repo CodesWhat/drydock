@@ -4370,8 +4370,10 @@ describe('callback access policy', () => {
       allowedemaildomains: 'b.test',
       requiredgroup: 'dd',
       groupclaim: 'roles',
+      requireemailverified: true,
     };
     expect(oidc.maskConfiguration()).toMatchObject({
+      requireemailverified: true,
       allowedemails: 'a@b.test',
       allowedemaildomains: 'b.test',
       requiredgroup: 'dd',

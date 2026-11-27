@@ -131,6 +131,7 @@ interface OidcConfiguration {
   beareraudiences?: string;
   allowedemails?: string;
   allowedemaildomains?: string;
+  requireemailverified?: boolean;
   requiredgroup?: string;
   groupclaim?: string;
   idtokensignedalg?: string;
@@ -442,6 +443,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       beareraudiences: this.joi.string().allow(''),
       allowedemails: this.joi.string().allow(''),
       allowedemaildomains: this.joi.string().allow(''),
+      requireemailverified: this.joi.boolean(),
       requiredgroup: this.joi.string().allow(''),
       groupclaim: this.joi.string(),
       idtokensignedalg: this.joi.string().valid(...ID_TOKEN_SIGNED_ALGORITHMS),
@@ -484,6 +486,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       ...(this.configuration.allowedemaildomains
         ? { allowedemaildomains: this.configuration.allowedemaildomains }
         : {}),
+      ...(this.configuration.requireemailverified ? { requireemailverified: true } : {}),
       ...(this.configuration.requiredgroup
         ? { requiredgroup: this.configuration.requiredgroup }
         : {}),
