@@ -14,6 +14,7 @@
  * sessions are made by the real login routes or planted through the session
  * store, the way a session from another release would already sit there.
  */
+
 import { argon2Sync, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import type { Duplex } from 'node:stream';
@@ -21,6 +22,7 @@ import express, { type Application, type Response as ExpressResponse, type Reque
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
 import { WebSocket, WebSocketServer } from 'ws';
+import { ROLE_SCOPES } from './roles.js';
 
 const { auditEvents, auditFault, logLines } = vi.hoisted(() => {
   // Account lockout is the budget under test in one place, so keep it out of the
@@ -425,7 +427,11 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       const response = await post(h, { Authorization: BASIC_AUTH_HEADER }, { remember: false });
 
       expect(response.status).toBe(200);
-      expect(await response.text()).toBe(JSON.stringify({ username: TEST_USER }));
+      expect(JSON.parse(await response.text())).toEqual({
+        username: TEST_USER,
+        role: 'admin',
+        scopes: [...ROLE_SCOPES.admin],
+      });
       expect(response.headers.get('content-type')).toBe('application/json; charset=utf-8');
       expect(response.headers.get('cache-control')).toBe(
         'private, no-cache, no-store, must-revalidate',
@@ -572,7 +578,11 @@ describe('TOTP slice 3: login challenge and the closed Basic bypass', () => {
       const response = await put(h, challenge.id, { code: totpNow(enrolled.seed) });
 
       expect(response.status).toBe(200);
-      expect(await response.text()).toBe(JSON.stringify({ username: TEST_USER }));
+      expect(JSON.parse(await response.text())).toEqual({
+        username: TEST_USER,
+        role: 'admin',
+        scopes: [...ROLE_SCOPES.admin],
+      });
       expect(response.headers.get('cache-control')).toBe(
         'private, no-cache, no-store, must-revalidate',
       );

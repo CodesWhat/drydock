@@ -10,12 +10,14 @@
  * and TOTP stores, and the same start-up call that records what an offline
  * command did.
  */
+
 import { argon2Sync, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import express, { type Application, type Response as ExpressResponse, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import session from 'express-session';
+import { ROLE_SCOPES } from './roles.js';
 
 const { logLines } = vi.hoisted(() => {
   // The drills sign in a handful of times each; keep the lockout budgets out of the way.
@@ -365,7 +367,11 @@ describe('lost device and recovery codes', () => {
     expect(await protectedStatus(h, oldCookie)).toBe(401);
     const afterwards = await passwordLogin(h, EVE);
     expect(afterwards.status).toBe(200);
-    expect(await afterwards.json()).toEqual({ username: 'eve' });
+    expect(await afterwards.json()).toEqual({
+      username: 'eve',
+      role: 'admin',
+      scopes: [...ROLE_SCOPES.admin],
+    });
     expect(await protectedStatus(h, cookieOf(afterwards))).toBe(200);
 
     // Nobody else's factor moved: bob still needs his code, and it still works.
