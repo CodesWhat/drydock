@@ -22,7 +22,7 @@ export const PREFERENCES_API_VERSION = 1;
 // Error code of the 409 returned when a PATCH carries a stale revision. The
 // UI matches on it to tell "re-fetch and merge" apart from an API version
 // mismatch, which is also a 409.
-export const PREFERENCES_REVISION_STALE_ERROR = 'PREFERENCES_REVISION_STALE';
+const PREFERENCES_REVISION_STALE_ERROR = 'PREFERENCES_REVISION_STALE';
 
 const preferencesPatchSchema = joi.object({
   apiVersion: joi.number().valid(PREFERENCES_API_VERSION).required(),

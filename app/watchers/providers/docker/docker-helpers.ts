@@ -220,7 +220,7 @@ function normalizeConfigStringValue(value: unknown) {
   return valueTrimmed === '' ? undefined : valueTrimmed;
 }
 
-export function normalizeConfigBooleanValue(value: unknown) {
+function normalizeConfigBooleanValue(value: unknown) {
   if (typeof value === 'boolean') {
     return value;
   }

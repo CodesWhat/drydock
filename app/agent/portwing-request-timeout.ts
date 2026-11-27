@@ -9,10 +9,10 @@ export const CAPABILITY_REQUEST_TIMEOUT = 'dd:request-timeout';
 export const CAPABILITY_CANCEL = 'dd:cancel';
 export const TIMEOUT_HINT_HEADER = 'X-Portwing-Timeout-Ms';
 
-export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-export const MIN_TIMEOUT_HINT_MS = 1_000;
-export const MAX_TIMEOUT_HINT_MS = 900_000;
-export const TIMEOUT_HINT_MARGIN_MS = 5_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const MIN_TIMEOUT_HINT_MS = 1_000;
+const MAX_TIMEOUT_HINT_MS = 900_000;
+const TIMEOUT_HINT_MARGIN_MS = 5_000;
 const STOP_GRACE_MS = 15_000;
 
 export function clampTimeoutHintMs(hintMs: number): number {
