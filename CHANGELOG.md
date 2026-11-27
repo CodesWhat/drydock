@@ -13,6 +13,10 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
+### Documentation
+
+- Refreshed the README and docs for 1.9: the trigger count is 23 with the GitHub Dispatch and GitLab Pipeline providers, the roadmap rows list RBAC and required upgrade stops under v1.9.0, and the Biome badge is 2.6. Fixed the broken cleanup Images link and the ContainerForge link, removed the retired `DD_TRIGGER_*` and `dd.trigger.*` rows from the live reference, documented `result.updateCandidates` and the totp-factor `managementAllowed` field, and added the combined `/api/v1/triggers` and bundled Trivy/cosign entries to the deprecation schedule.
+
 ## [1.9.0-rc.1] - 2026-11-20
 
 > [!WARNING]

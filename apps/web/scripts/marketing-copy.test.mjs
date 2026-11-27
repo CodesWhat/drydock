@@ -77,7 +77,7 @@ test("roadmap HEAD follows the active RC while retaining older candidates", () =
   assert.equal(
     marketing.getRoadmapHead(marketing.roadmap.filter((item) => item.status === "released"))
       .version,
-    "v1.7.0",
+    "v1.7.1",
   );
   assert.equal(marketing.getRoadmapHead([]), undefined);
 });
