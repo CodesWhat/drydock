@@ -11,6 +11,7 @@
 import logger from '../../log/index.js';
 import type { Database } from './driver.js';
 import {
+  AUDIT_ACTOR_ROLE_SQL,
   AUDIT_ACTOR_SQL,
   INITIAL_SCHEMA_SQL,
   SCHEMA_MIGRATIONS_TABLE_SQL,
@@ -63,6 +64,9 @@ export const UPDATE_OPERATION_NEW_CONTAINER_ID_INDEX_MIGRATION_VERSION = 16;
 
 /** ui_preferences.revision, the optimistic-concurrency counter for preference writes (PREF-REVISION). */
 export const UI_PREFERENCES_REVISION_MIGRATION_VERSION = 17;
+
+/** Nullable audit.actor_role column (RBAC audit attribution of the acting role). */
+export const AUDIT_ACTOR_ROLE_MIGRATION_VERSION = 18;
 
 export const MIGRATIONS: readonly Migration[] = [
   {
@@ -263,6 +267,11 @@ ALTER TABLE containers ADD COLUMN label_owned TEXT;
     // Existing rows start at 1 so a stored record never shares revision 0 with "no record yet".
     note: 'add ui_preferences.revision for stale-write detection (PREF-REVISION)',
     sql: 'ALTER TABLE ui_preferences ADD COLUMN revision INTEGER NOT NULL DEFAULT 1;',
+  },
+  {
+    version: AUDIT_ACTOR_ROLE_MIGRATION_VERSION,
+    note: 'add audit.actor_role (RBAC audit attribution of the acting role)',
+    sql: AUDIT_ACTOR_ROLE_SQL,
   },
 ];
 

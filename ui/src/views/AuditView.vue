@@ -99,6 +99,7 @@ const actionTypes = [
   'notification-outbox-updated',
   'operation-cancelled',
   'agent-key-changed',
+  'auth-denied',
 ];
 
 const route = useRoute();

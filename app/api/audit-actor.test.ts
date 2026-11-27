@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
-import { getAuditActor } from '../store/audit-actor.js';
-import { bindAuditActor, getAuditActorForRequest } from './audit-actor.js';
+import { getAuditActor, getAuditActorRole } from '../store/audit-actor.js';
+import { bindAuditActor, getAuditActorForRequest, getAuditRoleForRequest } from './audit-actor.js';
 import type { AuthenticatedPrincipal } from './principal.js';
 
 const identity = { subjectId: 's', providerId: 'basic.one', assurance: 'password', issuedAt: 1 };
@@ -35,6 +35,18 @@ describe('getAuditActorForRequest', () => {
   });
 });
 
+describe('getAuditRoleForRequest', () => {
+  test('is undefined with no principal', () => {
+    expect(getAuditRoleForRequest(req())).toBeUndefined();
+  });
+
+  test('is the role a person holds', () => {
+    expect(
+      getAuditRoleForRequest(req({ kind: 'anonymous', username: 'anonymous', role: 'operator' })),
+    ).toBe('operator');
+  });
+});
+
 describe('bindAuditActor', () => {
   test('binds the actor for the rest of the request, including async continuations', async () => {
     let seen: string | undefined;
@@ -45,6 +57,30 @@ describe('bindAuditActor', () => {
     bindAuditActor(req({ kind: 'session', username: 'alice' }), {} as Response, next);
     await vi.waitFor(() => expect(seen).toBe('alice'));
     expect(getAuditActor()).toBeUndefined();
+  });
+
+  test('binds the role the person holds alongside the actor', () => {
+    let seen: string | undefined;
+    bindAuditActor(
+      req({ kind: 'anonymous', username: 'anonymous', role: 'viewer' }),
+      {} as Response,
+      () => {
+        seen = getAuditActorRole();
+      },
+    );
+    expect(seen).toBe('viewer');
+  });
+
+  test('binds no role for an API key', () => {
+    let seen: string | undefined = 'unset';
+    bindAuditActor(
+      req({ kind: 'api-key', username: 'ci', keyId: 'k1', scopes: [], parentKeyId: null }),
+      {} as Response,
+      () => {
+        seen = getAuditActorRole();
+      },
+    );
+    expect(seen).toBeUndefined();
   });
 
   test('leaves the actor unset for an unauthenticated request', () => {

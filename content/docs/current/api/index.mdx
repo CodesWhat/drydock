@@ -395,7 +395,8 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
       "triggerName": "docker.local",
       "status": "success",
       "details": "",
-      "actor": "alice"
+      "actor": "alice",
+      "actorRole": "operator"
     }
   ],
   "total": 42,
@@ -422,6 +423,10 @@ curl "http://drydock:3000/api/v1/audit?offset=0&limit=25&action=update-applied&c
 
 Each entry carries an `actor` when a signed-in user or API key caused it: the username for sessions, Basic and OIDC, `api-key:<key name>` for an API key, and `anonymous` when anonymous access is enabled. The value comes from the authenticated request on the server, never from anything the client sends. Entries from schedulers, auto-updates and agent-reported events have no `actor`, and so do entries written before this field existed. A failed login has no actor either, because the name was typed by the caller and never verified.
 
+When a person caused the entry, `actorRole` holds the [role](/docs/configuration/authentications/roles) they held at the time (`viewer`, `operator` or `admin`), so the log still says what authority acted after a role changes. An API key has no role, and neither do system entries or rows written before roles existed.
+
+A request refused for lack of a role or scope writes an `auth-denied` entry with the route, the scope, the role and the role it needed in `details`. The same actor hitting the same route again within a minute doesn't write another one.
+
 ### Export audit entries
 
 ```bash
@@ -430,7 +435,7 @@ curl -OJ "http://drydock:3000/api/v1/audit/export?format=csv&actor=alice&from=20
 
 Downloads every entry matching the filters, newest first, as a file. It takes `format` (`csv`, the default, or `json`) plus the same `action`, `actions`, `container`, `actor`, `from` and `to` filters as the list route, and ignores `offset` and `limit`. The export is capped at 100,000 entries; the `X-Total-Count` header carries the full match count. It needs the same `read` scope as the list route.
 
-The CSV has a header row and the columns `id`, `timestamp`, `actor`, `action`, `containerName`, `containerIdentityKey`, `containerImage`, `fromVersion`, `toVersion`, `updateKind`, `semverDiff`, `triggerName`, `status` and `details`. Cells are quoted when they hold a comma, quote or line break. A cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet shows it as text instead of running it as a formula. The JSON export is an array of entries with the stored values unchanged.
+The CSV has a header row and the columns `id`, `timestamp`, `actor`, `actorRole`, `action`, `containerName`, `containerIdentityKey`, `containerImage`, `fromVersion`, `toVersion`, `updateKind`, `semverDiff`, `triggerName`, `status` and `details`. Cells are quoted when they hold a comma, quote or line break. A cell that starts with `=`, `+`, `-` or `@` gets a leading apostrophe so a spreadsheet shows it as text instead of running it as a formula. The JSON export is an array of entries with the stored values unchanged.
 
 ### Retention
 
@@ -438,7 +443,7 @@ Entries older than 30 days are pruned by default. Set `DD_AUDIT_RETENTION_DAYS` 
 
 ### Action types
 
-`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `hook-label-ignored`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `security-fast-lane`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`, `notification-silence-set`, `notification-silence-cleared`
+`update-available`, `update-applied`, `update-applied-dryrun`, `update-failed`, `notification-delivery-failed`, `container-update`, `security-alert`, `security-scan-skipped`, `scanner-asset-pull-started`, `scanner-asset-pull-succeeded`, `scanner-asset-pull-failed`, `scanner-asset-warm-started`, `scanner-asset-warm-succeeded`, `scanner-asset-warm-failed`, `agent-disconnect`, `container-unhealthy`, `maturity-cleared`, `container-added`, `container-removed`, `rollback`, `preview`, `container-start`, `container-stop`, `container-restart`, `webhook-watch`, `webhook-watch-container`, `webhook-update`, `hook-configured`, `hook-pre-success`, `hook-pre-failed`, `hook-post-success`, `hook-post-failed`, `hook-label-ignored`, `auto-rollback`, `auth-login`, `env-reveal`, `debug-dump`, `auto-update-blocked`, `security-fast-lane`, `update-policy-override-set`, `update-policy-override-cleared`, `group-policy-set`, `group-policy-cleared`, `label-override-set`, `label-override-cleared`, `update-approved`, `update-rejected`, `update-deferred`, `mqtt-command-update`, `api-key-created`, `api-key-revoked`, `api-key-auth-failed`, `notification-silence-set`, `notification-silence-cleared`, `auth-denied`
 
 ## Server-Sent Events (SSE)
 

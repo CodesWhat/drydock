@@ -33,6 +33,7 @@
  */
 
 import type { Response } from 'express';
+import { recordAuthzDenial } from './authz-denial.js';
 import { sendErrorResponse } from './error-response.js';
 import type { PrincipalCarrier } from './principal.js';
 import { resolveHumanRole } from './principal-role.js';
@@ -183,6 +184,7 @@ export function enforceApiKeyScope(
   }
 
   const deny = (message: string, details?: Record<string, unknown>): false => {
+    recordAuthzDenial(req as PrincipalCarrier, { scope });
     if (res) {
       sendErrorResponse(res as Response, 403, details ? { message, details } : { message });
     }
@@ -235,6 +237,7 @@ export function enforceAccess(
   if (roleAtLeast(role, requiredRole)) {
     return true;
   }
+  recordAuthzDenial(req as PrincipalCarrier, { scope, requiredRole });
   if (res) {
     sendErrorResponse(res as Response, 403, {
       message: ROLE_DENIED_MESSAGE,

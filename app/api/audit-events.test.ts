@@ -22,6 +22,20 @@ describe('recordAuditEvent', () => {
     mockGetAuditCounter.mockReturnValue({ inc: mockInc });
   });
 
+  test('carries an explicit actor role through to the stored entry', () => {
+    recordAuditEvent({
+      action: 'auth-denied',
+      status: 'error',
+      containerName: 'authorization',
+      actor: 'vera',
+      actorRole: 'viewer',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ actor: 'vera', actorRole: 'viewer' }),
+    );
+  });
+
   test('should include optional version fields when provided', () => {
     recordAuditEvent({
       action: 'rollback',

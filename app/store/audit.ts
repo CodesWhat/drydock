@@ -18,7 +18,7 @@ import logger from '../log/index.js';
 import type { AuditEntry } from '../model/audit.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
-import { getAuditActor } from './audit-actor.js';
+import { getAuditActor, getAuditActorRole } from './audit-actor.js';
 import type { Database, Row, SqlBinding } from './db/driver.js';
 
 const log = logger.child({ component: 'store.audit' });
@@ -102,6 +102,7 @@ function rowToEntry(row: Row): AuditEntry {
     status: row.status as AuditEntry['status'],
     details: optionalString(row.details),
     actor: optionalString(row.actor),
+    actorRole: optionalString(row.actor_role),
   };
 }
 
@@ -197,18 +198,23 @@ export function createCollections(database: Database): void {
 export function insertAudit(entry: AuditEntry): AuditEntry {
   const timestamp = entry.timestamp || new Date().toISOString();
   const actor = entry.actor ?? getAuditActor();
+  // The bound role belongs to the bound actor. An entry that names its own actor
+  // (a login, before any principal exists) never inherits someone else's role.
+  const actorRole =
+    entry.actorRole ?? (entry.actor === undefined ? getAuditActorRole() : undefined);
   const entryToSave: AuditEntry = {
     ...entry,
     id: entry.id || crypto.randomUUID(),
     timestamp,
     ...(actor !== undefined ? { actor } : {}),
+    ...(actorRole !== undefined ? { actorRole } : {}),
   };
 
   if (db) {
     db.prepare(
       `INSERT INTO audit
-         (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details, actor)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, timestamp, timestamp_ms, action, container_name, container_identity_key, container_image, from_version, to_version, update_kind, semver_diff, trigger_name, status, details, actor, actor_role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       entryToSave.id,
       entryToSave.timestamp,
@@ -225,6 +231,7 @@ export function insertAudit(entry: AuditEntry): AuditEntry {
       entryToSave.status,
       entryToSave.details ?? null,
       entryToSave.actor ?? null,
+      entryToSave.actorRole ?? null,
     );
     auditInsertsSincePrune += 1;
     if (auditInsertsSincePrune >= AUDIT_PRUNE_INSERT_INTERVAL) {

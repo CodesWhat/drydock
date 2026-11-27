@@ -77,6 +77,7 @@ const backendAuditActions = {
   'notification-outbox-updated': true,
   'operation-cancelled': true,
   'agent-key-changed': true,
+  'auth-denied': true,
 } satisfies Record<AuditEntry['action'], true>;
 
 export const BACKEND_AUDIT_ACTIONS = Object.keys(backendAuditActions);

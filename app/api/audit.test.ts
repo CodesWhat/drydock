@@ -574,6 +574,7 @@ describe('Audit Router export', () => {
     containerName: 'web',
     status: 'success',
     actor: 'alice',
+    actorRole: 'operator',
   };
 
   beforeEach(() => {
@@ -613,8 +614,8 @@ describe('Audit Router export', () => {
     expect(res.getHeader('x-total-count')).toBe('1');
     expect(res.getHeader('x-content-type-options')).toBe('nosniff');
     expect(res.body).toBe(
-      'id,timestamp,actor,action,containerName,containerIdentityKey,containerImage,fromVersion,toVersion,updateKind,semverDiff,triggerName,status,details\r\n' +
-        '1,2026-01-01T00:00:00.000Z,alice,update-applied,web,,,,,,,,success,\r\n',
+      'id,timestamp,actor,actorRole,action,containerName,containerIdentityKey,containerImage,fromVersion,toVersion,updateKind,semverDiff,triggerName,status,details\r\n' +
+        '1,2026-01-01T00:00:00.000Z,alice,operator,update-applied,web,,,,,,,,success,\r\n',
     );
   });
 

@@ -1,4 +1,8 @@
 import express from 'express';
+
+const { mockRecordAuthzDenial } = vi.hoisted(() => ({ mockRecordAuthzDenial: vi.fn() }));
+vi.mock('./authz-denial.js', () => ({ recordAuthzDenial: mockRecordAuthzDenial }));
+
 import {
   ADMIN_SCOPE,
   API_KEYS_MANAGE_SCOPE,
@@ -506,6 +510,55 @@ describe('scoped() enforcement', () => {
     );
 
     expect(blocked).toBeUndefined();
+  });
+});
+
+describe('denial recording', () => {
+  const key = {
+    principal: {
+      kind: 'api-key' as const,
+      username: 'ci',
+      keyId: 'k',
+      scopes: ['read'],
+      parentKeyId: null,
+    },
+  };
+  const person = (role: string) => ({
+    principal: { kind: 'anonymous' as const, username: 'anonymous', role },
+  });
+
+  function createResponse() {
+    const json = vi.fn();
+    return { res: { status: vi.fn(() => ({ json })) }, json };
+  }
+
+  beforeEach(() => {
+    mockRecordAuthzDenial.mockClear();
+  });
+
+  test('records a role miss with the scope and the floor that was missed', () => {
+    const req = person('viewer');
+    enforceAccess(req as never, createResponse().res, 'containers:update');
+    expect(mockRecordAuthzDenial).toHaveBeenCalledWith(req, {
+      scope: 'containers:update',
+      requiredRole: 'operator',
+    });
+  });
+
+  test('records a missing API key scope', () => {
+    enforceAccess(key as never, createResponse().res, 'admin');
+    expect(mockRecordAuthzDenial).toHaveBeenCalledWith(key, { scope: 'admin' });
+  });
+
+  test('records a key refused on a session-only route', () => {
+    enforceAccess(key as never, createResponse().res, SESSION_ONLY);
+    expect(mockRecordAuthzDenial).toHaveBeenCalledWith(key, { scope: SESSION_ONLY });
+  });
+
+  test('records nothing for a request that is let through', () => {
+    enforceAccess(person('admin') as never, createResponse().res, 'admin');
+    enforceAccess(key as never, createResponse().res, 'read');
+    expect(mockRecordAuthzDenial).not.toHaveBeenCalled();
   });
 });
 
