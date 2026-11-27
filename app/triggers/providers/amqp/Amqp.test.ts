@@ -11,9 +11,10 @@ const container = {
 const url = 'amqp://user:pass@rabbit:5672';
 
 let amqpTrigger: Amqp;
-let channel: { assertExchange: any; publish: any; close: any };
+let channel: { assertExchange: any; publish: any; close: any; on: any };
 let connection: { on: any; createChannel: any; close: any };
 let handlers: Record<string, (...args: any[]) => void>;
+let channelHandlers: Record<string, (...args: any[]) => void>;
 
 function configure(overrides = {}) {
   amqpTrigger.configuration = amqpTrigger.validateConfiguration({ url, ...overrides });
@@ -27,7 +28,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   amqpTrigger = new Amqp();
   handlers = {};
+  channelHandlers = {};
   channel = {
+    on: vi.fn((event: string, handler: (...args: any[]) => void) => {
+      channelHandlers[event] = handler;
+    }),
     assertExchange: vi.fn().mockResolvedValue(undefined),
     publish: vi.fn().mockReturnValue(true),
     close: vi.fn().mockResolvedValue(undefined),
@@ -128,6 +133,56 @@ test('should log connection errors and reconnect after the connection closes', a
   expect(warn).toHaveBeenCalledWith('AMQP connection error (reset)');
   handlers.close();
   await amqpTrigger.trigger(container);
+  expect(amqp.connect).toHaveBeenCalledTimes(2);
+});
+
+test('should listen for channel errors before asserting the exchange, so a broker close cannot crash the process', async () => {
+  configure({ exchange: 'drydock' });
+  channel.assertExchange.mockImplementation(async () => {
+    expect(channelHandlers.error).toBeTypeOf('function');
+    expect(channelHandlers.close).toBeTypeOf('function');
+  });
+  const warn = vi.spyOn(amqpTrigger.log, 'warn').mockImplementation(() => undefined);
+  await amqpTrigger.trigger(container);
+  channelHandlers.error(new Error('PRECONDITION_FAILED'));
+  expect(warn).toHaveBeenCalledWith('AMQP channel error (PRECONDITION_FAILED)');
+});
+
+test('should open a fresh channel after the broker closes the current one', async () => {
+  configure();
+  await amqpTrigger.trigger(container);
+  channelHandlers.close();
+  await amqpTrigger.trigger(container);
+  expect(amqp.connect).toHaveBeenCalledTimes(1);
+  expect(connection.createChannel).toHaveBeenCalledTimes(2);
+});
+
+test('should ignore a close from a channel that was already replaced', async () => {
+  configure();
+  await amqpTrigger.trigger(container);
+  const staleClose = channelHandlers.close;
+  connection.createChannel.mockResolvedValueOnce({ ...channel });
+  (amqpTrigger as any).channel = undefined;
+  await amqpTrigger.trigger(container);
+  staleClose();
+  await amqpTrigger.trigger(container);
+  expect(connection.createChannel).toHaveBeenCalledTimes(2);
+});
+
+test('should share one connection and channel between concurrent first triggers', async () => {
+  configure({ exchange: 'drydock' });
+  await Promise.all([amqpTrigger.trigger(container), amqpTrigger.trigger(container)]);
+  expect(amqp.connect).toHaveBeenCalledTimes(1);
+  expect(connection.createChannel).toHaveBeenCalledTimes(1);
+  expect(channel.assertExchange).toHaveBeenCalledTimes(1);
+  expect(channel.publish).toHaveBeenCalledTimes(2);
+});
+
+test('should retry the connection after a failed first attempt', async () => {
+  configure();
+  vi.mocked(amqp.connect).mockRejectedValueOnce(new Error('refused'));
+  await expect(amqpTrigger.trigger(container)).rejects.toThrow('refused');
+  await expect(amqpTrigger.trigger(container)).resolves.toBe(true);
   expect(amqp.connect).toHaveBeenCalledTimes(2);
 });
 

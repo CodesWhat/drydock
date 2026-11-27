@@ -121,12 +121,26 @@ test('sendMessage should reject on a session error event', async () => {
     setImmediate(() => session.emit('error', new Error('auth failed')));
   });
   await expect(xmppTrigger.trigger(container)).rejects.toThrow('auth failed');
+  // @xmpp/reconnect would otherwise keep logging in every second.
+  expect(session.stop).toHaveBeenCalledTimes(1);
 });
 
 test('sendMessage should reject when the session fails to start', async () => {
   configure();
   session.start.mockRejectedValue(new Error('connect refused'));
   await expect(xmppTrigger.trigger(container)).rejects.toThrow('connect refused');
+  expect(session.stop).toHaveBeenCalledTimes(1);
+});
+
+test('sendMessage should not send when the session comes online after it already failed', async () => {
+  configure();
+  session.start.mockImplementation(async () => {
+    setImmediate(() => session.emit('error', new Error('stream reset')));
+  });
+  await expect(xmppTrigger.trigger(container)).rejects.toThrow('stream reset');
+  session.emit('online');
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(session.send).not.toHaveBeenCalled();
 });
 
 test('sendMessage should ignore events after it settled', async () => {

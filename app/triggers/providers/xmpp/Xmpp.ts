@@ -100,12 +100,20 @@ class Xmpp extends Trigger<XmppConfiguration> {
         stop();
       }, this.configuration.timeout);
 
+      // @xmpp/client reconnects after every disconnect until stopped, so every
+      // failure path stops the client, and a reconnect that comes online after
+      // the delivery already failed must not send it late.
       xmpp.on('error', (error: Error) => {
         this.log.error(`XMPP error (${error.message})`);
         settle(error);
+        stop();
       });
 
       xmpp.on('online', async () => {
+        if (settled) {
+          await stop();
+          return;
+        }
         try {
           await xmpp.send(
             xml(
@@ -125,6 +133,7 @@ class Xmpp extends Trigger<XmppConfiguration> {
       xmpp.start().catch((error: Error) => {
         this.log.error(`XMPP start error (${error.message})`);
         settle(error);
+        stop();
       });
     });
   }

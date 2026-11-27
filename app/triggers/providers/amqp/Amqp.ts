@@ -17,6 +17,7 @@ interface AmqpConfiguration extends TriggerConfiguration {
 class Amqp extends Trigger<AmqpConfiguration> {
   private connection?: ChannelModel;
   private channel?: Channel;
+  private pendingChannel?: Promise<Channel>;
 
   /**
    * Get the Trigger configuration schema.
@@ -49,9 +50,21 @@ class Amqp extends Trigger<AmqpConfiguration> {
 
   /**
    * Get or create the AMQP channel, reconnecting after a dropped connection.
+   * Concurrent callers share one in-flight open, so a burst of first triggers
+   * opens one connection and one channel.
    * @returns {Promise<Channel>}
    */
   async getChannel(): Promise<Channel> {
+    if (this.channel) {
+      return this.channel;
+    }
+    this.pendingChannel ??= this.openChannel().finally(() => {
+      this.pendingChannel = undefined;
+    });
+    return this.pendingChannel;
+  }
+
+  private async openChannel(): Promise<Channel> {
     if (!this.connection) {
       const connection = await amqp.connect(this.configuration.url);
       connection.on('error', (error: Error) => {
@@ -63,16 +76,27 @@ class Amqp extends Trigger<AmqpConfiguration> {
       });
       this.connection = connection;
     }
-    if (!this.channel) {
-      const channel = await this.connection.createChannel();
-      if (this.configuration.exchange) {
-        await channel.assertExchange(this.configuration.exchange, this.configuration.exchangetype, {
-          durable: true,
-        });
+    const channel = await this.connection.createChannel();
+    // The broker closes a channel on a failed assertExchange or a publish to a
+    // deleted exchange, and amqplib emits that as 'error'. With no listener the
+    // EventEmitter throws and takes the process down, so listen before the
+    // first call that can fail, and drop the closed channel so the next
+    // trigger opens a fresh one.
+    channel.on('error', (error: Error) => {
+      this.log.warn(`AMQP channel error (${error.message})`);
+    });
+    channel.on('close', () => {
+      if (this.channel === channel) {
+        this.channel = undefined;
       }
-      this.channel = channel;
+    });
+    if (this.configuration.exchange) {
+      await channel.assertExchange(this.configuration.exchange, this.configuration.exchangetype, {
+        durable: true,
+      });
     }
-    return this.channel;
+    this.channel = channel;
+    return channel;
   }
 
   /**
