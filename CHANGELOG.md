@@ -17,6 +17,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Security fast lane: a replica whose running scan is newer than the remembered candidate scan now gets its own fresh candidate scan instead of being marked attempted and left waiting for its next running-scan change.
 - Image pruning after a digest update no longer removes the previous image when a retained rollback backup records that digest, so the rollback no longer fails on a missing image.
+- Auto-rollback health monitoring no longer logs "container is healthy" at the end of its window when every inspect failed or the healthcheck was still starting. The log now reports the real outcome (inspect failed, still starting, healthy, or never reported a status).
 
 ## [1.9.0-rc.1] - 2026-11-20
 
