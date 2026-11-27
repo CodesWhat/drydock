@@ -659,6 +659,74 @@ describe('additional docker trigger coverage', () => {
     );
   });
 
+  test('cleanupOldImages should skip digest pruning when the digest is retained for rollback', async () => {
+    const backupStore = await import('../../../store/backup.js');
+    docker.configuration.prune = true;
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
+      { imageTag: '1.0.0', imageDigest: 'sha256:old' },
+    ] as any);
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+    const registryProvider = {
+      getImageFullName: vi.fn(() => 'my-registry/test/test:sha256:old'),
+    };
+    const logContainer = createMockLog('info');
+
+    await docker.cleanupOldImages(
+      {},
+      registryProvider,
+      {
+        name: 'container-name',
+        watcher: 'test',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: { repo: 'sha256:old' },
+        },
+        updateKind: { kind: 'digest' },
+      },
+      logContainer,
+    );
+
+    expect(registryProvider.getImageFullName).not.toHaveBeenCalled();
+    expect(removeImageSpy).not.toHaveBeenCalled();
+    expect(logContainer.info).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping prune of digest sha256:old'),
+    );
+  });
+
+  test('cleanupOldImages should prune the digest image when only other digests are retained', async () => {
+    const backupStore = await import('../../../store/backup.js');
+    docker.configuration.prune = true;
+    vi.mocked(backupStore.getBackupsForContainer).mockReturnValue([
+      { imageTag: '1.0.0', imageDigest: 'sha256:other' },
+      { imageTag: '0.9.0' },
+    ] as any);
+    const removeImageSpy = vi.spyOn(docker, 'removeImage').mockResolvedValue(undefined);
+    const registryProvider = {
+      getImageFullName: vi.fn(() => 'my-registry/test/test:sha256:old'),
+    };
+
+    await docker.cleanupOldImages(
+      {},
+      registryProvider,
+      {
+        name: 'container-name',
+        watcher: 'test',
+        image: {
+          registry: { name: 'hub', url: 'my-registry' },
+          name: 'test/test',
+          tag: { value: '1.0.0' },
+          digest: { repo: 'sha256:old' },
+        },
+        updateKind: { kind: 'digest' },
+      },
+      createMockLog('info'),
+    );
+
+    expect(removeImageSpy).toHaveBeenCalled();
+  });
+
   test('cleanupOldImages should warn when digest image removal fails', async () => {
     docker.configuration.prune = true;
     vi.spyOn(docker, 'removeImage').mockRejectedValue(new Error('remove failed'));

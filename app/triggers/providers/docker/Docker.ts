@@ -1868,6 +1868,12 @@ class Docker<
     const retainedBackups =
       backupStore.getBackupsForContainer(this.resolveContainerBackupScope(container)) || [];
     const retainedTags = new Set(retainedBackups.map((b) => b.imageTag));
+    const retainedDigests = new Set(
+      retainedBackups
+        .map((b) => b.imageDigest)
+        .filter((d): d is string => typeof d === 'string' && d !== '')
+        .map((d) => d.substring(d.indexOf('@') + 1)),
+    );
 
     if (container.updateKind.kind === 'tag') {
       if (retainedTags.has(container.image.tag.value)) {
@@ -1877,6 +1883,12 @@ class Docker<
       const oldImage = registry.getImageFullName(container.image, container.image.tag.value);
       await this.removeImage(dockerApi, oldImage, logContainer);
     } else if (container.updateKind.kind === 'digest' && container.image.digest.repo) {
+      if (retainedDigests.has(container.image.digest.repo)) {
+        logContainer.info(
+          `Skipping prune of digest ${container.image.digest.repo} — retained for rollback`,
+        );
+        return;
+      }
       try {
         const oldImage = registry.getImageFullName(container.image, container.image.digest.repo);
         await this.removeImage(dockerApi, oldImage, logContainer);
