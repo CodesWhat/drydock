@@ -558,14 +558,12 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       : undefined;
 
     return {
-      ...this.configuration,
+      ...this.maskFields(['sshpassword', 'sshpassphrase']),
       maintenancewindowopen: hasMaintenanceWindow ? this.isMaintenanceWindowOpen() : undefined,
       maintenancewindowqueued: hasMaintenanceWindow ? this.maintenanceWindowWatchQueued : false,
       maintenancenextwindow: nextMaintenanceWindow,
       authblocked: this.remoteAuthBlockedReason !== undefined,
       authblockedreason: this.remoteAuthBlockedReason,
-      sshpassword: Docker.mask(this.configuration.sshpassword),
-      sshpassphrase: Docker.mask(this.configuration.sshpassphrase),
       auth: this.configuration.auth
         ? {
             type: this.configuration.auth.type,
