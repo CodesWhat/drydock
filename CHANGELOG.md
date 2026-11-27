@@ -14,6 +14,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Security
 
+- Agents using Ed25519 request signing now sign Portwing signature v3, which binds each request to the agent's own ID. A request captured for one agent can no longer replay on another agent that trusts the same controller key. Drydock reads the ID from /_portwing/info, confirms the agent accepts v3, pins it per agent, never falls back to v2 once pinned, and stops signing if the agent's ID changes. `DD_AGENT_{name}_AUDIENCE` sets the ID explicitly. Needs Portwing 1.1.0 or newer. Rolling back to 1.8 needs `portwing signature-lock clear <keyID>` on the agents first.
 - Pin Alpine libexpat to 2.11.0-r0. Alpine replaced 2.10.0-r0 in the v3.24 repository, which broke every image build with a `libexpat-2.11.0-r0: breaks: world[libexpat=2.10.0-r0]` error.
 - **Security:** Added OpenVEX `not_affected` statements for five High OpenSSL advisories on Alpine openssl 3.5.9-r1 with no Alpine fix yet (CVE-2026-124709, CVE-2026-107494, CVE-2026-121482, CVE-2026-84786, CVE-2026-107493). None are reachable in the image's built-in paths, so the Grype gate no longer flags them.
 
