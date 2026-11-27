@@ -75,8 +75,10 @@ curl http://drydock:3000/api/v1/triggers/smtp/gmail/agent1
 
 This operation lets you run a specific Trigger with simulated data.
 
+Notification triggers render the body as a simulated container, keeping only `id`, `name`, `displayName`, `displayIcon`, `status`, `watcher`, `updateAvailable`, `image`, `result`, `updateKind` and `error`. Other keys, `labels` included, are dropped and strings are capped at 2048 characters. Actions (`docker`, `dockercompose`, `portainer`, `command`) and the CI dispatch providers (`githubdispatch`, `gitlabpipeline`) ignore everything but `id` and `operationId`: they run on drydock's stored copy of that container, and an unknown `id` returns `404`.
+
 ```bash
-export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test","updateKind":{"kind":"tag","semverDiff":"patch","localValue":"1.2.3","remoteValue":"1.2.4","result":{"link":"https://my-container/release-notes/"}}}'
+export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test","updateKind":{"kind":"tag","semverDiff":"patch","localValue":"1.2.3","remoteValue":"1.2.4"},"result":{"link":"https://my-container/release-notes/"}}'
 curl -X POST -H "Content-Type: application/json" -d "$CONTAINER" http://drydock:3000/api/v1/triggers/smtp/gmail
 ```
 

@@ -30,7 +30,7 @@ vi.mock('../../store/container.js', () => ({
 }));
 
 vi.mock('../../api/trigger.js', () => ({
-  runTrigger: vi.fn(),
+  runTriggerFromController: vi.fn(),
 }));
 
 vi.mock('../../api/component.js', () => ({
@@ -66,19 +66,19 @@ describe('agent API trigger', () => {
       req.body = { id: 'c1', agent: 'remote-agent' };
       await triggerApi.runTrigger(req, res);
       expect(req.body.agent).toBeUndefined();
-      expect(apiTrigger.runTrigger).toHaveBeenCalledWith(req, res);
+      expect(apiTrigger.runTriggerFromController).toHaveBeenCalledWith(req, res);
     });
 
     test('should handle body without agent field', async () => {
       req.body = { id: 'c1' };
       await triggerApi.runTrigger(req, res);
-      expect(apiTrigger.runTrigger).toHaveBeenCalledWith(req, res);
+      expect(apiTrigger.runTriggerFromController).toHaveBeenCalledWith(req, res);
     });
 
     test('should handle null body', async () => {
       req.body = null;
       await triggerApi.runTrigger(req, res);
-      expect(apiTrigger.runTrigger).toHaveBeenCalledWith(req, res);
+      expect(apiTrigger.runTriggerFromController).toHaveBeenCalledWith(req, res);
     });
   });
 
@@ -131,6 +131,21 @@ describe('agent API trigger', () => {
       expect(passed[0].labels['dd.hook.pre']).toBeUndefined();
       expect(res.status).toHaveBeenCalledWith(200);
     });
+
+    test.each(['githubdispatch', 'gitlabpipeline'])(
+      'should hand a %s batch the stored container, never a forged image',
+      async (type) => {
+        req.params = { type, name: 'ci' };
+        req.body = [{ id: 'c1', image: { name: 'attacker/evil' }, result: { tag: 'pwned' } }];
+        const storedC1 = { id: 'c1', image: { name: 'library/nginx' } };
+        storeContainer.getContainer.mockReturnValue(storedC1);
+        const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+        registry.getState.mockReturnValue({ trigger: { [`${type}.ci`]: mockTrigger } });
+        await triggerApi.runTriggerBatch(req, res);
+        expect(mockTrigger.triggerBatch.mock.calls[0][0][0]).toBe(storedC1);
+        expect(res.status).toHaveBeenCalledWith(200);
+      },
+    );
 
     test('should return 404 and run nothing when any id is unknown', async () => {
       req.params = { type: 'docker', name: 'update' };

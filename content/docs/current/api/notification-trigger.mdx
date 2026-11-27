@@ -40,7 +40,11 @@ To fetch one registered on a specific agent, append the agent name: `/api/v1/not
 
 ## Running a notification trigger
 
-Run a notification trigger with simulated or real container data. Local routes are `POST /api/v1/notification-triggers/:type/:name`; for containers managed by a remote agent use `POST /api/v1/notification-triggers/:type/:name/:agent`.
+Run a notification trigger with simulated container data. Local routes are `POST /api/v1/notification-triggers/:type/:name`; for containers managed by a remote agent use `POST /api/v1/notification-triggers/:type/:name/:agent`.
+
+The body is the container the message describes, limited to `id`, `name`, `displayName`, `displayIcon`, `status`, `watcher`, `updateAvailable`, `image`, `result`, `updateKind` and `error`. Any other key, `labels` included, is dropped, strings are capped at 2048 characters, and a field of the wrong type returns `400`.
+
+The CI dispatch providers (`githubdispatch`, `gitlabpipeline`) start a real pipeline, so they work like actions here: the body only names a watched container by `id`, the run uses drydock's stored copy of it, and an unknown `id` returns `404`.
 
 ```bash
 export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test"}'

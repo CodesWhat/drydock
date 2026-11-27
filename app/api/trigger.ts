@@ -8,7 +8,10 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { clearNotificationSkip } from '../triggers/notification-skips.js';
 import Trigger from '../triggers/providers/Trigger.js';
-import { getTriggerCategoryForType } from '../triggers/trigger-category.js';
+import {
+  getTriggerCategoryForType,
+  isStoreBoundTriggerType,
+} from '../triggers/trigger-category.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorStatusCode } from '../util/error.js';
 import * as component from './component.js';
@@ -60,6 +63,71 @@ const triggerRequestBodySchema = joi
   })
   .unknown(true);
 
+const SIMULATED_TEXT_MAX_LENGTH = 2048;
+const simulatedText = () => joi.string().max(SIMULATED_TEXT_MAX_LENGTH);
+
+/**
+ * The container a notification test-fire may describe. A notification trigger
+ * run from this route renders a message about a container that need not
+ * exist, so the body is the container, but only the fields a message template
+ * reads survive. `labels`, the label-derived trigger filters and every other
+ * unknown key are stripped, nested ones included, and strings are bounded.
+ */
+const notificationSimulationSchema = joi
+  .object({
+    id: joi.string().trim().min(1).max(256).required(),
+    agent: joi.string().trim().min(1),
+    operationId: joi.string().trim().min(1),
+    name: simulatedText(),
+    displayName: simulatedText(),
+    displayIcon: simulatedText(),
+    status: simulatedText(),
+    watcher: simulatedText(),
+    updateAvailable: joi.boolean(),
+    image: joi.object({
+      id: simulatedText(),
+      registry: joi.object({
+        name: simulatedText(),
+        url: simulatedText(),
+        lookupImage: simulatedText(),
+        lookupUrl: simulatedText(),
+      }),
+      name: simulatedText(),
+      tag: joi.object({
+        value: simulatedText(),
+        semver: joi.boolean(),
+        tagPrecision: joi.string().valid('specific', 'floating'),
+      }),
+      digest: joi.object({
+        watch: joi.boolean(),
+        value: simulatedText(),
+        repo: simulatedText(),
+      }),
+      architecture: simulatedText(),
+      os: simulatedText(),
+      variant: simulatedText(),
+      created: simulatedText(),
+      softwareVersion: simulatedText(),
+    }),
+    result: joi.object({
+      tag: simulatedText(),
+      suggestedTag: simulatedText(),
+      digest: simulatedText(),
+      created: simulatedText(),
+      softwareVersion: simulatedText(),
+      publishedAt: simulatedText(),
+      link: simulatedText(),
+    }),
+    updateKind: joi.object({
+      kind: simulatedText(),
+      localValue: simulatedText(),
+      remoteValue: simulatedText(),
+      semverDiff: simulatedText(),
+    }),
+    error: joi.object({ message: simulatedText() }),
+  })
+  .options({ stripUnknown: true });
+
 const INVALID_TRIGGER_REQUEST_BODY_ERROR = 'Invalid trigger request body';
 const UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose', 'portainer']);
 
@@ -106,6 +174,23 @@ function validateTriggerRequestBody(body: unknown): {
   };
 }
 
+/**
+ * Reduce a notification test-fire body to the bounded simulation shape.
+ */
+function sanitizeNotificationSimulation(body: TriggerRequestBody): {
+  value?: Container;
+  error?: string;
+} {
+  const validationResult = notificationSimulationSchema.validate(body, {
+    abortEarly: false,
+    convert: false,
+  });
+  if (validationResult.error) {
+    return { error: validationResult.error.message };
+  }
+  return { value: validationResult.value as unknown as Container };
+}
+
 function getRemoteErrorPayload(error: unknown): ErrorResponsePayload | undefined {
   if (!error || typeof error !== 'object') {
     return undefined;
@@ -143,6 +228,23 @@ function formatStoredContainerOwner(container: Container): string {
   return container.agent ? `${container.agent}.${container.id}` : container.id;
 }
 
+function refuseRemoteContainer(
+  res: Response,
+  triggerType: string,
+  triggerName: string,
+  agentName: string,
+  containerId: string,
+) {
+  log.warn(
+    `Cannot execute local trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on remote container ${sanitizeLogParam(agentName)}.${sanitizeLogParam(containerId)}`,
+  );
+  sendErrorResponse(
+    res,
+    400,
+    `Cannot execute local trigger ${triggerType}.${triggerName} on remote container ${agentName}.${containerId}`,
+  );
+}
+
 function getRouteAgentOwnershipError(agentName: string, container: Container): string | undefined {
   if (container.agent === agentName) {
     return undefined;
@@ -150,10 +252,36 @@ function getRouteAgentOwnershipError(agentName: string, container: Container): s
   return `Route agent ${agentName} does not own container ${formatStoredContainerOwner(container)}`;
 }
 
+interface RunTriggerOptions {
+  /**
+   * The agent route is called by the controller with the real container a
+   * notification is about, transient fields included, so its notification
+   * payloads run as sent. Store-bound triggers are re-read on every route.
+   */
+  trustNotificationPayload: boolean;
+}
+
 /**
- * Run a specific trigger on a specific container provided in the payload.
+ * Run a specific trigger. Store-bound triggers (actions and CI dispatch) run
+ * on the container stored under the body's id; notification triggers run on
+ * a simulated container built from the body.
  */
 export async function runTrigger(req: Request<RunTriggerParams>, res: Response) {
+  return runLocalTrigger(req, res, { trustNotificationPayload: false });
+}
+
+/**
+ * Agent-side entry point for a trigger the controller asked this agent to run.
+ */
+export async function runTriggerFromController(req: Request<RunTriggerParams>, res: Response) {
+  return runLocalTrigger(req, res, { trustNotificationPayload: true });
+}
+
+async function runLocalTrigger(
+  req: Request<RunTriggerParams>,
+  res: Response,
+  options: RunTriggerOptions,
+) {
   const triggerType = req.params.type;
   const triggerName = req.params.name;
 
@@ -172,18 +300,11 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
     return;
   }
-  const containerToTrigger = validationResult.value as unknown as Container;
+  const requestBody = validationResult.value;
 
   // Running local triggers on remote containers is not supported
-  if (containerToTrigger.agent) {
-    log.warn(
-      `Cannot execute local trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on remote container ${sanitizeLogParam(containerToTrigger.agent)}.${sanitizeLogParam(containerToTrigger.id)}`,
-    );
-    sendErrorResponse(
-      res,
-      400,
-      `Cannot execute local trigger ${triggerType}.${triggerName} on remote container ${containerToTrigger.agent}.${containerToTrigger.id}`,
-    );
+  if (requestBody.agent) {
+    refuseRemoteContainer(res, triggerType, triggerName, requestBody.agent, requestBody.id);
     return;
   }
 
@@ -218,15 +339,55 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     return;
   }
 
-  // Ensure updateKind exists for template rendering (test containers
-  // from the API don't have the computed getter that validate() adds)
-  if (!containerToTrigger.updateKind) {
-    containerToTrigger.updateKind = {
-      kind: 'unknown',
-      localValue: undefined,
-      remoteValue: undefined,
-      semverDiff: 'unknown',
-    };
+  // A synthetic container from a file watcher has nothing running to act on. Update triggers
+  // are refused further down by the eligibility blockers; this covers the other actions.
+  if (isFileSourcedContainer(requestBody) && resolvedCategoryIsAction) {
+    sendErrorResponse(res, 409, 'Containers from a file watcher are notification-only');
+    return;
+  }
+
+  let containerToTrigger: Container;
+  if (isStoreBoundTriggerType(triggerToRun.type)) {
+    // The body only names the container. Image, labels and result come from
+    // the store, so a forged body cannot steer what the trigger acts on.
+    const storedContainer = storeContainer.getContainer(requestBody.id);
+    if (!storedContainer) {
+      sendErrorResponse(res, 404, 'Container not found');
+      return;
+    }
+    if (storedContainer.agent) {
+      refuseRemoteContainer(
+        res,
+        triggerType,
+        triggerName,
+        storedContainer.agent,
+        storedContainer.id,
+      );
+      return;
+    }
+    containerToTrigger = storedContainer;
+  } else {
+    const simulation = options.trustNotificationPayload
+      ? { value: requestBody as unknown as Container }
+      : sanitizeNotificationSimulation(requestBody);
+    if (simulation.error || !simulation.value) {
+      log.warn(
+        `Invalid notification simulation body (type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, error=${sanitizeLogParam(simulation.error)})`,
+      );
+      sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
+      return;
+    }
+    containerToTrigger = simulation.value;
+    // Ensure updateKind exists for template rendering (test containers
+    // from the API don't have the computed getter that validate() adds)
+    if (!containerToTrigger.updateKind) {
+      containerToTrigger.updateKind = {
+        kind: 'unknown',
+        localValue: undefined,
+        remoteValue: undefined,
+        semverDiff: 'unknown',
+      };
+    }
   }
 
   if (Trigger.isRollbackContainer(containerToTrigger)) {
@@ -234,28 +395,15 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
     return;
   }
 
-  // A synthetic container from a file watcher has nothing running to act on. Update triggers
-  // are refused further down by the eligibility blockers; this covers the other actions.
-  if (isFileSourcedContainer(containerToTrigger) && resolvedCategoryIsAction) {
-    sendErrorResponse(res, 409, 'Containers from a file watcher are notification-only');
-    return;
-  }
-
   try {
     if (UPDATE_TRIGGER_TYPES.has(triggerToRun.type.toLowerCase())) {
-      const storedContainer = storeContainer.getContainer(containerToTrigger.id);
-      if (!storedContainer) {
-        sendErrorResponse(res, 404, 'Container not found');
-        return;
-      }
-
-      const operationId = validationResult.value.operationId;
-      const accepted = await requestContainerUpdate(storedContainer, {
+      const operationId = requestBody.operationId;
+      const accepted = await requestContainerUpdate(containerToTrigger, {
         trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger },
         ...(operationId !== undefined ? { operationId } : {}),
       });
       log.info(
-        `Accepted update trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(storedContainer.id)})`,
+        `Accepted update trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(containerToTrigger.id)})`,
       );
       res.status(202).json({ operationId: accepted.operationId });
       return;
@@ -318,29 +466,45 @@ export async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res
     sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
     return;
   }
-  const containerToTrigger = validationResult.value as unknown as Container;
+  const requestBody = validationResult.value;
+
+  let containerToTrigger: Container;
+  if (isStoreBoundTriggerType(triggerType)) {
+    // Forward the controller's stored copy, never the caller's description of
+    // it; the agent re-reads its own store again on arrival.
+    const storedContainer = storeContainer.getContainer(requestBody.id);
+    if (!storedContainer) {
+      sendErrorResponse(res, 404, 'Container not found');
+      return;
+    }
+    const ownershipError = getRouteAgentOwnershipError(agentName, storedContainer);
+    if (ownershipError) {
+      sendErrorResponse(res, 409, ownershipError);
+      return;
+    }
+    containerToTrigger = storedContainer;
+  } else {
+    const simulation = sanitizeNotificationSimulation(requestBody);
+    if (simulation.error || !simulation.value) {
+      log.warn(
+        `Invalid remote notification simulation body (agent=${sanitizeLogParam(agentName)}, type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, error=${sanitizeLogParam(simulation.error)})`,
+      );
+      sendErrorResponse(res, 400, INVALID_TRIGGER_REQUEST_BODY_ERROR);
+      return;
+    }
+    containerToTrigger = simulation.value;
+  }
 
   if (Trigger.isRollbackContainer(containerToTrigger)) {
     sendErrorResponse(res, 409, 'Cannot update temporary rollback container');
     return;
   }
 
-  const callerOperationId = validationResult.value.operationId;
+  const callerOperationId = requestBody.operationId;
 
   try {
     if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
-      const storedContainer = storeContainer.getContainer(containerToTrigger.id);
-      if (!storedContainer) {
-        sendErrorResponse(res, 404, 'Container not found');
-        return;
-      }
-
-      const ownershipError = getRouteAgentOwnershipError(agentName, storedContainer);
-      if (ownershipError) {
-        sendErrorResponse(res, 409, ownershipError);
-        return;
-      }
-
+      const storedContainer = containerToTrigger;
       const triggerId = buildAgentQualifiedTriggerId(agentName, triggerType, triggerName);
       const resolvedTrigger = registry.getState().trigger[triggerId];
       const triggerToRun =

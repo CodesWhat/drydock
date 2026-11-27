@@ -20,6 +20,25 @@ export function getTriggerCategoryForType(type: string): TriggerCategory {
 }
 
 /**
+ * CI dispatch adapters are notification-category for labels and API scopes,
+ * but each run starts a real pipeline that builds whatever image it is told
+ * about, so a caller must not be able to describe that container.
+ */
+const CI_DISPATCH_TRIGGER_TYPES = new Set(['githubdispatch', 'gitlabpipeline']);
+
+/**
+ * Trigger types the trigger API runs only against a container read back from
+ * the store by id, never against a caller-supplied container body: every
+ * action provider plus the CI dispatch adapters (GHSA-46pm-mm9q-xv3c).
+ */
+export function isStoreBoundTriggerType(type: string): boolean {
+  return (
+    getTriggerCategoryForType(type) === 'action' ||
+    CI_DISPATCH_TRIGGER_TYPES.has(type.toLowerCase())
+  );
+}
+
+/**
  * Select the category-scoped include/exclude label values for a container.
  *
  * No mirror fallback: this is the strict-scoping decision for #494. A lone

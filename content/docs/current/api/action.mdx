@@ -40,9 +40,11 @@ To fetch one registered on a specific agent, append the agent name: `/api/v1/act
 
 ## Running a action
 
-Run a action with simulated or real container data. Local routes are `POST /api/v1/actions/:type/:name`; for containers managed by a remote agent use `POST /api/v1/actions/:type/:name/:agent`.
+Run an action against a container drydock already watches. Local routes are `POST /api/v1/actions/:type/:name`; for containers managed by a remote agent use `POST /api/v1/actions/:type/:name/:agent`.
+
+The body only names the container by `id` (plus an optional `operationId`). The action runs on drydock's stored copy of that container, so any `image`, `labels`, `result` or other field in the body is ignored. An `id` drydock doesn't know returns `404`.
 
 ```bash
-export CONTAINER='{"id":"123456789","name":"container_test","watcher":"watcher_test"}'
+export CONTAINER='{"id":"123456789"}'
 curl -X POST -H "Content-Type: application/json" -d "$CONTAINER" http://drydock:3000/api/v1/actions/docker/local
 ```
