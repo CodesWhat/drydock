@@ -72,6 +72,7 @@
         "systemLogs": "Logs système",
         "manageGroup": "Gérer",
         "hosts": "Hôtes",
+        "fleetHealth": "État de la flotte",
         "registries": "Registres",
         "watchers": "Observateurs",
         "images": "Images",

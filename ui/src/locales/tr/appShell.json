@@ -72,6 +72,7 @@
         "systemLogs": "Sistem günlükleri",
         "manageGroup": "Yönet",
         "hosts": "Ana makineler",
+        "fleetHealth": "Filo durumu",
         "registries": "Kayıtlar",
         "watchers": "İzleyiciler",
         "images": "İmajlar",

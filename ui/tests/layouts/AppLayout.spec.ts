@@ -481,6 +481,20 @@ describe('AppLayout', () => {
   });
 
   describe('layout spacing', () => {
+    it('lists Fleet Health as its own top-level nav item (#1686)', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const navItem = wrapper
+        .findAll('.nav-item-wrapper')
+        .find((candidate) => candidate.text().includes('Fleet Health'));
+
+      expect(navItem).toBeDefined();
+      await navItem?.trigger('click');
+      expect(mockRouterPush).toHaveBeenCalledWith('/fleet');
+    });
+
     it('labels the notification delivery queue as Outbox with an outbox icon', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);

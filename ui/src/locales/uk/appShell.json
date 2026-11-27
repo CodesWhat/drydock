@@ -72,6 +72,7 @@
         "systemLogs": "Системні журнали",
         "manageGroup": "Керування",
         "hosts": "Хости",
+        "fleetHealth": "Стан парку",
         "registries": "Реєстри",
         "watchers": "Спостерігачі",
         "images": "Образи",

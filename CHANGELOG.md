@@ -10,6 +10,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 ### Changed
 
+- Fleet Health now has its own page in the left navigation instead of sitting above the container list, which frees up that space on the Containers view. The roster, reload and inventory refresh controls are unchanged. Requested in discussion #1686 and #1572.
 - Trimmed homepage filler: removed the long coverage-scope note under the hero stats and the "Probably not for you yet" and "Switching" blocks under the comparison table. The coverage badge now reads "100% backend coverage", and the WUD and Watchtower comparison pages carry the migration steps.
 
 ### Fixed

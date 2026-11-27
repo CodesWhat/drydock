@@ -20,4 +20,8 @@ describe('ROUTES', () => {
   it('defines a dedicated container logs route with an id param', () => {
     expect(ROUTES.CONTAINER_LOGS).toBe('/containers/:id/logs');
   });
+
+  it('defines a dedicated fleet health route', () => {
+    expect(ROUTES.FLEET).toBe('/fleet');
+  });
 });
