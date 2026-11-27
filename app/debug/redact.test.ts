@@ -133,6 +133,7 @@ describe('debug/redact', () => {
       apikey: 'api-token',
       accesskey: 'access-token',
       privatekey: '-----BEGIN PRIVATE KEY-----',
+      routingkey: 'pagerduty-routing-key',
       LOGIN: 'operator',
     };
 
@@ -145,6 +146,7 @@ describe('debug/redact', () => {
       apikey: '[REDACTED]',
       accesskey: '[REDACTED]',
       privatekey: '[REDACTED]',
+      routingkey: '[REDACTED]',
       LOGIN: 'operator',
     });
   });

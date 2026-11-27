@@ -157,12 +157,17 @@ Portainer is also an update-action provider and uses the `DD_ACTION_PORTAINER_*`
 - [**Mattermost**](/docs/configuration/triggers/mattermost) -- Mattermost webhook
 - [**MQTT**](/docs/configuration/triggers/mqtt) -- MQTT topic
 - [**ntfy**](/docs/configuration/triggers/ntfy) -- ntfy push notification
+- [**Opsgenie**](/docs/configuration/triggers/opsgenie) -- Opsgenie alert
+- [**PagerDuty**](/docs/configuration/triggers/pagerduty) -- PagerDuty Events API v2 event
 - [**Pushover**](/docs/configuration/triggers/pushover) -- Pushover notification
 - [**Rocket.Chat**](/docs/configuration/triggers/rocketchat) -- Rocket.Chat webhook
+- [**Signal**](/docs/configuration/triggers/signal) -- Signal message through signal-cli-rest-api
 - [**Slack**](/docs/configuration/triggers/slack) -- Slack webhook
 - [**SMTP**](/docs/configuration/triggers/smtp) -- Email notification
 - [**Teams**](/docs/configuration/triggers/teams) -- Microsoft Teams webhook
 - [**Telegram**](/docs/configuration/triggers/telegram) -- Telegram bot message
+- [**Uptime Kuma**](/docs/configuration/triggers/uptimekuma) -- Uptime Kuma push monitor
+- [**Zulip**](/docs/configuration/triggers/zulip) -- Zulip stream or direct message
 
 ## Common trigger configuration
 
@@ -226,7 +231,7 @@ The semver thresholds can be suffixed with `-no-digest` to exclude digest-only u
 ### Notes
 
 - `RESOLVENOTIFICATIONS` is currently implemented for Gotify (auto-deletes the notification message after a successful update). Other providers can be extended to support it.
-- Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
+- Some messaging triggers (Slack, Telegram, Teams, Matrix, Mattermost, Rocket.Chat, Google Chat, Signal, Zulip, PagerDuty, Opsgenie, Uptime Kuma) also support `DISABLETITLE` (default `false`) to send only the body without a title line.
 - You can set `DD_NOTIFICATION_{trigger_type}_THRESHOLD`, `_ONCE`, `_MODE`, or `_ORDER` to define a default for all triggers of the same type, e.g. `DD_NOTIFICATION_NTFY_THRESHOLD=minor` (or `DD_ACTION_{trigger_type}_...` for action triggers). The same four keys, `THRESHOLD`, `ONCE`, `MODE`, and `ORDER`, are the ones this type-level default mechanism supports.
 - Triggers are executed by ascending `ORDER`; when two triggers have the same `ORDER`, they are sorted by trigger id.
 - Triggers sharing the same trigger name (e.g. `docker.update` and `discord.update`) can share `THRESHOLD`, `ONCE`, `MODE`, and `ORDER`; for each of those keys, if exactly one value is defined among them, that value is used for the others unless they override it explicitly.

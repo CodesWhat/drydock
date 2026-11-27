@@ -1,0 +1,52 @@
+---
+title: "Signal"
+description: "The signal trigger lets you send container update notifications via Signal."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `signal` trigger lets you send container update notifications via [Signal](https://signal.org/) through [signal-cli-rest-api](https://github.com/bbernhard/signal-cli-rest-api).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_SIGNAL_{trigger_name}_URL` | 🔴 | The signal-cli-rest-api base URL | The `http` or `https` address |  |
+| `DD_NOTIFICATION_SIGNAL_{trigger_name}_NUMBER` | 🔴 | The registered Signal number that sends the message | A phone number in international format |  |
+| `DD_NOTIFICATION_SIGNAL_{trigger_name}_RECIPIENTS` | 🔴 | Comma-separated recipients | Phone numbers or group ids |  |
+| `DD_NOTIFICATION_SIGNAL_{trigger_name}_APIKEY` | ⚪ | Bearer credential when the API sits behind an authenticating proxy | Any string |  |
+| `DD_NOTIFICATION_SIGNAL_{trigger_name}_DISABLETITLE` | ⚪ | Send only the body, without a title line | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+The sending number must already be registered or linked in signal-cli-rest-api.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_SIGNAL_LOCAL_URL=http://signal-cli:8080
+      - DD_NOTIFICATION_SIGNAL_LOCAL_NUMBER=+15551234567
+      - DD_NOTIFICATION_SIGNAL_LOCAL_RECIPIENTS=+15557654321
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_SIGNAL_LOCAL_URL="http://signal-cli:8080" \
+  -e DD_NOTIFICATION_SIGNAL_LOCAL_NUMBER="+15551234567" \
+  -e DD_NOTIFICATION_SIGNAL_LOCAL_RECIPIENTS="+15557654321" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

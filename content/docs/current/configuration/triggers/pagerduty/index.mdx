@@ -1,0 +1,47 @@
+---
+title: "PagerDuty"
+description: "The pagerduty trigger lets you send container update notifications via PagerDuty."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `pagerduty` trigger lets you send container update notifications via [PagerDuty](https://www.pagerduty.com/).
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_NOTIFICATION_PAGERDUTY_{trigger_name}_ROUTINGKEY` | 🔴 | The integration (routing) key of a PagerDuty Events API v2 integration | A 32 character key |  |
+| `DD_NOTIFICATION_PAGERDUTY_{trigger_name}_SEVERITY` | ⚪ | Severity attached to every event | `info`, `warning`, `error`, `critical` | `info` |
+| `DD_NOTIFICATION_PAGERDUTY_{trigger_name}_SOURCE` | ⚪ | The `source` field of the event | Any string | `drydock` |
+| `DD_NOTIFICATION_PAGERDUTY_{trigger_name}_DISABLETITLE` | ⚪ | Use a short fixed summary instead of the rendered title | `true`, `false` | `false` |
+
+<Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
+
+Each notification becomes a `trigger` event. For single notifications the container name, watcher, local and remote values and the release link are sent in `custom_details`.
+
+## Examples
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_NOTIFICATION_PAGERDUTY_LOCAL_ROUTINGKEY=your-routing-key
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e DD_NOTIFICATION_PAGERDUTY_LOCAL_ROUTINGKEY="your-routing-key" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>

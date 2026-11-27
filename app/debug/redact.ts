@@ -17,6 +17,7 @@ const SENSITIVE_KEY_SUBSTRINGS = [
   'privatekey',
   'clientkey',
   'signingkey',
+  'routingkey',
 ];
 
 // Short enough that a substring rule would fire on ordinary words (compass,
