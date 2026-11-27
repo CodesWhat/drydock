@@ -17,6 +17,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 - Four new registry providers: Elastic (`docker.elastic.co`), Linode, Scaleway (`scw.cloud`) and self-hosted ProGet. Each matches only its own hosts (no suffix or lookalike spoofing), supports anonymous bearer and credentialed auth, and masks secrets. Elastic, Linode and Scaleway are enabled anonymously by default, so registries go from 23 to 27.
 - Native notification providers for PagerDuty (Events API v2), Opsgenie, Signal (signal-cli-rest-api), Zulip and Uptime Kuma push monitors, configured with `DD_NOTIFICATION_{PAGERDUTY,OPSGENIE,SIGNAL,ZULIP,UPTIMEKUMA}_*`. Each supports single and batch templates, masks its secrets in configuration output, and uses the outbound HTTP timeout.
 - Docker watchers can reach a remote host over SSH with `DD_WATCHER_<name>_PROTOCOL=ssh` (runs `docker system dial-stdio` on the host). It needs `SSHUSER`, a pinned `SSHHOSTKEY` SHA-256 fingerprint, and a key file, agent or password. A host key mismatch refuses the connection. Requirements are documented on the watchers page, and SSH passphrases are now redacted in debug dumps.
+- Six new native notification providers: Bark, Prowl, WhatsApp (Cloud API), XMPP, AMQP (RabbitMQ) and NATS, configured with `DD_NOTIFICATION_<TYPE>_<NAME>_*`. Each has outbound timeouts where HTTP is used, batch and single templates, secret masking in config output and debug dumps, and a docs page under Actions & Notifications.
 
 ### Security
 
