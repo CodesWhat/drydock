@@ -9,10 +9,10 @@ import { type Advisory, getAdvisory } from "./advisories.ts";
 import {
   BASE_URL,
   DOCKER_HUB_URL,
-  DOCS_ROOT,
   GITHUB_RELEASES_URL,
   GITHUB_URL,
   SITE_CONFIG,
+  STABLE_DOCS_ROOT,
 } from "./site-config.ts";
 import { features } from "./site-content.ts";
 
@@ -90,7 +90,7 @@ export function softwareApplicationNode(): Node {
     publisher: ref(ORGANIZATION_ID),
     softwareHelp: {
       "@type": "WebPage",
-      url: `${BASE_URL}${DOCS_ROOT}`,
+      url: `${BASE_URL}${STABLE_DOCS_ROOT}`,
     },
   };
 }

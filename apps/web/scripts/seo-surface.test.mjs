@@ -200,3 +200,42 @@ test("competitor pages don't contradict the README matrix", () => {
   );
   assert.doesNotMatch(read("../src/lib/comparison-route-data/diun.tsx"), /REST API\|None/);
 });
+
+test("the stable docs line is derived from SITE_CONFIG.stableVersion", () => {
+  const [major, minor] = siteConfig.SITE_CONFIG.stableVersion.split(".");
+  assert.equal(siteConfig.STABLE_DOCS_VERSION, `v${major}.${minor}`);
+  assert.equal(siteConfig.STABLE_DOCS_ROOT, `/docs/${siteConfig.STABLE_DOCS_VERSION}`);
+  assert.ok(versions.some((v) => v.slug === siteConfig.STABLE_DOCS_VERSION));
+});
+
+test("only lines newer than the stable line count as pre-release", () => {
+  const stableIndex = versions.findIndex((v) => v.slug === siteConfig.STABLE_DOCS_VERSION);
+  for (const [index, v] of versions.entries()) {
+    assert.equal(siteConfig.isPreReleaseDocsLine(v.slug), index < stableIndex, v.slug);
+  }
+  assert.equal(siteConfig.isPreReleaseDocsLine("v9.9"), false);
+});
+
+test("docs pages self-canonicalise and show the pre-release notice", () => {
+  const source = read("../src/app/docs/[[...slug]]/page.tsx");
+  assert.match(source, /const canonical = url;/);
+  assert.doesNotMatch(source, /isArchived|currentCounterpart/);
+  assert.match(source, /isPreReleaseDocsLine\(versionSlug\)/);
+  assert.match(source, /getDocsPage\(\[STABLE_DOCS_VERSION, \.\.\.rest\]\)/);
+  assert.match(source, /stableCounterpart\?\.url \?\? STABLE_DOCS_ROOT/);
+});
+
+test("docs og images carry dimensions, alt text and locale", () => {
+  const source = read("../src/app/docs/[[...slug]]/page.tsx");
+  const openGraph = source.match(/openGraph: \{[\s\S]*?\n {4}\},/)?.[0] ?? "";
+  assert.match(openGraph, /width: 1200, height: 630, alt:/);
+  assert.match(openGraph, /locale: SITE_CONFIG\.locale/);
+});
+
+test("the 404 page has its own twitter card, not the homepage's", () => {
+  const source = read("../src/app/not-found.tsx");
+  const twitter = source.match(/twitter: \{[\s\S]*?\n {2}\},/)?.[0] ?? "";
+  assert.match(twitter, /title: `Page Not Found/);
+  assert.match(twitter, /images:/);
+  assert.match(source, /locale: SITE_CONFIG\.locale/);
+});

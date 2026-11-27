@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 import { faqItems } from "../src/app/data/faq.ts";
 import { ADVISORIES } from "../src/lib/advisories.ts";
-import { BASE_URL, SITE_CONFIG } from "../src/lib/site-config.ts";
+import { BASE_URL, SITE_CONFIG, STABLE_DOCS_VERSION } from "../src/lib/site-config.ts";
 import {
   buildAdvisoryJsonLd,
   buildCompareIndexJsonLd,
@@ -152,6 +152,11 @@ test("home graph links organization, website, software, page and FAQ", () => {
   assert.equal(byType.WebPage.about["@id"], SOFTWARE_ID);
   assert.equal(byType.SoftwareApplication.softwareVersion, SITE_CONFIG.stableVersion);
   assert.equal(byType.SoftwareApplication.description, SITE_CONFIG.description);
+  assert.equal(
+    byType.SoftwareApplication.softwareHelp.url,
+    `${BASE_URL}/docs/${STABLE_DOCS_VERSION}`,
+    "softwareHelp must point at the stable line, matching softwareVersion",
+  );
   assert.equal(byType.SoftwareApplication.isAccessibleForFree, true);
   assert.equal(byType.SoftwareApplication.offers.price, "0");
 });

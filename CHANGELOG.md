@@ -21,6 +21,8 @@ Historical entry dates retain their original changelog headings; exact publicati
 
 - Update Bouncer scans no longer fail with `Unterminated string in JSON` when a socket proxy cuts the scanner worker's attach connection mid-scan. Drydock now reads the worker's output from the container logs after it exits, errors clearly if the stream was cut and the logs can't be read, and the JSON parse error now says the scanner output was incomplete and what to check. A proxy in front of the Docker API must still allow long-lived attach connections. ([#1685](https://github.com/CodesWhat/drydock/issues/1685))
 
+- Website docs for archived versions (v1.8, v1.7 and older) now canonicalise to themselves and are no longer disallowed in `robots.txt`, so searchers on the stable release land on docs that match it. Pages for lines with no GA release (v1.9, v1.8) show a pre-release notice linking to the matching v1.7 page, or the v1.7 docs root when there isn't one, and the structured-data `softwareHelp` now points at the stable docs. The 404 page also gets its own Twitter card, and docs and 404 share images carry dimensions, alt text and `og:locale`.
+
 ## [1.9.0-rc.1] - 2026-11-20
 
 > [!WARNING]
