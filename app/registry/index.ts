@@ -664,15 +664,18 @@ const DEFAULT_REGISTRIES: ProviderConfigurationsByProvider = {
   dhi: { public: '' },
   docr: { public: '' },
   ecr: { public: '' },
+  elastic: { public: '' },
   gar: { public: '' },
   gcr: { public: '' },
   ghcr: { public: '' },
   hub: { public: '' },
   ibmcr: { public: '' },
+  linode: { public: '' },
   lscr: { public: '' },
   mau: { public: '' },
   ocir: { public: '' },
   quay: { public: '' },
+  scaleway: { public: '' },
   trueforge: { public: '' },
 };
 

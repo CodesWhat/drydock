@@ -1,0 +1,77 @@
+---
+title: "SCALEWAY (Scaleway Container Registry)"
+description: "The scaleway registry lets you configure Scaleway Container Registry integration."
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+The `scaleway` registry lets you configure [Scaleway Container Registry](https://www.scaleway.com/en/container-registry/) integration.
+
+Drydock automatically detects `scw.cloud` hosts such as `rg.fr-par.scw.cloud` and namespace subdomains. Lookalike hosts such as `rg.fr-par.scw.cloud.attacker.com` never match.
+
+## Variables
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_SECRETKEY` | ⚪ | Scaleway API secret key. Sent as the password with the username `nologin` | `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_PASSWORD` and `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_AUTH` must not be defined | |
+| `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_LOGIN` | ⚪ | Registry username | `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_PASSWORD` must be defined | |
+| `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_PASSWORD` | ⚪ | Registry password | `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_LOGIN` must be defined | |
+| `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_AUTH` | ⚪ | Base64-encoded `login:password` string | `DD_REGISTRY_SCALEWAY_{REGISTRY_NAME}_LOGIN/PASSWORD/SECRETKEY` must not be defined | |
+
+## Examples
+
+### Configure for anonymous access
+
+Anonymous access needs no configuration. Public namespaces are checked with an anonymous bearer token when the registry issues a token challenge.
+
+### Configure with an API secret key
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_REGISTRY_SCALEWAY_PRIVATE_SECRETKEY=YOUR_SCALEWAY_SECRET_KEY
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_SCALEWAY_PRIVATE_SECRETKEY=YOUR_SCALEWAY_SECRET_KEY" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
+
+### Configure with login and password
+
+<Tabs items={["Docker Compose", "Docker"]}>
+<Tab value="Docker Compose">
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:1.9.0-rc.1
+    ...
+    environment:
+      - DD_REGISTRY_SCALEWAY_PRIVATE_LOGIN=myuser
+      - DD_REGISTRY_SCALEWAY_PRIVATE_PASSWORD=xxxxx
+```
+
+</Tab>
+<Tab value="Docker">
+```bash
+docker run \
+  -e "DD_REGISTRY_SCALEWAY_PRIVATE_LOGIN=myuser" \
+  -e "DD_REGISTRY_SCALEWAY_PRIVATE_PASSWORD=xxxxx" \
+  ...
+  codeswhat/drydock:1.9.0-rc.1
+```
+</Tab>
+</Tabs>
