@@ -22,6 +22,7 @@ Historical entry dates retain their original changelog headings; exact publicati
 ### Changed
 
 - Website: archived docs versions (v1.3 to v1.8) now emit JSON-LD marked as archived (`creativeWorkStatus: "Archived"` plus an `isPartOf` pointing at the versioned docs root), while the current docs keep unversioned-status markup.
+- Internal cleanup: one shared `getErrorMessage` (the docker-helpers copy is gone), the session-lock waits in basic auth and OIDC now use abortable `sleep`, and the demo app no longer registers `DELETE /api/v1/icons/cache` twice.
 
 ### Fixed
 

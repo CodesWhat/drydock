@@ -6,8 +6,8 @@ import {
   setDetectedServerName,
 } from '../../../configuration/index.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { disableSocketRedirects } from './disable-socket-redirects.js';
-import { getErrorMessage } from './docker-helpers.js';
 import { resolveDockerSocketPath } from './docker-socket-resolution.js';
 import type { MutableOidcState, OidcContext, OidcRemoteAuthConfiguration } from './oidc.js';
 import {

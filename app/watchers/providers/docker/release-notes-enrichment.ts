@@ -4,7 +4,7 @@ import {
   resolveSourceRepoForContainer,
   toContainerReleaseNotes,
 } from '../../../release-notes/index.js';
-import { getErrorMessage } from './docker-helpers.js';
+import { getErrorMessage } from '../../../util/error.js';
 
 interface ReleaseNotesEnrichmentLogger {
   debug: (message: string) => void;

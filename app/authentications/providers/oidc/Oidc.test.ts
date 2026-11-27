@@ -27,6 +27,20 @@ vi.mock('../../../prometheus/auth.js', () => ({
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
 }));
 
+// util/sleep uses node:timers/promises when given a signal, which fake timers
+// don't control. Route it through the global setTimeout so these tests can
+// still drive the lock wait deadline.
+vi.mock('../../../util/sleep.js', () => ({
+  sleep: (ms: number, signal?: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(resolve, ms);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(timer);
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+      });
+    }),
+}));
+
 vi.mock('undici', async (importOriginal) => {
   const actual = await importOriginal<typeof import('undici')>();
   return {
