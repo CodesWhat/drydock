@@ -1,6 +1,6 @@
 <div align="center">
 
-<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <strong>Português (Brasil)</strong></p>
+<p><a href="README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pl.md">Polski</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <strong>Português (Brasil)</strong> · <a href="README.tr.md">Türkçe</a></p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/whale-logo-dark.png" />
